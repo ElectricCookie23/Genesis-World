@@ -1,11 +1,11 @@
 // Cloud shell: noise-driven density that drifts with the wind bands and casts shadows.
 import { BufferAttribute, BufferGeometry, DoubleSide, Mesh, MeshBasicNodeMaterial } from 'three/webgpu';
 import {
-  Fn, attribute, cos, dot, float, fract, max, mix, mx_fractal_noise_float, normalize, positionWorld, sin, smoothstep, vec3, abs,
+  Fn, attribute, cos, dot, exp, float, fract, max, mix, mx_fractal_noise_float, normalize, positionWorld, sin, smoothstep, vec3, abs,
 } from 'three/tsl';
 import type { Grid } from '../sim/world';
 import type { CellSnapshot } from '../shared/protocol';
-import { CLOUD_RADIUS, uCloudAmount, uSteam, uSunDir, uTime } from './common';
+import { CLOUD_RADIUS, uBolts, uCloudAmount, uSteam, uSunDir, uTime } from './common';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
@@ -78,7 +78,13 @@ export class CloudLayer {
     const storm = smoothstep(0.75, 1.0, cover).mul(d);
     const base = mix(vec3(1.0, 1.0, 1.0), vec3(0.42, 0.45, 0.52), storm.mul(0.7));
     const lit = base.mul(sunColor).mul(shade).mul(day).mul(1.0).add(vec3(0.015, 0.02, 0.035).mul(d));
-    material.colorNode = lit;
+    // lightning lights storm clouds from inside, by day or night
+    let flash: N = float(0);
+    for (const bolt of uBolts) {
+      const b: N = bolt;
+      flash = flash.add(exp(float(1).sub(dot(dir, b.xyz)).mul(-2600)).mul(b.w));
+    }
+    material.colorNode = lit.add(vec3(0.72, 0.8, 1.0).mul(flash).mul(d.mul(0.7).add(0.3)));
     material.opacityNode = smoothstep(0.0, 0.6, d).mul(0.95);
     this.mesh = new Mesh(g, material);
     this.mesh.frustumCulled = false;

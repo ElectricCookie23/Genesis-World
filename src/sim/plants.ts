@@ -314,6 +314,16 @@ export class Plants {
     }
   }
 
+  /** A fraction of a region's land burned (cell-by-cell fire at low time speeds). */
+  burn(region: number, fraction: number): void {
+    const base = region * SLOTS;
+    for (let s = 0; s < SLOTS; s++) {
+      const id = this.slotSp[base + s]!;
+      if (id < 0 || this.species[id]!.aquatic) continue;
+      this.slotCover[base + s] = this.slotCover[base + s]! * (1 - fraction * 0.85 * (1 - this.species[id]!.genes[PG.FireResist]! * 0.9));
+    }
+  }
+
   /** Paint fine-cell vegetation, canopy height and dominant flora from the regional plant communities. */
   paint(world: World, climate: ClimateState): void {
     const reg = this.reg;

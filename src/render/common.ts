@@ -1,5 +1,5 @@
 // Shared uniforms and constants for every render module.
-import { Vector3 } from 'three/webgpu';
+import { Vector3, Vector4 } from 'three/webgpu';
 import { uniform } from 'three/tsl';
 
 /** Scene units per km of elevation. Planet radius is 1. */
@@ -34,3 +34,6 @@ export const uFlash = uniform(0);
 export function radiusForElevation(km: number): number {
   return 1 + km * EXAG;
 }
+
+/** Lightning bolts: xyz = unit direction of the strike, w = brightness (decays in a blink). */
+export const uBolts = [0, 1, 2, 3].map(() => uniform(new Vector4(0, 1, 0, 0)));

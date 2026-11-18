@@ -35,7 +35,13 @@ export interface UIState {
   slowOnEvents: boolean;
   hintStep: number;
   mobile: boolean;
+  quality: 'low' | 'medium' | 'high' | 'ultra';
+  musicVolume: number;
+  reducedMotion: boolean;
+  slots: SlotInfo[];
 }
+
+export interface SlotInfo { slot: number; name: string; seed: string; simYear: number; savedAt: number; }
 
 export const state: UIState = {
   stats: null,
@@ -63,6 +69,10 @@ export const state: UIState = {
   slowOnEvents: true,
   hintStep: 0,
   mobile: false,
+  quality: 'high',
+  musicVolume: 0.6,
+  reducedMotion: false,
+  slots: [],
 };
 
 const listeners = new Set<() => void>();
@@ -99,6 +109,12 @@ export const actions = {
   copySeedLink: () => {},
   newWorld: (_seed?: string) => {},
   followCreature: (_on: boolean) => {},
+  setQuality: (_q: UIState['quality']) => {},
+  setMusicVolume: (_v: number) => {},
+  setReducedMotion: (_on: boolean) => {},
+  saveSlot: (_name: string) => {},
+  loadSlot: (_slot: number) => {},
+  deleteSlot: (_slot: number) => {},
 };
 
 export function togglePanel(p: Panel): void {

@@ -56,6 +56,8 @@ export interface WorldStats {
   plantSpecies: number;
   population: number;
   landCover: number;
+  /** Cells under storm cells right now (lightning flickers there). */
+  storms: number[];
 }
 
 /** One animal species, as shown in the tree of life and info cards. */
@@ -106,6 +108,8 @@ export type ToWorker =
   | { type: 'requestCells' }
   | { type: 'god'; tool: string; cell: number; power?: number }
   | { type: 'settings'; slowOnEvents?: boolean }
+  | { type: 'save'; name: string; slot: string }
+  | { type: 'load'; save: unknown }
   /** Jump ahead by running the sim flat out (used by automated checks). */
   | { type: 'warp'; years: number };
 
@@ -117,4 +121,6 @@ export type FromWorker =
   | { type: 'species'; species: SpeciesInfo[] }
   | { type: 'plants'; plants: PlantInfo[] }
   | { type: 'herds'; herds: HerdSnapshot }
+  | { type: 'saved'; slot: string; save: unknown }
+  | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }
   | { type: 'error'; message: string };

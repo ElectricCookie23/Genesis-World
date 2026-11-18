@@ -17,7 +17,7 @@ function ring(pole: 1 | -1, latDeg: number, segments: number): BufferGeometry {
     const lat = ((latDeg + 4 * Math.sin(a * 3 + pole) + 2.5 * Math.sin(a * 7)) * Math.PI) / 180;
     const cl = Math.cos(lat), sl = Math.sin(lat) * pole;
     for (let r = 0; r < 2; r++) {
-      const rad = r === 0 ? 1.04 : 1.105;
+      const rad = r === 0 ? 1.035 : 1.14;
       const o = (i * 2 + r) * 3;
       pos[o] = cl * Math.cos(a) * rad; pos[o + 1] = sl * rad; pos[o + 2] = cl * Math.sin(a) * rad;
       uv[(i * 2 + r) * 2] = i / segments; uv[(i * 2 + r) * 2 + 1] = r;
@@ -41,11 +41,11 @@ export function createAuroras(): Mesh[] {
     const u = uv.x.mul(46).add(sin(uv.x.mul(9).add(t.mul(2))).mul(1.6));
     const rays = mx_fractal_noise_float(vec3(u, t, float(lat)), 3, 2.2, 0.55).mul(0.5).add(0.5);
     const folds = mx_fractal_noise_float(vec3(uv.x.mul(7), t.mul(0.6), float(lat * 2)), 2, 2.0, 0.5).mul(0.5).add(0.5);
-    const curtain = pow(rays, 2.2).mul(smoothstep(0.25, 0.75, folds));
+    const curtain = pow(rays, 1.6).mul(smoothstep(0.15, 0.6, folds)).add(folds.mul(0.18));
     const fade = smoothstep(0.0, 0.12, uv.y).mul(pow(float(1).sub(uv.y), 1.6));
     const color = mix(vec3(0.1, 1.0, 0.45), vec3(0.55, 0.2, 0.95), smoothstep(0.25, 0.95, uv.y));
     const night = float(1).sub(smoothstep(-0.25, 0.2, dot(normalize(positionWorld), uSunDir)));
-    material.colorNode = color.mul(curtain).mul(fade).mul(night.mul(0.9).add(0.06)).mul(uAurora).mul(1.7);
+    material.colorNode = color.mul(curtain).mul(fade).mul(night.mul(0.94).add(0.04)).mul(uAurora).mul(4.2);
     const mesh = new Mesh(ring(pole, lat, 220), material);
     mesh.frustumCulled = false;
     mesh.renderOrder = 6;

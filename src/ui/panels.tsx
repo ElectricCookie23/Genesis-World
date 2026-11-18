@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { G, GENE_NAMES } from '../sim/genetics';
 import type { SimEvent } from '../sim/events';
 import type { SpeciesInfo } from '../shared/protocol';
-import { actions, state, update, useStore } from './store';
+import { actions, state, update, useStore, type UIState } from './store';
 import { bigNumber, eventColor, eventGlyph, formatYear, hsl, metres, shortYear } from './format';
 import css from './ui.module.css';
 
@@ -290,13 +290,40 @@ export function GodTools() {
 
 export function Settings() {
   const s = useStore();
+  const qualities: UIState['quality'][] = ['low', 'medium', 'high', 'ultra'];
   return (
-    <div class={`${css.panel} ${css.side}`} style={{ bottom: 'auto' }}>
-      <div class={css.head}><h2>World</h2><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
+    <div class={`${css.panel} ${css.side}`}>
+      <div class={css.head}><h2>World and settings</h2><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
       <div class={css.scroll}>
         <div class={css.row}><span>Seed code<br /><span class={css.sub}>{s.seed}</span></span><button class={css.btn} onClick={() => actions.copySeedLink()}>copy link</button></div>
-        <div class={css.row}><span>Slow down on big events</span><button class={css.btn} onClick={() => actions.setSlowOnEvents(!s.slowOnEvents)}>{s.slowOnEvents ? 'on' : 'off'}</button></div>
         <div class={css.row}><span>Start a new world</span><button class={css.btn} onClick={() => actions.newWorld()}>new seed</button></div>
+        <div class={css.sub} style={{ margin: '12px 0 2px' }}>SAVED PLANETS (autosaves every 2 minutes)</div>
+        {s.slots.map((sl) => (
+          <div class={css.row} key={sl.slot}>
+            <span>{sl.name}<br /><span class={css.sub}>{sl.seed} · {formatYear(sl.simYear).toLowerCase()}</span></span>
+            <span>
+              <button class={css.btn} onClick={() => actions.loadSlot(sl.slot)}>load</button>{' '}
+              <button class={css.btn} onClick={() => actions.deleteSlot(sl.slot)}>✕</button>
+            </span>
+          </div>
+        ))}
+        {s.slots.length < 10 && (
+          <div class={css.row}>
+            <span>Save this planet</span>
+            <button class={css.btn} onClick={() => actions.saveSlot(`${s.seed}, ${formatYear(s.stats?.simYear ?? 0).toLowerCase()}`)}>save</button>
+          </div>
+        )}
+        <div class={css.sub} style={{ margin: '12px 0 2px' }}>SETTINGS</div>
+        <div class={css.row}>
+          <span>Quality</span>
+          <span>{qualities.map((q) => <button class={css.btn} style={{ marginLeft: 4, opacity: s.quality === q ? 1 : 0.55 }} onClick={() => actions.setQuality(q)}>{q}</button>)}</span>
+        </div>
+        <div class={css.row}>
+          <span>Music</span>
+          <input type="range" min="0" max="1" step="0.05" value={s.musicVolume} onInput={(e) => actions.setMusicVolume(Number((e.target as HTMLInputElement).value))} />
+        </div>
+        <div class={css.row}><span>Slow down on big events</span><button class={css.btn} onClick={() => actions.setSlowOnEvents(!s.slowOnEvents)}>{s.slowOnEvents ? 'on' : 'off'}</button></div>
+        <div class={css.row}><span>Reduced motion</span><button class={css.btn} onClick={() => actions.setReducedMotion(!s.reducedMotion)}>{s.reducedMotion ? 'on' : 'off'}</button></div>
       </div>
     </div>
   );

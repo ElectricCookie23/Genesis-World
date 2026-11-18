@@ -207,11 +207,15 @@ export interface Individual {
   cell: number;
 }
 
-function makeMaterial(iPos: InstancedBufferAttribute, iQuat: InstancedBufferAttribute, iData: InstancedBufferAttribute): MeshBasicNodeMaterial {
+let sharedMaterial: MeshBasicNodeMaterial | null = null;
+
+/** One material for every species: instance data comes from named instanced attributes on each geometry. */
+function makeMaterial(): MeshBasicNodeMaterial {
+  if (sharedMaterial) return sharedMaterial;
   const material = new MeshBasicNodeMaterial();
-  const ip: any = instancedBufferAttribute(iPos);
-  const iq: any = instancedBufferAttribute(iQuat);
-  const id: any = instancedBufferAttribute(iData); // scale, phase, moving, gait rate
+  const ip: any = attribute('iPos', 'vec3');
+  const iq: any = attribute('iQuat', 'vec4');
+  const id: any = attribute('iData', 'vec4'); // scale, phase, moving, gait rate
   const anim: any = attribute('anim', 'vec4');
   const p: any = positionGeometry;
   const t = uTime.mul(id.w).add(id.y);
@@ -238,6 +242,8 @@ function makeMaterial(iPos: InstancedBufferAttribute, iQuat: InstancedBufferAttr
   const emissive: any = attribute('emissive', 'vec3');
   material.colorNode = albedo.mul(light).mul(0.82).add((vec3 as any)(rim, rim, rim)).add(emissive.mul(float(1.15).sub(day)).mul(2.4));
   void abs;
+  void instancedBufferAttribute;
+  sharedMaterial = material;
   return material;
 }
 
@@ -289,7 +295,11 @@ export class CreatureLayer {
     const iQuat = new InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
     const iData = new InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
     for (const a of [iPos, iQuat, iData]) a.setUsage(DynamicDrawUsage);
-    const mesh = new InstancedMesh(buildCreatureGeometry(info.genes), makeMaterial(iPos, iQuat, iData), CAP);
+    const geo = buildCreatureGeometry(info.genes);
+    geo.setAttribute('iPos', iPos);
+    geo.setAttribute('iQuat', iQuat);
+    geo.setAttribute('iData', iData);
+    const mesh = new InstancedMesh(geo, makeMaterial(), CAP);
     const m = new Matrix4();
     for (let i = 0; i < CAP; i++) mesh.setMatrixAt(i, m);
     mesh.count = 0;

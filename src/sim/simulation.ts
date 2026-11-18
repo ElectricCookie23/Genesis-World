@@ -64,6 +64,11 @@ export class Simulation {
   private geoRng: RNG;
   private nameRng: RNG;
   private milestoneTimer = 0;
+  /** Storm cells: dense rain cloud with lightning, drifting with the wind. */
+  storms: { cell: number; strength: number; years: number; ticks: number }[] = [];
+  /** Cells on fire right now (low time speeds only), with days left to burn. */
+  private burning = new Map<number, number>();
+  private weatherRng: RNG;
   /** Milliseconds spent in each part, for tuning. */
   readonly prof = { climate: 0, plants: 0, creatures: 0, paint: 0, regions: 0 };
 
@@ -90,6 +95,7 @@ export class Simulation {
     this.lifeRng = this.rng.fork('life');
     this.geoRng = this.rng.fork('events');
     this.nameRng = this.rng.fork('names');
+    this.weatherRng = this.rng.fork('weather');
     this.lifeYear = this.lifeRng.range(0.35e6, 0.9e6);
     this.algaeDelay = this.lifeRng.range(1.2e6, 3e6);
     this.animalDelay = this.lifeRng.range(5e6, 10e6);
@@ -166,6 +172,7 @@ export class Simulation {
       if (w.lava[i]! > 0) w.lava[i] = w.lava[i]! < 0.004 ? 0 : w.lava[i]! * lavaK;
     }
     this.prof.climate += performance.now() - tc;
+    this.weather(dt);
     this.updateEras(dt);
     this.geologyEvents(dt);
     this.ecoAcc += dt / ECO_YEARS;
@@ -274,6 +281,97 @@ export class Simulation {
       }).id;
     } else if (this.seaState !== 0 && Math.abs(s) < 0.03) {
       this.seaState = 0;
+    }
+  }
+
+  // ---------------------------------------------------------------- weather
+
+  /** Storm cells drift downwind, rain, and throw lightning; at low speeds fire spreads cell by cell. */
+  private weather(dt: number): void {
+    const w = this.world, g = this.grid, r = this.weatherRng;
+    const storms = this.storms;
+    // keep about a dozen storms alive, born over warm humid places
+    for (let tries = 0; tries < 3 && storms.length < 14; tries++) {
+      const c = r.int(g.count);
+      if (this.climate.humidity[c]! > 0.42 && this.climate.meanT[c]! > 6 && r.chance(0.5)) {
+        storms.push({ cell: c, strength: r.range(0.8, 1), years: r.range(0.02, 0.06), ticks: 80 + r.int(120) });
+      }
+    }
+    const moveP = Math.min(0.25, dt / 0.0015);
+    for (let k = storms.length - 1; k >= 0; k--) {
+      const s = storms[k]!;
+      s.years -= dt;
+      s.ticks--;
+      if (s.years <= 0 && s.ticks <= 0) { storms.splice(k, 1); continue; }
+      if (r.chance(moveP)) {
+        // step to the neighbour most directly downwind
+        const c = s.cell;
+        const x = g.pos[c * 3]!, y = g.pos[c * 3 + 1]!, z = g.pos[c * 3 + 2]!;
+        let ex = -z, ez = x;
+        const el = Math.hypot(ex, ez) || 1;
+        ex /= el; ez /= el;
+        const u = w.windE[c]!, v = w.windN[c]!;
+        const wx = u * ex + v * (-y * ez), wy = v * (ez * x - ex * z), wz = u * ez + v * (y * ex);
+        let best = c, bd = 0;
+        for (let j = 0; j < g.ncount[c]!; j++) {
+          const nb = g.neighbors[c * 6 + j]!;
+          const d = (g.pos[nb * 3]! - x) * wx + (g.pos[nb * 3 + 1]! - y) * wy + (g.pos[nb * 3 + 2]! - z) * wz;
+          if (d > bd) { bd = d; best = nb; }
+        }
+        s.cell = best;
+      }
+      // thick cloud over the cell and its neighbours
+      w.cloud[s.cell] = Math.max(w.cloud[s.cell]!, s.strength);
+      for (let j = 0; j < g.ncount[s.cell]!; j++) {
+        const nb = g.neighbors[s.cell * 6 + j]!;
+        w.cloud[nb] = Math.max(w.cloud[nb]!, s.strength * 0.85);
+      }
+      // lightning: at low speeds a strike on dry growth starts a real fire
+      if (dt < 0.1 && r.chance(Math.min(0.2, dt * 12))) {
+        const hit = g.neighbors[s.cell * 6 + r.int(g.ncount[s.cell]!)]!;
+        if (w.elevation[hit]! > w.seaLevel && w.vegetation[hit]! > 0.3 && w.moisture[hit]! < 0.55 && w.ash[hit]! < 0.2 && !this.burning.has(hit)) {
+          this.burning.set(hit, 6 + r.range(0, 8));
+          const storm = this.emit({ type: 'storm', cellId: s.cell, title: 'A dry storm', description: 'Thunderheads pile up over dry country. There is lightning, but little rain reaches the ground.', importance: 0 });
+          this.emit({
+            type: 'wildfire', cellId: hit, title: 'Lightning starts a fire',
+            description: this.say('strike', [
+              'A bolt splits a dead tree and the dry growth around it catches.',
+              'Lightning touches the ground. A thread of smoke rises, then flame.',
+              'One strike is enough. Fire begins to move through the dry growth.',
+            ]),
+            causes: [storm.id], importance: 1,
+          });
+        }
+      }
+    }
+    if (dt >= 0.1) {
+      // at high speed fires are handled statistically per region
+      if (this.burning.size) this.burning.clear();
+      return;
+    }
+    if (!this.burning.size) return;
+    const days = dt * 365;
+    const raining = new Set<number>();
+    for (const s of storms) { raining.add(s.cell); for (let j = 0; j < g.ncount[s.cell]!; j++) raining.add(g.neighbors[s.cell * 6 + j]!); }
+    for (const [c, left] of [...this.burning]) {
+      w.lava[c] = Math.max(w.lava[c]!, 0.55);
+      w.ash[c] = Math.max(w.ash[c]!, 0.35);
+      for (let j = 0; j < g.ncount[c]!; j++) {
+        const nb = g.neighbors[c * 6 + j]!;
+        if (this.burning.has(nb) || raining.has(nb)) continue;
+        if (w.elevation[nb]! <= w.seaLevel || w.vegetation[nb]! < 0.25 || w.ash[nb]! > 0.3) continue;
+        const dry = Math.max(0.05, 0.8 - w.moisture[nb]!);
+        if (r.chance(Math.min(0.5, days * 0.35 * dry * w.vegetation[nb]!))) this.burning.set(nb, 5 + r.range(0, 8));
+      }
+      const remain = left - days;
+      if (remain <= 0 || raining.has(c)) {
+        this.burning.delete(c);
+        w.ash[c] = 0.85;
+        w.vegetation[c] = w.vegetation[c]! * 0.15;
+        w.canopy[c] = 0;
+        const reg = this.regions.regionOf[c]!;
+        this.plants.burn(reg, 1 / Math.max(1, this.regions.cellStart[reg + 1]! - this.regions.cellStart[reg]!));
+      } else this.burning.set(c, remain);
     }
   }
 

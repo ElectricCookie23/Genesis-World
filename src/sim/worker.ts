@@ -3,6 +3,7 @@
 import { Simulation } from './simulation';
 import { G, P, PHEN_COUNT, sizeMetres } from './genetics';
 import { nearestCell } from './world';
+import { loadSimulation, saveSimulation, type SaveState } from './snapshot';
 import {
   SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
 } from '../shared/protocol';
@@ -120,6 +121,7 @@ function stats(s: Simulation): WorldStats {
     plantSpecies: s.plants.living,
     population: s.creatures.totalPop,
     landCover: s.plants.totalLandCover / Math.max(1, s.regions.count),
+    storms: s.storms.map((x) => x.cell),
   };
 }
 
@@ -227,6 +229,22 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
           cellsRequested = true;
         }
         break;
+      case 'save':
+        if (sim) post({ type: 'saved', slot: msg.slot, save: saveSimulation(sim, msg.name) });
+        break;
+      case 'load': {
+        const save = msg.save as SaveState;
+        sim = new Simulation(save.seed, save.gridN);
+        loadSimulation(sim, save);
+        sim.events.drainFresh();
+        sentExtinct.clear();
+        speciesVersion = -1;
+        plantVersion = -1;
+        lastSpecies = 0;
+        const { cells, transfer } = snapshotCells(sim);
+        post({ type: 'loaded', cells, stats: stats(sim), events: sim.events.events }, transfer);
+        break;
+      }
       case 'warp':
         if (sim) {
           const end = sim.simYear + msg.years;

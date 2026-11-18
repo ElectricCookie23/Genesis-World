@@ -12,6 +12,9 @@ import { App } from './ui/App';
 import { closeAll } from './ui/panels';
 import { describeIndividual } from './render/creatures';
 import { Vector3 } from 'three/webgpu';
+import { del, get, set } from 'idb-keyval';
+import { Music } from './audio/music';
+import type { SlotInfo, UIState } from './ui/store';
 import { actions, state, togglePanel, update } from './ui/store';
 
 const bootBar = document.getElementById('boot-bar') as HTMLElement;
@@ -53,7 +56,7 @@ async function boot(): Promise<void> {
     fatal('Genesis needs WebGPU or WebGL2 to draw its planet. Please open it in a recent version of Chrome, Edge, Firefox or Safari.');
     return;
   }
-  scene.setPixelRatio(mobile ? 1.5 : 2);
+  scene.setPixelRatio(mobile ? 1 : 2);
   scene.plantBudget = mobile ? 15000 : 60000;
   scene.creatureBudget = mobile ? 1500 : 5000;
   update({ backend: scene.backend });
@@ -61,8 +64,20 @@ async function boot(): Promise<void> {
 
   const grid = buildGrid();
   progress(0.45);
-  const worker = new Worker(new URL('./sim/worker.ts', import.meta.url), { type: 'module' });
+  let worker: Worker;
   const send = (m: ToWorker) => worker.postMessage(m);
+  const music = new Music();
+  let hushUntil = 0;
+  let lastRecovery = 0;
+  const autoKey = `genesis:auto:${seed}`;
+  // a save to load as soon as the world is ready: a named slot (?slot=n) or this seed's autosave
+  let pendingLoad: unknown = null;
+  try {
+    const slot = params.get('slot');
+    const saved = params.has('fresh') ? null : slot ? await get(`genesis:slot:${slot}`) : await get(autoKey);
+    if (saved && (saved as { seed?: string }).seed === seed) pendingLoad = saved;
+    update({ slots: ((await get('genesis:slots')) as SlotInfo[] | undefined) ?? [] });
+  } catch { /* storage unavailable: play without saves */ }
   let opening: Opening | null = null;
   let started = false;
 
@@ -100,6 +115,74 @@ async function boot(): Promise<void> {
     location.href = `${location.pathname}?seed=${encodeURIComponent(s ?? randomSeedCode((Math.random() * 2 ** 32) >>> 0))}`;
   };
 
+  // quality presets, and automatic step-downs when the frame rate sags
+  const QUALITY: Record<UIState['quality'], { ratio: number; plants: number; creatures: number; bloom: boolean }> = {
+    low: { ratio: 1, plants: 12000, creatures: 1200, bloom: false },
+    medium: { ratio: 1.5, plants: 30000, creatures: 3000, bloom: true },
+    high: { ratio: 2, plants: 60000, creatures: 5000, bloom: true },
+    ultra: { ratio: 3, plants: 60000, creatures: 5000, bloom: true },
+  };
+  let adaptive = 0;
+  const applyQuality = () => {
+    const q = QUALITY[state.quality];
+    const cut = adaptive >= 2 ? 0.5 : 1;
+    scene.setPixelRatio(Math.max(0.75, q.ratio - (adaptive >= 3 ? 0.5 : 0) - (adaptive >= 4 ? 0.5 : 0)));
+    scene.post.setBloom(q.bloom && adaptive < 1);
+    if (scene.vegetation) scene.vegetation.maxInstances = Math.min(mobile ? 15000 : 60000, q.plants * cut);
+    if (scene.creatures) scene.creatures.budget = Math.min(mobile ? 1500 : 5000, q.creatures * cut);
+  };
+  actions.setQuality = (q) => {
+    adaptive = 0;
+    update({ quality: q });
+    store.set('genesis:quality', q);
+    applyQuality();
+  };
+  actions.setMusicVolume = (v) => {
+    update({ musicVolume: v });
+    store.set('genesis:music', String(v));
+    music.setVolume(v);
+    void music.start();
+  };
+  actions.setReducedMotion = (on) => {
+    update({ reducedMotion: on });
+    store.set('genesis:motion', on ? '1' : '0');
+    scene.cam.autoOrbit = on ? 0 : 0.012;
+  };
+  const savedQuality = store.get('genesis:quality') as UIState['quality'] | null;
+  update({
+    quality: savedQuality && QUALITY[savedQuality] ? savedQuality : mobile ? 'low' : 'high',
+    musicVolume: Number(store.get('genesis:music') ?? 0.6),
+    reducedMotion: store.get('genesis:motion') ? store.get('genesis:motion') === '1' : reducedMotion,
+  });
+  music.setVolume(state.musicVolume);
+  const startMusic = () => { void music.start(); window.removeEventListener('pointerdown', startMusic); window.removeEventListener('keydown', startMusic); };
+  window.addEventListener('pointerdown', startMusic);
+  window.addEventListener('keydown', startMusic);
+
+  // saved planets: ten named slots plus an autosave for each seed
+  const writeSlots = (slots: SlotInfo[]) => { update({ slots }); void set('genesis:slots', slots).catch(() => {}); };
+  actions.saveSlot = (name) => {
+    const used = new Set(state.slots.map((x) => x.slot));
+    let slot = 0;
+    while (used.has(slot)) slot++;
+    if (slot >= 10) return;
+    send({ type: 'save', name, slot: String(slot) });
+    writeSlots([...state.slots, { slot, name, seed, simYear: state.stats?.simYear ?? 0, savedAt: Date.now() }]);
+    update({ notice: 'Planet saved.' });
+    window.setTimeout(() => update({ notice: '' }), 2500);
+  };
+  actions.loadSlot = (slot) => {
+    const info = state.slots.find((x) => x.slot === slot);
+    if (!info) return;
+    if (info.seed !== seed) { location.href = `${location.pathname}?seed=${encodeURIComponent(info.seed)}&slot=${slot}`; return; }
+    void get(`genesis:slot:${slot}`).then((saved) => { if (saved) send({ type: 'load', save: saved }); });
+  };
+  actions.deleteSlot = (slot) => {
+    void del(`genesis:slot:${slot}`).catch(() => {});
+    writeSlots(state.slots.filter((x) => x.slot !== slot));
+  };
+  window.setInterval(() => { if (!state.opening && state.speedIndex > 0) send({ type: 'save', name: 'autosave', slot: 'auto' }); }, 120000);
+
   // milestone pop-ups play one after another
   const toasts: SimEvent[] = [];
   let toastUntil = 0;
@@ -130,18 +213,57 @@ async function boot(): Promise<void> {
     }
   };
 
-  worker.onmessage = (e: MessageEvent<FromWorker>) => {
+  const resetHistory = () => {
+    state.events = [];
+    state.chronicle = [];
+    state.species = new Map();
+    state.plants = new Map();
+    toasts.length = 0;
+    update({ whyEvent: -1, selectedSpecies: -1, creature: null, milestone: null });
+    scene.creatures?.clear();
+  };
+  const takeEvents = (events: SimEvent[], live: boolean) => {
+    for (const ev of events) {
+      state.events[ev.id] = ev;
+      // keep effect links current on the events we already hold
+      for (const c of ev.causes) {
+        const cause = state.events[c];
+        if (cause && !cause.effects.includes(ev.id)) cause.effects.push(ev.id);
+      }
+      if (ev.importance >= 1 && ev.id > 0) state.chronicle.push(ev.id);
+      if (!live) continue;
+      if (ev.importance >= 3) toasts.push(ev);
+      if (ev.type === 'impact') scene.flash(0.9);
+      else if (ev.type === 'super-eruption') scene.flash(0.35);
+      else if (ev.type === 'mass-extinction') hushUntil = performance.now() + 45000;
+    }
+    update({});
+  };
+
+  const onMessage = (e: MessageEvent<FromWorker>) => {
     const msg = e.data;
     switch (msg.type) {
       case 'ready': {
         progress(0.9);
-        scene.setGrid(grid, msg.seed);
+        if (!scene.planet) { scene.setGrid(grid, msg.seed); applyQuality(); }
         scene.applyCells(msg.cells, true);
         scene.applyStats(msg.stats);
         update({ stats: msg.stats });
+        if (recovering) {
+          // the scene already exists: just reload state and carry on at the same speed
+          recovering = false;
+          if (pendingLoad) send({ type: 'load', save: pendingLoad });
+          pendingLoad = null;
+          send({ type: 'speed', index: state.speedIndex });
+          break;
+        }
         opening = new Opening(scene, reducedMotion);
         opening.onChronicle = () => update({ chronicleLine: 'Year 0. The world is quiet. The water is warm.' });
-        if (store.get(openedKey) === '1' || params.has('skip')) opening.skip();
+        if (store.get(openedKey) === '1' || params.has('skip') || pendingLoad) opening.skip();
+        if (pendingLoad) {
+          send({ type: 'load', save: pendingLoad });
+          pendingLoad = null;
+        }
         started = true;
         progress(1);
         window.setTimeout(() => bootEl.classList.add('gone'), 250);
@@ -154,21 +276,10 @@ async function boot(): Promise<void> {
       case 'stats':
         scene.applyStats(msg.stats);
         update({ stats: msg.stats, fps: scene.fpsAvg });
+        music.setMood({ stage: msg.stats.stage, era: msg.stats.era, life: Math.min(1, msg.stats.livingSpecies / 30), hush: performance.now() < hushUntil });
         break;
       case 'events':
-        for (const ev of msg.events) {
-          state.events[ev.id] = ev;
-          // keep effect links current on the events we already hold
-          for (const c of ev.causes) {
-            const cause = state.events[c];
-            if (cause && !cause.effects.includes(ev.id)) cause.effects.push(ev.id);
-          }
-          if (ev.importance >= 1 && ev.id > 0) state.chronicle.push(ev.id);
-          if (ev.importance >= 3) toasts.push(ev);
-          if (ev.type === 'impact') scene.flash(0.9);
-          else if (ev.type === 'super-eruption') scene.flash(0.35);
-        }
-        update({});
+        takeEvents(msg.events, true);
         break;
       case 'species':
         for (const sp of msg.species) state.species.set(sp.id, sp);
@@ -182,14 +293,49 @@ async function boot(): Promise<void> {
         for (const pl of msg.plants) state.plants.set(pl.id, pl);
         scene.setPlants(state.plants);
         break;
+      case 'saved': {
+        const key = msg.slot === 'auto' ? autoKey : `genesis:slot:${msg.slot}`;
+        void set(key, msg.save).catch(() => update({ notice: 'Could not save: browser storage is full or blocked.' }));
+        break;
+      }
+      case 'loaded':
+        resetHistory();
+        takeEvents(msg.events.filter(Boolean), false);
+        scene.applyCells(msg.cells, true);
+        scene.applyStats(msg.stats);
+        update({ stats: msg.stats });
+        break;
       case 'error':
         console.error('sim worker:', msg.message);
-        update({ notice: 'The simulation hit a problem. Reload the page to restart it.' });
+        recover();
         break;
     }
   };
-  worker.onerror = (e) => console.error('worker error', e.message);
-  send({ type: 'init', seed });
+  const startWorker = () => {
+    worker = new Worker(new URL('./sim/worker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = onMessage;
+    worker.onerror = (e) => { console.error('worker error', e.message); recover(); };
+    send({ type: 'init', seed });
+  };
+  // if the simulation crashes, restart it from the last autosave rather than leave a frozen planet
+  const recover = () => {
+    const now = performance.now();
+    if (now - lastRecovery < 30000) {
+      update({ notice: 'The simulation keeps failing. Reload the page to restart it.' });
+      return;
+    }
+    lastRecovery = now;
+    worker.terminate();
+    void get(autoKey).catch(() => null).then((saved) => {
+      pendingLoad = saved ?? null;
+      recovering = true;
+      startWorker();
+      update({ notice: saved ? 'The simulation stumbled. Restored from the last autosave.' : 'The simulation stumbled and was restarted.' });
+      window.setTimeout(() => update({ notice: '' }), 6000);
+    });
+  };
+  let recovering = false;
+  startWorker();
   progress(0.6);
 
   render(h(App, {}), document.getElementById('ui') as HTMLElement);
@@ -257,6 +403,7 @@ async function boot(): Promise<void> {
   window.addEventListener('resize', () => scene.resize());
 
   let lastFocus = 0;
+  let slowFor = 0;
   const focusVec = new Vector3();
   let last = performance.now();
   const loop = (now: number) => {
@@ -276,6 +423,13 @@ async function boot(): Promise<void> {
         send({ type: 'focus', x: focusVec.x, y: focusVec.y, z: focusVec.z, altitude: scene.cam.dist });
         refreshCreature();
       }
+      // adaptive quality: two seconds under target steps down bloom, then instance counts, then resolution
+      const target = mobile ? 26 : 50;
+      if (!state.opening && scene.fpsAvg < target && document.visibilityState === 'visible') {
+        slowFor += dt;
+        if (slowFor > 2 && adaptive < 4) { adaptive++; slowFor = 0; applyQuality(); }
+      } else slowFor = 0;
+      scene.cam.autoOrbit = state.reducedMotion ? 0 : state.postcard ? 0.035 : 0.012;
       const busy = state.panel !== 'none' || state.whyEvent >= 0 || state.selectedSpecies >= 0;
       if (!state.uiHidden && !state.opening && !busy && now - lastActivity > 4000) update({ uiHidden: true });
     }
