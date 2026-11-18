@@ -11,6 +11,8 @@ import { createAtmosphere, createMoon, createSky } from './atmosphere';
 import { createDustDisc } from './effects';
 import { OrbitCamera } from './camera';
 import { PostFX } from './postfx';
+import { Vegetation } from './vegetation';
+import type { PlantInfo } from '../shared/protocol';
 import { EXAG, MOON_DISTANCE, uFlash, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime } from './common';
 
 export type Quality = 'low' | 'medium' | 'high' | 'ultra';
@@ -34,6 +36,9 @@ export class GenesisScene {
   planet?: PlanetMesh;
   ocean?: OceanMesh;
   clouds?: CloudLayer;
+  vegetation?: Vegetation;
+  /** Instance budget for plants (lower on mobile). */
+  plantBudget = 60000;
   grid?: Grid;
   backend = 'webgl2';
   time = 0;
@@ -49,6 +54,7 @@ export class GenesisScene {
   eraHaze = 0;
   eraHazeTarget = 0;
   private lastCell = 0;
+  private tmpFocus = new Vector3();
   private lastElevation?: Float32Array;
   moonDistance = MOON_DISTANCE;
   fpsAvg = 60;
@@ -95,6 +101,8 @@ export class GenesisScene {
     this.ocean = new OceanMesh(grid);
     this.clouds = new CloudLayer(grid);
     this.scene.add(this.planet.mesh, this.ocean.mesh, this.clouds.mesh);
+    this.vegetation = new Vegetation(grid, this.plantBudget);
+    for (const m of this.vegetation.meshes) this.scene.add(m);
     void hashSeed(seed);
   }
 
@@ -103,8 +111,13 @@ export class GenesisScene {
     this.planet.update(cells, first);
     this.ocean.update(cells);
     this.clouds.update(cells);
+    this.vegetation?.setCells(cells);
     this.lastElevation = cells.elevation;
     uSeaKm.value = cells.seaLevel;
+  }
+
+  setPlants(plants: Map<number, PlantInfo>): void {
+    this.vegetation?.setPlants(plants);
   }
 
   /** Radius of the visible surface (terrain or sea) along a unit direction. */
@@ -185,6 +198,7 @@ export class GenesisScene {
     }
     this.eraHaze += (this.eraHazeTarget - this.eraHaze) * Math.min(1, dt * 0.5);
     this.cam.update(dt);
+    this.vegetation?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist);
     const c = this.cam.camera;
     const far = c.position.length() + this.moonDistance + 4;
     c.far = far;

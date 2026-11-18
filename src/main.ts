@@ -52,6 +52,7 @@ async function boot(): Promise<void> {
     return;
   }
   scene.setPixelRatio(mobile ? 1.5 : 2);
+  scene.plantBudget = mobile ? 15000 : 60000;
   update({ backend: scene.backend });
   progress(0.3);
 
@@ -172,6 +173,7 @@ async function boot(): Promise<void> {
         break;
       case 'plants':
         for (const pl of msg.plants) state.plants.set(pl.id, pl);
+        scene.setPlants(state.plants);
         break;
       case 'error':
         console.error('sim worker:', msg.message);

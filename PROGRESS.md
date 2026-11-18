@@ -27,8 +27,8 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 5 | Cloud shell that moves with simulated wind and casts shadows. | done | noise shell drifting in wind bands, shadows on land and sea; cover from sim humidity |
 | 6 | Glassy ocean with depth color, sun glint and coastal foam. | done |  |
 | 7 | Orbiting moon whose tides visibly move the coastline. | in progress | moon orbits and raises a visible tidal bulge; sim-side tide effects to come |
-| 8 | Plants that spread by biome, light and rain, so forests and grasslands form on their own. | in progress | sim done (plant species compete per region; forests and grassland emerge); 3D plant instances to come |
-| 9 | Plants evolve height, color, leaf type and fruit. | in progress | sim done (12 plant genes evolve); visuals to come |
+| 8 | Plants that spread by biome, light and rain, so forests and grasslands form on their own. | done | plant species compete per region; instanced trees, shrubs and grass appear near the camera |
+| 9 | Plants evolve height, color, leaf type and fruit. | done | 12 plant genes evolve; height, leaf type, hue, fruit and glow drive the 3D plants |
 | 10 | Creatures built entirely from genomes: legs, fins or wings, size, neck, horns, tail, color, pattern, glow. | in progress | sim done (50-gene genome drives body, senses, diet, behaviour); meshes to come |
 | 11 | Procedural walking with feet planted on the terrain. | not started | |
 | 12 | Energy, hunger, reproduction, aging and death. | in progress | sim done at population level (energy, starvation, breeding, death) |
@@ -51,11 +51,11 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 29 | Lightning starts wildfires, followed by regrowth (grass, then shrubs, then forest). | simplified | fires are statistical per region with scorch and regrowth; flame visuals to come |
 | 30 | Ice ages and warm eras, with biomes migrating as the climate changes. | done | long climate cycles drive ice ages and warm eras; biomes follow |
 | 31 | Sea level rises and falls, opening and closing land bridges. | in progress | sea level follows ice volume; land-bridge effects on life to verify |
-| 32 | Volcanic eruptions with lava, ash and fertile ground afterward. | in progress | sim done (eruptions build land, ash, fertility, cooling); lava and plume visuals to come |
+| 32 | Volcanic eruptions with lava, ash and fertile ground afterward. | in progress | eruptions build land, ash, fertility, cooling, lava glow; cones erode; ash plume particles to come |
 | 33 | Meteor strike god tool: shockwave, crater, impact winter. | in progress | meteor god tool works (click to strike, flash, crater, impact winter); particle effects to come |
 | 34 | Mass extinctions, each logged with its causes. | done | detected from extinction rate, logged with weighted causes |
 | 35 | Adaptive radiation that refills empty niches after extinctions. | in progress | empty worlds speciate faster; radiation event after a mass extinction |
-| 36 | Night side: bioluminescent plants and creatures. | not started | |
+| 36 | Night side: bioluminescent plants and creatures. | in progress | glowing plant species light up at night; glowing creatures to come |
 | 37 | Auroras over the poles. | not started | |
 | 38 | Generative ambient music that shifts with the planet's state. | not started | |
 | 39 | Postcard mode: UI hidden, slow cinematic camera. | in progress | P hides the UI and lets the camera drift; cinematic paths to come |

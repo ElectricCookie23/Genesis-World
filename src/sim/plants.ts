@@ -42,8 +42,8 @@ export function isAquatic(genes: Float32Array): boolean {
 export function landSuitability(genes: Float32Array, temp: number, moisture: number): number {
   const h = genes[PG.Height]!;
   // tall plants need far more water and a long warm season
-  const need = genes[PG.WaterNeed]! * 0.6 + 0.5 * h;
-  const sw = sat(1 - (need - moisture) * 3.5);
+  const need = genes[PG.WaterNeed]! * 0.55 + 0.42 * h;
+  const sw = sat(1 - (need - moisture) * 3);
   const topt = 1 + 31 * genes[PG.Leaf]!;
   const width = 14 - 4 * genes[PG.Growth]!;
   const d = (temp - topt) / width;
@@ -264,7 +264,7 @@ export class Plants {
           // wind-blown and animal-carried seeds can jump further
           if (disp > 0.3 && rng.chance(0.4)) nb = reg.grid.neighbors[nb * 6 + rng.int(reg.grid.ncount[nb]!)]!;
           // now and then a spore or seed drifts far on a current or a storm
-          if (rng.chance(sp.aquatic ? 0.03 : 0.006)) nb = rng.int(R);
+          if (rng.chance(sp.aquatic ? 0.03 : 0.02)) nb = rng.int(R);
           let colonist = sp;
           if (rng.chance(0.012)) {
             mutatePlant(sp.genes, this.scratch, rng, 1.6);

@@ -1,7 +1,7 @@
 // The whole deterministic simulation. Runs in the worker and in headless tests.
 import { RNG, hashSeed } from './rng';
 import { BIOME_NAMES, buildGrid, createWorld, GRID_N, type Grid, type World } from './world';
-import { computeDrainage, erupt, generateTerrain, impact, type GeologyState, type VolcanoSite } from './geology';
+import { computeDrainage, erode, erupt, generateTerrain, impact, type GeologyState, type VolcanoSite } from './geology';
 import { classifyBiomes, createClimate, updateMoisture, updateSnow, updateTemperature, type ClimateState } from './climate';
 import { EventLog, type SimEvent } from './events';
 import { buildRegions, updateRegions, type Regions } from './regions';
@@ -394,7 +394,11 @@ export class Simulation {
     updateRegions(reg, this.world, this.climate);
     this.prof.regions += performance.now() - tr;
     this.originOfLife();
-    if (this.stage === 'barren' || this.stage === 'microbes') return;
+    if (this.stage === 'barren' || this.stage === 'microbes') {
+      this.milestoneTimer++;
+      if (this.milestoneTimer % 16 === 0 && erode(this.world, Math.min(0.5, 0.06 * 16 * tau))) this.terrainDirty = true;
+      return;
+    }
     const p = this.plants;
     const t0 = performance.now();
     p.step(this.world, this.climate, this.lifeRng, this.simYear, tau);
@@ -409,6 +413,7 @@ export class Simulation {
     this.creatureEvents();
     this.milestoneTimer++;
     if (this.milestoneTimer % 8 === 0) this.checkMilestones();
+    if (this.milestoneTimer % 16 === 0 && erode(this.world, Math.min(0.5, 0.06 * 16 * tau))) this.terrainDirty = true;
   }
 
   private bestSeaRegion(): number {
@@ -491,8 +496,8 @@ export class Simulation {
       for (let k = reg.cellStart[r]!; k < reg.cellStart[r + 1]!; k++) {
         const i = reg.cellList[k]!;
         if (w.elevation[i]! > w.seaLevel && w.vegetation[i]! > 0.1) {
-          w.ash[i] = Math.max(w.ash[i]!, 0.75);
-          w.lava[i] = Math.max(w.lava[i]!, 0.45);
+          w.ash[i] = Math.max(w.ash[i]!, 0.6);
+          if (((i * 2654435761) >>> 0) % 5 === 0) w.lava[i] = Math.max(w.lava[i]!, 0.3);
         }
       }
     }

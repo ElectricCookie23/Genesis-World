@@ -339,7 +339,11 @@ export function erupt(world: World, site: VolcanoSite, magnitude: number): numbe
   const c = site.cell;
   site.eruptions++;
   const build = 0.04 + 0.35 * magnitude;
-  if (elevation[c]! < 7.5) elevation[c] = elevation[c]! + build;
+  // a cone only stands so far above its surroundings before it slumps
+  let around = 0;
+  for (let j = 0; j < grid.ncount[c]!; j++) around += elevation[grid.neighbors[c * 6 + j]!]!;
+  around /= grid.ncount[c]!;
+  if (elevation[c]! < 6.5 && elevation[c]! - around < 2.6) elevation[c] = elevation[c]! + build;
   for (let j = 0; j < grid.ncount[c]!; j++) {
     const nb = grid.neighbors[c * 6 + j]!;
     if (elevation[nb]! < elevation[c]! - 0.3) elevation[nb] = elevation[nb]! + build * 0.45;
@@ -373,4 +377,23 @@ export function impact(world: World, cell: number, size: number): { cells: numbe
     if (d < 1) lava[i] = 1;
   }
   return { cells, dist, radius };
+}
+
+/** Slow erosion: sharp peaks wear down toward their surroundings. Returns true if anything moved. */
+export function erode(world: World, amount: number): boolean {
+  const { grid, elevation, seaLevel } = world;
+  let changed = false;
+  for (let i = 0; i < grid.count; i++) {
+    const e = elevation[i]!;
+    if (e <= seaLevel + 0.5) continue;
+    let s = 0;
+    const nc = grid.ncount[i]!;
+    for (let j = 0; j < nc; j++) s += elevation[grid.neighbors[i * 6 + j]!]!;
+    const excess = e - s / nc - 1.1;
+    if (excess > 0) {
+      elevation[i] = e - excess * amount;
+      changed = true;
+    }
+  }
+  return changed;
 }
