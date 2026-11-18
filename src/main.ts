@@ -213,6 +213,7 @@ async function boot(): Promise<void> {
     }
   };
 
+  let lastHud = 0;
   const resetHistory = () => {
     state.events = [];
     state.chronicle = [];
@@ -275,7 +276,8 @@ async function boot(): Promise<void> {
         break;
       case 'stats':
         scene.applyStats(msg.stats);
-        update({ stats: msg.stats, fps: scene.fpsAvg });
+        // the HUD refreshes four times a second; the scene gets every update
+        if (performance.now() - lastHud > 250) { lastHud = performance.now(); update({ stats: msg.stats, fps: scene.fpsAvg }); } else state.stats = msg.stats;
         music.setMood({ stage: msg.stats.stage, era: msg.stats.era, life: Math.min(1, msg.stats.livingSpecies / 30), hush: performance.now() < hushUntil });
         break;
       case 'events':
@@ -438,7 +440,9 @@ async function boot(): Promise<void> {
   requestAnimationFrame(loop);
 
   // hooks for automated visual checks
-  (window as unknown as { __genesis: unknown }).__genesis = { scene, state, setSpeed, update, actions, send, skip: () => opening?.skip(), opening: () => opening };
+  // grab the 3D canvas straight after a render (cheap way to capture frames in automated checks)
+  const grab = () => { scene.frame(0); return canvas.toDataURL('image/jpeg', 0.9); };
+  (window as unknown as { __genesis: unknown }).__genesis = { scene, state, setSpeed, update, actions, send, grab, skip: () => opening?.skip(), opening: () => opening };
 }
 
 boot().catch((err) => {

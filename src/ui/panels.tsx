@@ -200,6 +200,16 @@ export function CreatureCard() {
 /** The tree of life: time runs left to right, every species is a glowing branch. */
 export function Tree() {
   const s = useStore();
+  // the tree is costly to lay out: redraw it about once a second, not on every stats tick
+  const cache = useRef<{ at: number; species: number; node: any }>({ at: 0, species: -1, node: null });
+  const nowMs = performance.now();
+  if (cache.current.node && nowMs - cache.current.at < 1000 && cache.current.species === s.species.size) return cache.current.node;
+  const node = renderTree(s);
+  cache.current = { at: nowMs, species: s.species.size, node };
+  return node;
+}
+
+function renderTree(s: UIState) {
   const all = [...s.species.values()].sort((a, b) => a.bornYear - b.bornYear || a.id - b.id);
   const now = s.stats?.simYear ?? 1;
   const children = new Map<number, SpeciesInfo[]>();

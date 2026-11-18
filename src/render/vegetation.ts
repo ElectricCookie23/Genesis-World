@@ -91,6 +91,7 @@ export class Vegetation {
   private lastFocus = new Vector3(9, 9, 9);
   private lastDist = 0;
   private dirty = true;
+  private lastBuild = 0;
   private triCentre: Float32Array;
   maxInstances: number;
 
@@ -145,7 +146,9 @@ export class Vegetation {
 
   setCells(cells: CellSnapshot): void {
     this.cells = cells;
-    this.dirty = true;
+    // replant at most every two seconds while the world changes under a still camera
+    const now = performance.now();
+    if (now - this.lastBuild > 2000) this.dirty = true;
   }
 
   setPlants(plants: Map<number, PlantInfo>): void {
@@ -166,6 +169,7 @@ export class Vegetation {
     const moved = focus.distanceToSquared(this.lastFocus) > Math.pow(Math.min(0.03, dist * 0.12), 2) || Math.abs(Math.log(dist / Math.max(1e-6, this.lastDist))) > 0.2;
     if (!moved && !this.dirty) return;
     this.dirty = false;
+    this.lastBuild = performance.now();
     this.lastFocus.copy(focus);
     this.lastDist = dist;
     // radius of the planted patch grows with altitude; density per triangle falls
