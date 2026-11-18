@@ -45,4 +45,7 @@ Read this first when resuming. Then BRIEF.md, PROGRESS.md, DECISIONS.md and `git
 4. Tier 2 in numbered order (41 onward), starting with intelligence threshold, campfires and settlements.
 
 ## Known issues
+- Land animals, hunters and flight do not appear in every seed (on a small grid, `basalt-vale-202` still had none at 260 My). Tune with `scripts/probe.ts` and `scripts/history.ts` across the five test seeds.
+- The build container has been killed for memory when a headless browser check and a history script ran at the same time. Run them one at a time.
+- A browser check that warps 120 My takes about 8 minutes in software rendering; run it in the background and do not edit `src` meanwhile.
 - GitHub Pages cannot deploy while the repo is private on a free plan (see DECISIONS.md #2).
