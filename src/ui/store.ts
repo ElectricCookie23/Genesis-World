@@ -1,7 +1,9 @@
 // Tiny observable store shared by the Preact UI and the app.
 import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
-import type { WorldStats } from '../shared/protocol';
+import type { PlantInfo, SpeciesInfo, WorldStats } from '../shared/protocol';
+
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings';
 
 export interface UIState {
   stats: WorldStats | null;
@@ -15,8 +17,22 @@ export interface UIState {
   uiHidden: boolean;
   postcard: boolean;
   chronicleLine: string;
+  /** All events by id (sparse until received). */
   events: SimEvent[];
+  /** Ids of events worth narrating, oldest first. */
+  chronicle: number[];
+  species: Map<number, SpeciesInfo>;
+  plants: Map<number, PlantInfo>;
+  panel: Panel;
+  /** Event shown in the "Why did this happen?" panel. */
+  whyEvent: number;
+  selectedSpecies: number;
+  milestone: SimEvent | null;
   notice: string;
+  godTool: string;
+  slowOnEvents: boolean;
+  hintStep: number;
+  mobile: boolean;
 }
 
 export const state: UIState = {
@@ -32,7 +48,18 @@ export const state: UIState = {
   postcard: false,
   chronicleLine: '',
   events: [],
+  chronicle: [],
+  species: new Map(),
+  plants: new Map(),
+  panel: 'none',
+  whyEvent: -1,
+  selectedSpecies: -1,
+  milestone: null,
   notice: '',
+  godTool: '',
+  slowOnEvents: true,
+  hintStep: 0,
+  mobile: false,
 };
 
 const listeners = new Set<() => void>();
@@ -63,4 +90,13 @@ export const actions = {
   setSpeed: (_index: number) => {},
   togglePause: () => {},
   skipOpening: () => {},
+  flyToCell: (_cell: number, _dist?: number) => {},
+  selectSpecies: (_id: number) => {},
+  setSlowOnEvents: (_on: boolean) => {},
+  copySeedLink: () => {},
+  newWorld: (_seed?: string) => {},
 };
+
+export function togglePanel(p: Panel): void {
+  update({ panel: state.panel === p ? 'none' : p });
+}

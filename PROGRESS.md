@@ -40,26 +40,26 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 18 | Life starts in the sea and moves onto land over time. | done | life starts in the sea; oxygen opens the land; first land animals emerge around 85 My |
 | 19 | Flight evolves gradually, starting with gliding. | not started | |
 | 20 | The cause graph: every event stores its causes and effects. | done | every event stores causes with weights and effects |
-| 21 | "Why did this happen?" panel on any event. | not started | |
+| 21 | "Why did this happen?" panel on any event. | done | panel walks the cause graph backward as a vertical story with a glyph thumbnail per step |
 | 22 | One continuous camera zoom from deep space down to the ground. | not started | |
 | 23 | Follow mode: click a creature and the camera tracks it, with an info card (name, species, age, genes, lineage, current action). | not started | |
-| 24 | Time controls from paused to Epoch speed (see section 7.2). | not started | |
-| 25 | A live, glowing tree of life. Clicking a branch flies the camera to that species. | not started | |
-| 26 | A chronicle narrated like a nature documentary. | not started | |
-| 27 | Milestone pop-ups: "First eye," "First flight," "First fire," "First city." | not started | |
+| 24 | Time controls from paused to Epoch speed (see section 7.2). | done | pause, 1x, 10x, 100x, 1000x, Epoch; slows around big events |
+| 25 | A live, glowing tree of life. Clicking a branch flies the camera to that species. | in progress | live glowing tree; click a branch to open the species and fly to its range |
+| 26 | A chronicle narrated like a nature documentary. | done | chronicle panel and a narration line, calm documentary voice, no template repeats twice in a row |
+| 27 | Milestone pop-ups: "First eye," "First flight," "First fire," "First city." | done | milestone pop-ups for first life, eye, hunter, steps on land, flight, forest and more |
 | 28 | Storm cells with lightning, and rain that drives plant growth. | not started | |
 | 29 | Lightning starts wildfires, followed by regrowth (grass, then shrubs, then forest). | simplified | fires are statistical per region with scorch and regrowth; flame visuals to come |
 | 30 | Ice ages and warm eras, with biomes migrating as the climate changes. | done | long climate cycles drive ice ages and warm eras; biomes follow |
 | 31 | Sea level rises and falls, opening and closing land bridges. | in progress | sea level follows ice volume; land-bridge effects on life to verify |
 | 32 | Volcanic eruptions with lava, ash and fertile ground afterward. | in progress | sim done (eruptions build land, ash, fertility, cooling); lava and plume visuals to come |
-| 33 | Meteor strike god tool: shockwave, crater, impact winter. | in progress | sim done (crater, kill radius, impact winter); god tool UI and visuals to come |
+| 33 | Meteor strike god tool: shockwave, crater, impact winter. | in progress | meteor god tool works (click to strike, flash, crater, impact winter); particle effects to come |
 | 34 | Mass extinctions, each logged with its causes. | done | detected from extinction rate, logged with weighted causes |
 | 35 | Adaptive radiation that refills empty niches after extinctions. | in progress | empty worlds speciate faster; radiation event after a mass extinction |
 | 36 | Night side: bioluminescent plants and creatures. | not started | |
 | 37 | Auroras over the poles. | not started | |
 | 38 | Generative ambient music that shifts with the planet's state. | not started | |
-| 39 | Postcard mode: UI hidden, slow cinematic camera. | not started | |
-| 40 | Seed codes: a shared code replays the same world exactly. | in progress | seed in URL replays the same world; share UI to come |
+| 39 | Postcard mode: UI hidden, slow cinematic camera. | in progress | P hides the UI and lets the camera drift; cinematic paths to come |
+| 40 | Seed codes: a shared code replays the same world exactly. | done | seed in the URL replays the world; copy-link button in the World panel |
 | 41 | An intelligence threshold any lineage can cross. | not started | |
 | 42 | Campfires appearing on the night side. | not started | |
 | 43 | Villages, then city lights visible from orbit. | not started | |

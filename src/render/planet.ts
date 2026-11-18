@@ -48,6 +48,7 @@ export class PlanetMesh {
   private readonly normals: Float32Array;
   private readonly colors: Float32Array;
   private readonly aux: Float32Array;
+  private readonly glow: Float32Array;
   private readonly cellColor: Float32Array;
   /** Smoothed biome colours, so biomes blend over 2 to 3 cells. */
   private readonly scratch: Float32Array;
@@ -59,6 +60,7 @@ export class PlanetMesh {
     this.normals = new Float32Array(triCount * 9);
     this.colors = new Float32Array(triCount * 9);
     this.aux = new Float32Array(triCount * 3);
+    this.glow = new Float32Array(triCount * 3);
     this.cellColor = new Float32Array(grid.count * 3);
     this.scratch = new Float32Array(grid.count * 3);
     this.elevation = new Float32Array(grid.count);
@@ -67,6 +69,7 @@ export class PlanetMesh {
     this.geometry.setAttribute('normal', new BufferAttribute(this.normals, 3));
     this.geometry.setAttribute('color', new BufferAttribute(this.colors, 3));
     this.geometry.setAttribute('cloudCover', new BufferAttribute(this.aux, 1));
+    this.geometry.setAttribute('glow', new BufferAttribute(this.glow, 1));
 
     const material = new MeshBasicNodeMaterial();
     const albedo = attribute('color', 'vec3');
@@ -93,6 +96,10 @@ export class PlanetMesh {
     const rim = pow(float(1).sub(max(dot(up, V), 0)), 3);
     const hazeColor = vec3(uHazeTint).mul(day.mul(0.9).add(0.02));
     lit = mix(lit, hazeColor, rim.mul(0.3).add(uHazeAmount).clamp(0, 0.9).mul(float(1).sub(uMolten)));
+    // lava and wildfire glow (bright enough to bloom, flickering)
+    const heat = attribute('glow', 'float');
+    const flicker = mx_fractal_noise_float(P.mul(60).add(vec3(0, uTime.mul(0.6), 0)), 2, 2.0, 0.5).mul(0.35).add(0.75);
+    lit = lit.add(vec3(3.2, 0.75, 0.08).mul(heat.mul(heat)).mul(flicker));
     material.colorNode = lit;
     this.mesh = new Mesh(this.geometry, material);
     this.mesh.frustumCulled = false;
@@ -116,9 +123,11 @@ export class PlanetMesh {
       const lush = LUSH[b < BIOME_COUNT ? b : 0]!;
       const bare = BARE[b < BIOME_COUNT ? b : 0]!;
       const v = Math.min(1, vegetation[i]!);
-      sc[i * 3] = bare.r + (lush.r - bare.r) * v;
-      sc[i * 3 + 1] = bare.g + (lush.g - bare.g) * v;
-      sc[i * 3 + 2] = bare.b + (lush.b - bare.b) * v;
+      // tall canopy reads darker and richer than low growth
+      const shade = 1 - 0.3 * Math.min(1, cells.canopy[i]! * 1.3) * v;
+      sc[i * 3] = (bare.r + (lush.r - bare.r) * v) * shade;
+      sc[i * 3 + 1] = (bare.g + (lush.g - bare.g) * v) * (shade * 0.5 + 0.5);
+      sc[i * 3 + 2] = (bare.b + (lush.b - bare.b) * v) * shade;
     }
     for (let i = 0; i < count; i++) {
       // blend with neighbours so biome borders are soft
@@ -149,6 +158,8 @@ export class PlanetMesh {
     }
     const P = this.positions, C = this.colors, Nn = this.normals, A = this.aux;
     const cloud = cells.cloud;
+    const lava = cells.lava;
+    const Gl = this.glow;
     for (let t = 0, o = 0; t < tris.length; t += 3, o += 9) {
       const a = tris[t]!, b = tris[t + 1]!, c = tris[t + 2]!;
       if (geometryChanged) {
@@ -173,6 +184,7 @@ export class PlanetMesh {
       C[o + 6] = cc[c * 3]!; C[o + 7] = cc[c * 3 + 1]!; C[o + 8] = cc[c * 3 + 2]!;
       const ti = t;
       A[ti] = cloud[a]!; A[ti + 1] = cloud[b]!; A[ti + 2] = cloud[c]!;
+      Gl[ti] = lava[a]!; Gl[ti + 1] = lava[b]!; Gl[ti + 2] = lava[c]!;
     }
     if (geometryChanged) {
       this.geometry.attributes.position!.needsUpdate = true;
@@ -180,5 +192,6 @@ export class PlanetMesh {
     }
     this.geometry.attributes.color!.needsUpdate = true;
     this.geometry.attributes.cloudCover!.needsUpdate = true;
+    this.geometry.attributes.glow!.needsUpdate = true;
   }
 }

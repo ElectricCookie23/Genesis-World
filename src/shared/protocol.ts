@@ -25,6 +25,8 @@ export interface CellSnapshot {
   cloud: Float32Array;
   ash: Float32Array;
   lava: Float32Array;
+  canopy: Float32Array;
+  flora: Int32Array;
   flow: Float32Array;
   downhill: Int32Array;
   windE: Float32Array;
@@ -46,6 +48,44 @@ export interface WorldStats {
   /** Actual years per second being simulated (may be reduced around big events). */
   yearsPerSecond: number;
   tickMs: number;
+  stage: string;
+  era: string;
+  oxygen: number;
+  livingSpecies: number;
+  totalSpecies: number;
+  plantSpecies: number;
+  population: number;
+  landCover: number;
+}
+
+/** One animal species, as shown in the tree of life and info cards. */
+export interface SpeciesInfo {
+  id: number;
+  name: string;
+  parent: number;
+  bornYear: number;
+  extinctYear: number;
+  pop: number;
+  peakPop: number;
+  regions: number;
+  /** Fine cell at the heart of its range. */
+  homeCell: number;
+  eventId: number;
+  /** Reference genome (GENE_COUNT floats). */
+  genes: Float32Array;
+  metres: number;
+  land: number;
+  fly: number;
+}
+
+export interface PlantInfo {
+  id: number;
+  name: string;
+  parent: number;
+  genes: Float32Array;
+  aquatic: boolean;
+  extinct: boolean;
+  cover: number;
 }
 
 export type ToWorker =
@@ -54,11 +94,15 @@ export type ToWorker =
   | { type: 'focus'; x: number; y: number; z: number; altitude: number }
   | { type: 'requestCells' }
   | { type: 'god'; tool: string; cell: number; power?: number }
-  | { type: 'settings'; slowOnEvents?: boolean };
+  | { type: 'settings'; slowOnEvents?: boolean }
+  /** Jump ahead by running the sim flat out (used by automated checks). */
+  | { type: 'warp'; years: number };
 
 export type FromWorker =
   | { type: 'ready'; seed: string; gridN: number; tilt: number; cells: CellSnapshot; stats: WorldStats }
   | { type: 'cells'; cells: CellSnapshot }
   | { type: 'stats'; stats: WorldStats }
   | { type: 'events'; events: SimEvent[] }
+  | { type: 'species'; species: SpeciesInfo[] }
+  | { type: 'plants'; plants: PlantInfo[] }
   | { type: 'error'; message: string };

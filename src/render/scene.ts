@@ -11,7 +11,7 @@ import { createAtmosphere, createMoon, createSky } from './atmosphere';
 import { createDustDisc } from './effects';
 import { OrbitCamera } from './camera';
 import { PostFX } from './postfx';
-import { EXAG, MOON_DISTANCE, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime } from './common';
+import { EXAG, MOON_DISTANCE, uFlash, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime } from './common';
 
 export type Quality = 'low' | 'medium' | 'high' | 'ultra';
 
@@ -47,10 +47,14 @@ export class GenesisScene {
   /** Era grade targets: -1 ice age .. +1 greenhouse, plus impact-winter haze 0..1. */
   eraWarmth = 0;
   eraHaze = 0;
+  eraHazeTarget = 0;
   private lastCell = 0;
   private lastElevation?: Float32Array;
   moonDistance = MOON_DISTANCE;
   fpsAvg = 60;
+  flashLevel = 0;
+  /** When false the opening sequence owns the flash uniform. */
+  ownsFlash = false;
 
   constructor(readonly canvas: HTMLCanvasElement, forceWebGL = false) {
     this.renderer = new WebGPURenderer({ canvas, antialias: true, forceWebGL, powerPreference: 'high-performance' });
@@ -111,6 +115,33 @@ export class GenesisScene {
     return 1 + e * EXAG;
   }
 
+  /** Unit direction on the planet under a screen point, or null if the point misses it. */
+  pick(clientX: number, clientY: number): Vector3 | null {
+    const rect = this.canvas.getBoundingClientRect();
+    const ndc = new Vector3(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1, 0.5);
+    const cam = this.cam.camera;
+    cam.updateMatrixWorld();
+    const dir = ndc.unproject(cam).sub(cam.position).normalize();
+    const o = cam.position;
+    let radius = 1;
+    for (let k = 0; k < 3; k++) {
+      const b = o.dot(dir);
+      const disc = b * b - (o.lengthSq() - radius * radius);
+      if (disc < 0) return null;
+      const t = -b - Math.sqrt(disc);
+      if (t < 0) return null;
+      const hit = o.clone().addScaledVector(dir, t).normalize();
+      radius = this.surfaceRadius(hit.x, hit.y, hit.z);
+      if (k === 2) return hit;
+    }
+    return null;
+  }
+
+  /** Brief white flash (impacts). */
+  flash(amount: number): void {
+    this.flashLevel = Math.max(this.flashLevel, amount);
+  }
+
   cellAt(x: number, y: number, z: number): number {
     if (!this.grid) return 0;
     this.lastCell = nearestCell(this.grid, x, y, z, this.lastCell);
@@ -124,6 +155,7 @@ export class GenesisScene {
       this.declination = stats.tilt * Math.sin(stats.yearFrac * Math.PI * 2);
     }
     this.eraWarmth = Math.max(-1, Math.min(1, (stats.meanTemp - 14.5) / 7));
+    this.eraHazeTarget = stats.era === 'winter' ? 1 : 0;
   }
 
   frame(dt: number): void {
@@ -147,6 +179,11 @@ export class GenesisScene {
     (uHazeTint.value as Vector3).lerp(HAZE_BLUE.clone().lerp(HAZE_SICK, this.eraHaze), Math.min(1, dt * 0.8));
     uHazeAmount.value += (this.eraHaze * 0.35 - uHazeAmount.value) * Math.min(1, dt * 0.8);
 
+    if (this.ownsFlash) {
+      this.flashLevel *= Math.exp(-dt * 2.2);
+      uFlash.value = this.flashLevel;
+    }
+    this.eraHaze += (this.eraHazeTarget - this.eraHaze) * Math.min(1, dt * 0.5);
     this.cam.update(dt);
     const c = this.cam.camera;
     const far = c.position.length() + this.moonDistance + 4;
