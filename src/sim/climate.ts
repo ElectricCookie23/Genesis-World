@@ -178,7 +178,14 @@ export function updateMoisture(world: World, state: ClimateState, passes: number
     }
     humidity.set(scratch);
   }
-  for (let i = 0; i < count; i++) if (elevation[i]! <= seaLevel) moisture[i] = Math.min(1, humidity[i]!);
+  const cloud = world.cloud;
+  for (let i = 0; i < count; i++) {
+    if (elevation[i]! <= seaLevel) moisture[i] = Math.min(1, humidity[i]!);
+    const a = Math.abs(lat[i]!) * (180 / Math.PI);
+    const band = 0.5 + 0.6 * Math.exp(-(a * a) / 160) - 0.4 * Math.exp(-((a - 26) * (a - 26)) / 110) + 0.45 * Math.exp(-((a - 55) * (a - 55)) / 260);
+    const target = Math.max(0, Math.min(1, humidity[i]! * band * 0.95 + (elevation[i]! > seaLevel ? moisture[i]! * 0.3 : 0)));
+    cloud[i] = cloud[i]! + (target - cloud[i]!) * 0.25;
+  }
 }
 
 /** Snow and ice build up where it is cold and melt where it is warm. dt in years. */

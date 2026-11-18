@@ -20,13 +20,13 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 
 | # | Feature | Status | Notes |
 |---|---|---|---|
-| 1 | Procedural icosphere planet with oceans, continents, mountains, rivers and polar caps. | not started | |
-| 2 | Biomes driven by temperature and moisture. | not started | |
-| 3 | Day/night cycle, plus axial tilt that creates seasons. | not started | |
-| 4 | Atmospheric scattering with blue rim glow and real sunsets. | not started | |
-| 5 | Cloud shell that moves with simulated wind and casts shadows. | not started | |
-| 6 | Glassy ocean with depth color, sun glint and coastal foam. | not started | |
-| 7 | Orbiting moon whose tides visibly move the coastline. | not started | |
+| 1 | Procedural icosphere planet with oceans, continents, mountains, rivers and polar caps. | in progress | planet, oceans, continents, mountains, polar caps done; river ribbons still to draw |
+| 2 | Biomes driven by temperature and moisture. | done |  |
+| 3 | Day/night cycle, plus axial tilt that creates seasons. | in progress | day/night done (cosmetic 80 s day); seasons shown at 1x and 10x |
+| 4 | Atmospheric scattering with blue rim glow and real sunsets. | done | ray-marched Rayleigh + Mie shell |
+| 5 | Cloud shell that moves with simulated wind and casts shadows. | done | noise shell drifting in wind bands, shadows on land and sea; cover from sim humidity |
+| 6 | Glassy ocean with depth color, sun glint and coastal foam. | done |  |
+| 7 | Orbiting moon whose tides visibly move the coastline. | in progress | moon orbits and raises a visible tidal bulge; sim-side tide effects to come |
 | 8 | Plants that spread by biome, light and rain, so forests and grasslands form on their own. | not started | |
 | 9 | Plants evolve height, color, leaf type and fruit. | not started | |
 | 10 | Creatures built entirely from genomes: legs, fins or wings, size, neck, horns, tail, color, pattern, glow. | not started | |
@@ -59,7 +59,7 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 37 | Auroras over the poles. | not started | |
 | 38 | Generative ambient music that shifts with the planet's state. | not started | |
 | 39 | Postcard mode: UI hidden, slow cinematic camera. | not started | |
-| 40 | Seed codes: a shared code replays the same world exactly. | not started | |
+| 40 | Seed codes: a shared code replays the same world exactly. | in progress | seed in URL replays the same world; share UI to come |
 | 41 | An intelligence threshold any lineage can cross. | not started | |
 | 42 | Campfires appearing on the night side. | not started | |
 | 43 | Villages, then city lights visible from orbit. | not started | |

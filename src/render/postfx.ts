@@ -1,0 +1,52 @@
+// Post-processing: bloom, ACES tone mapping, era colour grade, vignette, film grain.
+import { ACESFilmicToneMapping, RenderPipeline, type Camera, type Scene, type WebGPURenderer } from 'three/webgpu';
+import { float, fract, length, mix, pass, renderOutput, screenUV, sin, dot, smoothstep, uniform, vec2, vec3, vec4 } from 'three/tsl';
+import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import { uFlash, uGradeTint, uTime } from './common';
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export const uBloomStrength = uniform(0.5);
+export const uGrain = uniform(0.03);
+export const uVignette = uniform(0.5);
+
+export class PostFX {
+  readonly pipeline: RenderPipeline;
+  private bloomEnabled = true;
+  private scenePass: any;
+
+  constructor(private renderer: WebGPURenderer, scene: Scene, camera: Camera) {
+    renderer.toneMapping = ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    this.pipeline = new RenderPipeline(renderer);
+    this.scenePass = pass(scene, camera);
+    this.build();
+  }
+
+  setBloom(enabled: boolean): void {
+    if (enabled === this.bloomEnabled) return;
+    this.bloomEnabled = enabled;
+    this.build();
+  }
+
+  private build(): void {
+    const color = this.scenePass.getTextureNode('output');
+    let hdr: any = color;
+    if (this.bloomEnabled) {
+      const glow = bloom(color, 1, 0.55, 1.0);
+      hdr = color.add((glow as any).mul(uBloomStrength));
+    }
+    hdr = hdr.mul(vec4(vec3(uGradeTint), 1));
+    this.pipeline.outputColorTransform = false;
+    const mapped: any = renderOutput(hdr);
+    const uv = screenUV;
+    const vig = float(1).sub(smoothstep(0.45, 1.15, length(uv.sub(0.5)).mul(1.45)).mul(uVignette));
+    const grain = fract(sin(dot(uv.add(fract(uTime)), vec2(12.9898, 78.233))).mul(43758.5453)).sub(0.5).mul(uGrain);
+    const rgb = mix(mapped.rgb.mul(vig).add(grain), vec3(1, 1, 1), uFlash);
+    this.pipeline.outputNode = vec4(rgb, 1);
+    this.pipeline.needsUpdate = true;
+  }
+
+  render(): void {
+    this.pipeline.render();
+  }
+}

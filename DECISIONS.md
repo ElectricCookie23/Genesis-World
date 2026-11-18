@@ -12,3 +12,7 @@ Choices made where the brief was unclear or something had to change. Newest at t
 8. **Tests use Vitest** (Node environment, no browser) through `npm test`.
 9. **Tick rate:** the worker runs 20 fixed ticks per second; the renderer interpolates.
 10. **Auto-resume:** a scheduled task fires every 5 hours into the build session so work continues after a usage limit. HANDOFF.md is the note the next session reads first.
+11. **Day and night are cosmetic.** At 1x one sim day lasts one real second, which would strobe the sun, so the visible day lasts 80 real seconds at every speed. Seasons (sun declination) follow the sim at 1x and 10x.
+12. **Custom lighting instead of scene lights.** Every material computes its own sun, sky and night light in TSL from shared uniforms. It is cheaper than PBR lights and keeps terrain, ocean, clouds and atmosphere consistent. Real shadow maps for close-up creatures and trees come later.
+13. **Scale:** planet radius is 1 scene unit and 1 km of elevation is 0.0056 units, so 8 km peaks read from space. Life is drawn far larger than true scale (snow-globe planet).
+14. **Stars are drawn in the sky shader** (hashed cells) rather than as point sprites, so they look the same on WebGPU and WebGL2.

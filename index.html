@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="Genesis: a small living planet where geology, climate, life and civilization evolve on their own." />
+    <title>Genesis</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #000; overflow: hidden; overscroll-behavior: none; }
+      #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+      #boot {
+        position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background:
+          radial-gradient(1px 1px at 12% 22%, #fff8 50%, transparent 51%), radial-gradient(1px 1px at 78% 14%, #fff6 50%, transparent 51%),
+          radial-gradient(1px 1px at 33% 71%, #fff7 50%, transparent 51%), radial-gradient(1px 1px at 61% 83%, #fff5 50%, transparent 51%),
+          radial-gradient(1px 1px at 88% 58%, #fff7 50%, transparent 51%), radial-gradient(1px 1px at 47% 36%, #fff4 50%, transparent 51%),
+          radial-gradient(1px 1px at 8% 88%, #fff6 50%, transparent 51%), radial-gradient(1px 1px at 69% 44%, #fff5 50%, transparent 51%),
+          radial-gradient(1px 1px at 24% 49%, #fff4 50%, transparent 51%), radial-gradient(1px 1px at 93% 91%, #fff6 50%, transparent 51%), #000;
+        color: #e9e4d8; transition: opacity 1.6s ease; pointer-events: none;
+      }
+      #boot.gone { opacity: 0; }
+      #boot h1 { font: 500 clamp(34px, 7vw, 76px) 'Cormorant Garamond', 'Times New Roman', serif; letter-spacing: 0.42em; margin: 0 0 0 0.42em; opacity: 0.92; }
+      #boot .line { width: min(240px, 50vw); height: 1px; background: #ffffff1c; margin-top: 30px; overflow: hidden; }
+      #boot .line i { display: block; height: 100%; width: 0%; background: #e9e4d8; transition: width 0.4s ease; }
+      #boot p { font: 13px/1.6 'JetBrains Mono', ui-monospace, monospace; max-width: 34em; text-align: center; padding: 0 24px; color: #b9b3a6; }
+    </style>
+  </head>
+  <body>
+    <canvas id="view" tabindex="0"></canvas>
+    <div id="ui"></div>
+    <div id="boot"><h1>GENESIS</h1><div class="line"><i id="boot-bar"></i></div><p id="boot-msg"></p></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
