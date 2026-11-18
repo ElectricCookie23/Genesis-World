@@ -1,0 +1,31 @@
+{
+  "name": "genesis-world",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Genesis: a living planet simulation in the browser",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fontsource/cormorant-garamond": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "idb-keyval": "^6.3.0",
+    "preact": "^11.2.0",
+    "simplex-noise": "^4.0.3",
+    "three": "^0.187.0",
+    "tone": "^15.1.22"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^26.6.6",
+    "@types/three": "^0.187.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
+  }
+}

@@ -1,0 +1,172 @@
+# Progress
+
+Status of all 150 features from BRIEF.md. Values: not started, in progress, done, simplified (with a note).
+
+## Build stages
+
+| Stage | What | Status |
+|---|---|---|
+| 1 | Project setup, repo, CI workflow, PRNG, worker loop, message protocol | done |
+| 2 | Planet, terrain, ocean, atmosphere, clouds, lighting, post-processing, opening sequence | in progress |
+| 3 | Climate, weather, seasons, moon tides | not started |
+| 4 | Plants | not started |
+| 5 | Creatures, genetics, behaviour, speciation | not started |
+| 6 | Cause graph, chronicle, camera modes, core UI | not started |
+| 7 | Tier 2 | not started |
+| 8 | Tier 3 | not started |
+| 9 | Audio polish, performance pass, final QA | not started |
+
+## Features
+
+| # | Feature | Status | Notes |
+|---|---|---|---|
+| 1 | Procedural icosphere planet with oceans, continents, mountains, rivers and polar caps. | not started | |
+| 2 | Biomes driven by temperature and moisture. | not started | |
+| 3 | Day/night cycle, plus axial tilt that creates seasons. | not started | |
+| 4 | Atmospheric scattering with blue rim glow and real sunsets. | not started | |
+| 5 | Cloud shell that moves with simulated wind and casts shadows. | not started | |
+| 6 | Glassy ocean with depth color, sun glint and coastal foam. | not started | |
+| 7 | Orbiting moon whose tides visibly move the coastline. | not started | |
+| 8 | Plants that spread by biome, light and rain, so forests and grasslands form on their own. | not started | |
+| 9 | Plants evolve height, color, leaf type and fruit. | not started | |
+| 10 | Creatures built entirely from genomes: legs, fins or wings, size, neck, horns, tail, color, pattern, glow. | not started | |
+| 11 | Procedural walking with feet planted on the terrain. | not started | |
+| 12 | Energy, hunger, reproduction, aging and death. | not started | |
+| 13 | Mutation, with natural selection emerging on its own. | not started | |
+| 14 | Speciation detection, with each new species given a generated Latin-style name. | not started | |
+| 15 | Herbivores, predators and scavengers in a live food web. | not started | |
+| 16 | Herds, flocks and fish schools. | not started | |
+| 17 | Pack hunting, and prey that flee. | not started | |
+| 18 | Life starts in the sea and moves onto land over time. | not started | |
+| 19 | Flight evolves gradually, starting with gliding. | not started | |
+| 20 | The cause graph: every event stores its causes and effects. | not started | |
+| 21 | "Why did this happen?" panel on any event. | not started | |
+| 22 | One continuous camera zoom from deep space down to the ground. | not started | |
+| 23 | Follow mode: click a creature and the camera tracks it, with an info card (name, species, age, genes, lineage, current action). | not started | |
+| 24 | Time controls from paused to Epoch speed (see section 7.2). | not started | |
+| 25 | A live, glowing tree of life. Clicking a branch flies the camera to that species. | not started | |
+| 26 | A chronicle narrated like a nature documentary. | not started | |
+| 27 | Milestone pop-ups: "First eye," "First flight," "First fire," "First city." | not started | |
+| 28 | Storm cells with lightning, and rain that drives plant growth. | not started | |
+| 29 | Lightning starts wildfires, followed by regrowth (grass, then shrubs, then forest). | not started | |
+| 30 | Ice ages and warm eras, with biomes migrating as the climate changes. | not started | |
+| 31 | Sea level rises and falls, opening and closing land bridges. | not started | |
+| 32 | Volcanic eruptions with lava, ash and fertile ground afterward. | not started | |
+| 33 | Meteor strike god tool: shockwave, crater, impact winter. | not started | |
+| 34 | Mass extinctions, each logged with its causes. | not started | |
+| 35 | Adaptive radiation that refills empty niches after extinctions. | not started | |
+| 36 | Night side: bioluminescent plants and creatures. | not started | |
+| 37 | Auroras over the poles. | not started | |
+| 38 | Generative ambient music that shifts with the planet's state. | not started | |
+| 39 | Postcard mode: UI hidden, slow cinematic camera. | not started | |
+| 40 | Seed codes: a shared code replays the same world exactly. | not started | |
+| 41 | An intelligence threshold any lineage can cross. | not started | |
+| 42 | Campfires appearing on the night side. | not started | |
+| 43 | Villages, then city lights visible from orbit. | not started | |
+| 44 | Cave paintings depicting the real species they hunted. | not started | |
+| 45 | Religions founded on real events (the comet, the eclipse, the volcano). | not started | |
+| 46 | If the user intervenes a lot, civilizations build temples facing the camera. | not started | |
+| 47 | Domestication: tamed species start evolving in new directions. | not started | |
+| 48 | Agriculture that turns land into fields. | not started | |
+| 49 | Roads that follow ancient migration trails. | not started | |
+| 50 | Ruins that forests overgrow, later found by a second intelligent species. | not started | |
+| 51 | Plate tectonics with drifting continents. | not started | |
+| 52 | Mountain building at plate collisions, creating rain-shadow deserts. | not started | |
+| 53 | Earthquakes and tsunamis. | not started | |
+| 54 | Hotspots that build island chains. | not started | |
+| 55 | Erosion that carves canyons and grows deltas. | not started | |
+| 56 | Ocean currents that carry heat. | not started | |
+| 57 | Rafting: creatures ride storm debris to colonize islands. | not started | |
+| 58 | Coral reefs and atolls, with bleaching in heat waves. | not started | |
+| 59 | Plankton blooms visible from orbit, and bioluminescent waves at night. | not started | |
+| 60 | Hurricanes with a visible eye. | not started | |
+| 61 | Snow that builds up and melts, feeding the rivers. | not started | |
+| 62 | Oxygen level tracked, with a giant-insect era when it spikes. | not started | |
+| 63 | Seasonal migrations that wear trails into the land. | not started | |
+| 64 | Hibernation, and day versus night species. | not started | |
+| 65 | Camouflage evolving to match each biome. | not started | |
+| 66 | Sexual selection: mating displays and ornaments. | not started | |
+| 67 | Nests and parental care. | not started | |
+| 68 | Disease outbreaks spreading through herds. | not started | |
+| 69 | Symbiosis pairs. | not started | |
+| 70 | Flowers co-evolving with pollinators. | not started | |
+| 71 | Toxin versus resistance arms races, shown on a chart. | not started | |
+| 72 | Convergent evolution detector ("Two unrelated lineages have both evolved into crab-like forms"). | not started | |
+| 73 | Island dwarfism and gigantism. | not started | |
+| 74 | Flight lost on predator-free islands. | not started | |
+| 75 | Land species returning to the sea as ocean giants. | not started | |
+| 76 | Echolocation shown as ripples. | not started | |
+| 77 | Electric fish with visible arcs. | not started | |
+| 78 | Metamorphosis, with larval and adult forms that look completely different. | not started | |
+| 79 | Hive species with growing mounds. | not started | |
+| 80 | Keystone species whose loss collapses an ecosystem. | not started | |
+| 81 | Invasive species crossing land bridges. | not started | |
+| 82 | Living fossils flagged when a species stays unchanged for eons. | not started | |
+| 83 | Fossil layer: see-through ground showing bones where extinct species died. | not started | |
+| 84 | Auto-generated field guide with a sketch-style card for every species. | not started | |
+| 85 | Extinction memorial. | not started | |
+| 86 | Rewind timeline with snapshots and major events marked. | not started | |
+| 87 | God tools: ice age, heat wave, raise mountains, flood, plague, lightning. | not started | |
+| 88 | Custom species designer. | not started | |
+| 89 | A monolith that speeds up intelligence nearby. | not started | |
+| 90 | Overlays: temperature, rain, population, genetic diversity, oxygen. | not started | |
+| 91 | Graphs of population, biomass and atmosphere over time. | not started | |
+| 92 | First-person creature view. | not started | |
+| 93 | Creature calls generated from body size. | not started | |
+| 94 | Spatial sound: wind, rain, thunder, waves, lava. | not started | |
+| 95 | Documentary director: an auto-camera that cuts to whatever is most interesting right now. | not started | |
+| 96 | Solar eclipses that make creatures go quiet. | not started | |
+| 97 | Comets that return on a long cycle and become myths. | not started | |
+| 98 | Meteor showers that trigger mutation bursts. | not started | |
+| 99 | A rare captured second moon. | not started | |
+| 100 | Shattering the moon into a ring system. | not started | |
+| 101 | Ring shadow creating a cold stripe biome. | not started | |
+| 102 | A nearby supernova with a radiation spike. | not started | |
+| 103 | The sun brightening over the far future. | not started | |
+| 104 | Constellations named after extinct species. | not started | |
+| 105 | Binary-sun seeds with double shadows. | not started | |
+| 106 | The supercontinent cycle. | not started | |
+| 107 | Supervolcano ash winters. | not started | |
+| 108 | Glaciers carving fjords. | not started | |
+| 109 | Cave networks with blind, pale species. | not started | |
+| 110 | Hydrothermal vent ecosystems. | not started | |
+| 111 | Geysers and hot springs. | not started | |
+| 112 | Salt flats where inland seas dry. | not started | |
+| 113 | Tornadoes. | not started | |
+| 114 | Fire tornadoes in big wildfires. | not started | |
+| 115 | Dust storms that fertilize the ocean. | not started | |
+| 116 | Acid rain after eruptions. | not started | |
+| 117 | Valley fog, rainbows and heat shimmer. | not started | |
+| 118 | The ozone layer, and what happens when it's stripped. | not started | |
+| 119 | A snowball-planet event. | not started | |
+| 120 | Permafrost thaw speeding up warming. | not started | |
+| 121 | Civilizations burning ancient swamp coal and warming the planet. | not started | |
+| 122 | Plagues traveling along trade routes. | not started | |
+| 123 | Trade boats crossing the seas. | not started | |
+| 124 | Tribal wars and borders. | not started | |
+| 125 | A space age with satellites and a radio signal. | not started | |
+| 126 | Possible nuclear winter. | not started | |
+| 127 | Departure: a civilization leaves the planet as a light rising into space. | not started | |
+| 128 | Giant mushrooms and glowing fungal networks, shown in an x-ray view. | not started | |
+| 129 | Carnivorous plants in poor soil. | not started | |
+| 130 | Autumn colors. | not started | |
+| 131 | A marker on the oldest living tree. | not started | |
+| 132 | Gas-bladder creatures drifting like blimps. | not started | |
+| 133 | Living islands: sea giants with forests on their backs. | not started | |
+| 134 | Walking forests. | not started | |
+| 135 | Mass hatchings that light up the ocean. | not started | |
+| 136 | Bone graveyards. | not started | |
+| 137 | A rare golden mutant. | not started | |
+| 138 | An eternal storm sitting over one spot. | not started | |
+| 139 | A full underwater exploration view. | not started | |
+| 140 | Cross-section slice showing rock layers, caves and roots. | not started | |
+| 141 | Flat map view. | not started | |
+| 142 | Photo mode with film filters. | not started | |
+| 143 | Timeline fork that runs two futures side by side. | not started | |
+| 144 | Full family tree of any individual creature. | not started | |
+| 145 | Intelligent species developing their own music. | not started | |
+| 146 | Near silence after a mass extinction. | not started | |
+| 147 | More god tools: gene ray, shield dome, summon comet, tilt axis, rain of life. | not started | |
+| 148 | Hands-off mode that locks all god tools. | not started | |
+| 149 | GIF and video recording. | not started | |
+| 150 | Export a planet's history as an illustrated PDF book. | not started | |
