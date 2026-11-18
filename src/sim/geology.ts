@@ -1,6 +1,7 @@
 // Terrain generation, tectonics, volcanoes, erosion, drainage, sea level.
 import { RNG } from './rng';
 import { fbm, makeNoise, ridged } from './noise';
+import { placeName } from './names';
 import type { Plate, World } from './world';
 
 export interface Hotspot {
@@ -9,8 +10,16 @@ export interface Hotspot {
   cell: number;
 }
 
+export interface VolcanoSite {
+  cell: number;
+  name: string;
+  hotspot: boolean;
+  eruptions: number;
+}
+
 export interface GeologyState {
   hotspots: Hotspot[];
+  volcanoes: VolcanoSite[];
   /** Boundary convergence per cell (positive = colliding), refreshed with tectonics. */
   convergence: Float32Array;
   /** Target ocean fraction for this seed. */
@@ -202,7 +211,17 @@ export function generateTerrain(world: World, rng: RNG): GeologyState {
     // base fertility: young volcanic and lowland soils are richer
     world.fertility[i] = Math.max(0.15, Math.min(1, 0.5 + 0.25 * fbm(detailNoise, pos[i * 3]! * 3 + 31, pos[i * 3 + 1]! * 3, pos[i * 3 + 2]! * 3, 2)));
   }
-  return { hotspots, convergence, oceanFraction };
+  const volcanoes: VolcanoSite[] = [];
+  const vr = rng.fork('volcanoes');
+  for (const h of hotspots) volcanoes.push({ cell: h.cell, name: placeName(vr), hotspot: true, eruptions: 0 });
+  const candidates: number[] = [];
+  for (let i = 0; i < count; i++) if (convergence[i]! > 0.45 && elev[i]! > -0.5) candidates.push(i);
+  const wanted = Math.min(candidates.length, 40 + vr.int(20));
+  for (let k = 0; k < wanted; k++) {
+    const c = candidates[vr.int(candidates.length)]!;
+    if (!volcanoes.some((v) => v.cell === c)) volcanoes.push({ cell: c, name: placeName(vr), hotspot: false, eruptions: 0 });
+  }
+  return { hotspots, volcanoes, convergence, oceanFraction };
 }
 
 class MinHeap {
@@ -291,4 +310,67 @@ export function computeDrainage(world: World): void {
     const d = downhill[c]!;
     if (d >= 0 && elevation[d]! > seaLevel) flow[d] = flow[d]! + flow[c]!;
   }
+}
+
+/** Cells within a number of steps of a start cell, with their step distance. */
+export function cellsWithin(grid: World['grid'], start: number, radius: number): { cells: number[]; dist: number[] } {
+  const cells = [start];
+  const dist = [0];
+  const seen = new Set<number>([start]);
+  for (let k = 0; k < cells.length; k++) {
+    const d = dist[k]!;
+    if (d >= radius) continue;
+    const c = cells[k]!;
+    for (let j = 0; j < grid.ncount[c]!; j++) {
+      const nb = grid.neighbors[c * 6 + j]!;
+      if (!seen.has(nb)) {
+        seen.add(nb);
+        cells.push(nb);
+        dist.push(d + 1);
+      }
+    }
+  }
+  return { cells, dist };
+}
+
+/** Apply an eruption to the terrain. Returns the affected cells. magnitude 0..1. */
+export function erupt(world: World, site: VolcanoSite, magnitude: number): number[] {
+  const { grid, elevation, ash, lava, vegetation, fertility } = world;
+  const c = site.cell;
+  site.eruptions++;
+  const build = 0.04 + 0.35 * magnitude;
+  if (elevation[c]! < 7.5) elevation[c] = elevation[c]! + build;
+  for (let j = 0; j < grid.ncount[c]!; j++) {
+    const nb = grid.neighbors[c * 6 + j]!;
+    if (elevation[nb]! < elevation[c]! - 0.3) elevation[nb] = elevation[nb]! + build * 0.45;
+  }
+  const radius = Math.round(2 + 9 * magnitude);
+  const { cells, dist } = cellsWithin(grid, c, radius);
+  for (let k = 0; k < cells.length; k++) {
+    const i = cells[k]!;
+    const f = Math.pow(1 - dist[k]! / (radius + 1), 1.4);
+    ash[i] = Math.max(ash[i]!, f * (0.5 + 0.5 * magnitude));
+    vegetation[i] = vegetation[i]! * (1 - 0.92 * f);
+    if (dist[k]! <= 1 + Math.round(magnitude * 2)) lava[i] = Math.max(lava[i]!, 1 - dist[k]! * 0.3);
+    fertility[i] = Math.min(1, fertility[i]! + 0.2 * f);
+  }
+  return cells;
+}
+
+/** Meteor impact: crater, rim, ash blanket. size 0..1. Returns affected cells and their distance. */
+export function impact(world: World, cell: number, size: number): { cells: number[]; dist: number[]; radius: number } {
+  const { grid, elevation, ash, lava, vegetation } = world;
+  const radius = Math.round(3 + 9 * size);
+  const { cells, dist } = cellsWithin(grid, cell, radius * 3);
+  for (let k = 0; k < cells.length; k++) {
+    const i = cells[k]!;
+    const d = dist[k]! / radius;
+    if (d < 0.75) elevation[i] = elevation[i]! - (1.2 + 2.2 * size) * (1 - d * d);
+    else if (d < 1.2) elevation[i] = elevation[i]! + (0.5 + 0.9 * size) * (1 - Math.abs(d - 0.95) / 0.3);
+    const f = Math.max(0, 1 - d / 3);
+    ash[i] = Math.max(ash[i]!, f);
+    vegetation[i] = vegetation[i]! * (1 - f);
+    if (d < 1) lava[i] = 1;
+  }
+  return { cells, dist, radius };
 }

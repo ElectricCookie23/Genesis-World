@@ -27,19 +27,19 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 5 | Cloud shell that moves with simulated wind and casts shadows. | done | noise shell drifting in wind bands, shadows on land and sea; cover from sim humidity |
 | 6 | Glassy ocean with depth color, sun glint and coastal foam. | done |  |
 | 7 | Orbiting moon whose tides visibly move the coastline. | in progress | moon orbits and raises a visible tidal bulge; sim-side tide effects to come |
-| 8 | Plants that spread by biome, light and rain, so forests and grasslands form on their own. | not started | |
-| 9 | Plants evolve height, color, leaf type and fruit. | not started | |
-| 10 | Creatures built entirely from genomes: legs, fins or wings, size, neck, horns, tail, color, pattern, glow. | not started | |
+| 8 | Plants that spread by biome, light and rain, so forests and grasslands form on their own. | in progress | sim done (plant species compete per region; forests and grassland emerge); 3D plant instances to come |
+| 9 | Plants evolve height, color, leaf type and fruit. | in progress | sim done (12 plant genes evolve); visuals to come |
+| 10 | Creatures built entirely from genomes: legs, fins or wings, size, neck, horns, tail, color, pattern, glow. | in progress | sim done (50-gene genome drives body, senses, diet, behaviour); meshes to come |
 | 11 | Procedural walking with feet planted on the terrain. | not started | |
-| 12 | Energy, hunger, reproduction, aging and death. | not started | |
-| 13 | Mutation, with natural selection emerging on its own. | not started | |
-| 14 | Speciation detection, with each new species given a generated Latin-style name. | not started | |
-| 15 | Herbivores, predators and scavengers in a live food web. | not started | |
+| 12 | Energy, hunger, reproduction, aging and death. | in progress | sim done at population level (energy, starvation, breeding, death) |
+| 13 | Mutation, with natural selection emerging on its own. | done | mutation plus selection from food, predation and climate only; no fitness score |
+| 14 | Speciation detection, with each new species given a generated Latin-style name. | done | lineage speciation with Latin-style names from trait and place roots |
+| 15 | Herbivores, predators and scavengers in a live food web. | in progress | herbivores, hunters and scavengers share food pools per region; persistent hunters still rare |
 | 16 | Herds, flocks and fish schools. | not started | |
 | 17 | Pack hunting, and prey that flee. | not started | |
-| 18 | Life starts in the sea and moves onto land over time. | not started | |
+| 18 | Life starts in the sea and moves onto land over time. | done | life starts in the sea; oxygen opens the land; first land animals emerge around 85 My |
 | 19 | Flight evolves gradually, starting with gliding. | not started | |
-| 20 | The cause graph: every event stores its causes and effects. | not started | |
+| 20 | The cause graph: every event stores its causes and effects. | done | every event stores causes with weights and effects |
 | 21 | "Why did this happen?" panel on any event. | not started | |
 | 22 | One continuous camera zoom from deep space down to the ground. | not started | |
 | 23 | Follow mode: click a creature and the camera tracks it, with an info card (name, species, age, genes, lineage, current action). | not started | |
@@ -48,13 +48,13 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 26 | A chronicle narrated like a nature documentary. | not started | |
 | 27 | Milestone pop-ups: "First eye," "First flight," "First fire," "First city." | not started | |
 | 28 | Storm cells with lightning, and rain that drives plant growth. | not started | |
-| 29 | Lightning starts wildfires, followed by regrowth (grass, then shrubs, then forest). | not started | |
-| 30 | Ice ages and warm eras, with biomes migrating as the climate changes. | not started | |
-| 31 | Sea level rises and falls, opening and closing land bridges. | not started | |
-| 32 | Volcanic eruptions with lava, ash and fertile ground afterward. | not started | |
-| 33 | Meteor strike god tool: shockwave, crater, impact winter. | not started | |
-| 34 | Mass extinctions, each logged with its causes. | not started | |
-| 35 | Adaptive radiation that refills empty niches after extinctions. | not started | |
+| 29 | Lightning starts wildfires, followed by regrowth (grass, then shrubs, then forest). | simplified | fires are statistical per region with scorch and regrowth; flame visuals to come |
+| 30 | Ice ages and warm eras, with biomes migrating as the climate changes. | done | long climate cycles drive ice ages and warm eras; biomes follow |
+| 31 | Sea level rises and falls, opening and closing land bridges. | in progress | sea level follows ice volume; land-bridge effects on life to verify |
+| 32 | Volcanic eruptions with lava, ash and fertile ground afterward. | in progress | sim done (eruptions build land, ash, fertility, cooling); lava and plume visuals to come |
+| 33 | Meteor strike god tool: shockwave, crater, impact winter. | in progress | sim done (crater, kill radius, impact winter); god tool UI and visuals to come |
+| 34 | Mass extinctions, each logged with its causes. | done | detected from extinction rate, logged with weighted causes |
+| 35 | Adaptive radiation that refills empty niches after extinctions. | in progress | empty worlds speciate faster; radiation event after a mass extinction |
 | 36 | Night side: bioluminescent plants and creatures. | not started | |
 | 37 | Auroras over the poles. | not started | |
 | 38 | Generative ambient music that shifts with the planet's state. | not started | |
@@ -81,7 +81,7 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 59 | Plankton blooms visible from orbit, and bioluminescent waves at night. | not started | |
 | 60 | Hurricanes with a visible eye. | not started | |
 | 61 | Snow that builds up and melts, feeding the rivers. | not started | |
-| 62 | Oxygen level tracked, with a giant-insect era when it spikes. | not started | |
+| 62 | Oxygen level tracked, with a giant-insect era when it spikes. | in progress | oxygen tracked; limits body size and activity |
 | 63 | Seasonal migrations that wear trails into the land. | not started | |
 | 64 | Hibernation, and day versus night species. | not started | |
 | 65 | Camouflage evolving to match each biome. | not started | |

@@ -5,8 +5,8 @@ export const SPEEDS = [
   { key: 'pause', label: 'Pause', yearsPerSecond: 0 },
   { key: '1x', label: '1x', yearsPerSecond: 1 / 365 },
   { key: '10x', label: '10x', yearsPerSecond: 1 },
-  { key: '100x', label: '100x', yearsPerSecond: 5_000 },
-  { key: '1000x', label: '1000x', yearsPerSecond: 50_000 },
+  { key: '100x', label: '100x', yearsPerSecond: 30_000 },
+  { key: '1000x', label: '1000x', yearsPerSecond: 100_000 },
   { key: 'epoch', label: 'Epoch', yearsPerSecond: 300_000 },
 ] as const;
 export type SpeedIndex = 0 | 1 | 2 | 3 | 4 | 5;
@@ -24,6 +24,7 @@ export interface CellSnapshot {
   snow: Float32Array;
   cloud: Float32Array;
   ash: Float32Array;
+  lava: Float32Array;
   flow: Float32Array;
   downhill: Int32Array;
   windE: Float32Array;
@@ -51,7 +52,9 @@ export type ToWorker =
   | { type: 'init'; seed: string; gridN?: number }
   | { type: 'speed'; index: number }
   | { type: 'focus'; x: number; y: number; z: number; altitude: number }
-  | { type: 'requestCells' };
+  | { type: 'requestCells' }
+  | { type: 'god'; tool: string; cell: number; power?: number }
+  | { type: 'settings'; slowOnEvents?: boolean };
 
 export type FromWorker =
   | { type: 'ready'; seed: string; gridN: number; tilt: number; cells: CellSnapshot; stats: WorldStats }

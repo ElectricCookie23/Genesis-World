@@ -30,6 +30,10 @@ export interface ClimateState {
   scratch: Float32Array;
   /** Solar brightness multiplier (rises in the far future). */
   solar: number;
+  /** Static per-cell values: sin(latitude), rain band and cloud band factors. */
+  sinLat: Float32Array;
+  rainBand: Float32Array;
+  cloudBand: Float32Array;
 }
 
 export function createClimate(world: World, rng: RNG): ClimateState {
@@ -44,10 +48,10 @@ export function createClimate(world: World, rng: RNG): ClimateState {
   const state: ClimateState = {
     tilt: (r.range(14, 30) * Math.PI) / 180,
     cycles: [
-      { period: r.range(34e6, 52e6), amp: r.range(3.2, 4.6), phase: r.range(0, Math.PI * 2) },
-      { period: r.range(9e6, 15e6), amp: r.range(1.4, 2.4), phase: r.range(0, Math.PI * 2) },
-      { period: r.range(90e3, 130e3), amp: r.range(0.8, 1.5), phase: r.range(0, Math.PI * 2) },
-      { period: r.range(36e3, 46e3), amp: r.range(0.3, 0.6), phase: r.range(0, Math.PI * 2) },
+      { period: r.range(34e6, 52e6), amp: r.range(2.4, 3.3), phase: r.range(0, Math.PI * 2) },
+      { period: r.range(9e6, 15e6), amp: r.range(1.0, 1.7), phase: r.range(0, Math.PI * 2) },
+      { period: r.range(90e3, 130e3), amp: r.range(0.45, 0.8), phase: r.range(0, Math.PI * 2) },
+      { period: r.range(36e3, 46e3), amp: r.range(0.15, 0.3), phase: r.range(0, Math.PI * 2) },
     ],
     greenhouse: 2.5,
     aerosol: 0,
@@ -61,7 +65,17 @@ export function createClimate(world: World, rng: RNG): ClimateState {
     meanT: new Float32Array(count),
     scratch: new Float32Array(count),
     solar: 1,
+    sinLat: new Float32Array(count),
+    rainBand: new Float32Array(count),
+    cloudBand: new Float32Array(count),
   };
+  for (let i = 0; i < count; i++) {
+    const a = Math.abs(grid.lat[i]!) * (180 / Math.PI);
+    state.sinLat[i] = Math.sin(grid.lat[i]!);
+    // convective belt at the equator, dry subtropical highs, wet mid-latitudes
+    state.rainBand[i] = 0.55 + 0.75 * Math.exp(-(a * a) / 220) - 0.38 * Math.exp(-((a - 27) * (a - 27)) / 90) + 0.25 * Math.exp(-((a - 52) * (a - 52)) / 200);
+    state.cloudBand[i] = 0.5 + 0.6 * Math.exp(-(a * a) / 160) - 0.4 * Math.exp(-((a - 26) * (a - 26)) / 110) + 0.45 * Math.exp(-((a - 55) * (a - 55)) / 260);
+  }
   computeWind(world, state, r);
   return state;
 }
@@ -119,7 +133,7 @@ export function longCycleOffset(state: ClimateState, simYear: number): number {
 export function updateTemperature(world: World, state: ClimateState, simYear: number, yearFrac: number): void {
   const { grid, elevation, seaLevel, temperature } = world;
   const { lat, count, neighbors, ncount } = grid;
-  const iceFeedback = -9 * Math.max(0, state.iceFraction - 0.08);
+  const iceFeedback = -6 * Math.max(0, state.iceFraction - 0.08);
   const solar = (state.solar - 1) * 60;
   state.globalOffset = longCycleOffset(state, simYear) + state.greenhouse - state.aerosol + state.forced + iceFeedback + solar;
   const seasonal = yearFrac >= 0;
@@ -127,7 +141,7 @@ export function updateTemperature(world: World, state: ClimateState, simYear: nu
   const tiltScale = state.tilt / 0.41;
   const scratch = state.scratch;
   for (let i = 0; i < count; i++) {
-    const sl = Math.sin(lat[i]!);
+    const sl = state.sinLat[i]!;
     const h = elevation[i]! - seaLevel;
     const land = h > 0;
     let t = 27.5 - 49 * sl * sl + state.globalOffset + state.jitter[i]!;
@@ -145,7 +159,7 @@ export function updateTemperature(world: World, state: ClimateState, simYear: nu
     temperature[i] = t;
     sum += t;
     // slow-moving annual mean for biome classification
-    state.meanT[i] = seasonal ? state.meanT[i]! + (t - season * Math.sin(lat[i]!) * tiltScale * (elevation[i]! > seaLevel ? 15 : 5) - state.meanT[i]!) * 0.2 : t;
+    state.meanT[i] = seasonal ? state.meanT[i]! + (t - season * state.sinLat[i]! * tiltScale * (elevation[i]! > seaLevel ? 15 : 5) - state.meanT[i]!) * 0.2 : t;
   }
   state.meanTemp = sum / count;
 }
@@ -153,7 +167,7 @@ export function updateTemperature(world: World, state: ClimateState, simYear: nu
 /** Advect humidity along the wind and rain it out. A few passes per call. */
 export function updateMoisture(world: World, state: ClimateState, passes: number): void {
   const { grid, elevation, seaLevel, moisture, vegetation } = world;
-  const { lat, count } = grid;
+  const { count } = grid;
   const { humidity, upwind, meanT, scratch } = state;
   for (let p = 0; p < passes; p++) {
     for (let i = 0; i < count; i++) {
@@ -167,9 +181,7 @@ export function updateMoisture(world: World, state: ClimateState, passes: number
       const up = upwind[i]!;
       const hin = humidity[up]!;
       const lift = Math.max(0, h - Math.max(0, elevation[up]! - seaLevel));
-      const a = Math.abs(lat[i]!) * (180 / Math.PI);
-      // convective belt at the equator, dry subtropical highs, wet mid-latitudes
-      const band = 0.55 + 0.75 * Math.exp(-(a * a) / 220) - 0.38 * Math.exp(-((a - 27) * (a - 27)) / 90) + 0.25 * Math.exp(-((a - 52) * (a - 52)) / 200);
+      const band = state.rainBand[i]!;
       const cold = Math.max(0.15, Math.min(1, (t + 18) / 34));
       const rainRate = Math.min(0.9, (0.07 + 0.55 * Math.min(1.2, lift)) * band);
       const rain = hin * rainRate;
@@ -181,8 +193,7 @@ export function updateMoisture(world: World, state: ClimateState, passes: number
   const cloud = world.cloud;
   for (let i = 0; i < count; i++) {
     if (elevation[i]! <= seaLevel) moisture[i] = Math.min(1, humidity[i]!);
-    const a = Math.abs(lat[i]!) * (180 / Math.PI);
-    const band = 0.5 + 0.6 * Math.exp(-(a * a) / 160) - 0.4 * Math.exp(-((a - 26) * (a - 26)) / 110) + 0.45 * Math.exp(-((a - 55) * (a - 55)) / 260);
+    const band = state.cloudBand[i]!;
     const target = Math.max(0, Math.min(1, humidity[i]! * band * 0.95 + (elevation[i]! > seaLevel ? moisture[i]! * 0.3 : 0)));
     cloud[i] = cloud[i]! + (target - cloud[i]!) * 0.25;
   }

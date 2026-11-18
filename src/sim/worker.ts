@@ -29,6 +29,7 @@ function snapshotCells(s: Simulation): { cells: CellSnapshot; transfer: Transfer
     snow: w.snow.slice(),
     cloud: w.cloud.slice(),
     ash: w.ash.slice(),
+    lava: w.lava.slice(),
     flow: w.flow.slice(),
     downhill: w.downhill.slice(),
     windE: w.windE.slice(),
@@ -38,7 +39,7 @@ function snapshotCells(s: Simulation): { cells: CellSnapshot; transfer: Transfer
   s.terrainDirty = false;
   const transfer = [
     cells.elevation.buffer, cells.temperature.buffer, cells.moisture.buffer, cells.biome.buffer,
-    cells.vegetation.buffer, cells.snow.buffer, cells.cloud.buffer, cells.ash.buffer,
+    cells.vegetation.buffer, cells.snow.buffer, cells.cloud.buffer, cells.ash.buffer, cells.lava.buffer,
     cells.flow.buffer, cells.downhill.buffer, cells.windE.buffer, cells.windN.buffer,
   ];
   return { cells, transfer };
