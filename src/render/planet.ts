@@ -84,7 +84,8 @@ export class PlanetMesh {
     const sunColor = mix(vec3(1.0, 0.36, 0.13), vec3(1.0, 0.95, 0.88), smoothstep(-0.05, 0.4, sunHeight));
     const shadow = cloudShadowAt(P, attribute('cloudCover', 'float'));
     const skyAmbient = vec3(0.3, 0.45, 0.75).mul(0.2).mul(day).mul(dot(N, up).mul(0.5).add(0.5));
-    const nightAmbient = vec3(0.012, 0.018, 0.035);
+    // faint moonlight so the night side is dark but not blind
+    const nightAmbient = vec3(0.02, 0.03, 0.058).mul(dot(N, up).mul(0.5).add(0.5));
     let lit = albedo.mul(sunColor.mul(diffuse).mul(shadow).mul(1.2).add(skyAmbient).add(nightAmbient));
     // Molten surface for the opening sequence: glowing cracks between dark crust plates.
     const crust = mx_fractal_noise_float(P.mul(7).add(vec3(0, uTime.mul(0.02), 0)), 4, 2.1, 0.55);
@@ -95,7 +96,9 @@ export class PlanetMesh {
     const V = normalize(cameraPosition.sub(P));
     const rim = pow(float(1).sub(max(dot(up, V), 0)), 3);
     const hazeColor = vec3(uHazeTint).mul(day.mul(0.9).add(0.02));
-    lit = mix(lit, hazeColor, rim.mul(0.3).add(uHazeAmount).clamp(0, 0.9).mul(float(1).sub(uMolten)));
+    // haze builds with distance through the air, so nearby ground stays crisp
+    const far = smoothstep(0.03, 0.9, cameraPosition.sub(P).length());
+    lit = mix(lit, hazeColor, rim.mul(0.3).mul(far).add(uHazeAmount).clamp(0, 0.9).mul(float(1).sub(uMolten)));
     // lava and wildfire glow (bright enough to bloom, flickering)
     const heat = attribute('glow', 'float');
     const flicker = mx_fractal_noise_float(P.mul(60).add(vec3(0, uTime.mul(0.6), 0)), 2, 2.0, 0.5).mul(0.35).add(0.75);

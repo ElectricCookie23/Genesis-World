@@ -27,6 +27,8 @@ export interface UIState {
   /** Event shown in the "Why did this happen?" panel. */
   whyEvent: number;
   selectedSpecies: number;
+  /** The individual creature selected or followed. */
+  creature: { key: number; species: number; name: string; age: string; action: string; following: boolean } | null;
   milestone: SimEvent | null;
   notice: string;
   godTool: string;
@@ -54,6 +56,7 @@ export const state: UIState = {
   panel: 'none',
   whyEvent: -1,
   selectedSpecies: -1,
+  creature: null,
   milestone: null,
   notice: '',
   godTool: '',
@@ -95,6 +98,7 @@ export const actions = {
   setSlowOnEvents: (_on: boolean) => {},
   copySeedLink: () => {},
   newWorld: (_seed?: string) => {},
+  followCreature: (_on: boolean) => {},
 };
 
 export function togglePanel(p: Panel): void {

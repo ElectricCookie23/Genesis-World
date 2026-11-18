@@ -29,20 +29,20 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 7 | Orbiting moon whose tides visibly move the coastline. | in progress | moon orbits and raises a visible tidal bulge; sim-side tide effects to come |
 | 8 | Plants that spread by biome, light and rain, so forests and grasslands form on their own. | done | plant species compete per region; instanced trees, shrubs and grass appear near the camera |
 | 9 | Plants evolve height, color, leaf type and fruit. | done | 12 plant genes evolve; height, leaf type, hue, fruit and glow drive the 3D plants |
-| 10 | Creatures built entirely from genomes: legs, fins or wings, size, neck, horns, tail, color, pattern, glow. | in progress | sim done (50-gene genome drives body, senses, diet, behaviour); meshes to come |
-| 11 | Procedural walking with feet planted on the terrain. | not started | |
+| 10 | Creatures built entirely from genomes: legs, fins or wings, size, neck, horns, tail, color, pattern, glow. | done | bodies generated from the genome: segments, legs, fins, wings, glide membrane, neck, head, eyes, horns, tail, shell, crest, colour, pattern, glow |
+| 11 | Procedural walking with feet planted on the terrain. | simplified | walk cycle in the vertex shader with feet placed on the exact terrain facet; no per-leg IK |
 | 12 | Energy, hunger, reproduction, aging and death. | in progress | sim done at population level (energy, starvation, breeding, death) |
 | 13 | Mutation, with natural selection emerging on its own. | done | mutation plus selection from food, predation and climate only; no fitness score |
 | 14 | Speciation detection, with each new species given a generated Latin-style name. | done | lineage speciation with Latin-style names from trait and place roots |
 | 15 | Herbivores, predators and scavengers in a live food web. | in progress | herbivores, hunters and scavengers share food pools per region; persistent hunters still rare |
-| 16 | Herds, flocks and fish schools. | not started | |
+| 16 | Herds, flocks and fish schools. | in progress | individuals move as herds, flocks and schools around a drifting centre (render side) |
 | 17 | Pack hunting, and prey that flee. | not started | |
 | 18 | Life starts in the sea and moves onto land over time. | done | life starts in the sea; oxygen opens the land; first land animals emerge around 85 My |
-| 19 | Flight evolves gradually, starting with gliding. | not started | |
+| 19 | Flight evolves gradually, starting with gliding. | in progress | limb gene runs legs to gliding membrane to wings; flight milestones exist; tuning so flight appears reliably still to do |
 | 20 | The cause graph: every event stores its causes and effects. | done | every event stores causes with weights and effects |
 | 21 | "Why did this happen?" panel on any event. | done | panel walks the cause graph backward as a vertical story with a glyph thumbnail per step |
-| 22 | One continuous camera zoom from deep space down to the ground. | not started | |
-| 23 | Follow mode: click a creature and the camera tracks it, with an info card (name, species, age, genes, lineage, current action). | not started | |
+| 22 | One continuous camera zoom from deep space down to the ground. | done | one zoom from deep space to the ground, tilting to the horizon as it descends |
+| 23 | Follow mode: click a creature and the camera tracks it, with an info card (name, species, age, genes, lineage, current action). | in progress | click selects a creature, double-click or F follows it; card shows name, species, age, action, genes, lineage. Depth of field to come |
 | 24 | Time controls from paused to Epoch speed (see section 7.2). | done | pause, 1x, 10x, 100x, 1000x, Epoch; slows around big events |
 | 25 | A live, glowing tree of life. Clicking a branch flies the camera to that species. | in progress | live glowing tree; click a branch to open the species and fly to its range |
 | 26 | A chronicle narrated like a nature documentary. | done | chronicle panel and a narration line, calm documentary voice, no template repeats twice in a row |
@@ -55,7 +55,7 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 33 | Meteor strike god tool: shockwave, crater, impact winter. | in progress | meteor god tool works (click to strike, flash, crater, impact winter); particle effects to come |
 | 34 | Mass extinctions, each logged with its causes. | done | detected from extinction rate, logged with weighted causes |
 | 35 | Adaptive radiation that refills empty niches after extinctions. | in progress | empty worlds speciate faster; radiation event after a mass extinction |
-| 36 | Night side: bioluminescent plants and creatures. | in progress | glowing plant species light up at night; glowing creatures to come |
+| 36 | Night side: bioluminescent plants and creatures. | done | glowing plants and creatures light up at night and bloom |
 | 37 | Auroras over the poles. | not started | |
 | 38 | Generative ambient music that shifts with the planet's state. | not started | |
 | 39 | Postcard mode: UI hidden, slow cinematic camera. | in progress | P hides the UI and lets the camera drift; cinematic paths to come |

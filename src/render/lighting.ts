@@ -14,7 +14,7 @@ export const surfaceLight = Fn(([n, p]: [N, N]) => {
   // soft wrap lighting so the shaded side of small objects stays readable
   const diffuse = max(dot(n, uSunDir).mul(0.5).add(0.5), 0).mul(day);
   const sky = vec3(0.42, 0.52, 0.7).mul(0.42).mul(day).mul(dot(n, up).mul(0.35).add(0.65));
-  return sunColor.mul(diffuse).mul(1.2).add(sky).add(vec3(0.012, 0.018, 0.035));
+  return sunColor.mul(diffuse).mul(1.2).add(sky).add(vec3(0.026, 0.038, 0.07).mul(dot(n, up).mul(0.4).add(0.6)));
 });
 
 /** 0 at night, 1 by day, at world position p. */

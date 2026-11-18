@@ -141,6 +141,19 @@ export class OrbitCamera {
     if (dist !== undefined) this.tDist = dist;
   }
 
+  zoomTo(dist: number): void {
+    this.tDist = Math.max(MIN_DIST, Math.min(MAX_DIST, dist));
+  }
+
+  /** Keep the focus on a moving point (follow mode). */
+  track(lon: number, lat: number): void {
+    let d = lon - this.tLon;
+    d = ((d + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+    this.tLon += d;
+    this.tLat = lat;
+    this.idle = 0;
+  }
+
   setImmediate(lon: number, lat: number, dist: number): void {
     this.lon = this.tLon = lon;
     this.lat = this.tLat = lat;

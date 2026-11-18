@@ -10,6 +10,8 @@ import type { SimEvent } from './sim/events';
 import { SPEEDS, type FromWorker, type ToWorker } from './shared/protocol';
 import { App } from './ui/App';
 import { closeAll } from './ui/panels';
+import { describeIndividual } from './render/creatures';
+import { Vector3 } from 'three/webgpu';
 import { actions, state, togglePanel, update } from './ui/store';
 
 const bootBar = document.getElementById('boot-bar') as HTMLElement;
@@ -53,6 +55,7 @@ async function boot(): Promise<void> {
   }
   scene.setPixelRatio(mobile ? 1.5 : 2);
   scene.plantBudget = mobile ? 15000 : 60000;
+  scene.creatureBudget = mobile ? 1500 : 5000;
   update({ backend: scene.backend });
   progress(0.3);
 
@@ -169,7 +172,11 @@ async function boot(): Promise<void> {
         break;
       case 'species':
         for (const sp of msg.species) state.species.set(sp.id, sp);
+        scene.setSpecies(state.species);
         update({});
+        break;
+      case 'herds':
+        scene.setHerds(msg.herds);
         break;
       case 'plants':
         for (const pl of msg.plants) state.plants.set(pl.id, pl);
@@ -187,7 +194,30 @@ async function boot(): Promise<void> {
 
   render(h(App, {}), document.getElementById('ui') as HTMLElement);
   scene.cam.attach(canvas);
-  scene.cam.onTap = (x, y) => {
+  const refreshCreature = (following?: boolean) => {
+    const c = state.creature;
+    if (!c) return;
+    const ind = scene.creatures?.byKey(c.key);
+    const info = state.species.get(c.species);
+    if (!ind || !info) return;
+    const d = describeIndividual(ind, info);
+    if (d.action !== c.action || following !== undefined) update({ creature: { ...c, ...d, following: following ?? c.following } });
+  };
+  actions.followCreature = (on) => {
+    scene.follow(on && state.creature ? state.creature.key : null);
+    if (state.creature) refreshCreature(on);
+  };
+  scene.cam.onTap = (x, y, double) => {
+    if (state.godTool !== 'meteor') {
+      const ind = scene.pickCreature(x, y);
+      const info = ind ? state.species.get(ind.species) : undefined;
+      if (ind && info) {
+        const d = describeIndividual(ind, info);
+        update({ creature: { key: ind.key, species: ind.species, ...d, following: double }, selectedSpecies: -1, whyEvent: -1 });
+        if (double) scene.follow(ind.key);
+        return;
+      }
+    }
     if (state.godTool === 'meteor') {
       const hit = scene.pick(x, y);
       if (hit) {
@@ -220,10 +250,14 @@ async function boot(): Promise<void> {
     else if (k === 'g') togglePanel('god');
     else if (e.key === '?' || k === '/') togglePanel('help');
     else if (k === 'p') { update({ postcard: !state.postcard }); scene.cam.idle = state.postcard ? 100 : 0; }
+    else if (k === 'f') { if (state.creature) actions.followCreature(!state.creature.following); }
+    else if (k === 'escape' && scene.following !== null) actions.followCreature(false);
     else if (k === 'escape') { if (state.postcard) update({ postcard: false }); else closeAll(); }
   });
   window.addEventListener('resize', () => scene.resize());
 
+  let lastFocus = 0;
+  const focusVec = new Vector3();
   let last = performance.now();
   const loop = (now: number) => {
     const dt = Math.min(0.1, (now - last) / 1000);
@@ -235,6 +269,13 @@ async function boot(): Promise<void> {
       } else if (state.opening) finishOpening();
       scene.frame(dt);
       pumpToasts(now);
+      // tell the worker where we are looking, twice a second
+      if (now - lastFocus > 500) {
+        lastFocus = now;
+        scene.cam.focusDir(focusVec);
+        send({ type: 'focus', x: focusVec.x, y: focusVec.y, z: focusVec.z, altitude: scene.cam.dist });
+        refreshCreature();
+      }
       const busy = state.panel !== 'none' || state.whyEvent >= 0 || state.selectedSpecies >= 0;
       if (!state.uiHidden && !state.opening && !busy && now - lastActivity > 4000) update({ uiHidden: true });
     }

@@ -12,7 +12,8 @@ import { createDustDisc } from './effects';
 import { OrbitCamera } from './camera';
 import { PostFX } from './postfx';
 import { Vegetation } from './vegetation';
-import type { PlantInfo } from '../shared/protocol';
+import { CreatureLayer, type Individual } from './creatures';
+import type { HerdSnapshot, PlantInfo, SpeciesInfo } from '../shared/protocol';
 import { EXAG, MOON_DISTANCE, uFlash, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime } from './common';
 
 export type Quality = 'low' | 'medium' | 'high' | 'ultra';
@@ -37,6 +38,10 @@ export class GenesisScene {
   ocean?: OceanMesh;
   clouds?: CloudLayer;
   vegetation?: Vegetation;
+  creatures?: CreatureLayer;
+  creatureBudget = 5000;
+  /** Key of the individual the camera follows, or null. */
+  following: number | null = null;
   /** Instance budget for plants (lower on mobile). */
   plantBudget = 60000;
   grid?: Grid;
@@ -103,6 +108,8 @@ export class GenesisScene {
     this.scene.add(this.planet.mesh, this.ocean.mesh, this.clouds.mesh);
     this.vegetation = new Vegetation(grid, this.plantBudget);
     for (const m of this.vegetation.meshes) this.scene.add(m);
+    this.creatures = new CreatureLayer(grid, this.creatureBudget);
+    this.creatures.onMesh = (m) => this.scene.add(m);
     void hashSeed(seed);
   }
 
@@ -112,8 +119,32 @@ export class GenesisScene {
     this.ocean.update(cells);
     this.clouds.update(cells);
     this.vegetation?.setCells(cells);
+    this.creatures?.setCells(cells);
     this.lastElevation = cells.elevation;
     uSeaKm.value = cells.seaLevel;
+  }
+
+  setSpecies(species: Map<number, SpeciesInfo>): void {
+    if (!this.creatures) return;
+    this.creatures.setSpecies(species);
+    for (const m of this.creatures.prune()) this.scene.remove(m);
+  }
+
+  setHerds(h: HerdSnapshot): void {
+    this.creatures?.setHerds(h);
+  }
+
+  /** The creature under a screen point, if any. */
+  pickCreature(clientX: number, clientY: number): Individual | null {
+    if (!this.creatures) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    this.cam.camera.updateMatrixWorld();
+    return this.creatures.pick(this.cam.camera, clientX - rect.left, clientY - rect.top, rect.width, rect.height);
+  }
+
+  follow(key: number | null): void {
+    this.following = key;
+    if (key !== null && this.cam.dist > 0.06) this.cam.zoomTo(0.035);
   }
 
   setPlants(plants: Map<number, PlantInfo>): void {
@@ -198,6 +229,16 @@ export class GenesisScene {
     }
     this.eraHaze += (this.eraHazeTarget - this.eraHaze) * Math.min(1, dt * 0.5);
     this.cam.update(dt);
+    if (this.creatures) {
+      this.creatures.update(this.time, this.cam.dist);
+      if (this.following !== null) {
+        const ind = this.creatures.byKey(this.following);
+        if (ind) {
+          const d = ind.pos.clone().normalize();
+          this.cam.track(Math.atan2(d.z, d.x), Math.asin(Math.max(-1, Math.min(1, d.y))));
+        }
+      }
+    }
     this.vegetation?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist);
     const c = this.cam.camera;
     const far = c.position.length() + this.moonDistance + 4;

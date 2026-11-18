@@ -1,7 +1,7 @@
 import { SPEEDS } from '../shared/protocol';
 import { actions, togglePanel, useStore } from './store';
 import { bigNumber, formatYear } from './format';
-import { Chronicle, GodTools, Help, Num, Settings, SpeciesCard, Tree, Why } from './panels';
+import { Chronicle, CreatureCard, GodTools, Help, Num, Settings, SpeciesCard, Tree, Why } from './panels';
 import css from './ui.module.css';
 
 const STAGE: Record<string, string> = { barren: 'lifeless', microbes: 'microbes', algae: 'algae seas', animals: 'living world' };
@@ -43,6 +43,7 @@ export function App() {
           {s.panel === 'settings' && <Settings />}
           {s.whyEvent >= 0 && <Why />}
           {s.selectedSpecies >= 0 && s.whyEvent < 0 && <SpeciesCard />}
+          {s.creature && s.selectedSpecies < 0 && s.whyEvent < 0 && <CreatureCard />}
           {s.hintStep < HINTS.length && s.panel === 'none' && (
             <div class={`${css.panel} ${css.hint}`} key={s.hintStep}><b>{HINTS[s.hintStep]![0]}</b>{HINTS[s.hintStep]![1]}</div>
           )}

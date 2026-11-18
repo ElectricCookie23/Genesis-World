@@ -1,9 +1,10 @@
 /// <reference lib="webworker" />
 // Worker entry point: owns all world state and runs the fixed-timestep loop.
 import { Simulation } from './simulation';
-import { G, P, sizeMetres } from './genetics';
+import { G, P, PHEN_COUNT, sizeMetres } from './genetics';
+import { nearestCell } from './world';
 import {
-  SPEEDS, type CellSnapshot, type FromWorker, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
+  SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
 } from '../shared/protocol';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
@@ -22,6 +23,40 @@ let slowUntil = 0;
 let speciesVersion = -1;
 let plantVersion = -1;
 const sentExtinct = new Set<number>();
+let focus: { x: number; y: number; z: number; altitude: number } | null = null;
+let lastHerds = 0;
+let focusRegion = 0;
+
+/** Cohorts in the regions around the camera focus. */
+function herds(s: Simulation, f: { x: number; y: number; z: number; altitude: number }): { herds: HerdSnapshot; transfer: Transferable[] } {
+  const reg = s.regions, cr = s.creatures;
+  focusRegion = nearestCell(reg.grid, f.x, f.y, f.z, focusRegion);
+  const rings = f.altitude < 0.12 ? 2 : f.altitude < 0.4 ? 3 : 5;
+  const seen = new Set<number>([focusRegion]);
+  let frontier = [focusRegion];
+  for (let k = 0; k < rings; k++) {
+    const next: number[] = [];
+    for (const r of frontier) {
+      for (let j = 0; j < reg.grid.ncount[r]!; j++) {
+        const nb = reg.grid.neighbors[r * 6 + j]!;
+        if (!seen.has(nb)) { seen.add(nb); next.push(nb); }
+      }
+    }
+    frontier = next;
+  }
+  const rs: number[] = [], sp: number[] = [], n: number[] = [], land: number[] = [], fly: number[] = [], fed: number[] = [];
+  for (let c = 0; c < cr.high; c++) {
+    if (!cr.alive[c] || !seen.has(cr.region[c]!)) continue;
+    if (!cr.species[cr.sp[c]!]!.name) continue;
+    rs.push(cr.region[c]!); sp.push(cr.sp[c]!); n.push(cr.count[c]!);
+    land.push(cr.phen[c * PHEN_COUNT + P.LandUse]!); fly.push(cr.phen[c * PHEN_COUNT + P.Fly]!); fed.push(cr.fed[c]!);
+  }
+  const h: HerdSnapshot = {
+    region: Int32Array.from(rs), species: Int32Array.from(sp), count: Float32Array.from(n),
+    land: Float32Array.from(land), fly: Float32Array.from(fly), fed: Float32Array.from(fed),
+  };
+  return { herds: h, transfer: [h.region.buffer, h.species.buffer, h.count.buffer, h.land.buffer, h.fly.buffer, h.fed.buffer] };
+}
 
 function post(msg: FromWorker, transfer: Transferable[] = []): void {
   ctx.postMessage(msg, transfer);
@@ -154,6 +189,11 @@ function tick(): void {
     plantVersion = s.plants.version;
     post({ type: 'plants', plants: plantList(s) });
   }
+  if (focus && focus.altitude < 1.3 && now - lastHerds > 600 && s.stage === 'animals') {
+    lastHerds = now;
+    const h = herds(s, focus);
+    post({ type: 'herds', herds: h.herds }, h.transfer);
+  }
   void speciesVersion;
 }
 
@@ -195,6 +235,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         }
         break;
       case 'focus':
+        focus = { x: msg.x, y: msg.y, z: msg.z, altitude: msg.altitude };
         break;
     }
   } catch (err) {

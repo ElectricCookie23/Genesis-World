@@ -88,6 +88,17 @@ export interface PlantInfo {
   cover: number;
 }
 
+/** Populations in the regions around the camera focus, for drawing individuals. */
+export interface HerdSnapshot {
+  /** Per cohort: region index, species id, head count, fraction of time on land, flight ability, how well fed. */
+  region: Int32Array;
+  species: Int32Array;
+  count: Float32Array;
+  land: Float32Array;
+  fly: Float32Array;
+  fed: Float32Array;
+}
+
 export type ToWorker =
   | { type: 'init'; seed: string; gridN?: number }
   | { type: 'speed'; index: number }
@@ -105,4 +116,5 @@ export type FromWorker =
   | { type: 'events'; events: SimEvent[] }
   | { type: 'species'; species: SpeciesInfo[] }
   | { type: 'plants'; plants: PlantInfo[] }
+  | { type: 'herds'; herds: HerdSnapshot }
   | { type: 'error'; message: string };

@@ -161,6 +161,42 @@ export function SpeciesCard() {
   );
 }
 
+/** Info card for one individual creature (follow mode). */
+export function CreatureCard() {
+  const s = useStore();
+  const c = s.creature;
+  if (!c) return null;
+  const sp = s.species.get(c.species);
+  if (!sp) return null;
+  const lineage: SpeciesInfo[] = [];
+  for (let p = s.species.get(sp.parent); p && lineage.length < 4; p = s.species.get(p.parent)) lineage.push(p);
+  return (
+    <div class={`${css.panel} ${css.card}`}>
+      <div class={css.head} style={{ padding: 0 }}>
+        <h2><i class={css.swatch} style={{ color: hsl(sp.genes[G.Hue]!) }} />{c.name}</h2>
+        <button class={css.close} onClick={() => { actions.followCreature(false); update({ creature: null }); }}>✕</button>
+      </div>
+      <div class={css.desc}><i>{sp.name}</i>. {describe(sp)}</div>
+      <div class={css.kv}>
+        <span>doing</span><b style={{ fontWeight: 400 }}>{c.action}</b>
+        <span>age</span><b style={{ fontWeight: 400 }}>{c.age}</b>
+        <span>length</span><b style={{ fontWeight: 400 }}>{metres(sp.metres)}</b>
+        <span>its kind</span><b style={{ fontWeight: 400 }}><Num value={sp.pop} format={bigNumber} /></b>
+      </div>
+      <div style={{ margin: '10px 0 4px' }} class={css.sub}>GENES</div>
+      {SHOWN_GENES.slice(0, 8).map((gi) => (
+        <div class={css.gene} key={gi}><span>{GENE_NAMES[gi]}</span><i><b style={{ width: `${sp.genes[gi]! * 100}%` }} /></i></div>
+      ))}
+      {lineage.length > 0 && <div style={{ margin: '10px 0 2px' }} class={css.sub}>LINEAGE</div>}
+      {lineage.map((p) => <div key={p.id}><button class={css.link} onClick={() => actions.selectSpecies(p.id)}>{p.name}</button></div>)}
+      <div style={{ marginTop: 12 }}>
+        <button class={css.link} onClick={() => actions.followCreature(!c.following)}>{c.following ? 'stop following' : 'follow (F)'}</button>
+        <button class={css.link} onClick={() => actions.selectSpecies(sp.id)}>about the species</button>
+      </div>
+    </div>
+  );
+}
+
 /** The tree of life: time runs left to right, every species is a glowing branch. */
 export function Tree() {
   const s = useStore();
@@ -267,6 +303,7 @@ export function Settings() {
 }
 
 export function closeAll(): void {
-  update({ panel: 'none', whyEvent: -1, selectedSpecies: -1, godTool: '' });
+  actions.followCreature(false);
+  update({ panel: 'none', whyEvent: -1, selectedSpecies: -1, godTool: '', creature: null });
 }
 void state;
