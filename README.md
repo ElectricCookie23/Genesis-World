@@ -6,6 +6,16 @@ Genesis is a 3D web experience of a small planet where geology, climate, life an
 
 Nothing is scripted. Every species, extinction and forest emerges from the simulation, and every event records what caused it, so you can click anything in the chronicle and trace its story back to the root.
 
+## Screenshots
+
+Seed `amber-reef-101` after 120 million years (captured with software rendering at low resolution; a real GPU looks sharper).
+
+| From orbit | A wooded coast |
+|---|---|
+| ![The planet from orbit](docs/space.jpg) | ![A coast with forest and sea life](docs/coast.jpg) |
+| **Near the ground** | **Woodland** |
+| ![Shrubs, trees and small land animals by the shore](docs/ground.jpg) | ![Broadleaf trees and succulents](docs/woodland.jpg) |
+
 ## Run it locally
 
 ```bash
