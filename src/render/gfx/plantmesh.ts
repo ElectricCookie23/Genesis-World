@@ -178,14 +178,16 @@ function tree(b: Builder, spec: TreeSpec): void {
     const segs = level === 0 ? 6 : level === 1 ? 4 : 3;
     const sides = level === 0 ? 7 : level === 1 ? 5 : 4;
     const path: V3[] = [base];
-    const radii: number[] = [radius];
+    // the trunk flares where it meets the ground
+    const radii: number[] = [level === 0 ? radius * 1.35 : radius];
     let d = dir, p = base;
     const bendAxis = perp(dir);
     for (let s = 1; s <= segs; s++) {
       d = norm(add(rotateAbout(d, bendAxis, (level === 0 ? spec.lean : 0.14) * b.r(-1, 1)), [0, -spec.gravity * 0.1 * level, 0]));
       p = add(p, mul(d, length / segs));
       path.push(p);
-      radii.push(radius * (1 - (s / segs) * (level === spec.levels ? 0.85 : 0.5)));
+      // boughs thin toward their ends and twigs run out to a point: at half thickness they ended in square-cut stubs
+      radii.push(radius * (1 - (s / segs) * (level === spec.levels ? 0.96 : level === 0 ? 0.55 : 0.72)));
     }
     b.limb(path, radii, sides, spec.bark, PART.bark, phase, level === 0 ? 0 : 0.6 + 0.4 * level);
     if (level >= spec.levels) {
@@ -222,13 +224,13 @@ export function buildPlant(form: Form, seed = 1): BufferGeometry {
   switch (form) {
     case 'broadleaf':
       b.crown = [0, 0.78, 0]; b.crownR = 0.5;
-      tree(b, { height: 0.62, trunkR: 0.055, lean: 0.1, levels: 2, children: [5, 3], angle: 0.85, ratio: 0.62, firstBranch: 0.45, gravity: -0.6, leafPart: PART.leaf, leafSize: 0.24, leaves: 5, bark: BARK, flatCrown: 0.15, twist: 2.4 });
+      tree(b, { height: 0.62, trunkR: 0.044, lean: 0.12, levels: 2, children: [5, 3], angle: 0.85, ratio: 0.62, firstBranch: 0.45, gravity: -0.6, leafPart: PART.leaf, leafSize: 0.24, leaves: 5, bark: BARK, flatCrown: 0.15, twist: 2.4 });
       break;
     case 'umbrella':
       b.crown = [0, 0.95, 0]; b.crownR = 0.55;
       // the crown is a shallow dome, not a single flat layer: leaf cards lying dead level showed as paper discs from
       // above and as rows of dashes from the side (and in the imposter baked from the side)
-      tree(b, { height: 0.7, trunkR: 0.045, lean: 0.16, levels: 2, children: [4, 3], angle: 1.1, ratio: 0.7, firstBranch: 0.72, gravity: 0.5, leafPart: PART.leaf, leafSize: 0.22, leaves: 7, bark: DARK_BARK, flatCrown: 0.6, twist: 1.6 });
+      tree(b, { height: 0.7, trunkR: 0.037, lean: 0.18, levels: 2, children: [4, 3], angle: 1.1, ratio: 0.7, firstBranch: 0.72, gravity: 0.5, leafPart: PART.leaf, leafSize: 0.22, leaves: 7, bark: DARK_BARK, flatCrown: 0.6, twist: 1.6 });
       break;
     case 'conifer': {
       b.crown = [0, 0.6, 0]; b.crownR = 0.6;
