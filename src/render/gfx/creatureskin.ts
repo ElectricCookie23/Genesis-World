@@ -12,6 +12,7 @@ import { COVER, RIG, ZONE } from './creaturemesh';
 import { uLook } from './look';
 import type { PlanetData } from './planetdata';
 import { groundRadiusNode } from './terrain';
+import { eclipseLight } from './eclipse';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
@@ -152,7 +153,7 @@ export function makeCreatureMaterial(data: PlanetData, erosionTex: Texture, clou
   const day = smoothstep(-0.12, 0.22, sunH);
   const night = float(1).sub(day);
   const sunColor: N = mix(vec3(uLook.dusk), vec3(uLook.star), smoothstep(-0.05, 0.4, sunH));
-  const sunVis = smoothstep(-0.08, 0.1, sunH).mul(cloudShadow(vBase));
+  const sunVis = smoothstep(-0.08, 0.1, sunH).mul(cloudShadow(vBase)).mul(eclipseLight(vBase));
   const thin = is(zone, ZONE.membrane).add(is(zone, ZONE.bladder).mul(0.7));
   const nv = max(dot(Nrm, V), 0);
   // shifting colours on some skins, strongest at glancing angles

@@ -9,17 +9,18 @@ Read this first when resuming. Then PROGRESS.md, DECISIONS.md and `git log`.
 - Stop and show the owner only at points that are worth showing.
 - Graphics rules (owner): full techniques on WebGL2 (FFT ocean, GPU erosion, TAA with a history buffer), quadtree LOD terrain, WebGPU optional, screenshots here check correctness only, push every step.
 
-## Paused here (owner asked for a pause; resume from this list)
-State at the pause: everything is committed and pushed, the type check is clean, no background jobs are running.
+## Where the "simplified" pass stands (work queue item 3, in progress)
+Done so far in this pass: leg IK (11), temples (46), eclipse shadow (96), tornado and fire tornado funnels (113, 114), boats (123), borders (124), satellites (125), hurricane eye (60). Towns are now drawn up close as buildings (`gfx/buildings.ts`: huts, houses, halls, towers, domes, spires by technology, windows lit at night in the nation's colour).
 
-1. **Re-render three of the "after" screenshots.** `docs/screenshots/after/2-space-night.jpg` and `4-night-map.jpg` were taken before the far-off sea glow was fixed (they show a teal blocky pattern on the night sea that is now gone in the code), and `8-underwater.jpg` was taken from above the surface. The capture script is not in the repo (the scratch folder is lost between sessions): rebuild it from the recipe under "How to check visuals here". Camera for view 8: `scene.underwater = true`, `cam.setImmediate(lon, lat, 0.0009)` over a sea cell 80 to 500 m deep, `cam.tiltOffset = cam.tTilt = -1.1`. A full run of eight views takes about 30 minutes here (6 minutes of warp to 150 My, then about 17 seconds a frame).
-2. **Then start the "simplified" pass** (work queue item 3). Three standalone pieces are already written and type-checked but not wired in yet:
-   - `src/util/gif.ts` (`encodeGif(frames, w, h, delay)`) for feature 149: capture about 3 seconds of canvas frames at 10 fps, scaled to about 480 px wide, and offer the file as a download next to the WebM recorder in `main.ts`.
-   - `src/util/pdf.ts` (`PdfDoc`: `background`, `rect`, `text`, `paragraph`, `jpeg`, `addPage`, `save`) for feature 150: replace the print view in `actions.exportBook` with a real PDF (cover with the planet image from `__genesis.grab()`, then the major events).
-   - `src/ui/sketch.tsx` (`CreatureSketch({ genes, width, seed })`) for feature 84: use it in the field guide (`Guide` in `src/ui/panels.tsx`) as a paper-coloured card per species.
-   Not yet looked at in a browser: check each once wired.
-3. Items in PROGRESS.md still marked simplified that the new renderer already covers and only need their notes brought up to date: 49 (roads now follow valleys, rivers and coasts), 123 (sea lanes with moving ship lights), 132 to 134 (bladder and grove are real models now), 139 (caustics and the view from below exist; no light shafts).
-4. Planned for the rest of that pass (nothing started): settlement buildings, temples and boats as models (46, 123), a rising light at departure (127), worn migration trails that roads follow (49, 63), hibernation (64), young beside nests (67), symbiosis and pollinators with real effects (69, 70), electric arcs (77), see-through fossil view (83), a timeline strip with more rewind points (86), genetic diversity and oxygen overlays (90), positional sound (94), the moon's shadow in a solar eclipse (96), double shadows under two suns (105), cave mouths (109), hot spring pools (111), tornado funnels (113, 114), dust fertilising the sea (115), fog, rainbows and heat shimmer (117), fungal network view (128), mass hatching glow (135), better bone graveyards (136), two futures running side by side (143), real ancestry in the family tree (144), canyon and delta erosion (55), atolls (58), and plates whose outlines drift (51, 52, 54).
+Written and type-checked but NOT wired in yet:
+- `src/sim/tectonics.ts` (`driftPlatesMoving`): plates whose outlines really move, with collisions, ridges and conserved continental crust. Tested alone on a small planet (one continent breaks into four over 300 My, land 32% to 23%, heights capped near 7.5 km). To wire: replace `driftPlates` in `simulation.ts` (features 51, 52), keep hotspots fixed so chains form (54), then run `npm test` and a `scripts/history.ts` run to check life survives.
+- `src/util/gif.ts` (149), `src/util/pdf.ts` (150), `src/ui/sketch.tsx` (84): see the notes in each file. Wire into `main.ts` (`toggleRecording`, `exportBook`) and the `Guide` panel.
+
+Still to do, nothing started: rising light at departure (127), worn migration trails that roads follow (49, 63), hibernation (64), young beside nests (67), symbiosis and pollinators with real effects (69, 70), electric arcs (77), see-through fossil view (83), timeline strip with more rewind points (86), genetic diversity and oxygen overlays (90), positional sound (94), double shadows under two suns (105), cave mouths (109), hot spring pools (111), dust fertilising the sea (115), fog, rainbows and heat shimmer (117), fungal network view (128), mass hatching glow (135), better bone graveyards (136), two futures side by side (143), real ancestry in the family tree (144), canyon and delta erosion (55), atolls (58). Notes to bring up to date only: 49 (roads follow valleys, rivers, coasts), 132 to 134, 139.
+
+Known small artifact: with the camera exactly over longitude 0 two short bright ticks appear above and below the centre of the planet from orbit. Not traced yet.
+
+A card "Review Genesis live site on a real GPU" was left in the owner's desktop app. If they run it, its findings arrive as `docs/GPU_REVIEW.md` and `docs/screenshots/gpu/` on main: pull and tune from them.
 
 ## Work queue, in the owner's order
 1. Original brief: built (every feature in PROGRESS.md is done or simplified).
@@ -45,7 +46,7 @@ Everything reads the planet from cube-map textures baked from the simulation's c
 ## Graphics: still open
 - Nothing has been seen on a real GPU. Frame rate, shader compile time and final look are unverified. The owner checks the deployed site; expect tuning of colours, exposure, cloud density, city light brightness and preset costs after that.
 - Not built: screen-space reflections on water, parallax occlusion mapping, footprints, lens flare, ground fog, canopy texture on far terrain, glow cast on the ground by glowing plants, a WebGPU compute path (WebGL2-style passes run on both backends instead).
-- The eight "after" screenshots are in `docs/screenshots/after/` (software rendering, 800x500). Three of them need retaking, see "Paused here".
+- The eight "after" screenshots are in `docs/screenshots/after/` (software rendering, 800x500).
 - GitHub Pages is on (repo public, source GitHub Actions): every push to main deploys to https://electriccookie23.github.io/Genesis-World/ after the tests pass (about six minutes).
 
 ## How to check visuals here

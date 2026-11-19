@@ -20,6 +20,7 @@ import { uLook } from './look';
 import type { PlanetData } from './planetdata';
 import { FORMS, PART, buildPlant, type Form } from './plantmesh';
 import { groundRadiusNode } from './terrain';
+import { eclipseLight } from './eclipse';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
@@ -62,7 +63,7 @@ function plantLight(albedo: N, Nrm: N, P: N, thin: N, ao: N, shadow: N): N {
   const sunH = dot(up, L);
   const day = smoothstep(-0.12, 0.22, sunH);
   const sunColor: N = mix(vec3(uLook.dusk), vec3(uLook.star), smoothstep(-0.05, 0.4, sunH));
-  const sunVis = smoothstep(-0.08, 0.1, sunH).mul(shadow);
+  const sunVis = smoothstep(-0.08, 0.1, sunH).mul(shadow).mul(eclipseLight(P));
   const V: N = normalize(cameraPosition.sub(P));
   // leaves are lit from both sides; solid parts only from the front
   const ndl = dot(Nrm, L);

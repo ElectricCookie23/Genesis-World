@@ -17,6 +17,7 @@ import { uLook } from './look';
 import { settlementSize, type Nation } from './nations';
 import type { PlanetData } from './planetdata';
 import { groundRadiusNode } from './terrain';
+import { eclipseLight } from './eclipse';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
@@ -213,7 +214,7 @@ export class Towns {
       let albedo: N = wall.mul(is(PART.wall).add(is(PART.windows))).add(roof.mul(is(PART.roof))).add(vec3(0.86, 0.82, 0.7).mul(is(PART.sail))).add(vec3(0.2, 0.14, 0.1).mul(is(PART.hull)));
       albedo = mix(albedo, vec3(0.06, 0.08, 0.1), glass.mul(0.85));
       const sunColor: N = mix(vec3(uLook.dusk), vec3(uLook.star), smoothstep(-0.05, 0.4, sunH));
-      const sunVis = smoothstep(-0.08, 0.1, sunH).mul(cloudShadow(vBase));
+      const sunVis = smoothstep(-0.08, 0.1, sunH).mul(cloudShadow(vBase)).mul(eclipseLight(vBase));
       const sky: N = mix(vec3(uHazeTint), vec3(0.6, 0.6, 0.6), 0.45).mul(0.4).mul(day).mul(dot(nW, up).mul(0.35).add(0.65));
       const moon: N = vec3(uLook.moon).mul(0.05).mul(max(dot(nW, M), 0).mul(0.7).add(0.3)).mul(smoothstep(-0.1, 0.25, dot(up, M))).mul(night);
       const V: N = normalize(cameraPosition.sub(positionWorld));

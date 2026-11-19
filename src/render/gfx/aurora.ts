@@ -1,7 +1,7 @@
 // Aurora as light, not geometry: thin curtains of vertical rays marched through a shell of thin air
 // around each magnetic pole. Additive and soft, brightest along the lower edge, slowly folding,
 // with pulses of brightness running along the oval. Colours come from the world's air.
-import { AdditiveBlending, BackSide, Mesh, MeshBasicNodeMaterial, SphereGeometry, Vector3, type Data3DTexture } from 'three/webgpu';
+import { AdditiveBlending, BackSide, Mesh, MeshBasicNodeMaterial, IcosahedronGeometry, Vector3, type Data3DTexture } from 'three/webgpu';
 import {
   Fn, If, Loop, abs, cameraFar, cameraNear, cameraPosition, dot, exp, float, int, length, max, min, mix, normalize, perspectiveDepthToViewZ, positionView,
   positionWorld, screenCoordinate, select, sin, smoothstep, sqrt, texture3D, uniform, vec3, viewportDepthTexture,
@@ -89,7 +89,7 @@ export class AuroraVolume {
       return sum.mul(uAurora).mul(210);
     });
     material.colorNode = glow();
-    this.mesh = new Mesh(new SphereGeometry(HIGH * 1.012, 64, 48), material);
+    this.mesh = new Mesh(new IcosahedronGeometry(HIGH * 1.03, 5), material);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 6;
   }

@@ -20,6 +20,7 @@ import type { GroundSampler } from './gfx/ground';
 import { buildCreatureModel } from './gfx/creaturemesh';
 import { makeCreatureMaterial } from './gfx/creatureskin';
 import type { PlanetData } from './gfx/planetdata';
+import { eclipseAt } from './gfx/eclipse';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -76,6 +77,8 @@ export class CreatureLayer {
   private cells?: CellSnapshot;
   budget: number;
   onMesh?: (mesh: InstancedMesh) => void;
+  /** Where the moon is and how big (w = radius), for eclipses. */
+  moonBody = { x: 9, y: 0, z: 0, w: 0 };
   /** A moving animal disturbs the ground or water: kind 0 wake, 1 dust, 2 splash. */
   onStep?: (pos: Vector3, kind: number, size: number) => void;
   private herdSig = '';
@@ -351,7 +354,9 @@ export class CreatureLayer {
       right.crossVectors(fwd, up).normalize();
       // nocturnal animals lie low by day, and day animals by night
       const sun = a.x * sunDir.x + a.y * sunDir.y + a.z * sunDir.z;
-      const asleep = ind.night > 0.6 ? sun > 0.1 : ind.night < 0.3 ? sun < -0.15 : false;
+      // in the moon's shadow, day animals stop and settle as if night had come
+      const dark = this.moonBody.w > 0 && sun > 0 && eclipseAt(a, sunDir, this.moonBody, this.moonBody.w) < 0.35;
+      const asleep = ind.night > 0.6 ? sun > 0.1 && !dark : ind.night < 0.3 ? sun < -0.15 || dark : dark;
       const size = ind.size * boost * (ind.larva ? 0.5 : 1);
       ind.fwd.copy(fwd);
       let r: number;

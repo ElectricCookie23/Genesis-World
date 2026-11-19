@@ -30,6 +30,10 @@ import { GroundSampler } from './gfx/ground';
 import { RiverMap } from './gfx/rivermap';
 import { Precipitation } from './gfx/weather';
 import { Satellites } from './gfx/satellites';
+import { Towns } from './gfx/buildings';
+import { Tornadoes, type Twister } from './gfx/tornado';
+import { uMoonBody, uMoonBody2 } from './gfx/eclipse';
+import { MOON_RADIUS } from './common';
 import { CivMap, uNightMap } from './gfx/civmap';
 import type { Nation } from './gfx/nations';
 import { hashSeed as seedHash } from '../sim/rng';
@@ -86,6 +90,9 @@ export class GenesisScene {
   aurora?: AuroraVolume;
   weather?: Precipitation;
   satellites?: Satellites;
+  towns?: Towns;
+  tornadoes?: Tornadoes;
+  buildingBudget = 4000;
   riverSize = 512;
   shadowSteps = 8;
   /** Most real plant models and grass tufts drawn near the camera. */
@@ -287,6 +294,10 @@ export class GenesisScene {
         (sib.color.value as Vector3).set(c[0] * b, c[1] * b, c[2] * b);
       });
     }
+    this.towns = new Towns(grid, this.data, this.erosion.texture, this.clouds.shadow, this.buildingBudget);
+    for (const m of this.towns.meshes) this.scene.add(m);
+    this.tornadoes = new Tornadoes(this.data, this.erosion.texture);
+    this.scene.add(this.tornadoes.mesh);
     this.weather = new Precipitation(this.rainDrops);
     this.scene.add(this.weather.mesh);
     this.aurora = new AuroraVolume(this.clouds.noise);
@@ -303,6 +314,7 @@ export class GenesisScene {
     this.data?.update(cells, this.plantsForBake, first);
     this.ground?.setCells(cells.elevation, cells.seaLevel);
     this.riverMap?.update(cells, performance.now(), first);
+    this.towns?.setCells(cells);
     this.planet.update(cells, first);
     if (this.overlayOn) this.data?.setOverlay(this.planet.cellColors);
     this.vegetation?.setCells(cells);
@@ -467,6 +479,26 @@ export class GenesisScene {
     (uImpact.value as Vector4).set(g[cell * 3]!, g[cell * 3 + 1]!, g[cell * 3 + 2]!, 0);
   }
 
+  /** Funnels under storm cells that sit over land near the camera. */
+  private updateTornadoes(): void {
+    const t = this.tornadoes, cells = this.lastCells, grid = this.grid;
+    if (!t || !cells || !grid) return;
+    const list: Twister[] = [];
+    if (this.cam.dist < 0.5) {
+      const f = this.cam.focusDir(this.tmpFocus);
+      for (const s of this.stormCells) {
+        if (list.length >= 6 || cells.elevation[s]! <= cells.seaLevel + 0.02 || cells.elevation[s]! > cells.seaLevel + 2.5) continue;
+        const x = grid.pos[s * 3]!, y = grid.pos[s * 3 + 1]!, z = grid.pos[s * 3 + 2]!;
+        if (x * f.x + y * f.y + z * f.z < 0.93) continue;
+        // not every storm spins one up, and they come and go
+        const phase = Math.sin(this.time * 0.05 + s * 1.7);
+        if (((s * 2654435761) >>> 0) % 3 !== 0 || phase < -0.2) continue;
+        list.push({ dir: [x, y, z], fire: cells.lava[s]! > 0.3, seed: (s % 97) / 97 });
+      }
+    }
+    t.set(list);
+  }
+
   private plumeTimer = 0;
   /** Find the hottest eruptions and fires and feed them to the cloud volume as ash and smoke columns. */
   private updatePlumes(): void {
@@ -574,10 +606,14 @@ export class GenesisScene {
     const mi = 0.09;
     const md = (uMoonDir.value as Vector3).set(Math.cos(this.moonAngle), Math.sin(mi) * Math.sin(this.moonAngle), Math.sin(this.moonAngle)).normalize();
     this.moon.position.copy(md).multiplyScalar(this.moonDistance);
+    (uMoonBody.value as Vector4).set(this.moon.position.x, this.moon.position.y, this.moon.position.z, this.moon.visible ? MOON_RADIUS * this.moon.scale.x : 0);
+    if (this.creatures) { const mb = this.creatures.moonBody; mb.x = this.moon.position.x; mb.y = this.moon.position.y; mb.z = this.moon.position.z; mb.w = this.moon.visible ? MOON_RADIUS * this.moon.scale.x : 0; }
+    (uMoonBody2.value as Vector4).w = 0;
     this.moon.rotation.y = -this.moonAngle;
     if (this.moon2?.visible) {
       const a2 = this.moonAngle * 2.3 + 1;
       this.moon2.position.set(Math.cos(a2) * 3.4, Math.sin(0.4) * Math.sin(a2) * 3.4, Math.sin(a2) * 3.4 * Math.cos(0.4));
+      (uMoonBody2.value as Vector4).set(this.moon2.position.x, this.moon2.position.y, this.moon2.position.z, MOON_RADIUS * 0.45);
     }
     // the companion sun trails the main one by a wide angle
     (uSun2Dir.value as Vector3).set(cd * Math.cos(this.dayAngle + 0.9), Math.sin(this.declination) + 0.15, cd * Math.sin(this.dayAngle + 0.9)).normalize();
@@ -646,7 +682,9 @@ export class GenesisScene {
     // the erosion bake runs a few iterations a frame until it is done, then the terrain keeps its result
     if (this.erosion && !this.erosion.finished) this.erosion.step(this.renderer, this.erosionPerFrame);
     else if (this.erosion && this.ground) void this.ground.readDetail(this.renderer, this.erosion);
-    if (this.civ?.update(this.lastCells, this.speciesMap, performance.now(), dt)) this.onNations?.(this.civ.nations);
+    if (this.civ?.update(this.lastCells, this.speciesMap, performance.now(), dt)) { this.onNations?.(this.civ.nations); this.towns?.setTowns(this.civ.towns, this.civ.nations, this.civ.lanes); }
+    this.towns?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist, this.time);
+    this.updateTornadoes();
     const imp = uImpact.value as Vector4;
     if (imp.w >= 0) { imp.w += dt; if (imp.w > 240) imp.w = -1; }
     if ((this.plumeTimer -= dt) <= 0) { this.plumeTimer = 1.5; this.updatePlumes(); }

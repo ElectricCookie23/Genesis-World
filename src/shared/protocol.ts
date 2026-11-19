@@ -111,6 +111,9 @@ export interface PlantInfo {
 
 export interface SettlementInfo {
   id: number; name: string; cell: number; species: number; pop: number; tech: number; founded: number; belief: number; eventId: number; ruined: number;
+  /** Has raised a temple (after the sky has meddled often enough). */
+  temple?: boolean;
+  farms?: boolean;
 }
 
 /** A point in history the user can rewind to. */

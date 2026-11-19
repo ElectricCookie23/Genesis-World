@@ -12,6 +12,7 @@ import { samplePlanet, type PlanetData } from './planetdata';
 import { QuadSphere, patchNodes } from './quadsphere';
 import { RIVER_MAX_WIDTH, type RiverMap } from './rivermap';
 import { uNightMap, type CivMap } from './civmap';
+import { eclipseLight } from './eclipse';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
@@ -204,8 +205,9 @@ export class TerrainSurface {
       const wet = smoothstep(0.0, -0.03, above).mul(float(1).sub(smoothstep(0.12, 0.5, above.negate())));
       causticLight = mix(float(1), focus.add(0.72), wet);
     }
-    const direct = max(dot(Nrm, L), 0).mul(smoothstep(-0.1, 0.14, sunH)).mul(shadow).mul(ringShade).mul(terrainShadow).mul(causticLight);
-    const skyLight = mix(vec3(uLook.sky), vec3(0.6, 0.6, 0.6), 0.4).mul(0.2).mul(day).mul(dot(Nrm, dir).mul(0.4).add(0.6)).mul(ao);
+    const eclipse: N = eclipseLight(P);
+    const direct = max(dot(Nrm, L), 0).mul(smoothstep(-0.1, 0.14, sunH)).mul(shadow).mul(ringShade).mul(terrainShadow).mul(causticLight).mul(eclipse);
+    const skyLight = mix(vec3(uLook.sky), vec3(0.6, 0.6, 0.6), 0.4).mul(0.2).mul(day).mul(dot(Nrm, dir).mul(0.4).add(0.6)).mul(ao).mul(eclipse.mul(0.75).add(0.25));
     // the moon lights the night side in its own tint; airglow and starlight keep the rest from going black
     const moonUp = smoothstep(-0.1, 0.25, dot(dir, M));
     const moonLight = vec3(uLook.moon).mul(0.05).mul(max(dot(Nrm, M), 0).mul(0.8).add(0.2)).mul(moonUp).mul(float(1).sub(day)).mul(ao.mul(0.6).add(0.4));
@@ -276,7 +278,9 @@ export class TerrainSurface {
       const traffic = e3.r.mul(0.8).add(0.5);
       lit = mix(lit, lit.mul(0.6).add(sandC.mul(0.35).mul(day)), roadLine.mul(0.5).mul(day));
       const roadLight = roadLine.mul(importance.mul(0.6).add(0.4)).mul(traffic).mul(alive).mul(0.9);
-      lit = lit.add(hue.mul(cityLight.mul(1.25).add(roadLight)).mul(nightAmt));
+      // up close the light comes from real windows and lamps, so the painted glow steps back
+      const paint = mix(float(0.22), float(1), smoothstep(0.02, 0.25, camDist));
+      lit = lit.add(hue.mul(cityLight.mul(1.25).mul(paint).add(roadLight)).mul(nightAmt));
       // the Night Map: borders as fine bright lines, and a faint wash of each nation's colour over its land
       const border = float(1).sub(smoothstep(0.2, 0.42, CB.r));
       const frontier = float(1).sub(smoothstep(0.6, 0.78, CB.r)).mul(0.3);

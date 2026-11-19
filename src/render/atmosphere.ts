@@ -87,7 +87,7 @@ export function createAtmosphere(): Mesh {
     return color.mul(5).mul(vec3(uLook.star)).mul(uAtmo).mul(vec3(uGradeTint)).mul(select(discA.greaterThan(0), 1, 0));
   });
   material.colorNode = scatter();
-  const mesh = new Mesh(new SphereGeometry(ATMO_RADIUS, 96, 64), material);
+  const mesh = new Mesh(new IcosahedronGeometry(ATMO_RADIUS * 1.02, 6), material);
   mesh.frustumCulled = false;
   mesh.renderOrder = 5;
   return mesh;

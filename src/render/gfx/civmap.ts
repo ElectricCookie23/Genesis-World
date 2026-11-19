@@ -28,6 +28,9 @@ export class CivMap {
   private pts = new Float32Array(3 * 256);
   roadCount = 0;
   laneCount = 0;
+  /** Sea lanes as chains of cells, for the boats. */
+  lanes: number[][] = [];
+  get towns(): SettlementInfo[] { return this.settlements; }
 
   constructor(private grid: Grid, private bake: CubeBake, roadSize = 512) {
     this.a = bake.create(false);
@@ -89,6 +92,7 @@ export class CivMap {
       this.roads.commit();
       this.roadCount = net.roads.length;
       this.laneCount = net.lanes.length;
+      this.lanes = net.lanes.map((l) => l.cells);
     }
     return true;
   }

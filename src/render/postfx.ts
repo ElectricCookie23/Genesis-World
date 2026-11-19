@@ -122,7 +122,8 @@ export class PostFX {
     if (this.dofEnabled) color = dof(color, this.scenePass.getViewZNode(), uFocus, uFocus.mul(0.6), 0.9);
     this.lumSource = null;
     // ---- exposure, then bloom of what is still brighter than white: the star, lava, lightning, aurora, city cores
-    let hdr: N = color.mul(uExposure);
+    // nothing brighter than this survives: a single bad pixel must not bloom into a blot
+    let hdr: N = color.mul(uExposure).min(vec4(64, 64, 64, 1)).max(vec4(0, 0, 0, 0));
     if (o.bloom) {
       const glow: N = bloom(hdr, 1, 0.4, 1.05);
       hdr = hdr.add(glow.mul(uBloomStrength));

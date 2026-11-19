@@ -3,7 +3,7 @@
 // tileable 3D noise. They shade themselves, take the colour of the star at dusk and of the moon at
 // night, glow from inside with lightning, and cast shadows on the ground and sea.
 import {
-  BackSide, Data3DTexture, LinearFilter, Mesh, MeshBasicNodeMaterial, RGBAFormat, RepeatWrapping, SphereGeometry, UnsignedByteType, Vector4,
+  BackSide, Data3DTexture, LinearFilter, Mesh, MeshBasicNodeMaterial, RGBAFormat, RepeatWrapping, IcosahedronGeometry, UnsignedByteType, Vector4,
   type CubeTexture,
 } from 'three/webgpu';
 import {
@@ -13,6 +13,7 @@ import {
 import { EXAG, uDitherFrame, uBolts, uCloudAmount, uHazeTint, uMoonDir, uPlumeWind, uPlumes, uSteam, uSunDir, uTime } from '../common';
 import { uLook } from './look';
 import { samplePlanet } from './planetdata';
+import { eclipseLight } from './eclipse';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
@@ -257,12 +258,13 @@ export class VolumetricClouds {
             }
             const tl = max(exp(tau.negate()), exp(tau.mul(-0.22)).mul(0.62));
             const sunH = dot(dir, L).add(hN.mul(0.05));
-            const sunVis = smoothstep(-0.11, 0.07, sunH);
+            const ecl: N = eclipseLight(p);
+            const sunVis = smoothstep(-0.11, 0.07, sunH).mul(ecl);
             const day = smoothstep(-0.2, 0.25, sunH);
             const sunColor = mix(vec3(uLook.dusk), vec3(uLook.star), smoothstep(-0.03, 0.32, sunH));
             const powder = float(1).sub(exp(d.mul(-2.6))).mul(0.5).add(0.5);
             const sunLit = sunColor.mul(sunVis).mul(tl).mul(phase).mul(powder).mul(1.55);
-            const skyLit = mix(vec3(uHazeTint), vec3(1, 1, 1), 0.55).mul(day).mul(hN.mul(0.7).add(0.3)).mul(0.42);
+            const skyLit = mix(vec3(uHazeTint), vec3(1, 1, 1), 0.55).mul(day).mul(hN.mul(0.7).add(0.3)).mul(0.42).mul(ecl.mul(0.8).add(0.2));
             const moonUp = smoothstep(-0.1, 0.25, dot(dir, M));
             const moonLit = vec3(uLook.moon).mul(0.05).mul(hN.mul(0.75).add(0.25)).mul(moonUp).mul(float(1).sub(day)).mul(dot(rd, M).mul(0.3).add(1));
             const glow = vec3(0.006, 0.009, 0.012);
@@ -298,7 +300,8 @@ export class VolumetricClouds {
     const out: N = march();
     material.colorNode = out.rgb;
     material.opacityNode = out.a;
-    this.mesh = new Mesh(new SphereGeometry(CLOUD_TOP * 1.012, 72, 48), material);
+    // an icosphere has no seam or poles, so the shell never shows a hairline where its edges meet
+    this.mesh = new Mesh(new IcosahedronGeometry(CLOUD_TOP * 1.03, 5), material);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 3;
   }

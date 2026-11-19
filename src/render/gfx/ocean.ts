@@ -12,6 +12,7 @@ import { uLook } from './look';
 import { samplePlanet, type PlanetData } from './planetdata';
 import { QuadSphere, patchNodes } from './quadsphere';
 import type { CivMap } from './civmap';
+import { eclipseLight } from './eclipse';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
@@ -144,14 +145,16 @@ export class OceanSurface {
     const day = smoothstep(-0.14, 0.24, sunH);
     const sunColor: N = mix(vec3(uLook.dusk), vec3(uLook.star), smoothstep(-0.05, 0.4, sunH));
     const shadow: N = cloudShadow(P);
-    const sunVis = smoothstep(-0.08, 0.1, sunH).mul(shadow);
+    const eclipse: N = eclipseLight(P);
+    const sunVis = smoothstep(-0.08, 0.1, sunH).mul(shadow).mul(eclipse);
+
     let body: N = mix(shallow.mul(0.6), deep, float(1).sub(exp(path.mul(-950))));
     // plankton blooms stain the water
     body = mix(body, mix(body, vec3(uLook.pigmentA), 0.45).mul(1.3), C.b.mul(0.55));
     const moonUp = smoothstep(-0.1, 0.25, dot(dir, M));
     const night = float(1).sub(day);
     const moonAmb: N = vec3(uLook.moon).mul(0.05).mul(moonUp).mul(night);
-    const ambient: N = mix(vec3(uHazeTint), vec3(0.6, 0.6, 0.6), 0.4).mul(0.3).mul(day).add(moonAmb.mul(0.6)).add(vec3(0.004, 0.007, 0.008));
+    const ambient: N = mix(vec3(uHazeTint), vec3(0.6, 0.6, 0.6), 0.4).mul(0.3).mul(day).mul(eclipse.mul(0.75).add(0.25)).add(moonAmb.mul(0.6)).add(vec3(0.004, 0.007, 0.008));
     const bodyLit: N = body.mul(sunColor.mul(sunVis).mul(max(dot(Nw, L), 0).mul(0.6).add(0.4)).mul(0.95).add(ambient));
     let water: N = behind.mul(transmit).add(bodyLit.mul(vec3(1, 1, 1).sub(transmit)));
     // light glowing through the thin tops of waves, looking toward the star
