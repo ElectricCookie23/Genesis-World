@@ -35,6 +35,10 @@ function hash(n: number): number {
 }
 
 const CAP = 384;
+// Body length on screen, in planet radii, from the size gene. Living things are drawn far larger than life against
+// the terrain so they can be seen at all; these keep animals in proportion to the trees (a big animal's body is about
+// a third of a tall tree, where it used to equal one, which made herds look like giants among saplings).
+const ANIMAL_BASE = 0.00045, ANIMAL_SPAN = 0.0023;
 
 interface Slot { mesh: Copies; iPos: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; used: number; }
 
@@ -182,7 +186,7 @@ export class CreatureLayer {
         const e2 = new Vector3().crossVectors(home, e1).normalize();
         list.push({
           key, species: h.species[i]!, region: r, medium, home, e1, e2, h: hash(key * 31 + 5),
-          size: 0.0006 + 0.0038 * Math.pow(info.genes[G.Size]!, 1.3), social: info.genes[G.Sociality]!, fed: h.fed[i]!,
+          size: ANIMAL_BASE + ANIMAL_SPAN * Math.pow(info.genes[G.Size]!, 1.3), social: info.genes[G.Sociality]!, fed: h.fed[i]!,
           pos: home.clone(), fwd: e1.clone(), moving: 0, cell, night: info.genes[G.Nocturnal]!,
           larva: info.genes[G.Metamorphosis]! > 0.6 && hash(key * 53 + 7) < 0.35,
           rival: null, hunter: info.genes[G.Diet]! > 0.6, migrate: info.genes[G.Migration]!, echo: info.genes[G.Echo]! > 0.6,

@@ -132,9 +132,11 @@ export class TerrainSurface {
     const sandC: N = vec3(uLook.sand), soilC: N = vec3(uLook.soil);
 
     // rock: layered strata that follow height, with thin bright mineral bands
-    const strata = fract(h.mul(1.25).add(e1.r.mul(0.5)));
+    // The layers are bent by the two coarser detail scales and the mineral band is faint: as level, evenly spaced
+    // bright lines they read as map contours drawn on every hillside and shore.
+    const strata = fract(h.mul(1.25).add(e1.r.mul(0.5)).add(e2.r.mul(0.9)).add(e3.r.mul(0.35)));
     let rock: N = mix(rockA, rockB, smoothstep(0.3, 0.7, strata));
-    rock = mix(rock, rockC.mul(1.5), smoothstep(0.9, 0.94, strata).mul(smoothstep(1.0, 0.96, strata)).mul(0.8));
+    rock = mix(rock, rockC.mul(1.25), smoothstep(0.88, 0.94, strata).mul(smoothstep(1.0, 0.95, strata)).mul(0.28));
     // loose ground: dark wet soil through to pale dry sand
     const dry = float(1).sub(smoothstep(0.08, 0.32, moist));
     const hot = smoothstep(8, 22, temp);

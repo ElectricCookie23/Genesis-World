@@ -125,7 +125,8 @@ export function makeCreatureMaterial(data: PlanetData, erosionTex: Texture, clou
   const glossBase: N = is(cover, COVER.hide).mul(0.15).add(is(cover, COVER.scales).mul(0.5)).add(is(cover, COVER.fur).mul(0.04)).add(is(cover, COVER.feathers).mul(0.22)).add(is(cover, COVER.chitin).mul(0.9));
   let gloss: N = glossBase.mul(patterned).add(is(zone, ZONE.bone).mul(0.35)).add(is(zone, ZONE.bladder).mul(0.6)).add(is(zone, ZONE.membrane).mul(0.2)).add(wet.mul(0.45)).clamp(0, 1);
   // fur: outer shells keep only some hairs, and hair is darker near the skin
-  const strand = hash2(floor(vec2(u.mul(260), v.mul(140))));
+  // fine enough that single hairs, not square tufts, show up close
+  const strand = hash2(floor(vec2(u.mul(720), v.mul(390))));
   const hairKept = step(vShell.mul(0.92), strand);
   albedo = albedo.mul(mix(float(1), vShell.mul(0.5).add(0.6), step(0.001, vShell)));
   // one in a great many is born golden
@@ -166,7 +167,8 @@ export function makeCreatureMaterial(data: PlanetData, erosionTex: Texture, clou
   const moonUp = smoothstep(-0.1, 0.25, dot(up, M));
   const moon: N = vec3(uLook.moon).mul(0.05).mul(max(dot(Nrm, M), 0).mul(0.7).add(0.3)).mul(moonUp).mul(night);
   const H: N = normalize(V.add(L));
-  const spec = pow(max(dot(Nrm, H), 0), mix(float(10), float(200), gloss)).mul(gloss).mul(gloss.mul(2.5).add(0.3)).mul(sunVis);
+  // kept low: at full strength wet and armoured skins showed hard white streaks, like painted plastic
+  const spec = pow(max(dot(Nrm, H), 0), mix(float(10), float(200), gloss)).mul(gloss).mul(gloss.mul(1.1).add(0.2)).mul(sunVis);
   const fres = pow(float(1).sub(nv), 4);
   const sheen: N = vec3(uHazeTint).mul(day.mul(0.5).add(0.01)).mul(fres).mul(wet.mul(0.7).add(gloss.mul(0.2)));
   const velvet = pow(float(1).sub(nv), 3).mul(is(cover, COVER.fur).add(is(cover, COVER.feathers).mul(0.5))).mul(patterned).mul(0.3).mul(day);

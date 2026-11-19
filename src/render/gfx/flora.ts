@@ -502,7 +502,7 @@ export class Flora {
           pos[ia * 3 + 2]! * w + pos[ib * 3 + 2]! * u + pos[ic * 3 + 2]! * v,
         ).normalize();
         const small = form === 'tuft' || form === 'fern' || form === 'flower';
-        const size = (small ? 0.0011 : form === 'shrub' ? 0.0015 : 0.0016 + 0.003 * hv) * sizeBoost * (0.8 + 0.4 * hash(t * 7 + k * 31));
+        const size = (small ? 0.0011 : form === 'shrub' ? 0.0015 : 0.0021 + 0.0042 * hv) * sizeBoost * (0.8 + 0.4 * hash(t * 7 + k * 31));
         // colour: this world's pigments, with the leaf-hue gene running between the two
         const tHue = Math.max(0, Math.min(1, (genes ? genes[PG.LeafHue]! : 0.5) + (hash(t + k * 5) - 0.5) * 0.18));
         const light = (small ? 1.35 : 1) * (0.8 + 0.5 * hash(t * 11 + k));

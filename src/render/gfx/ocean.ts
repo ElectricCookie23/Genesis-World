@@ -179,7 +179,9 @@ export class OceanSurface {
     const H: N = normalize(V.add(L));
     const nh = max(dot(Nrm, H), 0);
     const fresnel = float(0.02).add(pow(float(1).sub(dot(Nrm, V).clamp(0, 1)), 5).mul(0.98).mul(mix(float(1), float(0.55), far)));
-    const glint = pow(nh, power).mul(power.add(8)).mul(0.0398).mul(sunVis).mul(smoothstep(0.0, 0.06, dot(Nrm, L))).min(60);
+    // From far off the glitter is a wide soft patch; at full strength it burned out to a white blob a quarter of the
+    // planet wide on a real display, so it is held back and capped with distance.
+    const glint = pow(nh, power).mul(power.add(8)).mul(0.0398).mul(sunVis).mul(smoothstep(0.0, 0.06, dot(Nrm, L))).mul(mix(float(1), float(0.4), far)).min(mix(float(60), float(1.6), far));
     const Hm: N = normalize(V.add(M));
     const moonGlint = pow(max(dot(Nrm, Hm), 0), power).mul(power.add(8)).mul(0.0398).mul(moonUp).mul(night).mul(0.045).min(3);
     let color: N = mix(water, sky, fresnel).add(sunColor.mul(glint).mul(fresnel.mul(4).add(0.25).min(1))).add(vec3(uLook.moon).mul(moonGlint));
