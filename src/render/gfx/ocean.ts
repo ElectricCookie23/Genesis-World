@@ -6,7 +6,7 @@ import {
   abs, sqrt, step, cameraPosition, cameraViewMatrix, dot, exp, float, frontFacing, length, log2, max, min, mix, normalize, positionView, positionWorld, pow, reflect,
   screenUV, select, sin, smoothstep, texture, vec2, vec3, vec4, viewportDepthTexture, viewportSharedTexture, cameraNear, cameraFar, perspectiveDepthToViewZ,
 } from 'three/tsl';
-import { EXAG, uImpact, uOverlay, uHazeAmount, uHazeTint, uMoonDir, uOceanFill, uSeaGlow, uSeaKm, uSunDir, uTideKm, uTime, uUnderwater } from '../common';
+import { EXAG, uHatch, uImpact, uOverlay, uHazeAmount, uHazeTint, uMoonDir, uOceanFill, uSeaGlow, uSeaKm, uSunDir, uTideKm, uTime, uUnderwater } from '../common';
 import { OceanFFT } from './fft';
 import { uLook } from './look';
 import { samplePlanet, type PlanetData } from './planetdata';
@@ -28,7 +28,7 @@ export class OceanSurface {
   readonly sphere: QuadSphere;
   readonly fft: OceanFFT;
   maxLevel = 11;
-  split = 4;
+  split = 5;
   private readonly dispNodes: N[] = [];
   private readonly detailNodes: N[] = [];
   private frame = 0;
@@ -38,7 +38,7 @@ export class OceanSurface {
   readonly causticNode: N;
   readonly causticTile: number;
 
-  constructor(data: PlanetData, cloudShadow: (p: N) => N, erosionTex: Texture, resolution = 256, seed = 1, civ?: CivMap, segments = 32, maxPatches = 700) {
+  constructor(data: PlanetData, cloudShadow: (p: N) => N, erosionTex: Texture, resolution = 256, seed = 1, civ?: CivMap, segments = 32, maxPatches = 1000) {
     this.fft = new OceanFFT(resolution, seed);
     this.fft.setWind(REFERENCE_WIND, 0.6);
     const outs = this.fft.outputs;
@@ -232,11 +232,21 @@ export class OceanSurface {
     const impRing = exp(impAng.sub(impAge.mul(0.085)).div(impAge.sqrt().mul(0.012).add(0.006)).pow(2).negate()).mul(exp(impAge.mul(-0.3))).mul(step(0, impAge));
     color = color.add(vec3(4.5, 2.6, 1.2).mul(impRing.mul(2)));
 
+    // a mass hatching lights the sea from below: a glow that spreads from where it began, then fades
+    const hatchAge: N = uHatch.w;
+    const hatchAng = sqrt(max(float(2).sub(dot(dir, uHatch.xyz).mul(2)), 0));
+    const hatchGlow = exp(hatchAng.div(hatchAge.mul(0.006).add(0.03)).pow(2).negate()).mul(exp(hatchAge.mul(-0.06))).mul(smoothstep(0, 2, hatchAge)).mul(step(0, hatchAge));
+    color = color.add(mix(vec3(0.1, 0.9, 0.8), vec3(uLook.pigmentB), 0.3).mul(hatchGlow).mul(e2.r.mul(0.9).add(0.5)).mul(night.mul(1.6).add(0.25)));
+
     // ---- from below: the bright window of sky overhead, darkness beyond it
     const cosUp = max(dot(V, Nw.negate()), 0);
     const windowAmt = smoothstep(0.62, 0.72, cosUp);
     const below: N = mix(deep.mul(0.6).add(shallow.mul(0.12)).mul(day.add(0.03)), sky.mul(1.4).add(sunColor.mul(pow(max(dot(V.negate(), L).negate(), 0), 40)).mul(4).mul(sunVis)), windowAmt);
-    color = select(frontFacing, color, below);
+    // shafts of light fan down from the surface around the star's image
+    const sunBelow: N = L.sub(dir.mul(dot(L, dir)));
+    const fan = sin(dot(dir.cross(V), normalize(sunBelow.add(vec3(1e-4, 0, 0)))).mul(55).add(grad.x.mul(14)).add(uTime.mul(0.6))).mul(0.5).add(0.5);
+    const shafts = pow(fan, 5).mul(windowAmt.mul(0.7).add(0.3)).mul(pow(max(dot(V.negate(), L).negate(), 0), 2)).mul(sunVis).mul(0.55);
+    color = select(frontFacing, color, below.add(mix(shallow, vec3(1, 1, 1), 0.4).mul(sunColor).mul(shafts)));
 
     const OV: N = samplePlanet(data.overlay, dir);
     color = mix(color, OV.rgb.mul(OV.rgb).mul(0.85), select(frontFacing, uOverlay, float(0)));

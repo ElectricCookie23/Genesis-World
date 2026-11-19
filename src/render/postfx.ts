@@ -13,7 +13,7 @@ import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
 import { traa } from 'three/addons/tsl/display/TRAANode.js';
 import GTAONode from 'three/addons/tsl/display/GTAONode.js';
 import { sharpen } from 'three/addons/tsl/display/SharpenNode.js';
-import { uDitherFrame, uExposure, uFlash, uGradeTint, uTime, uUnderwater } from './common';
+import { uDitherFrame, uExposure, uFlash, uGradeTint, uShimmer, uTime, uUnderwater } from './common';
 export { uExposure };
 import { Pass, makeTarget } from './gfx/gpu';
 
@@ -145,7 +145,10 @@ export class PostFX {
       // red and blue part ways only toward the corners
       const t: N = convertToTexture(mapped);
       const shift = fromCentre.mul(r2).mul(0.012);
-      rgb = vec3(t.sample(st.sub(shift)).r, t.sample(st).g, t.sample(st.add(shift)).b);
+      // hot air over the ground makes the lower part of the picture waver
+      const waver = vec2(sin(st.y.mul(140).add(uTime.mul(6))).mul(0.0016), sin(st.x.mul(90).add(uTime.mul(4.3))).mul(0.0009)).mul(uShimmer).mul(smoothstep(0.4, 0.8, st.y));
+      const sw = st.add(waver);
+      rgb = vec3(t.sample(sw.sub(shift)).r, t.sample(sw).g, t.sample(sw.add(shift)).b);
     }
     const vig = float(1).sub(smoothstep(0.45, 1.15, length(fromCentre).mul(1.45)).mul(uVignette));
     const grain = fract(sin(dot(st.add(fract(uTime)), vec2(12.9898, 78.233))).mul(43758.5453)).sub(0.5).mul(uGrain);

@@ -642,7 +642,7 @@ export function Settings() {
         <div class={css.row}><span>Colour-blind safe overlays</span><button class={css.btn} onClick={() => actions.setColorblind(!s.colorblind)}>{s.colorblind ? 'on' : 'off'}</button></div>
         <div class={css.row}>
           <span>Overlay (O)</span>
-          <span>{(['none', 'temp', 'rain', 'life', 'people', 'fossils', 'nations'] as const).map((o) => <button class={css.btn} style={{ marginLeft: 4, opacity: s.overlay === o ? 1 : 0.55 }} onClick={() => actions.setOverlay(o)}>{o}</button>)}</span>
+          <span>{(['none', 'temp', 'rain', 'life', 'people', 'fossils', 'nations', 'fungal'] as const).map((o) => <button class={css.btn} style={{ marginLeft: 4, opacity: s.overlay === o ? 1 : 0.55 }} onClick={() => actions.setOverlay(o)}>{o}</button>)}</span>
         </div>
         <div class={css.sub} style={{ margin: '12px 0 2px' }}>CAMERA AND KEEPSAKES</div>
         <div class={css.row}>

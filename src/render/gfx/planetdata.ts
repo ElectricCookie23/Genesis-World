@@ -73,6 +73,12 @@ export class PlanetData {
     for (let i = 0; i < n; i++) s[i] = cells.elevation[i]! <= cells.seaLevel && cells.temperature[i]! < -3 ? 1 : 0;
     b.fill(this.extra, 3, s);
     b.commit(this.extra);
+    // hot springs: the same scattered land cells that puff steam
+    if (full || cells.terrainChanged) {
+      for (let i = 0; i < n; i++) s[i] = cells.elevation[i]! > cells.seaLevel && ((i * 2654435761) >>> 0) % 2600 === 0 ? 1 : 0;
+      b.fill(this.overlay, 3, s);
+      b.commit(this.overlay);
+    }
   }
 }
 

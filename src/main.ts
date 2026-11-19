@@ -207,10 +207,11 @@ async function boot(): Promise<void> {
   actions.setOverlay = (o) => {
     update({ overlay: o });
     scene.setNightMap(o === 'nations');
-    scene.setOverlay(o === 'fossils' || o === 'nations' ? 'none' : o, state.colorblind);
+    scene.setOverlay(o === 'fossils' || o === 'nations' || o === 'fungal' ? 'none' : o, state.colorblind);
+    scene.setFungalView(o === 'fungal', state.plants);
     scene.setFossils(fossilCells(), o === 'fossils');
   };
-  actions.setColorblind = (on) => { update({ colorblind: on }); store.set('genesis:cb', on ? '1' : '0'); scene.setOverlay(state.overlay === 'fossils' || state.overlay === 'nations' ? 'none' : state.overlay, on); };
+  actions.setColorblind = (on) => { update({ colorblind: on }); store.set('genesis:cb', on ? '1' : '0'); scene.setOverlay(state.overlay === 'fossils' || state.overlay === 'nations' || state.overlay === 'fungal' ? 'none' : state.overlay, on); };
   actions.fork = () => { send({ type: 'fork' }); update({ notice: 'Fork point saved. Rewind to it from this panel.' }); window.setTimeout(() => update({ notice: '' }), 3000); };
   // a small invented family for an individual, stable for as long as it is on screen
   actions.familyOf = (key) => {
@@ -481,6 +482,9 @@ async function boot(): Promise<void> {
       // documentary director: cut to wherever something notable just happened
       if ((state.director || state.postcard) && ev.importance >= 2 && ev.cellId >= 0 && scene.following === null) actions.flyToCell(ev.cellId, 0.9);
       if ((ev.type === 'war' || ev.type === 'plague') && ev.cellId >= 0) scene.civUnrest(ev.cellId, ev.type);
+      if (ev.type === 'hatching' && ev.cellId >= 0) scene.hatchAt(ev.cellId);
+      // departure: the light rises from the greatest city
+      if (ev.title === 'Departure') { const home = [...state.settlements].filter((x) => x.ruined < 0).sort((p1, p2) => p2.tech - p1.tech)[0]; if (home) scene.launchAt(home.cell); }
       if (ev.type === 'impact') { scene.flash(0.9); scene.impactAt(ev.cellId); }
       else if (ev.type === 'super-eruption') scene.flash(0.35);
       else if (ev.type === 'mass-extinction') hushUntil = performance.now() + 45000;
@@ -672,7 +676,7 @@ async function boot(): Promise<void> {
     else if (k === 'x') togglePanel('section');
     else if (k === 'u') { scene.underwater = !scene.underwater; update({ notice: scene.underwater ? 'Diving allowed: zoom in over the sea to go under.' : '' }); window.setTimeout(() => update({ notice: '' }), 2500); }
     else if (k === 'v') scene.firstPerson = !scene.firstPerson;
-    else if (k === 'o') { const order = ['none', 'temp', 'rain', 'life', 'people', 'fossils', 'nations'] as const; actions.setOverlay(order[(order.indexOf(state.overlay) + 1) % order.length]!); }
+    else if (k === 'o') { const order = ['none', 'temp', 'rain', 'life', 'people', 'fossils', 'nations', 'fungal'] as const; actions.setOverlay(order[(order.indexOf(state.overlay) + 1) % order.length]!); }
     else if (k === 'f') { if (state.creature) actions.followCreature(!state.creature.following); }
     else if (k === 'escape' && scene.following !== null) actions.followCreature(false);
     else if (k === 'escape') { if (state.postcard) update({ postcard: false }); else closeAll(); }

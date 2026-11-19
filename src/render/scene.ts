@@ -21,6 +21,7 @@ import { Flora } from './gfx/flora';
 import { CreatureLayer, type Individual } from './creatures';
 import { Rivers } from './rivers';
 import { AuroraVolume, uAurora } from './gfx/aurora';
+import { PG } from '../sim/genetics';
 import { CLOUD_TOP } from './gfx/volclouds';
 import { applyLook, worldLook, type WorldLook } from './gfx/look';
 import { PlanetData } from './gfx/planetdata';
@@ -32,13 +33,14 @@ import { Precipitation } from './gfx/weather';
 import { Satellites } from './gfx/satellites';
 import { Towns } from './gfx/buildings';
 import { Tornadoes, type Twister } from './gfx/tornado';
+import { Caves, buildRibcage } from './gfx/landmarks';
 import { uMoonBody, uMoonBody2 } from './gfx/eclipse';
 import { MOON_RADIUS } from './common';
 import { CivMap, uNightMap } from './gfx/civmap';
 import type { Nation } from './gfx/nations';
 import { hashSeed as seedHash } from '../sim/rng';
 import type { HerdSnapshot, PlantInfo, SpeciesInfo } from '../shared/protocol';
-import { EXAG, MOON_DISTANCE, uBolts, uFlash, uRing, uSun2, uSun2Dir, uUnderwater, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime, uOceanFill, uOverlay, uAtmo, uImpact, uPlumes, uPlumeWind } from './common';
+import { EXAG, MOON_DISTANCE, uBolts, uFlash, uRing, uSun2, uSun2Dir, uUnderwater, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime, uOceanFill, uOverlay, uAtmo, uImpact, uPlumes, uPlumeWind, uFog, uRainbow, uShimmer, uHatch, uFungal, uFossil } from './common';
 
 export type Quality = 'low' | 'medium' | 'high' | 'ultra';
 
@@ -92,6 +94,7 @@ export class GenesisScene {
   satellites?: Satellites;
   towns?: Towns;
   tornadoes?: Tornadoes;
+  caves?: Caves;
   buildingBudget = 4000;
   riverSize = 512;
   shadowSteps = 8;
@@ -233,7 +236,7 @@ export class GenesisScene {
     setCloudShadow(this.clouds.shadow);
     this.riverMap = new RiverMap(grid, this.riverSize);
     this.ocean = new OceanSurface(this.data, this.clouds.shadow, this.erosion.texture, this.oceanResolution, seedHash(`ocean:${seed}`), this.civ);
-    this.terrain = new TerrainSurface(this.data, this.erosion, this.riverMap, 32, 800, this.shadowSteps, { node: this.ocean.causticNode, tile: this.ocean.causticTile }, this.civ);
+    this.terrain = new TerrainSurface(this.data, this.erosion, this.riverMap, 32, 1200, this.shadowSteps, { node: this.ocean.causticNode, tile: this.ocean.causticTile }, this.civ);
     this.scene.add(this.terrain.sphere.mesh);
     this.planet.mesh.visible = false;
     this.scene.add(this.planet.mesh, this.ocean.sphere.mesh, this.clouds.mesh);
@@ -264,8 +267,9 @@ export class GenesisScene {
     this.monolithMesh = new InstancedMesh(new BoxGeometry(0.004, 0.011, 0.0013).translate(0, 0.0055, 0), dark, 16);
     this.monolithMesh.count = 0;
     const boneMat = new MeshBasicNodeMaterial();
-    boneMat.colorNode = vec3(0.86, 0.82, 0.7).mul(dot(normalize(positionWorld), uSunDir).mul(0.5).add(0.6).max(float(0.12)));
-    const rib = new ConeGeometry(0.25, 1.4, 4).rotateZ(1.2).translate(0, 0.3, 0);
+    // bones: lit like anything else on the ground, but in the fossil view they shine through the darkened rock
+    boneMat.colorNode = vec3(0.86, 0.82, 0.7).mul(dot(normalize(positionWorld), uSunDir).mul(0.5).add(0.6).max(float(0.12))).add(vec3(1.3, 1.15, 0.8).mul(uFossil));
+    const rib = buildRibcage();
     this.boneMesh = new InstancedMesh(rib, boneMat, 256);
     this.boneMesh.count = 0;
     // the oldest tree on the planet stands apart: taller, with a pale gold crown
@@ -298,6 +302,8 @@ export class GenesisScene {
     for (const m of this.towns.meshes) this.scene.add(m);
     this.tornadoes = new Tornadoes(this.data, this.erosion.texture);
     this.scene.add(this.tornadoes.mesh);
+    this.caves = new Caves(grid, this.data, this.erosion.texture);
+    this.scene.add(this.caves.mesh);
     this.weather = new Precipitation(this.rainDrops);
     this.scene.add(this.weather.mesh);
     this.aurora = new AuroraVolume(this.clouds.noise);
@@ -305,6 +311,7 @@ export class GenesisScene {
     this.creatures = new CreatureLayer(grid, this.creatureBudget, this.ground!, this.data, this.erosion.texture, this.clouds.shadow);
     this.creatures.onMesh = (m) => this.scene.add(m);
     this.creatures.onStep = (pos, kind, size) => this.particles?.puff(pos, kind, size);
+    this.creatures.onArc = (pos, size) => this.particles?.arc(pos, size);
     void hashSeed(seed);
   }
 
@@ -315,6 +322,7 @@ export class GenesisScene {
     this.ground?.setCells(cells.elevation, cells.seaLevel);
     this.riverMap?.update(cells, performance.now(), first);
     this.towns?.setCells(cells);
+    this.caves?.setCells(cells);
     this.planet.update(cells, first);
     if (this.overlayOn) this.data?.setOverlay(this.planet.cellColors);
     this.vegetation?.setCells(cells);
@@ -458,6 +466,7 @@ export class GenesisScene {
   setFossils(cells: number[], show: boolean): void {
     this.boneCells = cells.slice(-256);
     this.showFossils = show;
+    uFossil.value = show ? 1 : 0;
     this.layoutMarkers();
   }
 
@@ -499,6 +508,38 @@ export class GenesisScene {
     t.set(list);
   }
 
+  /** A ship leaves the planet from this cell: a light that climbs away and does not come back. */
+  launchAt(cell: number): void {
+    if (!this.grid) return;
+    const g = this.grid.pos;
+    this.particles?.launch(new Vector3(g[cell * 3]!, g[cell * 3 + 1]!, g[cell * 3 + 2]!));
+  }
+
+  /** A mass hatching lights the sea around this cell. */
+  hatchAt(cell: number): void {
+    if (!this.grid) return;
+    const g = this.grid.pos;
+    (uHatch.value as Vector4).set(g[cell * 3]!, g[cell * 3 + 1]!, g[cell * 3 + 2]!, 0);
+  }
+
+  /** The fungal network view: the ground darkens and the threads between the great fungi glow. */
+  setFungalView(on: boolean, plants: Map<number, PlantInfo>): void {
+    uFungal.value = on ? 1 : 0;
+    this.fungalOn = on;
+    const cells = this.lastCells;
+    if (!on || !cells || !this.data) return;
+    const n = cells.elevation.length;
+    const colors = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const g = plants.get(cells.flora[i]!)?.genes;
+      // glowing, water-loving plants are the fungi; their threads run wherever they grow
+      const f = g && g[PG.Glow]! > 0.5 ? Math.min(1, cells.vegetation[i]! * (0.5 + g[PG.WaterNeed]!)) : cells.vegetation[i]! * 0.12;
+      colors[i * 3 + 1] = f * f;
+    }
+    this.data.setOverlay(colors);
+  }
+  private fungalOn = false;
+
   private plumeTimer = 0;
   /** Find the hottest eruptions and fires and feed them to the cloud volume as ash and smoke columns. */
   private updatePlumes(): void {
@@ -535,7 +576,7 @@ export class GenesisScene {
   private updateWeather(): void {
     const cells = this.lastCells, grid = this.grid, wx = this.weather;
     if (!wx) return;
-    if (!cells || !grid || this.cam.dist > 0.09 || uUnderwater.value > 0.5) { wx.set(0, false, 0, 0, 0); return; }
+    if (!cells || !grid || this.cam.dist > 0.09 || uUnderwater.value > 0.5) { wx.set(0, false, 0, 0, 0); uFog.value *= 0.95; uRainbow.value *= 0.95; uShimmer.value *= 0.9; return; }
     const p = this.cam.camera.position;
     const l = p.length();
     const c = (this.weatherCell = nearestCell(grid, p.x / l, p.y / l, p.z / l, this.weatherCell));
@@ -546,6 +587,16 @@ export class GenesisScene {
     const el = Math.hypot(x, z) || 1;
     const k = 0.0009;
     wx.set(Math.min(1, wet), cells.temperature[c]! < 0.5, (-z / el * cells.windE[c]! + (-y * x / el) * cells.windN[c]!) * k, el * cells.windN[c]! * k, (x / el * cells.windE[c]! + (-y * z / el) * cells.windN[c]!) * k);
+    // what the air is doing here: mist on damp ground when the star is low, a rainbow when rain falls in sunshine, shimmer over hot ground
+    const sun = uSunDir.value as Vector3;
+    const sunUp = x * sun.x + y * sun.y + z * sun.z;
+    const low = Math.max(0, 1 - Math.max(0, cells.elevation[c]! - cells.seaLevel) / 1.2);
+    const mist = Math.max(0, cells.moisture[c]! - 0.45) * 2 * low * Math.max(0, 1 - Math.abs(sunUp - 0.08) / 0.3) * (cells.temperature[c]! < 22 ? 1 : 0.4);
+    uFog.value += (Math.min(1, mist) - uFog.value) * 0.02;
+    const bow = wx.amount.value > 0.08 && sunUp > 0.03 && sunUp < 0.68 ? Math.min(1, wx.amount.value * 1.6) * (1 - Math.max(0, cells.cloud[c]! - 0.85) * 5) : 0;
+    uRainbow.value += (Math.max(0, bow) - uRainbow.value) * 0.03;
+    const hot = this.cam.dist < 0.05 && sunUp > 0.2 ? Math.max(0, Math.min(1, (cells.temperature[c]! - 31) / 10)) : 0;
+    uShimmer.value += (hot - uShimmer.value) * 0.05;
   }
   private weatherCell = 0;
 
@@ -685,6 +736,11 @@ export class GenesisScene {
     if (this.civ?.update(this.lastCells, this.speciesMap, performance.now(), dt)) { this.onNations?.(this.civ.nations); this.towns?.setTowns(this.civ.towns, this.civ.nations, this.civ.lanes); }
     this.towns?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist, this.time);
     this.updateTornadoes();
+    this.caves?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist);
+    // bones are too small to matter from orbit, except in the fossil view
+    if (this.boneMesh) this.boneMesh.visible = this.showFossils || this.cam.dist < 0.25;
+    const hatch = uHatch.value as Vector4;
+    if (hatch.w >= 0) { hatch.w += dt; if (hatch.w > 90) hatch.w = -1; }
     const imp = uImpact.value as Vector4;
     if (imp.w >= 0) { imp.w += dt; if (imp.w > 240) imp.w = -1; }
     if ((this.plumeTimer -= dt) <= 0) { this.plumeTimer = 1.5; this.updatePlumes(); }

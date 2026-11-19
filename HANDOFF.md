@@ -14,9 +14,13 @@ Done so far in this pass: leg IK (11), temples (46), eclipse shadow (96), tornad
 
 Also done in this pass: drifting plates (51, 52, 54; `sim/tectonics.ts`, all 11 tests pass and a 300 My history still fills with life), GIF export (149), PDF history book (150), sketch cards in the field guide (84; not yet looked at in a browser).
 
-Still to do, nothing started: rising light at departure (127), worn migration trails that roads follow (49, 63), hibernation (64), young beside nests (67), symbiosis and pollinators with real effects (69, 70), electric arcs (77), see-through fossil view (83), timeline strip with more rewind points (86), genetic diversity and oxygen overlays (90), positional sound (94), double shadows under two suns (105), cave mouths (109), hot spring pools (111), dust fertilising the sea (115), fog, rainbows and heat shimmer (117), fungal network view (128), mass hatching glow (135), better bone graveyards (136), two futures side by side (143), real ancestry in the family tree (144), canyon and delta erosion (55), atolls (58). Notes to bring up to date only: 49 (roads follow valleys, rivers, coasts), 132 to 134, 139.
+Also done: second-sun shadows (105), hot spring pools (111), mist, rainbow and heat shimmer (117; the rainbow has not been seen in a test frame yet), departure light (127), fungal view (128), fossil view with ribcages (83, 136), mass hatching glow (135), electric arcs (77), cave mouths (109), light shafts under water (139).
 
-Known small artifact: with the camera exactly over longitude 0 two short bright ticks appear above and below the centre of the planet from orbit. Not traced yet.
+Written but NOT wired in yet: `src/sim/landforms.ts` (`shapeLandforms`: canyons, deltas, sinking volcanic islands, reefs that keep pace into atolls; `dustFall`: desert dust feeding the sea downwind) for features 55, 58, 115.
+
+Still to do, nothing started: worn migration trails that roads follow (49, 63), hibernation (64), young beside nests (67), symbiosis and pollinators with real effects (69, 70), timeline strip with more rewind points (86), genetic diversity and oxygen overlays (90), positional sound (94), two futures side by side (143), real ancestry in the family tree (144).
+
+Fixed on the way: the terrain and sea quadtrees could run out of patches near the corners of a cube face and leave holes showing the sea; splitting now allows for the smaller patches there and running short makes the ground coarser instead of dropping patches. The two bright ticks seen from orbit were bone markers; bones are now hidden from orbit.
 
 A card "Review Genesis live site on a real GPU" was left in the owner's desktop app. If they run it, its findings arrive as `docs/GPU_REVIEW.md` and `docs/screenshots/gpu/` on main: pull and tune from them.
 

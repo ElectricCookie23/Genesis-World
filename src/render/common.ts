@@ -59,3 +59,14 @@ export const uPlumeWind = [0, 1, 2, 3].map(() => uniform(new Vector4(0, 0, 0, 1)
 export const uDitherFrame = uniform(0);
 /** Scene brightness multiplier chosen by the auto exposure. */
 export const uExposure = uniform(1);
+/** Ground mist near the camera, 0..1. */
+export const uFog = uniform(0);
+/** A rainbow opposite the star, 0..1. */
+export const uRainbow = uniform(0);
+/** Heat shimmer over hot ground near the camera, 0..1. */
+export const uShimmer = uniform(0);
+/** The latest mass hatching at sea: xyz = where, w = seconds since (negative = none). */
+export const uHatch = uniform(new Vector4(0, 1, 0, -1));
+/** 1 while the fungal network view is on; 1 while the fossil view is on. */
+export const uFungal = uniform(0);
+export const uFossil = uniform(0);

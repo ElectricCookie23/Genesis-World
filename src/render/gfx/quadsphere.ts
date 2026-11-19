@@ -103,7 +103,9 @@ export class QuadSphere {
     // nothing beyond the horizon is visible; mountains get a small allowance
     const horizon = Math.acos(Math.min(1, 1 / Math.max(1.0001, camR))) + 0.06;
     const cx = camera.x / camR, cy = camera.y / camR, cz = camera.z / camR;
-    const visit = (face: number, x0: number, y0: number, size: number, level: number): void => {
+    // reserve = patches still owed to parts of the tree not yet visited, so that running short of patches makes the
+    // ground coarser somewhere instead of leaving a hole in it
+    const visit = (face: number, x0: number, y0: number, size: number, level: number, reserve: number): void => {
       if (this.count >= this.max) return;
       faceDirection(face, (x0 + size / 2) * 2 - 1, (y0 + size / 2) * 2 - 1, this.tmp);
       const d = this.tmp;
@@ -113,19 +115,26 @@ export class QuadSphere {
       if (angle - reach > horizon) return;
       this.centre.set(d[0], d[1], d[2]);
       const dist = Math.max(0, this.centre.distanceTo(camera) - reach * 0.5);
-      if (level < maxLevel && dist < size * split) {
+      // toward the corners of a cube face the same patch covers less of the sphere, so it needs splitting later
+      const uc = (x0 + size / 2) * 2 - 1, vc = (y0 + size / 2) * 2 - 1;
+      const shrink = Math.pow(1 + uc * uc + vc * vc, -0.75);
+      if (level < maxLevel && dist < size * shrink * split && this.count + reserve + 4 <= this.max) {
         const h = size / 2;
-        visit(face, x0, y0, h, level + 1);
-        visit(face, x0 + h, y0, h, level + 1);
-        visit(face, x0, y0 + h, h, level + 1);
-        visit(face, x0 + h, y0 + h, h, level + 1);
+        visit(face, x0, y0, h, level + 1, reserve + 3);
+        visit(face, x0 + h, y0, h, level + 1, reserve + 2);
+        visit(face, x0, y0 + h, h, level + 1, reserve + 1);
+        visit(face, x0 + h, y0 + h, h, level + 1, reserve);
         return;
       }
       if (keep && !keep(face, x0, y0, size)) return;
       if (level > this.deepest) this.deepest = level;
       this.patch.setXYZW(this.count++, x0, y0, size, face);
     };
-    for (let face = 0; face < 6; face++) visit(face, 0, 0, 1, 0);
+    // start with the face under the camera so that, if patches run short, it is the far side that goes without
+    const ax = Math.abs(cx), ay = Math.abs(cy), az = Math.abs(cz);
+    const near = ax >= ay && ax >= az ? (cx > 0 ? 0 : 1) : ay >= az ? (cy > 0 ? 2 : 3) : cz > 0 ? 4 : 5;
+    const order = [near, ...[0, 1, 2, 3, 4, 5].filter((f) => f !== near)];
+    order.forEach((face, k) => visit(face, 0, 0, 1, 0, 5 - k));
     this.mesh.count = this.count;
     this.patch.needsUpdate = true;
   }

@@ -4,7 +4,7 @@ import { MeshBasicNodeMaterial, type Texture, type Vector3 } from 'three/webgpu'
 import {
   abs, atan, cameraPosition, cross, dot, exp, float, fract, max, min, mix, normalize, positionWorld, pow, reflect, select, sin, smoothstep, sqrt, step, texture, varying, vec2, vec3,
 } from 'three/tsl';
-import { EXAG, uImpact, uOverlay, uHazeAmount, uHazeTint, uMolten, uMoonDir, uRing, uSeaKm, uSun2, uSun2Dir, uSunDir, uTime } from '../common';
+import { EXAG, uFossil, uFungal, uImpact, uOverlay, uHazeAmount, uHazeTint, uMolten, uMoonDir, uRing, uSeaKm, uSun2, uSun2Dir, uSunDir, uTime } from '../common';
 import { cloudShadowAt } from '../clouds';
 import type { ErosionBake } from './erosion';
 import { uLook } from './look';
@@ -45,9 +45,9 @@ export class TerrainSurface {
   readonly sphere: QuadSphere;
   /** Deepest quadtree level allowed (lower on weak devices). */
   maxLevel = 11;
-  split = 5;
+  split = 6.5;
 
-  constructor(data: PlanetData, erosion: ErosionBake, rivers: RiverMap, segments = 32, maxPatches = 800, private shadowSteps = 8, caustics?: { node: N; tile: number }, civ?: CivMap) {
+  constructor(data: PlanetData, erosion: ErosionBake, rivers: RiverMap, segments = 32, maxPatches = 1200, private shadowSteps = 8, caustics?: { node: N; tile: number }, civ?: CivMap) {
     const material = new MeshBasicNodeMaterial();
     const eros = erosion.texture;
 
@@ -156,6 +156,13 @@ export class TerrainSurface {
     const rows = sin(dot(dir, t1).mul(5200).add(e1.r.mul(40))).mul(0.5).add(0.5);
     albedo = mix(albedo, mix(sandC.mul(0.8), pigment.mul(1.4), rows), C.r.mul(0.8).mul(float(1).sub(steep)));
     albedo = albedo.mul(mix(float(1), e3.r.mul(0.7).add(0.65), microFade));
+    // hot springs: a pool of mineral-blue water in a pale crust, ringed with rust-coloured terraces
+    const springField: N = samplePlanet(data.overlay, dir).a.mul(e1.r.mul(0.7).add(0.55));
+    const pool = smoothstep(0.62, 0.7, springField).mul(smoothstep(-0.01, 0.03, above));
+    const rimBand = smoothstep(0.42, 0.6, springField).mul(float(1).sub(pool)).mul(smoothstep(-0.01, 0.03, above));
+    const terraces = fract(springField.mul(18)).mul(0.5).add(0.6);
+    albedo = mix(albedo, mix(vec3(0.85, 0.5, 0.2), vec3(0.93, 0.9, 0.82), smoothstep(0.5, 0.6, springField)).mul(terraces), rimBand.mul(0.85));
+    albedo = mix(albedo, mix(vec3(0.1, 0.75, 0.8), vec3(0.04, 0.3, 0.6), smoothstep(0.7, 0.95, springField)), pool);
     albedo = mix(albedo, vec3(0.045, 0.04, 0.045), ash.mul(0.9));
     albedo = albedo.mul(float(1).sub(bank.mul(0.22)));
     // river water: the colour of this world's shallows, rippling downstream
@@ -212,7 +219,15 @@ export class TerrainSurface {
     const moonUp = smoothstep(-0.1, 0.25, dot(dir, M));
     const moonLight = vec3(uLook.moon).mul(0.05).mul(max(dot(Nrm, M), 0).mul(0.8).add(0.2)).mul(moonUp).mul(float(1).sub(day)).mul(ao.mul(0.6).add(0.4));
     const airglow = vec3(0.006, 0.01, 0.009).add(vec3(uLook.sky).mul(0.005));
-    const second = max(dot(Nrm, uSun2Dir), 0).mul(smoothstep(-0.1, 0.25, dot(dir, uSun2Dir))).mul(uSun2).mul(0.45);
+    // a second sun casts its own shadows, so under two suns every mountain has two
+    let occl2: N = float(0);
+    for (let i = 0; i < Math.max(2, Math.floor(this.shadowSteps / 2)); i++) {
+      const sLen = 0.005 * Math.pow(2.3, i);
+      const q2: N = origin.add(uSun2Dir.mul(sLen));
+      const qr2: N = q2.length();
+      occl2 = max(occl2, float(1).add((samplePlanet(data.height, q2.div(qr2)) as any).r.mul(EXAG)).sub(qr2).div(sLen * 0.09));
+    }
+    const second = max(dot(Nrm, uSun2Dir), 0).mul(smoothstep(-0.1, 0.25, dot(dir, uSun2Dir))).mul(uSun2).mul(0.45).mul(float(1).sub(occl2.clamp(0, 1)));
     const V: N = normalize(cameraPosition.sub(P));
     const gloss = snowAmt.mul(0.45).add(saltAmt.mul(0.25)).add(e1.a.mul(moist).mul(0.3)).mul(float(1).sub(river)).add(river.mul(float(1).sub(snowAmt)).mul(0.55));
     const specN: N = (normalize as any)((mix as any)(Nrm, dir, river));
@@ -288,8 +303,16 @@ export class TerrainSurface {
       lit = lit.add(hue.mul(claimed).mul(0.03).mul(uNightMap).mul(landMask));
       lit = mix(lit, hue.mul(1.5).add(0.12), lineAmt.mul(0.9));
     }
+    // the fungal view: the ground goes dark and the threads that join the great fungi show as a glowing web
+    const OVf: N = samplePlanet(data.overlay, dir);
+    const threads = pow(float(1).sub(abs(e2.r.mul(2).sub(1))), 9).add(pow(float(1).sub(abs(e3.r.mul(2).sub(1))), 7).mul(0.6)).add(pow(float(1).sub(abs(e1.r.mul(2).sub(1))), 12).mul(0.8));
+    const web: N = vec3(0.2, 1.0, 0.75).mul(threads).mul(OVf.g.mul(OVf.g)).mul(sin(uTime.mul(0.8).add(e1.r.mul(30))).mul(0.25).add(0.85)).mul(1.6);
+    lit = mix(lit, lit.mul(0.1).add(vec3(0.004, 0.008, 0.01)).add(web), uFungal.mul(smoothstep(-0.02, 0.02, above)));
+    // the fossil view: the ground turns to dark glass with its layers showing, so the bones in it can be seen
+    const layers = smoothstep(0.9, 1.0, fract(h.mul(6).add(e1.r.mul(0.6)))).mul(0.5);
+    lit = mix(lit, vec3(0.03, 0.045, 0.07).add(vec3(0.25, 0.4, 0.55).mul(layers)).mul(max(dot(Nrm, normalize(dir.add(t1.mul(0.6)))), 0).mul(0.6).add(0.5)), uFossil.mul(0.92));
     // data overlays replace the surface colour but keep the shape of the land readable
-    const OV: N = samplePlanet(data.overlay, dir);
+    const OV: N = OVf;
     const relief = max(dot(Nrm, normalize(dir.add(t1.mul(0.6)).add(t2.mul(0.3)))), 0).mul(0.6).add(0.45);
     lit = mix(lit, OV.rgb.mul(OV.rgb).mul(relief), uOverlay);
     // aerial perspective: distant ground takes on the colour of the air

@@ -6,7 +6,7 @@ import {
   Fn, Loop, attribute, cameraPosition, cos, dot, exp, float, floor, fract, length, max, min, mix, mx_fractal_noise_float, normalWorld, normalize,
   positionLocal, positionWorld, pow, select, sin, smoothstep, sqrt, vec3, cameraFar, cameraNear, perspectiveDepthToViewZ, positionView, viewportDepthTexture, uniform,
 } from 'three/tsl';
-import { ATMO_RADIUS, MOON_RADIUS, uExposure, uAtmo, uGradeTint, uHazeTint, uSkyAngle, uSun2, uSun2Dir, uSunDir, uTime } from './common';
+import { ATMO_RADIUS, MOON_RADIUS, uExposure, uFog, uRainbow, uAtmo, uGradeTint, uHazeTint, uSkyAngle, uSun2, uSun2Dir, uSunDir, uTime } from './common';
 import { RNG } from '../sim/rng';
 import { uLook } from './gfx/look';
 import { makeNoise, fbm } from '../sim/noise';
@@ -58,7 +58,8 @@ export function createAtmosphere(): Mesh {
       const p = ro.add(rd.mul(t));
       const h = max(length(p).sub(RP), 0);
       const dR = exp(h.div(-HR)).mul(ds);
-      const dM = exp(h.div(-HM)).mul(ds);
+      // mist: on damp cool mornings the lowest air is thick with droplets
+      const dM = exp(h.div(-HM)).mul(ds).mul(float(1).add(uFog.mul(9).mul(exp(h.div(-0.0016)))));
       odR.addAssign(dR);
       odM.addAssign(dM);
       const bl = dot(p, L);
@@ -84,7 +85,13 @@ export function createAtmosphere(): Mesh {
     const phaseM = float((3 / (8 * Math.PI)) * (1 - g * g)).mul(mu.mul(mu).add(1))
       .div(float(2 + g * g).mul(pow(float(1 + g * g).sub(mu.mul(2 * g)), 1.5)));
     const color = sumR.mul(betaR).mul(phaseR).add(sumM.mul(betaM).mul(phaseM));
-    return color.mul(5).mul(vec3(uLook.star)).mul(uAtmo).mul(vec3(uGradeTint)).mul(select(discA.greaterThan(0), 1, 0));
+    // a rainbow: a ring of colour 42 degrees from the point opposite the star, red on the outside
+    const away = dot(rd, L.negate());
+    const bowAngle = away.clamp(-1, 1).acos();
+    const band = bowAngle.sub(0.733).div(0.03);
+    const spectrum: N = vec3(exp(band.sub(0.6).pow(2).mul(-3)), exp(band.pow(2).mul(-3)), exp(band.add(0.6).pow(2).mul(-3)));
+    const bow: N = spectrum.mul(uRainbow).mul(0.22).mul(smoothstep(0.0, 0.15, dot(rd, normalize(ro)).add(0.05)));
+    return color.mul(5).mul(vec3(uLook.star)).mul(uAtmo).mul(vec3(uGradeTint)).mul(select(discA.greaterThan(0), 1, 0)).add(bow.mul(vec3(uLook.star)));
   });
   material.colorNode = scatter();
   const mesh = new Mesh(new IcosahedronGeometry(ATMO_RADIUS * 1.02, 6), material);

@@ -116,13 +116,13 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 74 | Flight lost on predator-free islands. | done | a winged lineage whose descendants lose their wings is recorded |
 | 75 | Land species returning to the sea as ocean giants. | done | land lineages that return to the sea are recorded with a milestone |
 | 76 | Echolocation shown as ripples. | done | echolocating animals near the camera send out expanding ripples |
-| 77 | Electric fish with visible arcs. | simplified | electric sea species carry glowing patches; no arc effect |
+| 77 | Electric fish with visible arcs. | done | electric sea species carry glowing patches and, seen up close, crackle now and then with a jagged thread of sparks |
 | 78 | Metamorphosis, with larval and adult forms that look completely different. | done | young of metamorphosing species are drawn as limbless grubs unlike the adults |
 | 79 | Hive species with growing mounds. | done | small, highly social species raise tall mounds at each colony |
 | 80 | Keystone species whose loss collapses an ecosystem. | done | when a widespread species dies and three more follow within 1.5 My, an ecosystem collapse is logged |
 | 81 | Invasive species crossing land bridges. | done | land species that surge across new land bridges when the seas fall are logged as invasions |
 | 82 | Living fossils flagged when a species stays unchanged for eons. | done | species unchanged for 60 My are flagged |
-| 83 | Fossil layer: see-through ground showing bones where extinct species died. | simplified | fossils overlay shows large bone markers where extinct species last lived; no see-through ground |
+| 83 | Fossil layer: see-through ground showing bones where extinct species died. | done | fossils view (overlay): the ground turns to dark glass with its layers showing, and ribcage skeletons shine through it where extinct species last lived; out of the view the bones lie small on the ground |
 | 84 | Auto-generated field guide with a sketch-style card for every species. | done | field guide shows every living species as a paper card with an ink sketch drawn from its genes (`ui/sketch.tsx`: body, legs, wings, fins, horns, sail, plates, markings, hand-drawn wobble) and a description |
 | 85 | Extinction memorial. | done | memorial section lists extinct species; click one for why it died |
 | 86 | Rewind timeline with snapshots and major events marked. | simplified | up to six rewind points at milestone events, listed in settings |
@@ -144,19 +144,19 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 102 | A nearby supernova with a radiation spike. | done | rare supernova: radiation kill on land and a mutation burst; peoples take it as an omen |
 | 103 | The sun brightening over the far future. | done | after 380 My the star slowly brightens and warms the world |
 | 104 | Constellations named after extinct species. | done | villages name constellations after extinct species whose bones they find |
-| 105 | Binary-sun seeds with double shadows. | simplified | 14% of seeds have a second sun in the sky that adds its own light; no double shadows |
+| 105 | Binary-sun seeds with double shadows. | done | 14% of seeds have a second sun that adds its own light, and mountains cast a second set of shadows from it |
 | 106 | The supercontinent cycle. | done | continent count is tracked as plates drift; supercontinent formation and break-up are logged |
 | 107 | Supervolcano ash winters. | done | super-eruptions bring a volcanic winter with global dieback |
 | 108 | Glaciers carving fjords. | simplified | ice near the coast carves valleys below sea level, which flood as fjords when it melts |
-| 109 | Cave networks with blind, pale species. | simplified | blind, pale burrowers of the dark are recorded as cave dwellers; no cave models |
+| 109 | Cave networks with blind, pale species. | done | blind, pale burrowers of the dark are recorded as cave dwellers; cave mouths (a rock arch round a black opening) appear on steep mountainsides near the camera |
 | 110 | Hydrothermal vent ecosystems. | done | undersea volcanic sites feed life without sunlight; vent dwellers are recorded |
-| 111 | Geysers and hot springs. | simplified | scattered land cells puff steam in bursts |
+| 111 | Geysers and hot springs. | done | scattered land cells puff steam in bursts and hold a hot spring: a mineral-blue pool in a pale crust ringed with rust-coloured terraces |
 | 112 | Salt flats where inland seas dry. | done | hot dry lowlands become white salt flats (biome) |
 | 113 | Tornadoes. | done | a twisting funnel of dust reaches from the ground to the cloud base under some storm cells over land (`gfx/tornado.ts`), with the debris particles at its foot |
 | 114 | Fire tornadoes in big wildfires. | done | over a big fire the same funnel burns orange |
 | 115 | Dust storms that fertilize the ocean. | simplified | strong wind lifts dust from deserts and salt flats; no ocean fertilising |
 | 116 | Acid rain after eruptions. | done | large eruptions bring acid rain that thins plant cover downwind |
-| 117 | Valley fog, rainbows and heat shimmer. | simplified | low damp ground near the dawn line lies under mist; no rainbows or heat shimmer |
+| 117 | Valley fog, rainbows and heat shimmer. | done (rainbow not yet seen in a test frame) | ground mist thickens the lowest air over damp, cool ground when the star is low; a rainbow stands 42 degrees from the point opposite the star when rain falls in sunshine; hot ground makes the lower part of the picture waver |
 | 118 | The ozone layer, and what happens when it's stripped. | done | a supernova strips the ozone layer; land plants suffer until it heals |
 | 119 | A snowball-planet event. | done | snowball event when ice covers more than 55% of the planet |
 | 120 | Permafrost thaw speeding up warming. | done | thawing at the end of an ice age adds greenhouse forcing |
@@ -166,19 +166,19 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 124 | Tribal wars and borders. | done | neighbouring settlements of different peoples or faiths go to war; nations, their territories and borders are drawn on the Night Map, and war makes the lights flicker |
 | 125 | A space age with satellites and a radio signal. | done | space age milestone; satellites circle the planet as points of light once technology passes 0.9, and the narration mentions the radio signal |
 | 126 | Possible nuclear winter. | done | after the space age a war can become nuclear: winter, dieback, most people and knowledge lost |
-| 127 | Departure: a civilization leaves the planet as a light rising into space. | simplified | after 25 My of space age the people depart (milestone); no rising light effect yet |
-| 128 | Giant mushrooms and glowing fungal networks, shown in an x-ray view. | simplified | glowing water-loving plants grow as giant mushrooms; no fungal network view |
+| 127 | Departure: a civilization leaves the planet as a light rising into space. | done | after 25 My of space age the people depart (milestone), and a point of light climbs out of the air from their greatest city on a long bright trail |
+| 128 | Giant mushrooms and glowing fungal networks, shown in an x-ray view. | done | glowing water-loving plants grow as giant mushrooms; the fungal view (overlay) darkens the ground and shows the web of threads between them, glowing |
 | 129 | Carnivorous plants in poor soil. | done | thorny, toxic, slow plants are recorded as meat-eaters |
 | 130 | Autumn colors. | done | broadleaf trees turn gold, red and brown where the cold season is coming (1x and 10x) |
 | 131 | A marker on the oldest living tree. | done | the longest-standing forest is tracked and its oldest tree drawn tall and golden |
-| 132 | Gas-bladder creatures drifting like blimps. | simplified | slow, large winged species carry a great pale float |
-| 133 | Living islands: sea giants with forests on their backs. | simplified | armoured sea giants carry a grove on their backs |
-| 134 | Walking forests. | simplified | colour-shifting land giants carry a grove on their backs |
-| 135 | Mass hatchings that light up the ocean. | simplified | glowing, prolific sea species are recorded as mass hatchers (event); no light pulse |
-| 136 | Bone graveyards. | simplified | small bones lie where species died out |
+| 132 | Gas-bladder creatures drifting like blimps. | done | slow, large winged species carry a great pale float (a smooth translucent bladder above the body) |
+| 133 | Living islands: sea giants with forests on their backs. | done | armoured sea giants carry a grove on their backs |
+| 134 | Walking forests. | done | colour-shifting land giants carry a grove on their backs |
+| 135 | Mass hatchings that light up the ocean. | done | glowing, prolific sea species hatch all at once (event), and the sea around the place lights up from below in a glow that spreads and fades |
+| 136 | Bone graveyards. | done | ribcage skeletons (spine, arched ribs, skull) lie where species died out |
 | 137 | A rare golden mutant. | done | about 1 in 700 individuals is drawn golden and noted on its card |
 | 138 | An eternal storm sitting over one spot. | done | one storm per world never ends |
-| 139 | A full underwater exploration view. | simplified | U lets the camera dive below the sea surface with a blue-green tint; no caustics or light shafts |
+| 139 | A full underwater exploration view. | done | U lets the camera dive below the surface: absorbed blue-green light, caustics on the sea bed, the bright window of sky overhead with darkness beyond it, and shafts of light fanning down |
 | 140 | Cross-section slice showing rock layers, caves and roots. | done | X draws a west-to-east slice under the view: strata, caves, sea, soil, roots, plants, ice, lava |
 | 141 | Flat map view. | done | M opens a flat map; click to fly there; overlays and settlements show on it |
 | 142 | Photo mode with film filters. | done | five photo filters and save-as-PNG |

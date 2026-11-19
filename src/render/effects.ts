@@ -103,6 +103,22 @@ export class ParticleSystem {
     else for (let i = 0; i < 3; i++) this.emit(p, (Math.random() - 0.5) * size, 0, (Math.random() - 0.5) * size, 0.5 + Math.random() * 0.4, size * 0.2, size * 0.9 - 0.004, 0.9, 0.95, 1.0, 0.6);
   }
 
+  private launches: { dir: V3; t0: number }[] = [];
+  /** A ship leaving the planet for good: a point of light that climbs out of the air on a long bright trail. */
+  launch(dir: V3): void {
+    this.launches.push({ dir: dir.clone(), t0: this.time });
+  }
+
+  /** A crackle of electricity from an animal that hunts with it: a jagged thread of sparks. */
+  arc(p: V3, size: number): void {
+    const q = new V3(), step = new V3((Math.random() - 0.5), (Math.random() - 0.5), (Math.random() - 0.5)).normalize().multiplyScalar(size * 0.35);
+    q.copy(p);
+    for (let i = 0; i < 7; i++) {
+      q.add(step); q.x += (Math.random() - 0.5) * size * 0.25; q.y += (Math.random() - 0.5) * size * 0.25; q.z += (Math.random() - 0.5) * size * 0.25;
+      this.emit(q, 0, 0, 0, 0.12 + Math.random() * 0.1, size * 0.22, 0, 2.2, 3.2, 5.0, 0.95);
+    }
+  }
+
   /** A ripple of sound spreading from a calling animal. */
   ripple(p: V3, size: number): void {
     this.emit(p, 0, 0, 0, 1.3, size, 99, 0.75, 0.95, 1.0, 0.55);
@@ -182,6 +198,17 @@ export class ParticleSystem {
           }
         }
       }
+    }
+    // ships leaving for the stars
+    for (let k = this.launches.length - 1; k >= 0; k--) {
+      const l = this.launches[k]!;
+      const age = time - l.t0;
+      if (age > 40) { this.launches.splice(k, 1); continue; }
+      const h = 0.003 + 0.9 * Math.pow(age / 40, 2.4);
+      const p = new V3().copy(l.dir).multiplyScalar(1 + h);
+      const sz = 0.004 + h * 0.03;
+      this.emit(p, 0, 0, 0, 0.5, sz, 0, 5, 4.6, 4.0, 1);
+      for (let j = 0; j < 2; j++) this.emit(p, (Math.random() - 0.5) * 0.002, (Math.random() - 0.5) * 0.002, (Math.random() - 0.5) * 0.002, 3 + Math.random() * 3, sz * 0.8, -0.0005, 3.2, 1.6, 0.5, 0.7);
     }
     void dt;
     if (this.dirty) {

@@ -5,7 +5,7 @@ import type { PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats 
 import type { Nation } from '../render/gfx/nations';
 
 export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section';
-export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations';
+export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal';
 
 export interface UIState {
   stats: WorldStats | null;

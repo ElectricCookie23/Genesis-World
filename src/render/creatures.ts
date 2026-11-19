@@ -79,6 +79,8 @@ export class CreatureLayer {
   onMesh?: (mesh: InstancedMesh) => void;
   /** Where the moon is and how big (w = radius), for eclipses. */
   moonBody = { x: 9, y: 0, z: 0, w: 0 };
+  onArc?: (pos: Vector3, size: number) => void;
+  private isElectric(id: number): boolean { const g = this.species.get(id)?.genes; return !!g && g[G.Electric]! > 0.6 && g[G.Water]! > 0.6; }
   /** A moving animal disturbs the ground or water: kind 0 wake, 1 dust, 2 splash. */
   onStep?: (pos: Vector3, kind: number, size: number) => void;
   private herdSig = '';
@@ -373,6 +375,8 @@ export class CreatureLayer {
       slot.iTint.setX(i, isGolden(ind.key) ? 1 : 0);
       const gait = (ind.medium === 2 ? 7 : 5.5) * (1.6 - ind.size * 120) * (0.6 + 0.4 * ind.moving);
       slot.iData.setXYZW(i, size, ind.h * 60, ind.medium === 1 ? ind.moving : 0.4 + 0.6 * ind.moving, Math.max(1.5, gait));
+      // animals that hunt with electricity crackle now and then
+      if (this.onArc && dist < 0.06 && Math.random() < 0.012 && this.isElectric(ind.species)) this.onArc(ind.pos, size);
       // dust at the feet of walkers, wakes and splashes where swimmers break the surface
       if (this.onStep && dist < 0.07 && ind.moving > 0.5 && Math.random() < 0.02 + size * 6) {
         if (ind.medium === 1) this.onStep(ind.pos, r <= sea + 1e-7 ? 2 : 1, size);
