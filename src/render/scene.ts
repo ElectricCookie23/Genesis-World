@@ -10,7 +10,8 @@ import type { CellSnapshot, WorldStats } from '../shared/protocol';
 import { hashSeed } from '../sim/rng';
 import { PlanetMesh } from './planet';
 import { OceanMesh } from './ocean';
-import { CloudLayer } from './clouds';
+import { setCloudShadow } from './clouds';
+import { VolumetricClouds } from './gfx/volclouds';
 import { createAtmosphere, createMoon, createSky } from './atmosphere';
 import { createDustDisc, ParticleSystem } from './effects';
 import { OrbitCamera } from './camera';
@@ -49,7 +50,8 @@ export class GenesisScene {
   readonly disc: Mesh;
   planet?: PlanetMesh;
   ocean?: OceanMesh;
-  clouds?: CloudLayer;
+  clouds?: VolumetricClouds;
+  cloudNoiseSize = 64;
   vegetation?: Vegetation;
   creatures?: CreatureLayer;
   rivers?: Rivers;
@@ -159,12 +161,13 @@ export class GenesisScene {
     this.data = new PlanetData(grid, this.dataSize);
     this.erosion = new ErosionBake(this.erosionSize, this.erosionIterations, seedHash(`erosion:${seed}`));
     this.ground = new GroundSampler(grid);
+    this.clouds = new VolumetricClouds(this.data.life, seedHash(`clouds:${seed}`), this.cloudNoiseSize);
+    setCloudShadow(this.clouds.shadow);
     this.riverMap = new RiverMap(grid, this.riverSize);
     this.terrain = new TerrainSurface(this.data, this.erosion, this.riverMap);
     this.scene.add(this.terrain.sphere.mesh);
     this.planet.mesh.visible = false;
     this.ocean = new OceanMesh(grid);
-    this.clouds = new CloudLayer(grid);
     this.scene.add(this.planet.mesh, this.ocean.mesh, this.clouds.mesh);
     this.vegetation = new Vegetation(grid, this.plantBudget);
     this.vegetation.ground = this.ground;
@@ -223,7 +226,6 @@ export class GenesisScene {
     this.riverMap?.update(cells, performance.now(), first);
     this.planet.update(cells, first);
     this.ocean.update(cells);
-    this.clouds.update(cells);
     this.vegetation?.setCells(cells);
     this.creatures?.setCells(cells);
     this.rivers?.update(cells, performance.now(), first || cells.terrainChanged);
@@ -357,6 +359,7 @@ export class GenesisScene {
     this.eraWarmth = Math.max(-1, Math.min(1, (stats.meanTemp - 14.5) / 7));
     this.eraHazeTarget = stats.era === 'winter' ? 1 : 0;
     this.stormCells = stats.storms;
+    if (this.clouds && this.grid) { const g = this.grid; this.clouds.setCyclones((stats.cyclones ?? []).slice(0, 4).map((c) => [g.pos[c * 3]!, g.pos[c * 3 + 1]!, g.pos[c * 3 + 2]!])); }
     this.moons = stats.moons;
     this.moon.visible = stats.moons >= 1 && this.moon.visible;
     if (stats.moons === 0) this.moon.visible = false;

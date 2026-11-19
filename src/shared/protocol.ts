@@ -62,6 +62,8 @@ export interface WorldStats {
   landCover: number;
   /** Cells under storm cells right now (lightning flickers there). */
   storms: number[];
+  /** Cells at the centres of cyclones (hurricanes and the eternal storm), for the renderer's spiral cloud bands. */
+  cyclones: number[];
   settlements: number;
   maxTech: number;
   /** Arms race: mean toxicity of land plants and mean toxin resistance of animals. */

@@ -50,8 +50,12 @@ const cloudDensityCheap = Fn(([dir, cover]: [N, N]) => {
   return smoothstep(threshold, threshold.add(0.34), n);
 });
 
+let shadowOverride: ((p: N) => N) | null = null;
+/** The volumetric clouds supply the shadow function once they exist. */
+export function setCloudShadow(fn: ((p: N) => N) | null): void { shadowOverride = fn; }
 /** Light reaching the ground at world position p (1 = full sun). */
-export const cloudShadowAt = Fn(([p, cover]: [N, N]) => {
+export const cloudShadowAt = (p: N, cover: N): N => (shadowOverride ? shadowOverride(p) : flatShadow(p, cover));
+const flatShadow = Fn(([p, cover]: [N, N]) => {
   const dir = normalize(normalize(p).add(uSunDir.mul(0.02)));
   return float(1).sub(cloudDensityCheap(dir, cover).mul(0.62));
 });
