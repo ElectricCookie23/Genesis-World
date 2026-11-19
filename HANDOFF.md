@@ -1,59 +1,59 @@
 # Handoff
 
-Read this first when resuming. Then BRIEF.md, PROGRESS.md, DECISIONS.md and `git log`.
+Read this first when resuming. Then PROGRESS.md, DECISIONS.md and `git log`.
 
 ## Standing instructions from the owner
-- Work autonomously; the owner is away and has said yes to all decisions.
-- Commit and push to `origin main` after every working step. Plain commit messages, no Co-Authored-By, no session link.
-- Keep this file and PROGRESS.md current in the same commits.
+- Work autonomously; the owner is away and has said yes to all decisions. Never wait for approval between steps.
+- Commit and push to `origin main` after every working step. Plain commit messages: no Co-Authored-By line, no session link.
+- Keep this file and PROGRESS.md current in the same commits. Log choices in DECISIONS.md.
 - Stop and show the owner only at points that are worth showing.
+- Graphics rules (owner): full techniques on WebGL2 (FFT ocean, GPU erosion, TAA with a history buffer), quadtree LOD terrain, WebGPU optional, screenshots here check correctness only, push every step.
 
-## Where things stand
-- The original brief is built through all three tiers. PROGRESS.md lists every feature as done or simplified (with what is missing). Nothing is "not started".
-- Verified in a headless browser: opening, planet, plants, creatures, UI panels, particles, ring, city lights, music start, autosave and resume, crash recovery, save slots. All 11 tests pass.
-- NOT verified: frame rate on a real GPU, mobile layout on a real phone, the live site (Pages is off).
-- Deferred to the graphics overhaul: real shadow maps, ambient occlusion, LOD levels for plants and creatures.
-- WORK QUEUE, in the owner's order:
-  1. Graphics overhaul: `docs/GRAPHICS_BRIEF.md`, plan and rules in `docs/GRAPHICS_PLAN.md` (full WebGL2 techniques, push every step).
-  2. Then complete every item marked "simplified" in PROGRESS.md.
-  3. Then the expansion brief: `docs/EXPANSION_BRIEF.md` (100 new systems, built in section order, each with a headless test).
-- NEXT: the owner's graphics overhaul brief (alien art direction, high-fidelity rendering). Its text is in `docs/GRAPHICS_BRIEF.md`. Start with its PROCESS step 1 (eight "before" screenshots), then follow its order.
+## Work queue, in the owner's order
+1. Original brief: built (every feature in PROGRESS.md is done or simplified).
+2. **Graphics overhaul** (`docs/GRAPHICS_BRIEF.md`): all twelve steps have a first pass, see the table at the top of PROGRESS.md. What is still open is listed below under "Graphics: still open".
+3. **Then complete every item marked "simplified" in PROGRESS.md.**
+4. **Then the expansion brief** `docs/EXPANSION_BRIEF.md` (100 new systems: architecture additions first, then sections 1 to 10 in order, each writing to the cause graph, deterministic, with a mobile fallback and at least one headless test).
 
-## What exists
-- `src/sim`: rng, world (fine grid n=63), geology, climate, events (cause graph), regions (coarse eco grid n=21), plants, genetics, creatures (cohorts, food web, speciation), naming, names, simulation (orchestration), worker.
-- `src/shared/protocol.ts`: messages (cells, stats, events, species, plants, herds), speed table.
-- `src/render`: common (uniforms), lighting (shared light for small objects), planet, ocean, clouds, atmosphere (also sky and moon), effects (dust disc), vegetation, creatures, postfx, camera, opening, scene.
-- `src/ui`: store, App (HUD), panels (Chronicle, Why, Tree, SpeciesCard, CreatureCard, Help, GodTools, Settings), format, CSS module. `src/main.ts` boots and wires everything.
-- `tests/sim.test.ts`: grid, determinism, five 120 My histories on a small grid (about 5 minutes).
-- `scripts/history.ts` (print a whole history), `scripts/probe.ts` (test selection on variants), `scripts/debug-*.ts`. Run with `npx vite-node scripts/history.ts <seed> <millionYears> <gridN>`; gridN 36 is 3x faster than 63.
+## The renderer now (src/render)
+Everything reads the planet from cube-map textures baked from the simulation's cells on the main thread.
+- `gfx/cubebake.ts`, `gfx/planetdata.ts`: the bake (height and climate, cover, life, extra, overlay). `gfx/civmap.ts` adds nation light colour, city glow, borders, war and plague.
+- `gfx/quadsphere.ts`: chunked cube-sphere quadtree (instanced patches with skirts). Used by `gfx/terrain.ts` (ground) and `gfx/ocean.ts` (sea).
+- `gfx/erosion.ts`: pipe-model hydraulic erosion in ping-pong targets, baked at load, used as triplanar detail at three scales. `gfx/ground.ts` repeats the terrain height on the CPU (reads the bake back) for animals and the camera; `groundRadiusNode` in `terrain.ts` is the same function for vertex shaders (plants, grass, creature feet).
+- `gfx/linefield.ts`: thin lines as a vector distance field in a cube map. `gfx/rivermap.ts` (rivers), roads and sea lanes in `gfx/civmap.ts`.
+- `gfx/fft.ts`: Tessendorf FFT, three cascades, butterfly passes. Verified against a CPU sum (scratch test, not in the repo's test suite).
+- `gfx/volclouds.ts`: ray-marched clouds, cyclones, ash and smoke plumes, cloud shadows. `gfx/aurora.ts`: ray-marched curtains. `atmosphere.ts`: scattering, sky, moon, sibling planets.
+- `gfx/nations.ts`: nations derived from settlements (names, colours, emblems, territory, roads). UI: Night Map overlay ("nations"), labels, Peoples panel.
+- `gfx/plantmesh.ts`, `gfx/flora.ts`: plant models, imposter atlas baked at load, grass ring.
+- `gfx/creaturemesh.ts`, `gfx/creatureskin.ts`: creature bodies and the shared skin material (leg IK, fur shells). `creatures.ts` still holds behaviour and placement.
+- `gfx/weather.ts` (rain and snow), `gfx/satellites.ts`, `effects.ts` (particles, dust disc), `postfx.ts` (GTAO, TAA, auto exposure, bloom, AgX, sharpen, fringe, grain).
+- `scene.ts`: `PRESETS` (Low, Medium, High, Ultra), `presetForBuild` (sizes fixed at load) and `presetLive`.
+- Old modules no longer drawn but still imported in places: `planet.ts` (kept for the flat map colours and overlays), `ocean.ts`, `vegetation.ts`, `rivers.ts`, `aurora.ts`, most of `clouds.ts`. Safe to delete once nothing imports them.
 
-## How to check visuals
-- `npm run dev`, then open `/?seed=amber-reef-101&skip` (`skip` jumps past the opening; `&webgl` forces WebGL2).
-- `window.__genesis` exposes `scene`, `state`, `setSpeed(i)`, `update(patch)`, `actions`, `send(msg)`, `skip()`, `opening()`.
-- `__genesis.send({ type: 'warp', years: 120e6 })` fast-forwards the sim (about 4 minutes for 120 My on the full grid; the worker is blocked meanwhile).
-- `__genesis.scene.creatures.debugSpawn(dir)` drops sample species at a unit direction, for checking creature bodies without a warp.
-- Software rendering in the build container is slow: use a viewport around 860x540, pause the sim before screenshots, and shrink the canvas (`scene.renderer.setSize(64, 40, false)`) while warping. Editing files under `src` while a browser check runs triggers a Vite reload and ruins the run.
-- TSL gotcha: with InstancedMesh, `positionLocal` inside `positionNode` is already instanced (world units). Creatures use their own instanced attributes and `positionGeometry` instead.
+## Graphics: still open
+- Nothing has been seen on a real GPU. Frame rate, shader compile time and final look are unverified. The owner checks the deployed site; expect tuning of colours, exposure, cloud density, city light brightness and preset costs after that.
+- Not built: screen-space reflections on water, parallax occlusion mapping, footprints, lens flare, ground fog, canopy texture on far terrain, glow cast on the ground by glowing plants, a WebGPU compute path (WebGL2-style passes run on both backends instead).
+- The eight "after" screenshots are in `docs/screenshots/after/` (software rendering, 800x500).
+- GitHub Pages is still off: the repo must be public and Settings, Pages, Source set to "GitHub Actions" by the owner.
 
-## How the life model works (read before touching it)
-- A cohort is one species in one region with one genome and a head count. Each eco step: feed (six plant pools by layer, prey, carrion), breed or starve, thermal stress, predation, disperse, mutate. One eco step is 15,000 sim years (one tick at Epoch); slower speeds take fractional steps.
-- Intake capacity comes from body (P.Forage); cost from body plus trait upkeep (P.Need). Never make claims proportional to need or costly traits become free.
-- Speciation: a far-out population (genome distance from the species reference) that is isolated by geography or differs in way of life becomes a species. Soft cap 40 living species, hard cap 64.
-- Things that broke it before: food layers in the sea, plant height arms race, prey energy too low for small hunters, spread thresholds, basin-locked dispersal. See git log.
+## How to check visuals here
+- `npm run dev`, open `/?seed=amber-reef-101&skip&fresh`. Dev switches: `&dsize=128&esize=128&eiter=60` shrink the bake for speed; `&webgl` forces WebGL2.
+- `window.__genesis` exposes `scene`, `state`, `setSpeed(i)`, `update(patch)`, `actions`, `send(msg)`, `grab()`.
+- The build container renders in software at about one frame per second. Do not use page screenshots for the canvas: step frames by hand with `scene.frame(dt)` and read the canvas with `__genesis.grab()`.
+- The worker keeps sending cell snapshots even when paused: after injecting test data with `scene.applyCells(c, true)`, set `scene.applyCells = () => {}` (and `scene.applyStats = () => {}`) or it is overwritten.
+- `scene.creatures.debugSpawn(dir)` drops sample species; made-up settlements go in through `scene.setSettlements(list)` then `scene.civ.update(scene.lastCells, new Map(), performance.now(), 0.05, true)`.
+- Never run a browser check and a history script at the same time (the container was killed for memory), and do not edit files under `src` while a browser check runs (Vite reloads the page).
+- TSL notes: with InstancedMesh, `positionLocal` inside `positionNode` is already instanced, so custom instancing uses named instanced attributes and `positionGeometry`. `patch` is a reserved word in GLSL. Cube lookups go through `samplePlanet` (x is mirrored). Texture reads inside loops need `.level(0)`. Render-target read-backs come back flipped on WebGL2: probe the orientation (see `gfx/ground.ts`). Mixed `any` and typed nodes often need `(fn as any)(...)` casts.
 
-## Next steps (in order)
-1. Finish Tier 1: storms and lightning (#28), auroras (#37), generative music (#38), postcard mode camera (#39), river ribbons, saving and settings (BRIEF 7.5), README with screenshots.
-2. Tuning: flight and predators should appear in most seeds; check five seeds with `scripts/history.ts`.
-3. Performance and adaptive quality (BRIEF 2), mobile layout check.
-4. Tier 2 in numbered order (41 onward), starting with intelligence threshold, campfires and settlements.
-
-## Civilization (Tier 2 started)
-- `src/sim/civilization.ts`: settlements (pop, tech, belief, ruin) founded by any species over the intelligence threshold (0.55, social, on land). Events come through `Simulation.civEvent`. `world.lights` paints night lights; the terrain shader shows them on the night side only.
-- On `amber-reef-101` (grid 27) a mind awakens at about 248 My, then fire, village and city follow.
-- Not done: settlement markers and cards in the UI, agriculture, roads, domestication, cave paintings, temples.
+## The simulation (src/sim), unchanged by the graphics work except for exposed data
+- Worker-side only, no Three.js. Fine grid n=63 (39,692 cells), eco regions n=21. One eco step is 15,000 years.
+- A cohort is one species in one region with one genome and a head count. Intake capacity comes from the body (P.Forage); cost from body plus trait upkeep (P.Need). Never make claims proportional to need or costly traits become free.
+- Speciation thresholds are measured in average cohort sizes (see DECISIONS 40). Soft cap 40 living species, hard cap 64, four cohorts per region.
+- Civilization: settlements founded after a lineage stays above intelligence 0.5 for 60 My; technology drives every stage.
+- Stats now also carry `cyclones` (cells) and `solar`.
+- Tests: `npm test` (11 tests, about five minutes). `scripts/history.ts <seed> <My> <gridN>` prints a whole history (`npx vite-node`).
 
 ## Known issues
-- Evolution reliability: after stopping gene-flow swamping (distinct lines no longer blend) and making flight widen feeding reach, `amber-reef-101` on a small grid reaches hunters, packs, gliding and about 20 land species by 300 My. Powered flight has not appeared in any run yet, and on cold seeds (`basalt-vale-202`) land animals appear but die out. Tune with `scripts/probe.ts`, `scripts/probe-fly.ts` and `scripts/history.ts`.
-- The build container has been killed for memory when a headless browser check and a history script ran at the same time. Run them one at a time.
-- A browser check that warps 120 My takes about 8 minutes in software rendering; run it in the background and do not edit `src` meanwhile.
-- GitHub Pages cannot deploy while the repo is private on a free plan (see DECISIONS.md #2).
+- Powered flight is rare and cold seeds can lose their land animals; see git log for the tuning history.
+- A long warp in the headless browser takes many minutes; run it in the background.
+- The scheduled task "Genesis auto-resume" fires into the owner's session every five hours with instructions to read this file and continue.

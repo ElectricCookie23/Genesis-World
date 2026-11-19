@@ -37,21 +37,7 @@ New approach:
 
 ## Order of work (from the brief)
 
-| Step | What | Status |
-|---|---|---|
-| 0 | "Before" screenshots of the eight views; update BRIEF.md section 3 and DECISIONS.md with the new direction | not started |
-| 1 | Alien art direction: star type per seed, sunlight and sky colour from it, plant pigments, ocean minerals, tinted moon; atmosphere driven by composition | not started |
-| 2 | Planet geometry and materials: cube-map bake, quadtree cube-sphere, per-pixel materials | not started |
-| 3 | Lighting and night side: moonlight, airglow, starlight fill, soft terminator, exposure | not started |
-| 4 | Clouds: ray-marched volume with cloud types from the sim, shadows, lightning inside | not started |
-| 5 | Ocean: layered wind-driven waves, foam, depth colour, reflections; underwater look | not started |
-| 6 | Nations and the night map: light signature per nation, hierarchy, frayed city shapes, road and sea networks, borders, names, emblems | not started |
-| 7 | Aurora: thin translucent curtains hugging the atmosphere | not started |
-| 8 | Vegetation: richer geometry, translucency, wind, distance imposters | not started |
-| 9 | Creatures: smoother, more detailed bodies and skin materials | not started |
-| 10 | Effects: lava, ash, meteors, fire, weather | not started |
-| 11 | Post-processing: tone mapping with auto exposure, restrained bloom, anti-aliasing, grain | not started |
-| 12 | Performance tuning and presets; "after" screenshots; README before/after | not started |
+The status of every step is kept in the table at the top of PROGRESS.md.
 
 After each step: retake the eight views, compare, fix, then commit as `gfx: ...` and push.
 
