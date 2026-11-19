@@ -6,7 +6,7 @@ import type { Regions } from './regions';
 import type { Plants } from './plants';
 
 export const MAX_COHORTS = 20000;
-export const REGION_CAP = 6;
+export const REGION_CAP = 4;
 /** Plant energy per unit of regional cover per step. */
 const FOOD_SCALE = 3e5;
 /**
@@ -621,7 +621,9 @@ export class Creatures {
       const need = SPECIATION_DISTANCE * (sparse ? 0.72 : 1);
       if (list.length < (sparse ? 2 : 3) || year - s.lastSplit < (sparse ? 0.3e6 : 1.5e6) || this.livingSpecies >= HARD_SPECIES_CAP) continue;
       // the most successful far-out population seeds a candidate species
-      let seed = -1, seedN = total * 0.004;
+      // thresholds are measured in average populations, so they mean the same on a small planet and a large one
+      const typical = total / list.length;
+      let seed = -1, seedN = typical * 0.6;
       coreRegions.clear();
       for (const c of list) {
         const d = geneDistance(genome, c * GENE_COUNT, s.ref, 0);
@@ -639,7 +641,7 @@ export class Creatures {
           if (!coreRegions.has(this.region[c]!)) isolatedPop += this.count[c]!;
         }
       }
-      if (group.length === list.length || groupPop < total * 0.03) continue;
+      if (group.length === list.length || groupPop < Math.min(total * 0.03, typical * (sparse ? 3 : 6))) continue;
       const groupRegions = new Set(group.map((c) => this.region[c]!)).size;
       const isolated = isolatedPop > groupPop * (sparse ? 0.5 : 0.7) && groupRegions >= (sparse ? 2 : 4);
       centroid.fill(0);

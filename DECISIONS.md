@@ -44,3 +44,5 @@ Choices made where the brief was unclear or something had to change. Newest at t
 37. **Screenshots from the build machine check correctness, not final look.** It renders in software. The owner judges the visuals on a real GPU from the deployed site, so every step is pushed as soon as it is correct.
 38. **After the graphics overhaul,** return to the items marked "simplified" in PROGRESS.md and complete them.
 39. **Expansion brief queued.** `docs/EXPANSION_BRIEF.md` (100 systems) follows after the graphics overhaul and the simplified-items pass, in that order, as the owner asked.
+40. **Speciation thresholds are measured in average populations,** not shares of the whole species. As fixed shares they made speciation nearly impossible on the full-size planet (one species after 280 My) while small test planets diversified.
+41. **Minds need time.** A lineage must stay above the intelligence threshold (0.5) for 60 My before it founds settlements, and technology grows about seven times slower than first tuned, so civilization starts later and its ages last long enough to watch. At most four population groups share a region (was six) to keep the full-size step fast.

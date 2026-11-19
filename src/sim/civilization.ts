@@ -26,7 +26,9 @@ export interface Settlement {
   stars: boolean;
 }
 
-export const INTELLIGENCE_THRESHOLD = 0.53;
+export const INTELLIGENCE_THRESHOLD = 0.5;
+/** A lineage must stay clever this long (years) before it starts keeping what it learns. */
+export const MIND_YEARS = 60e6;
 
 export class Civilization {
   settlements: Settlement[] = [];
@@ -40,13 +42,18 @@ export class Civilization {
   private ships = false;
   private industrial = false;
   private occupied = new Map<number, number>(); // region -> settlement id
+  private cleverSince = new Map<number, number>();
 
   step(sim: Simulation, rng: RNG, tau: number): void {
     const cr = sim.creatures, reg = sim.regions, w = sim.world;
     // a lineage crosses the threshold: clever, social, and numerous enough to keep what it learns
     for (const s of cr.species) {
       if (s.extinctYear >= 0 || this.sapient.includes(s.id) || !s.name) continue;
-      if (s.ref[G.Intelligence]! > INTELLIGENCE_THRESHOLD && s.ref[G.Sociality]! > 0.35 && s.pop > 2000 && cr.speciesMean(s.id, P.LandUse, true) > 0.4) {
+      const clever = s.ref[G.Intelligence]! > INTELLIGENCE_THRESHOLD && s.ref[G.Sociality]! > 0.35 && s.pop > 2000 && cr.speciesMean(s.id, P.LandUse, true) > 0.4;
+      // cleverness is inherited down a lineage: a daughter species keeps its parent's head start
+      if (!clever) { this.cleverSince.delete(s.id); continue; }
+      if (!this.cleverSince.has(s.id)) this.cleverSince.set(s.id, this.cleverSince.get(s.parent) ?? sim.simYear);
+      if (sim.simYear - this.cleverSince.get(s.id)! > MIND_YEARS) {
         this.sapient.push(s.id);
         sim.civEvent('threshold', s.id, reg.centre[s.home]!, -1);
       }
@@ -71,7 +78,7 @@ export class Civilization {
       // knowledge grows with people and neighbours, slowly
       const neighbours = this.neighbourCount(sim, st);
       const before = st.tech;
-      st.tech = Math.min(1.2, st.tech + tau * 0.0005 * (0.4 + Math.log10(1 + st.pop)) * (1 + 0.35 * neighbours) * (0.6 + s.ref[G.Intelligence]!));
+      st.tech = Math.min(1.2, st.tech + tau * 0.00007 * (0.4 + Math.log10(1 + st.pop)) * (1 + 0.35 * neighbours) * (0.6 + s.ref[G.Intelligence]!));
       if (!st.painted && st.tech > 0.06) {
         st.painted = true;
         // cave paintings show the animals these people really live among
