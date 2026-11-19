@@ -10,6 +10,7 @@ import type { ErosionBake } from './erosion';
 import { uLook } from './look';
 import { samplePlanet, type PlanetData } from './planetdata';
 import { QuadSphere, patchNodes } from './quadsphere';
+import { RIVER_MAX_WIDTH, type RiverMap } from './rivermap';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
@@ -17,6 +18,7 @@ type N = any;
 /** How many times the eroded detail tile repeats around the planet, coarse and fine. */
 const TILE_COARSE = 9;
 const TILE_FINE = 70;
+const TILE_MICRO = 610;
 /** Stored slopes are 0.22 x d(height)/d(uv); see ErosionBake's output pass. */
 const SLOPE_UNIT = 1 / 0.22;
 
@@ -26,7 +28,7 @@ export class TerrainSurface {
   maxLevel = 11;
   split = 5;
 
-  constructor(data: PlanetData, erosion: ErosionBake, segments = 32, maxPatches = 800) {
+  constructor(data: PlanetData, erosion: ErosionBake, rivers: RiverMap, segments = 32, maxPatches = 800, private shadowSteps = 8) {
     const material = new MeshBasicNodeMaterial();
     const eros = erosion.texture;
 
@@ -74,8 +76,9 @@ export class TerrainSurface {
     const t1: N = normalize(cross(select(pole, vec3(1, 0, 0), vec3(0, 1, 0)), dir));
     const t2: N = cross(dir, t1);
     const eps = 0.006;
-    const hx = samplePlanet(data.height, normalize(dir.add(t1.mul(eps)))).r.sub(samplePlanet(data.height, normalize(dir.sub(t1.mul(eps)))).r);
-    const hz = samplePlanet(data.height, normalize(dir.add(t2.mul(eps)))).r.sub(samplePlanet(data.height, normalize(dir.sub(t2.mul(eps)))).r);
+    const hE: N = samplePlanet(data.height, normalize(dir.add(t1.mul(eps)))).r, hW: N = samplePlanet(data.height, normalize(dir.sub(t1.mul(eps)))).r;
+    const hN: N = samplePlanet(data.height, normalize(dir.add(t2.mul(eps)))).r, hS: N = samplePlanet(data.height, normalize(dir.sub(t2.mul(eps)))).r;
+    const hx = hE.sub(hW), hz = hN.sub(hS);
     const macro: N = t1.mul(hx).add(t2.mul(hz)).mul(EXAG / (2 * eps));
     // fine slope from the eroded detail, plane by plane
     const detailGrad = (e: N, scale: number, a: N): N => {
@@ -86,10 +89,23 @@ export class TerrainSurface {
     // the fine layer fades with distance so far-off ground does not shimmer
     const camDist: N = cameraPosition.sub(P).length();
     const fineFade = smoothstep(0.9, 0.05, camDist);
-    const grad: N = macro.add(detailGrad(e1, TILE_COARSE, amp.coarse)).add(detailGrad(e2, TILE_FINE, amp.fine).mul(fineFade));
+    // a third, very fine layer appears only near the camera: pebbles, cracks and tussocks underfoot
+    const microFade = smoothstep(0.07, 0.008, camDist);
+    const e3: N = triplanar(dir, TILE_MICRO, w, false);
+    const grad: N = macro.add(detailGrad(e1, TILE_COARSE, amp.coarse)).add(detailGrad(e2, TILE_FINE, amp.fine).mul(fineFade))
+      .add(detailGrad(e3, TILE_MICRO, float(0.0045)).mul(microFade));
     const Nrm: N = normalize(dir.sub(grad.sub(dir.mul(dot(grad, dir)))));
     const slope: N = float(1).sub(dot(Nrm, dir)).clamp(0, 1);
     const steep: N = smoothstep(0.05, 0.2, slope);
+
+    // rivers: distance to the nearest centre line, from the vector field in the river map
+    const RV: N = samplePlanet(rivers.texture, dir);
+    const riverDist: N = RV.rgb.sub(0.5).mul(2 * rivers.range).length();
+    const riverWidth: N = RV.a.mul(RIVER_MAX_WIDTH);
+    const hasRiver = smoothstep(0.0, 0.02, RV.a).mul(smoothstep(0.0, 0.03, above));
+    const pixel = camDist.mul(0.0011);
+    const river: N = smoothstep(riverWidth.add(pixel), riverWidth.mul(0.7).sub(pixel.mul(0.3)), riverDist).mul(hasRiver).mul(riverWidth.div(riverWidth.add(pixel.mul(0.7))).clamp(0.25, 1));
+    const bank: N = smoothstep(riverWidth.mul(5).add(0.0012), riverWidth, riverDist).mul(hasRiver);
 
     const temp: N = A.g, moist: N = A.b, snow: N = A.a;
     const veg: N = B.r, canopy: N = B.g, ash: N = B.b, heat: N = B.a;
@@ -114,12 +130,19 @@ export class TerrainSurface {
     albedo = albedo.mul(float(1).sub(e1.a.mul(0.3)));
     // living ground cover in this world's own pigments
     const pigment: N = mix(vec3(uLook.pigmentA), vec3(uLook.pigmentB), X.g);
-    const vegMask = smoothstep(0.12, 0.55, veg.mul(1.25).add(e2.r.sub(0.5).mul(0.45))).mul(float(1).sub(steep.mul(0.75)));
+    // plants crowd the river banks, even in dry country
+    const vegMask = smoothstep(0.12, 0.55, veg.mul(bank.mul(1.2).add(1.25)).add(bank.mul(smoothstep(0.02, 0.2, veg)).mul(0.25)).add(e2.r.sub(0.5).mul(0.45))).mul(float(1).sub(steep.mul(0.75)));
     albedo = mix(albedo, pigment.mul(float(1).sub(canopy.mul(0.4))).mul(e2.r.mul(0.6).add(0.7)), vegMask);
     // farmland: ploughed strips in alternating crops
     const rows = sin(dot(dir, t1).mul(5200).add(e1.r.mul(40))).mul(0.5).add(0.5);
     albedo = mix(albedo, mix(sandC.mul(0.8), pigment.mul(1.4), rows), C.r.mul(0.8).mul(float(1).sub(steep)));
+    albedo = albedo.mul(mix(float(1), e3.r.mul(0.7).add(0.65), microFade));
     albedo = mix(albedo, vec3(0.045, 0.04, 0.045), ash.mul(0.9));
+    albedo = albedo.mul(float(1).sub(bank.mul(0.22)));
+    // river water: the colour of this world's shallows, rippling downstream
+    const ripple = sin(e2.r.mul(30).add(e3.r.mul(12)).sub(uTime.mul(2.4))).mul(0.5).add(0.5);
+    const riverColor: N = mix(vec3(uLook.oceanDeep), vec3(uLook.oceanShallow), ripple.mul(0.25).add(0.3)).mul(0.75);
+    albedo = mix(albedo, riverColor, river);
     // sea bed: pale sand in the shallows, dark silt in the deep, coral where it grows
     const depth = above.negate();
     let seabed: N = mix(sandC.mul(0.95), soilC.mul(0.3), smoothstep(0.0, 1.6, depth));
@@ -139,16 +162,32 @@ export class TerrainSurface {
     const sunColor = mix(vec3(uLook.dusk), vec3(uLook.star), smoothstep(-0.06, 0.36, sunH)).mul(1.25);
     const shadow: N = cloudShadowAt(P, C.a);
     const ringShade = float(1).sub(uRing.mul(smoothstep(0.085, 0.02, abs(dir.y))).mul(0.55));
-    const direct = max(dot(Nrm, L), 0).mul(smoothstep(-0.1, 0.14, sunH)).mul(shadow).mul(ringShade);
-    const skyLight = mix(vec3(uLook.sky), vec3(0.6, 0.6, 0.6), 0.4).mul(0.2).mul(day).mul(dot(Nrm, dir).mul(0.4).add(0.6));
+    // mountains cast shadows: march the height map toward the star and see whether the ground rises above the ray
+    const origin: N = dir.mul(float(1).add(A.r.mul(EXAG)));
+    let occl: N = float(0);
+    for (let i = 0; i < this.shadowSteps; i++) {
+      const sLen = 0.0035 * Math.pow(1.62, i * (9 / this.shadowSteps));
+      const q: N = origin.add(L.mul(sLen));
+      const qr: N = q.length();
+      const gh: N = float(1).add((samplePlanet(data.height, q.div(qr)) as any).r.mul(EXAG));
+      occl = max(occl, gh.sub(qr).div(sLen * 0.09));
+    }
+    const terrainShadow: N = float(1).sub(occl.clamp(0, 1));
+    // hollows see less sky
+    const hollow = hE.add(hW).add(hN).add(hS).mul(0.25).sub(A.r);
+    const ao: N = float(1).sub(hollow.mul(1.1).clamp(0, 0.55)).mul(mix(float(0.62), float(1), smoothstep(0.25, 0.6, e1.r))).mul(mix(float(1), e2.r.mul(0.5).add(0.72).min(1), fineFade));
+    const direct = max(dot(Nrm, L), 0).mul(smoothstep(-0.1, 0.14, sunH)).mul(shadow).mul(ringShade).mul(terrainShadow);
+    const skyLight = mix(vec3(uLook.sky), vec3(0.6, 0.6, 0.6), 0.4).mul(0.2).mul(day).mul(dot(Nrm, dir).mul(0.4).add(0.6)).mul(ao);
     // the moon lights the night side in its own tint; airglow and starlight keep the rest from going black
     const moonUp = smoothstep(-0.1, 0.25, dot(dir, M));
-    const moonLight = vec3(uLook.moon).mul(0.05).mul(max(dot(Nrm, M), 0).mul(0.8).add(0.2)).mul(moonUp).mul(float(1).sub(day));
+    const moonLight = vec3(uLook.moon).mul(0.05).mul(max(dot(Nrm, M), 0).mul(0.8).add(0.2)).mul(moonUp).mul(float(1).sub(day)).mul(ao.mul(0.6).add(0.4));
     const airglow = vec3(0.006, 0.01, 0.009).add(vec3(uLook.sky).mul(0.005));
     const second = max(dot(Nrm, uSun2Dir), 0).mul(smoothstep(-0.1, 0.25, dot(dir, uSun2Dir))).mul(uSun2).mul(0.45);
     const V: N = normalize(cameraPosition.sub(P));
-    const gloss = snowAmt.mul(0.45).add(saltAmt.mul(0.25)).add(e1.a.mul(moist).mul(0.3));
-    const spec = pow(max(dot(reflect(V.negate(), Nrm), L), 0), 48).mul(gloss).mul(day).mul(shadow);
+    const gloss = snowAmt.mul(0.45).add(saltAmt.mul(0.25)).add(e1.a.mul(moist).mul(0.3)).mul(float(1).sub(river)).add(river.mul(float(1).sub(snowAmt)).mul(0.55));
+    const specN: N = (normalize as any)((mix as any)(Nrm, dir, river));
+    const spec = pow(max(dot(reflect(V.negate(), specN), L), 0), 48).mul(gloss).mul(day).mul(shadow)
+      .add(pow(max(dot(reflect(V.negate(), specN), M), 0), 48).mul(river).mul(0.12).mul(moonUp).mul(float(1).sub(day)));
     let lit: N = albedo.mul(sunColor.mul(direct).add(vec3(0.7, 0.8, 1.0).mul(second)).add(skyLight).add(moonLight).add(airglow)).add(sunColor.mul(spec));
 
     // molten crust during the opening sequence

@@ -24,6 +24,7 @@ import { PlanetData } from './gfx/planetdata';
 import { ErosionBake } from './gfx/erosion';
 import { TerrainSurface } from './gfx/terrain';
 import { GroundSampler } from './gfx/ground';
+import { RiverMap } from './gfx/rivermap';
 import { hashSeed as seedHash } from '../sim/rng';
 import type { HerdSnapshot, PlantInfo, SpeciesInfo } from '../shared/protocol';
 import { EXAG, MOON_DISTANCE, uBolts, uFlash, uRing, uSun2, uSun2Dir, uUnderwater, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime } from './common';
@@ -56,6 +57,8 @@ export class GenesisScene {
   erosion?: ErosionBake;
   terrain?: TerrainSurface;
   ground?: GroundSampler;
+  riverMap?: RiverMap;
+  riverSize = 512;
   /** Resolution of the baked planet maps per cube face, and of the erosion bake. Set before setGrid. */
   dataSize = 256;
   erosionSize = 512;
@@ -156,7 +159,8 @@ export class GenesisScene {
     this.data = new PlanetData(grid, this.dataSize);
     this.erosion = new ErosionBake(this.erosionSize, this.erosionIterations, seedHash(`erosion:${seed}`));
     this.ground = new GroundSampler(grid);
-    this.terrain = new TerrainSurface(this.data, this.erosion);
+    this.riverMap = new RiverMap(grid, this.riverSize);
+    this.terrain = new TerrainSurface(this.data, this.erosion, this.riverMap);
     this.scene.add(this.terrain.sphere.mesh);
     this.planet.mesh.visible = false;
     this.ocean = new OceanMesh(grid);
@@ -216,6 +220,7 @@ export class GenesisScene {
     this.lastCells = cells;
     this.data?.update(cells, this.plantsForBake, first);
     this.ground?.setCells(cells.elevation, cells.seaLevel);
+    this.riverMap?.update(cells, performance.now(), first);
     this.planet.update(cells, first);
     this.ocean.update(cells);
     this.clouds.update(cells);
