@@ -317,9 +317,12 @@ export class TerrainSurface {
       // (It steps back further and over a longer distance than it did: from low over a town at night the painted
       // glow was large hard-edged white patches, far brighter than anything else, because the exposure opens up in
       // the dark. The glow is also held back by that exposure, as the stars are.)
-      const paint = mix(float(0.05), float(1), smoothstep(0.04, 0.5, camDist));
+      // (Second check on the GPU: from low over a town the patches were dimmer but still there, with hard ragged
+      // edges, and a village's road was a bright painted ribbon. Below about a tenth of a radius the painted light
+      // is gone altogether and the windows carry the scene; it returns gradually with height.)
+      const paint = smoothstep(0.1, 0.9, camDist);
       const heldBack = float(1).div(max(uExposure, 1)).pow(0.5);
-      lit = lit.add(hue.mul(cityLight.mul(1.25).mul(paint).add(roadLight.mul(mix(float(0.35), float(1), smoothstep(0.04, 0.5, camDist))))).mul(nightAmt).mul(heldBack));
+      lit = lit.add(hue.mul(cityLight.mul(1.25).mul(paint).add(roadLight.mul(smoothstep(0.08, 0.7, camDist)))).mul(nightAmt).mul(heldBack));
       // the Night Map: borders as fine bright lines, and a faint wash of each nation's colour over its land
       const border = float(1).sub(smoothstep(0.2, 0.42, CB.r));
       const frontier = float(1).sub(smoothstep(0.6, 0.78, CB.r)).mul(0.3);

@@ -95,9 +95,12 @@ export function buildBuilding(kind: Building): BufferGeometry {
     case 'hut':
       s.ring(0, 0, 0, 0.45, 0.42, 0.45, 9, PART.wall);
       s.ring(0, 0, 0.42, 0.6, 1.0, 0, 9, PART.roof);
+      // a cooking fire by the door: at night a village is points of firelight, not dark boxes
+      s.ring(0.72, 0.18, 0, 0.09, 0.24, 0, 5, PART.flame);
       break;
     case 'house':
-      s.box(0, 0, 0, 1.0, 0.5, 0.7, PART.wall);
+      // windowed walls, so that houses show lamplight at night like the larger buildings
+      s.box(0, 0, 0, 1.0, 0.5, 0.7, PART.windows);
       s.gable(0, 0.5, 0, 1.1, 0.42, 0.8);
       break;
     case 'hall':
