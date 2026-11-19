@@ -91,7 +91,14 @@ export function createAtmosphere(): Mesh {
     const band = bowAngle.sub(0.733).div(0.03);
     const spectrum: N = vec3(exp(band.sub(0.6).pow2().mul(-3)), exp(band.pow2().mul(-3)), exp(band.add(0.6).pow2().mul(-3)));
     const bow: N = spectrum.mul(uRainbow).mul(0.22).mul(smoothstep(0.0, 0.15, dot(rd, normalize(ro)).add(0.05)));
-    return color.mul(5).mul(vec3(uLook.star)).mul(uAtmo).mul(vec3(uGradeTint)).mul(select(discA.greaterThan(0), 1, 0)).add(bow.mul(vec3(uLook.star)));
+    // From inside the air the sky has to hold its own against sunlit ground. Single scattering alone left it about
+    // a tenth as bright, which the exposure for the ground then showed as a night sky at noon (seen once the ground
+    // itself was lit correctly on a real GPU). The lift applies in full to open sky, and gently to the haze in front
+    // of solid things, and fades out as the camera climbs out of the air so the view from orbit is unchanged.
+    const inside = float(1).sub(smoothstep(1.012, ATMO_RADIUS, sqrt(rr)));
+    const openSky = select(hitPlanet, float(0), smoothstep(tFarA.mul(0.9), tFarA.mul(0.99), tSolid));
+    const lift = mix(float(1), mix(float(1.35), float(3.0), openSky), inside);
+    return color.mul(5).mul(lift).mul(vec3(uLook.star)).mul(uAtmo).mul(vec3(uGradeTint)).mul(select(discA.greaterThan(0), 1, 0)).add(bow.mul(vec3(uLook.star)));
   });
   material.colorNode = scatter();
   const mesh = new Mesh(new IcosahedronGeometry(ATMO_RADIUS * 1.02, 6), material);
@@ -153,7 +160,10 @@ export function createSky(): Mesh {
   }
   // the background stays as dark as it is, however far the exposure opens up for a night scene
   const keepDark = float(1).div(max(uExposure, 0.5));
-  material.colorNode = stars.mul(pow(keepDark, 0.6)).add(nebula.mul(keepDark)).add(sun).add(sun2).add(siblings.mul(pow(keepDark, 0.6)));
+  // by day, from inside the air, the sky outshines the stars
+  const camR = length(cameraPosition);
+  const veil = float(1).sub(float(1).sub(smoothstep(1.012, ATMO_RADIUS, camR)).mul(smoothstep(-0.12, 0.1, dot(cameraPosition.div(camR), uSunDir))).mul(0.97));
+  material.colorNode = stars.mul(pow(keepDark, 0.6)).add(nebula.mul(keepDark)).add(siblings.mul(pow(keepDark, 0.6))).mul(veil).add(sun).add(sun2);
   const mesh = new Mesh(new SphereGeometry(400, 48, 32), material);
   mesh.frustumCulled = false;
   mesh.renderOrder = -10;
