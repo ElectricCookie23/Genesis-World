@@ -20,7 +20,8 @@ import { PostFX } from './postfx';
 import { Vegetation } from './vegetation';
 import { CreatureLayer, type Individual } from './creatures';
 import { Rivers } from './rivers';
-import { createAuroras } from './aurora';
+import { AuroraVolume, uAurora } from './gfx/aurora';
+import { CLOUD_TOP } from './gfx/volclouds';
 import { applyLook, worldLook, type WorldLook } from './gfx/look';
 import { PlanetData } from './gfx/planetdata';
 import { ErosionBake } from './gfx/erosion';
@@ -31,7 +32,7 @@ import { CivMap, uNightMap } from './gfx/civmap';
 import type { Nation } from './gfx/nations';
 import { hashSeed as seedHash } from '../sim/rng';
 import type { HerdSnapshot, PlantInfo, SpeciesInfo } from '../shared/protocol';
-import { EXAG, MOON_DISTANCE, uBolts, uFlash, uRing, uSun2, uSun2Dir, uUnderwater, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime, uOceanFill, uOverlay } from './common';
+import { EXAG, MOON_DISTANCE, uBolts, uFlash, uRing, uSun2, uSun2Dir, uUnderwater, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime, uOceanFill, uOverlay, uAtmo } from './common';
 
 export type Quality = 'low' | 'medium' | 'high' | 'ultra';
 
@@ -66,6 +67,7 @@ export class GenesisScene {
   ground?: GroundSampler;
   riverMap?: RiverMap;
   civ?: CivMap;
+  aurora?: AuroraVolume;
   riverSize = 512;
   shadowSteps = 8;
   /** Resolution of the baked planet maps per cube face, and of the erosion bake. Set before setGrid. */
@@ -91,6 +93,7 @@ export class GenesisScene {
   erosionPerFrame = 6;
   /** Cells under storms, where lightning may flash. */
   stormCells: number[] = [];
+  private solar = 1;
   private boltTimer = 0;
   private boltEcho = -1;
   creatureBudget = 5000;
@@ -220,7 +223,8 @@ export class GenesisScene {
     this.scene.add(this.rivers.mesh);
     // the old ribbons sit on the old faceted ground; rivers return as part of the new surface
     this.rivers.mesh.visible = false;
-    for (const a of createAuroras()) this.scene.add(a);
+    this.aurora = new AuroraVolume(this.clouds.noise);
+    this.scene.add(this.aurora.mesh);
     this.creatures = new CreatureLayer(grid, this.creatureBudget, this.ground!);
     this.creatures.onMesh = (m) => this.scene.add(m);
     void hashSeed(seed);
@@ -415,6 +419,7 @@ export class GenesisScene {
     this.eraWarmth = Math.max(-1, Math.min(1, (stats.meanTemp - 14.5) / 7));
     this.eraHazeTarget = stats.era === 'winter' ? 1 : 0;
     this.stormCells = stats.storms;
+    this.solar = stats.solar ?? 1;
     if (this.clouds && this.grid) { const g = this.grid; this.clouds.setCyclones((stats.cyclones ?? []).slice(0, 4).map((c) => [g.pos[c * 3]!, g.pos[c * 3 + 1]!, g.pos[c * 3 + 2]!])); }
     this.moons = stats.moons;
     this.moon.visible = stats.moons >= 1 && this.moon.visible;
@@ -523,6 +528,9 @@ export class GenesisScene {
     if (this.erosion && !this.erosion.finished) this.erosion.step(this.renderer, this.erosionPerFrame);
     else if (this.erosion && this.ground) void this.ground.readDetail(this.renderer, this.erosion);
     if (this.civ?.update(this.lastCells, this.speciesMap, performance.now(), dt)) this.onNations?.(this.civ.nations);
+    this.aurora?.setCameraRadius(this.cam.camera.position.length(), CLOUD_TOP);
+    // the aurora breathes with the star's activity, and needs air to glow in
+    uAurora.value = (0.8 + 0.3 * Math.sin(this.time * 0.037) + 0.2 * Math.sin(this.time * 0.011 + 1.3)) * this.solar * uAtmo.value;
     this.terrain?.update(this.cam.camera.position);
     this.ocean?.update(this.renderer, this.cam.camera.position, this.time, this.keepSeaPatch);
     this.vegetation?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist);

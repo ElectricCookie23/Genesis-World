@@ -64,6 +64,8 @@ export interface WorldStats {
   storms: number[];
   /** Cells at the centres of cyclones (hurricanes and the eternal storm), for the renderer's spiral cloud bands. */
   cyclones: number[];
+  /** Brightness of the star relative to today (1 = normal); the aurora follows it. */
+  solar: number;
   settlements: number;
   maxTech: number;
   /** Arms race: mean toxicity of land plants and mean toxin resistance of animals. */

@@ -128,6 +128,7 @@ function stats(s: Simulation): WorldStats {
     population: s.creatures.totalPop,
     landCover: s.plants.totalLandCover / Math.max(1, s.regions.count),
     storms: s.storms.map((x) => x.cell),
+    solar: s.climate.solar,
     cyclones: s.storms.filter((x) => x.hurricane || x.eternal).map((x) => x.cell),
     moons: s.moons,
     ring: s.ring,
