@@ -1,10 +1,10 @@
 // Atmosphere (Rayleigh + Mie single scattering, ray marched), sky with stars, nebula and sun, and the moon.
 import {
-  AdditiveBlending, BackSide, BufferAttribute, IcosahedronGeometry, Mesh, MeshBasicNodeMaterial, SphereGeometry,
+  AdditiveBlending, BackSide, BufferAttribute, IcosahedronGeometry, Mesh, MeshBasicNodeMaterial, SphereGeometry, Vector3, Vector4,
 } from 'three/webgpu';
 import {
   Fn, Loop, attribute, cameraPosition, cos, dot, exp, float, floor, fract, length, max, min, mix, mx_fractal_noise_float, normalWorld, normalize,
-  positionLocal, positionWorld, pow, select, sin, smoothstep, sqrt, vec3, cameraFar, cameraNear, perspectiveDepthToViewZ, positionView, viewportDepthTexture,
+  positionLocal, positionWorld, pow, select, sin, smoothstep, sqrt, vec3, cameraFar, cameraNear, perspectiveDepthToViewZ, positionView, viewportDepthTexture, uniform,
 } from 'three/tsl';
 import { ATMO_RADIUS, MOON_RADIUS, uAtmo, uGradeTint, uHazeTint, uSkyAngle, uSun2, uSun2Dir, uSunDir, uTime } from './common';
 import { RNG } from '../sim/rng';
@@ -19,6 +19,9 @@ const HR = 0.02;
 const HM = 0.006;
 const STEPS = 10;
 const LIGHT_STEPS = 4;
+
+/** Sibling planets in the sky: direction (in the frame of the stars) with angular radius in w, and colour. */
+export const uSiblings = [0, 1, 2, 3].map(() => ({ dir: uniform(new Vector4(0, 1, 0, 0.0004)), color: uniform(new Vector3(1, 1, 1)) }));
 
 export function createAtmosphere(): Mesh {
   const material = new MeshBasicNodeMaterial({
@@ -125,7 +128,14 @@ export function createSky(): Mesh {
   // binary systems: a smaller, bluer companion sun
   const mu2 = dot(dir, uSun2Dir);
   const sun2 = vec3(0.75, 0.86, 1.0).mul(smoothstep(0.99975, 0.9999, mu2).mul(40).add(pow(max(mu2, 0), 1400).mul(2))).mul(uSun2);
-  material.colorNode = stars.add(nebula).add(sun).add(sun2);
+  // the other worlds of this system: steady points and one small disc, each its own colour
+  let siblings: N = vec3(0, 0, 0);
+  for (const sib of uSiblings) {
+    const d = dot(sd, normalize(sib.dir as any));
+    const edge = float(1).sub((sib.dir as any).w.mul((sib.dir as any).w).mul(0.5));
+    siblings = siblings.add(vec3(sib.color).mul(smoothstep(edge, edge.add(0.0000015), d).mul(2.2).add(pow(max(d, 0), 60000).mul(0.9))));
+  }
+  material.colorNode = stars.add(nebula).add(sun).add(sun2).add(siblings);
   const mesh = new Mesh(new SphereGeometry(400, 48, 32), material);
   mesh.frustumCulled = false;
   mesh.renderOrder = -10;

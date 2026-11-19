@@ -2,9 +2,9 @@
 // GPU-eroded detail, shaded per pixel with materials blended from slope, height, moisture and temperature.
 import { MeshBasicNodeMaterial, type Texture, type Vector3 } from 'three/webgpu';
 import {
-  abs, cameraPosition, cross, dot, float, fract, max, min, mix, normalize, positionWorld, pow, reflect, select, sin, smoothstep, texture, varying, vec2, vec3,
+  abs, atan, cameraPosition, cross, dot, exp, float, fract, max, min, mix, normalize, positionWorld, pow, reflect, select, sin, smoothstep, sqrt, step, texture, varying, vec2, vec3,
 } from 'three/tsl';
-import { EXAG, uOverlay, uHazeAmount, uHazeTint, uMolten, uMoonDir, uRing, uSeaKm, uSun2, uSun2Dir, uSunDir, uTime } from '../common';
+import { EXAG, uImpact, uOverlay, uHazeAmount, uHazeTint, uMolten, uMoonDir, uRing, uSeaKm, uSun2, uSun2Dir, uSunDir, uTime } from '../common';
 import { cloudShadowAt } from '../clouds';
 import type { ErosionBake } from './erosion';
 import { uLook } from './look';
@@ -223,8 +223,24 @@ export class TerrainSurface {
     const molten = mix(vec3(0.035, 0.012, 0.01), vec3(2.3, 0.5, 0.05), cracks).add(vec3(1.4, 0.8, 0.2).mul(pow(cracks, 8)).mul(uMolten));
     lit = mix(lit, molten, smoothstep(0, 0.6, uMolten));
     // lava and fire glow through whatever is on top
+    // lava: a dark crust that splits into glowing cracks, wider and brighter the hotter it is; fire burns in the same way through plants
     const flicker = sin(uTime.mul(9).add(P.x.mul(700)).add(P.z.mul(500))).mul(0.2).add(0.8);
-    lit = lit.add(vec3(3.2, 0.75, 0.08).mul(heat.mul(heat)).mul(flicker).mul(e2.r.mul(0.8).add(0.6)));
+    const crustN = e2.r.mul(0.6).add(e3.r.mul(0.4)).add(sin(uTime.mul(0.3).add(e1.r.mul(20))).mul(0.03));
+    const crackW = heat.mul(0.55).add(0.03);
+    const lavaCracks = float(1).sub(smoothstep(crackW.mul(0.4), crackW, abs(crustN.sub(0.5)).mul(2)));
+    const crusted = smoothstep(0.08, 0.4, heat);
+    lit = mix(lit, lit.mul(0.25).add(vec3(0.02, 0.014, 0.012)), crusted.mul(0.8));
+    lit = lit.add(mix(vec3(2.6, 0.45, 0.04), vec3(4.2, 2.0, 0.5), lavaCracks.mul(heat)).mul(lavaCracks.mul(pow(heat, 0.5)).mul(1.6).add(heat.mul(heat).mul(0.5))).mul(flicker));
+    // a meteor strike: a ring of fire racing outward over the ground, and a crater that glows for a while
+    const impAge: N = uImpact.w;
+    const impAng = sqrt(max(float(2).sub(dot(dir, uImpact.xyz).mul(2)), 0));
+    const impOn = step(0, impAge);
+    const ringR = impAge.mul(0.085);
+    const ring = exp(impAng.sub(ringR).div(impAge.sqrt().mul(0.012).add(0.006)).pow(2).negate()).mul(exp(impAge.mul(-0.3))).mul(impOn);
+    const rays = pow(sin(atan(dot(dir, t2).sub(dot(uImpact.xyz, t2)), dot(dir, t1).sub(dot(uImpact.xyz, t1))).mul(17).add(e1.r.mul(9))).mul(0.5).add(0.5), 3);
+    const crater = exp(impAng.div(0.035).pow(2).negate()).mul(exp(impAge.mul(-0.03))).mul(impOn);
+    const ejecta = exp(impAng.div(0.11).pow(2).negate()).mul(rays).mul(exp(impAge.mul(-0.08))).mul(impOn).mul(0.6);
+    lit = lit.add(vec3(4.5, 2.4, 0.9).mul(ring.mul(2.5))).add(vec3(3.6, 0.9, 0.1).mul(crater.mul(e2.r.mul(1.2).add(0.4)).add(ejecta)));
     // ---- civilization: city light in each nation's own colour, roads, and (with the Night Map on) borders
     if (civ) {
       const CA: N = samplePlanet(civ.a, dir);

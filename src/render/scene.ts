@@ -13,7 +13,7 @@ import { OceanSurface } from './gfx/ocean';
 import { faceDirection } from './gfx/cubebake';
 import { setCloudShadow } from './clouds';
 import { VolumetricClouds } from './gfx/volclouds';
-import { createAtmosphere, createMoon, createSky } from './atmosphere';
+import { uSiblings, createAtmosphere, createMoon, createSky } from './atmosphere';
 import { createDustDisc, ParticleSystem } from './effects';
 import { OrbitCamera } from './camera';
 import { PostFX } from './postfx';
@@ -28,11 +28,13 @@ import { ErosionBake } from './gfx/erosion';
 import { TerrainSurface } from './gfx/terrain';
 import { GroundSampler } from './gfx/ground';
 import { RiverMap } from './gfx/rivermap';
+import { Precipitation } from './gfx/weather';
+import { Satellites } from './gfx/satellites';
 import { CivMap, uNightMap } from './gfx/civmap';
 import type { Nation } from './gfx/nations';
 import { hashSeed as seedHash } from '../sim/rng';
 import type { HerdSnapshot, PlantInfo, SpeciesInfo } from '../shared/protocol';
-import { EXAG, MOON_DISTANCE, uBolts, uFlash, uRing, uSun2, uSun2Dir, uUnderwater, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime, uOceanFill, uOverlay, uAtmo } from './common';
+import { EXAG, MOON_DISTANCE, uBolts, uFlash, uRing, uSun2, uSun2Dir, uUnderwater, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime, uOceanFill, uOverlay, uAtmo, uImpact, uPlumes, uPlumeWind } from './common';
 
 export type Quality = 'low' | 'medium' | 'high' | 'ultra';
 
@@ -68,11 +70,14 @@ export class GenesisScene {
   riverMap?: RiverMap;
   civ?: CivMap;
   aurora?: AuroraVolume;
+  weather?: Precipitation;
+  satellites?: Satellites;
   riverSize = 512;
   shadowSteps = 8;
   /** Most real plant models and grass tufts drawn near the camera. */
   plantModels = 1600;
   grassBudget = 6000;
+  rainDrops = 6000;
   /** Resolution of the baked planet maps per cube face, and of the erosion bake. Set before setGrid. */
   dataSize = 256;
   erosionSize = 512;
@@ -225,10 +230,28 @@ export class GenesisScene {
     this.scene.add(this.rivers.mesh);
     // the old ribbons sit on the old faceted ground; rivers return as part of the new surface
     this.rivers.mesh.visible = false;
+    this.satellites = new Satellites(40, seedHash(`sats:${seed}`));
+    this.scene.add(this.satellites.mesh);
+    // the other planets of this system, placed along a tilted band of sky
+    {
+      let h = seedHash(`system:${seed}`);
+      const rnd = () => { h = (h * 1664525 + 1013904223) >>> 0; return h / 4294967296; };
+      const tones: [number, number, number][] = [[1.0, 0.82, 0.6], [0.7, 0.85, 1.0], [1.0, 0.55, 0.4], [0.85, 0.9, 0.75], [0.8, 0.7, 1.0]];
+      uSiblings.forEach((sib, k) => {
+        const a = rnd() * Math.PI * 2, tilt = (rnd() - 0.5) * 0.25;
+        (sib.dir.value as Vector4).set(Math.cos(a) * Math.cos(tilt), Math.sin(tilt), Math.sin(a) * Math.cos(tilt), k === 0 ? 0.0022 + rnd() * 0.0015 : 0.0004 + rnd() * 0.0005);
+        const c = tones[Math.floor(rnd() * tones.length)]!;
+        const b = k === 0 ? 0.8 : 0.35 + rnd() * 0.5;
+        (sib.color.value as Vector3).set(c[0] * b, c[1] * b, c[2] * b);
+      });
+    }
+    this.weather = new Precipitation(this.rainDrops);
+    this.scene.add(this.weather.mesh);
     this.aurora = new AuroraVolume(this.clouds.noise);
     this.scene.add(this.aurora.mesh);
     this.creatures = new CreatureLayer(grid, this.creatureBudget, this.ground!, this.data, this.erosion.texture, this.clouds.shadow);
     this.creatures.onMesh = (m) => this.scene.add(m);
+    this.creatures.onStep = (pos, kind, size) => this.particles?.puff(pos, kind, size);
     void hashSeed(seed);
   }
 
@@ -399,7 +422,58 @@ export class GenesisScene {
     if (!this.grid) return;
     const g = this.grid.pos;
     this.particles?.impact(new Vector3(g[cell * 3]!, g[cell * 3 + 1]!, g[cell * 3 + 2]!));
+    (uImpact.value as Vector4).set(g[cell * 3]!, g[cell * 3 + 1]!, g[cell * 3 + 2]!, 0);
   }
+
+  private plumeTimer = 0;
+  /** Find the hottest eruptions and fires and feed them to the cloud volume as ash and smoke columns. */
+  private updatePlumes(): void {
+    const cells = this.lastCells, grid = this.grid;
+    if (!cells || !grid) return;
+    const { lava, vegetation, windE, windN } = cells;
+    const best: number[] = [];
+    for (let i = 0; i < grid.count; i++) {
+      if (lava[i]! < 0.45) continue;
+      // keep sources apart so one eruption does not use every slot
+      let near = false;
+      for (const b of best) if (grid.pos[b * 3]! * grid.pos[i * 3]! + grid.pos[b * 3 + 1]! * grid.pos[i * 3 + 1]! + grid.pos[b * 3 + 2]! * grid.pos[i * 3 + 2]! > 0.995) { near = true; if (lava[i]! > lava[b]!) best[best.indexOf(b)] = i; break; }
+      if (near) continue;
+      if (best.length < uPlumes.length) best.push(i);
+      else { let weakest = 0; for (let k = 1; k < best.length; k++) if (lava[best[k]!]! < lava[best[weakest]!]!) weakest = k; if (lava[i]! > lava[best[weakest]!]!) best[weakest] = i; }
+    }
+    for (let k = 0; k < uPlumes.length; k++) {
+      const u = uPlumes[k]!.value as Vector4, w = uPlumeWind[k]!.value as Vector4;
+      const c = best[k];
+      if (c === undefined) { u.w = 0; continue; }
+      const x = grid.pos[c * 3]!, y = grid.pos[c * 3 + 1]!, z = grid.pos[c * 3 + 2]!;
+      const ash = vegetation[c]! < 0.25 ? 1 : 0;
+      u.set(x, y, z, Math.min(1, lava[c]! * (ash ? 1.2 : 0.7)));
+      // east and north at the source, to turn the sim's wind into a world direction
+      const el = Math.hypot(x, z) || 1;
+      const ex = -z / el, ez = x / el;
+      const nx = -y * x / el, ny = el, nz = -y * z / el;
+      const lean = 0.07;
+      w.set((ex * windE[c]! + nx * windN[c]!) * lean, ny * windN[c]! * lean, (ez * windE[c]! + nz * windN[c]!) * lean, ash);
+    }
+  }
+
+  /** Rain or snow at the camera, from the cloud and storms overhead. */
+  private updateWeather(): void {
+    const cells = this.lastCells, grid = this.grid, wx = this.weather;
+    if (!wx) return;
+    if (!cells || !grid || this.cam.dist > 0.09 || uUnderwater.value > 0.5) { wx.set(0, false, 0, 0, 0); return; }
+    const p = this.cam.camera.position;
+    const l = p.length();
+    const c = (this.weatherCell = nearestCell(grid, p.x / l, p.y / l, p.z / l, this.weatherCell));
+    let storm = 0;
+    for (const s of this.stormCells) { const d = grid.pos[s * 3]! * p.x / l + grid.pos[s * 3 + 1]! * p.y / l + grid.pos[s * 3 + 2]! * p.z / l; if (d > 0.9985) storm = 1; }
+    const wet = Math.max(storm, Math.max(0, (cells.cloud[c]! - 0.72) / 0.25) * Math.min(1, cells.moisture[c]! * 2));
+    const x = grid.pos[c * 3]!, y = grid.pos[c * 3 + 1]!, z = grid.pos[c * 3 + 2]!;
+    const el = Math.hypot(x, z) || 1;
+    const k = 0.0009;
+    wx.set(Math.min(1, wet), cells.temperature[c]! < 0.5, (-z / el * cells.windE[c]! + (-y * x / el) * cells.windN[c]!) * k, el * cells.windN[c]! * k, (x / el * cells.windE[c]! + (-y * z / el) * cells.windN[c]!) * k);
+  }
+  private weatherCell = 0;
 
   /** Brief white flash (impacts). */
   flash(amount: number): void {
@@ -422,6 +496,7 @@ export class GenesisScene {
     this.eraHazeTarget = stats.era === 'winter' ? 1 : 0;
     this.stormCells = stats.storms;
     this.solar = stats.solar ?? 1;
+    this.satellites?.set(stats.maxTech >= 0.9 && stats.settlements > 0 ? Math.min(1, (stats.maxTech - 0.9) * 12 + 0.3) : 0);
     if (this.clouds && this.grid) { const g = this.grid; this.clouds.setCyclones((stats.cyclones ?? []).slice(0, 4).map((c) => [g.pos[c * 3]!, g.pos[c * 3 + 1]!, g.pos[c * 3 + 2]!])); }
     this.moons = stats.moons;
     this.moon.visible = stats.moons >= 1 && this.moon.visible;
@@ -530,6 +605,10 @@ export class GenesisScene {
     if (this.erosion && !this.erosion.finished) this.erosion.step(this.renderer, this.erosionPerFrame);
     else if (this.erosion && this.ground) void this.ground.readDetail(this.renderer, this.erosion);
     if (this.civ?.update(this.lastCells, this.speciesMap, performance.now(), dt)) this.onNations?.(this.civ.nations);
+    const imp = uImpact.value as Vector4;
+    if (imp.w >= 0) { imp.w += dt; if (imp.w > 240) imp.w = -1; }
+    if ((this.plumeTimer -= dt) <= 0) { this.plumeTimer = 1.5; this.updatePlumes(); }
+    this.updateWeather();
     this.aurora?.setCameraRadius(this.cam.camera.position.length(), CLOUD_TOP);
     // the aurora breathes with the star's activity, and needs air to glow in
     uAurora.value = (0.8 + 0.3 * Math.sin(this.time * 0.037) + 0.2 * Math.sin(this.time * 0.011 + 1.3)) * this.solar * uAtmo.value;

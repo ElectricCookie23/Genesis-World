@@ -10,7 +10,7 @@ import {
   Break, Fn, If, Loop, abs, cameraFar, cameraNear, cameraPosition, cos, dot, exp, float, int, length, max, min, mix, normalize, perspectiveDepthToViewZ,
   positionView, positionWorld, pow, screenCoordinate, select, sin, smoothstep, sqrt, texture3D, uniform, vec3, vec4, viewportDepthTexture, atan, log,
 } from 'three/tsl';
-import { EXAG, uBolts, uCloudAmount, uHazeTint, uMoonDir, uSteam, uSunDir, uTime } from '../common';
+import { EXAG, uBolts, uCloudAmount, uHazeTint, uMoonDir, uPlumeWind, uPlumes, uSteam, uSunDir, uTime } from '../common';
 import { uLook } from './look';
 import { samplePlanet } from './planetdata';
 
@@ -187,6 +187,27 @@ export class VolumetricClouds {
       return mix(float(1), exp(d.mul(-5)), 0.86);
     }) as unknown as (p: N) => N;
 
+    const plumeAt = Fn(([p]: [N]) => {
+      const r = length(p);
+      const dir = p.div(r);
+      const hN = r.sub(CLOUD_BASE).div(THICK).clamp(0, 1);
+      const out = vec3(0, 0, 0).toVar();
+      for (let k = 0; k < uPlumes.length; k++) {
+        const src: N = uPlumes[k], wnd: N = uPlumeWind[k];
+        If(src.w.greaterThan(0.01), () => {
+          // the column leans downwind as it climbs, and spreads; ash tops flatten into an anvil
+          const centre: N = (normalize as any)(src.xyz.add(wnd.xyz.mul(hN.mul(hN.add(0.4)))));
+          const ang = sqrt(max(float(2).sub(dot(dir, centre).mul(2)), 0));
+          const width = float(0.012).add(pow(hN, 1.5).mul(0.05)).add(smoothstep(0.7, 1.0, hN).mul(0.045).mul(wnd.w));
+          const billow = sin(p.x.mul(310).add(uTime.mul(0.4))).mul(sin(p.y.mul(270).sub(uTime.mul(0.3)))).mul(sin(p.z.mul(330))).mul(0.3).add(0.8);
+          const top = float(1).sub(smoothstep(mix(float(0.5), float(0.92), wnd.w), mix(float(0.7), float(1.0), wnd.w), hN));
+          const dens = exp(ang.div(width).pow(2).negate()).mul(src.w).mul(billow).mul(top).mul(1.15);
+          out.addAssign((vec3 as any)(dens, dens.mul(wnd.w), dens.mul(pow(float(1).sub(hN), 5)).mul(wnd.w).mul(0.5)));
+        });
+      }
+      return vec3(out.x, out.y.div(max(out.x, 1e-4)), out.z);
+    });
+
     const material = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, depthTest: false, side: BackSide });
     const march = Fn(() => {
       const ro: N = cameraPosition;
@@ -220,7 +241,10 @@ export class VolumetricClouds {
         (Loop as any)({ start: int(0), end: this.steps, type: 'int', condition: '<' }, ({ i }: { i: N }) => {
           const t = start.add(ds.mul(float(i).add(jitter)));
           const p: N = ro.add(rd.mul(t));
-          const d: N = densityFine(p);
+          const dCloud: N = densityFine(p);
+          // columns of volcanic ash and wood smoke: x = density, y = how much of it is dark ash, z = glow from the fire below
+          const pl: N = plumeAt(p);
+          const d: N = dCloud.add(pl.x);
           If(d.greaterThan(0.002), () => {
             const r = length(p);
             const dir = p.div(r);
@@ -255,7 +279,9 @@ export class VolumetricClouds {
               const top = max(max(CA.r, CA.g), CA.b);
               city = CA.rgb.div(max(top, 0.04)).mul(pow(CA.a, 1.4)).mul(float(1).sub(hN).pow(2)).mul(float(1).sub(day)).mul(0.5);
             }
-            const light = sunLit.add(skyLit).add(moonLit).add(glow).add(city).add(vec3(0.75, 0.83, 1.0).mul(flash).mul(5));
+            const sootShare = pl.x.div(max(d, 1e-4));
+            const tone: N = mix(vec3(1, 1, 1), mix(vec3(0.4, 0.38, 0.36), vec3(0.11, 0.1, 0.1), pl.y), sootShare);
+            const light = sunLit.add(skyLit).add(moonLit).mul(tone).add(glow).add(city).add(vec3(0.75, 0.83, 1.0).mul(flash).mul(5)).add(vec3(3.2, 0.8, 0.12).mul(pl.z));
             const a = float(1).sub(exp(d.mul(ds).mul(-SIGMA)));
             C.addAssign(light.mul(a).mul(T));
             T.mulAssign(float(1).sub(a));

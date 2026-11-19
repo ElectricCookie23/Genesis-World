@@ -76,6 +76,8 @@ export class CreatureLayer {
   private cells?: CellSnapshot;
   budget: number;
   onMesh?: (mesh: InstancedMesh) => void;
+  /** A moving animal disturbs the ground or water: kind 0 wake, 1 dust, 2 splash. */
+  onStep?: (pos: Vector3, kind: number, size: number) => void;
   private herdSig = '';
   /** -1..1 season signal for migration (0 at high time speeds). */
   season = 0;
@@ -366,6 +368,11 @@ export class CreatureLayer {
       slot.iTint.setX(i, isGolden(ind.key) ? 1 : 0);
       const gait = (ind.medium === 2 ? 7 : 5.5) * (1.6 - ind.size * 120) * (0.6 + 0.4 * ind.moving);
       slot.iData.setXYZW(i, size, ind.h * 60, ind.medium === 1 ? ind.moving : 0.4 + 0.6 * ind.moving, Math.max(1.5, gait));
+      // dust at the feet of walkers, wakes and splashes where swimmers break the surface
+      if (this.onStep && dist < 0.07 && ind.moving > 0.5 && Math.random() < 0.02 + size * 6) {
+        if (ind.medium === 1) this.onStep(ind.pos, r <= sea + 1e-7 ? 2 : 1, size);
+        else if (ind.medium === 0 && sea - r < size * 0.9) this.onStep(a.clone().multiplyScalar(sea), 0, size);
+      }
     }
     if (this.mounds) {
       const mm = new Matrix4(), mq = new Quaternion(), mp = new Vector3(), ms = new Vector3(), Y = new Vector3(0, 1, 0);

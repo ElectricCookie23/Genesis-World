@@ -49,3 +49,9 @@ export const uSeaGlow = uniform(0.35);
 export const uUnderwater = uniform(0);
 /** 0..1: how strongly the data overlay (temperature, rain, life, people) covers the surface. */
 export const uOverlay = uniform(0);
+/** The latest meteor strike: xyz = where, w = seconds since (negative = none). */
+export const uImpact = uniform(new Vector4(0, 1, 0, -1));
+/** Ash and smoke columns: xyz = source direction, w = strength (0 = none). */
+export const uPlumes = [0, 1, 2, 3].map(() => uniform(new Vector4(0, 1, 0, 0)));
+/** Per plume: xyz = which way the wind carries it (a tangent, in radians of lean), w = 1 for volcanic ash, 0 for wood smoke. */
+export const uPlumeWind = [0, 1, 2, 3].map(() => uniform(new Vector4(0, 0, 0, 1)));

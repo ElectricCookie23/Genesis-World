@@ -1,7 +1,7 @@
 // Special effects. For now: the protoplanetary dust disc of the opening sequence.
 import { AdditiveBlending, DoubleSide, Mesh, MeshBasicNodeMaterial, RingGeometry } from 'three/webgpu';
 import { atan, exp, float, length, mix, mx_fractal_noise_float, positionLocal, pow, smoothstep, uniform, uv, vec3 } from 'three/tsl';
-import { uTime } from './common';
+import { uSunDir, uTime } from './common';
 
 export const uDiscOpacity = uniform(0);
 export const uDiscCollapse = uniform(0);
@@ -72,7 +72,10 @@ export class ParticleSystem {
     material.positionNode = s.add(v.mul(age)).add(normalize(s).mul(d.w.mul(float(1).sub(ripple))).mul(age).mul(age));
     const alive = smoothstep(0.0, 0.08, k).mul(smoothstep(1.0, 0.55, k)).mul(age.greaterThan(0).and(age.lessThan(d.y)).select(1, 0));
     material.scaleNode = d.z.mul(k.mul(1.6).add(0.5)).mul(alive.greaterThan(0).select(1, 0));
-    material.colorNode = vec3(c.x, c.y, c.z);
+    // smoke, steam and dust are only seen by the light that falls on them; fire and embers shine by themselves
+    const dayLit = smoothstep(-0.12, 0.22, (normalize(s) as any).dot(uSunDir)).mul(0.93).add(0.05);
+    const selfLit = smoothstep(1.1, 1.4, c.x.max(c.y).max(c.z));
+    material.colorNode = vec3(c.x, c.y, c.z).mul(mix(dayLit, float(1), selfLit));
     // soft round puffs rather than squares
     const rd = length(uv().sub(0.5));
     const round = mix(smoothstep(0.5, 0.15, rd), smoothstep(0.36, 0.44, rd).mul(smoothstep(0.5, 0.45, rd)), ripple);
@@ -91,6 +94,13 @@ export class ParticleSystem {
     this.data.setXYZW(i, this.time, life, size, lift);
     this.tint.setXYZW(i, r, g, b, a);
     this.dirty = true;
+  }
+
+  /** Dust kicked up by feet, a splash, or a wake ring on the water. kind 0 wake, 1 dust, 2 splash. */
+  puff(p: V3, kind: number, size: number): void {
+    if (kind === 0) this.emit(p, 0, 0, 0, 1.6, size * 1.6, 99, 0.85, 0.92, 0.95, 0.4);
+    else if (kind === 1) this.emit(p, (Math.random() - 0.5) * size * 0.4, 0, (Math.random() - 0.5) * size * 0.4, 1.2 + Math.random(), size * 0.45, size * 0.08, 0.62, 0.52, 0.4, 0.3);
+    else for (let i = 0; i < 3; i++) this.emit(p, (Math.random() - 0.5) * size, 0, (Math.random() - 0.5) * size, 0.5 + Math.random() * 0.4, size * 0.2, size * 0.9 - 0.004, 0.9, 0.95, 1.0, 0.6);
   }
 
   /** A ripple of sound spreading from a calling animal. */

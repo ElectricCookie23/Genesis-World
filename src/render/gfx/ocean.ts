@@ -3,10 +3,10 @@
 // (measured through the water to the real sea bed behind it), plankton and ice.
 import { DoubleSide, MeshBasicNodeMaterial, type Texture, type Vector3, type WebGPURenderer } from 'three/webgpu';
 import {
-  abs, cameraPosition, cameraViewMatrix, dot, exp, float, frontFacing, length, log2, max, min, mix, normalize, positionView, positionWorld, pow, reflect,
+  abs, sqrt, step, cameraPosition, cameraViewMatrix, dot, exp, float, frontFacing, length, log2, max, min, mix, normalize, positionView, positionWorld, pow, reflect,
   screenUV, select, sin, smoothstep, texture, vec2, vec3, vec4, viewportDepthTexture, viewportSharedTexture, cameraNear, cameraFar, perspectiveDepthToViewZ,
 } from 'three/tsl';
-import { EXAG, uOverlay, uHazeAmount, uHazeTint, uMoonDir, uOceanFill, uSeaGlow, uSeaKm, uSunDir, uTideKm, uTime, uUnderwater } from '../common';
+import { EXAG, uImpact, uOverlay, uHazeAmount, uHazeTint, uMoonDir, uOceanFill, uSeaGlow, uSeaKm, uSunDir, uTideKm, uTime, uUnderwater } from '../common';
 import { OceanFFT } from './fft';
 import { uLook } from './look';
 import { samplePlanet, type PlanetData } from './planetdata';
@@ -221,6 +221,12 @@ export class OceanSurface {
       const platforms = smoothstep(0.985, 0.995, e2.g.mul(0.5).add(e2.r.mul(0.5)).add(e1.r.mul(0.12))).mul(smoothstep(0.82, 0.95, CB.g)).mul(smoothstep(0.2, 0.5, strongest)).mul(float(1).sub(smoothstep(0.25, 0.6, depthKm)));
       color = color.add(hue.mul(lane.mul(ships).mul(0.9).add(platforms.mul(1.6))).mul(night).mul(float(1).sub(ice)));
     }
+
+    // a meteor strike sends a bright ring across the sea as well
+    const impAge: N = uImpact.w;
+    const impAng = sqrt(max(float(2).sub(dot(dir, uImpact.xyz).mul(2)), 0));
+    const impRing = exp(impAng.sub(impAge.mul(0.085)).div(impAge.sqrt().mul(0.012).add(0.006)).pow(2).negate()).mul(exp(impAge.mul(-0.3))).mul(step(0, impAge));
+    color = color.add(vec3(4.5, 2.6, 1.2).mul(impRing.mul(2)));
 
     // ---- from below: the bright window of sky overhead, darkness beyond it
     const cosUp = max(dot(V, Nw.negate()), 0);
