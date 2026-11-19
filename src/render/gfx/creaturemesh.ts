@@ -360,7 +360,17 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
   if (hasLimbs && kind === Limb.Legs && g[G.LimbType]! > 0.66) {
     for (const side of [1, -1]) {
       const grid: V3[][] = [];
-      for (let r = 0; r <= 2; r++) { const row: V3[] = []; for (let c = 0; c <= 3; c++) row.push([-L * 0.3 + (c / 3) * L * 0.6, bodyY - H * 0.1 - (r / 2) * H * 0.1, side * (W * 0.3 + (r / 2) * W * 0.8)]); grid.push(row); }
+      // A flap of skin along the flank, not a board: it narrows and droops away from the body and its front and
+      // back edges curve in. (As a plain rectangle it stuck out of the animal's side like a card.)
+      for (let r = 0; r <= 2; r++) {
+        const row: V3[] = [];
+        const out = r / 2, span = L * 0.6 * (1 - 0.45 * out);
+        for (let c = 0; c <= 3; c++) {
+          const t = c / 3, edge = Math.abs(t - 0.5) * 2;
+          row.push([-span / 2 + t * span, bodyY - H * 0.1 - out * H * 0.24 - out * edge * H * 0.06, side * (W * 0.3 + out * W * 0.55 * (1 - 0.4 * edge * edge))]);
+        }
+        grid.push(row);
+      }
       m.sheet(grid, limbC, () => [RIG.body, 0, 0, side], ZONE.membrane);
     }
   }

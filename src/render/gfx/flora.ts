@@ -155,7 +155,10 @@ export class Flora {
       const fThin = is(fp, PART.leaf).add(is(fp, PART.needle)).add(is(fp, PART.frond)).add(is(fp, PART.blade)).add(is(fp, PART.petal));
       // colour by part
       const leafCol: N = vTint.mul(mix(float(0.5), float(1.3), smoothstep(0.0, 1.0, vCard.y))).mul(vCard.w.mul(0.45).add(0.6));
-      const barkCol: N = vColor.mul(sin(vCard.y.mul(60)).mul(0.08).add(0.95));
+      // bark: grooves running up the trunk that wander a little, with faint rings; a plain dark tube read as plastic
+      const vAt: N = varying(positionGeometry);
+      const grooves = sin(vAt.x.mul(170).add(sin(vAt.y.mul(13)).mul(1.5))).mul(0.5).add(sin(vAt.z.mul(150).add(vAt.y.mul(9))).mul(0.5));
+      const barkCol: N = vColor.mul(grooves.mul(0.17).add(0.87)).mul(sin(vCard.y.mul(60)).mul(0.05).add(0.97));
       const capSpots = smoothstep(0.75, 0.9, sin(vCard.x.mul(38)).mul(sin(vCard.y.mul(23))).mul(0.5).add(0.5));
       const capCol: N = mix(vTint, vec3(0.95, 0.92, 0.85), capSpots.mul(0.7));
       const albedo: N = barkCol.mul(is(fp, PART.bark))

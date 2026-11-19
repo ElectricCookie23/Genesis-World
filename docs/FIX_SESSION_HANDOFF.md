@@ -29,9 +29,13 @@ How the sessions talk:
 - The build session found that WebGPU can be checked in the container after all, with a stand-in canvas context (see "How to check visuals here" in `HANDOFF.md`). It reports pipeline validation errors; it still hides not-a-number faults.
 - This branch was restarted from `29ea8ad`. It carries only this file and `scripts/checks/`.
 
+- Second re-test (of `29ea8ad`) and a third pass (of `a42b083`) are at the top of `docs/GPU_REVIEW.md`. They confirm most of the second batch on the GPU and give High about 50 fps with all effects on. I fixed what they found that was contained (commit `6766d4a` on `main`, software-checked only): step-downs during loading, sky brightness at altitude, city glow from low altitude at night, sea dropped in squares beside islands, imposter size and hand-over distance per preset, building mix by population, buildings in the surf. What I did not take is listed in `HANDOFF.md` under "Still open from the second re-test"; the third pass adds flat looking-down view under water, plain-tube reef plants, thick straight trunks and bare ground under trees, a diamond-grid pattern on the sea from 0.3, a white fog smudge, and huts scattered without paths.
+- A check of `6766d4a` came back (sky, far trees, Ultra fixed; night glow from low and unlit villages not). A fourth batch followed: see `HANDOFF.md`, "Fourth batch from the fix session".
+- **Next for this session:** when the owner allows another GPU look, ask for the fourth batch to be checked (a town and a village at night from 0.08 and 0.02, Night Map labels, a broadleaf forest for trunks and bark, a shore for wading animals); then take the next contained items from the open list in `HANDOFF.md` if the build session has not.
+
 ## State of the code
 
-`main` is at `29ea8ad` and deployed. Always `git fetch` and merge before pushing: the build session pushes to `main` too.
+`main` is at `6766d4a`. Always `git fetch` and merge before pushing: the build session pushes to `main` too.
 
 Verified on the owner's GPU (re-test of `5bbe93a`, both backends):
 - Plants, animals and buildings draw (vertex buffers packed, `Copies` instead of `InstancedMesh`). No console errors at Low or High.
