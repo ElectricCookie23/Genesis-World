@@ -16,6 +16,7 @@ import { ERAS, eraOf } from './history/eras';
 import { hash32 } from './history/hash';
 import { capital, compound, makeLanguage, personName, placeMeanings, word, type Language } from './history/language';
 import { emptyHistory, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role } from './history/model';
+import { WEB, chooseNext, levelOf, newKnowledge, wayFor, type Land, type Leaning } from './history/tech';
 
 export interface Settlement {
   id: number;
@@ -50,6 +51,8 @@ export const MIND_YEARS = 15e6;
 export const FARMING = 0.22;
 /** At most this many history ticks in one call: under a fast-forward each tick covers more years. */
 const MAX_TICKS = 300;
+/** Ticks longer than this many years are a fast-forward: rulers and minor events are summarised, not recorded. */
+const SUMMARY_YEARS = 8;
 
 const sat = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
 /** How far from its capital a nation of each era can hold a town, counted in regions (the spacing of neighbouring towns). */
@@ -160,13 +163,20 @@ export class Civilization {
    */
   advance(sim: Simulation, rng: RNG, dt: number): void {
     const h = this.h;
-    if (h.began < 0 || !h.nations.some((n) => n.ended < 0)) { h.pending = 0; return; }
+    if (h.began < 0 || !h.nations.some((n) => n.ended < 0)) {
+      // no nation is left: whatever comes next begins its own ages, its own first ships, its own sky
+      if (h.topEra > 0 || this.departed) { h.topEra = 0; h.firsts.length = 0; this.departed = false; this.spaceAgeYear = -1; this.industrial = false; this.ships = false; }
+      h.pending = 0;
+      return;
+    }
     h.pending += dt;
     if (h.pending < 1) return;
     const years = Math.max(1, Math.ceil(h.pending / MAX_TICKS));
     const ticks = Math.floor(h.pending / years);
     const start = sim.simYear - h.pending;
+    sim.quietEvents = years > SUMMARY_YEARS;
     for (let k = 0; k < ticks; k++) this.tick(sim, rng, years, start + (k + 1) * years);
+    sim.quietEvents = false;
     h.pending -= ticks * years;
     this.census();
     this.paint(sim);
@@ -195,7 +205,8 @@ export class Civilization {
       if (n.capital !== big.id && (this.settlements[n.capital]?.ruined ?? 0) >= 0) n.capital = big.id;
       // ---- the ruler grows old
       const ruler = h.people[n.ruler];
-      if (ruler && ruler.died < 0) {
+      if (ruler && ruler.died < 0 && y > SUMMARY_YEARS) this.reignsPass(sim, rng, n, y, year);
+      else if (ruler && ruler.died < 0) {
         const span = this.lifespan(sim, n.species);
         const age = year - ruler.born;
         const hazard = 0.006 * Math.exp((age - 0.55 * span) / (0.14 * span));
@@ -205,7 +216,7 @@ export class Civilization {
       const reach = Math.min(4, towns.length - 1) * 0.08;
       const quick = 1 + 6 * sat((n.tech - 0.7) / 0.3) ** 2;
       const rate = 6.5e-5 * (0.45 + Math.log10(1 + pop) / 3) * (0.6 + sp.ref[G.Intelligence]!) * (1 + reach) * quick * (0.6 + 0.4 * n.stability);
-      n.tech = Math.min(1.2, n.tech + rate * y);
+      this.research(sim, rng, n, towns, rate * y, year, y);
       // ---- how well it holds together (rise and fall proper is expansion system E4)
       n.stability = sat(n.stability + (0.72 - n.stability) * Math.min(1, 0.02 * y) + (rng.next() - 0.5) * 0.02 * Math.sqrt(y));
       // ---- a new era
@@ -251,10 +262,15 @@ export class Civilization {
     const s = cr.species[st.species]!;
     if (this.failed(sim, st, s.extinctYear >= 0)) { this.abandon(sim, st, year); return; }
     const capacity = this.capacity(sim, st);
-    // people: a few per cent a year while there is room
-    const grow = 1 - Math.exp(-0.03 * y);
-    st.pop += st.pop * grow * (1 - st.pop / Math.max(0.5, capacity));
-    if (st.pop > capacity * 1.5) st.pop = capacity * 1.5;
+    if (this.departed) {
+      // the ones who left took the future with them: the towns of home thin out over a few thousand years
+      st.pop *= Math.exp(-y / 550);
+    } else {
+      // people: a few per cent a year while there is room
+      const grow = 1 - Math.exp(-0.03 * y);
+      st.pop += st.pop * grow * (1 - st.pop / Math.max(0.5, capacity));
+      if (st.pop > capacity * 1.5) st.pop = capacity * 1.5;
+    }
     // what the nation knows reaches its towns within a generation or two; the capital first
     const before = st.tech;
     const target = n.tech * (isCapital ? 1 : 0.86);
@@ -297,7 +313,7 @@ export class Civilization {
       }
     }
     // people move on and found daughter towns
-    if (st.pop > capacity * 0.7 && rng.chance(Math.min(0.6, 0.004 * y * (1 + st.tech * 3)))) {
+    if (!this.departed && st.pop > capacity * 0.7 && rng.chance(Math.min(0.6, 0.004 * y * (1 + st.tech * 3)))) {
       const nb = reg.grid.neighbors[st.region * 6 + rng.int(reg.grid.ncount[st.region]!)]!;
       if (!this.occupied.has(nb) && reg.land[nb]! > 0.3 && reg.ice[nb]! < 0.5) {
         const d = this.found(sim, rng, st.species, nb, st.id, year);
@@ -361,10 +377,109 @@ export class Civilization {
 
   private dynasty(n: Nation, founder: Person, year: number): Dynasty {
     const h = this.h;
-    const d: Dynasty = { id: h.dynasties.length, name: `House of ${founder.name}`, nation: n.id, founder: founder.id, founded: year, ended: -1, rulers: [founder.id] };
+    const d: Dynasty = { id: h.dynasties.length, name: `House of ${founder.name}`, nation: n.id, founder: founder.id, founded: year, ended: -1, rulers: [founder.id], reigns: 1 };
     h.dynasties.push(d);
     founder.dynasty = d.id;
     return d;
+  }
+
+  /** What a nation's land offers, from the places its towns stand on. */
+  private survey(sim: Simulation, n: Nation, towns: Settlement[]): Land[] {
+    const w = sim.world, reg = sim.regions, g = reg.grid;
+    const has = new Set<Land>();
+    for (const st of towns) {
+      const r = st.region;
+      if (reg.land[r]! < 0.97) has.add('coast');
+      for (let j = 0; j < g.ncount[r]!; j++) if (reg.land[g.neighbors[r * 6 + j]!]! < 0.5) has.add('coast');
+      if (w.flow[st.cell]! > 3) has.add('river');
+      if (w.canopy[st.cell]! > 0.25 || w.vegetation[st.cell]! > 0.6) has.add('forest');
+      if (w.moisture[st.cell]! < 0.3) has.add('sand');
+      if (reg.landTemp[r]! < 2) has.add('cold');
+      // ore and coal lie where they lie: fixed for each region by the seed, likelier under high ground
+      const high = w.elevation[st.cell]! - w.seaLevel > 0.8;
+      if ((hash32(this.seedNum, r, 0x0e) % 1000) / 1000 < (high ? 0.55 : 0.14)) has.add('ore');
+      if ((hash32(this.seedNum, r, 0xc0a1) % 1000) / 1000 < 0.2) has.add('coal');
+    }
+    if (has.has('coast')) has.add('sand');
+    if (sim.creatures.species.some((s) => s.tamedBy === n.species && s.extinctYear < 0)) has.add('beasts');
+    return [...has].sort();
+  }
+
+  /** How a culture and its ruler lean among the fields of knowledge. */
+  private leaning(n: Nation): Leaning {
+    const c = this.h.cultures[n.culture]!, r = this.h.people[n.ruler];
+    return {
+      war: 0.55 + 0.9 * c.war + (r ? r.bold * 0.3 : 0), trade: 0.6 + 0.9 * c.trade, craft: 0.7 + 0.6 * c.craft, mind: 0.7 + 0.5 * c.craft + (r ? r.wise * 0.3 : 0),
+      life: 0.8 + 0.4 * c.faith, sea: 0.7 + 0.6 * c.trade, sky: 0.75 + 0.5 * c.craft, build: 0.8 + 0.4 * c.faith, food: 1, power: 1,
+    };
+  }
+
+  /**
+   * Research (the tech web, system E1). `gain` is how much the level of knowledge would have risen in a
+   * world where knowledge was one number; it is saved up and spent on discoveries, one need at a time.
+   */
+  private research(sim: Simulation, rng: RNG, n: Nation, towns: Settlement[], gain: number, year: number, y: number): void {
+    const h = this.h;
+    if (year - n.surveyed > 60) { n.land = this.survey(sim, n, towns); n.surveyed = year; }
+    const land = new Set(n.land);
+    let possible = 0;
+    for (let i = 0; i < WEB.length; i++) if (wayFor(i, land) >= 0) possible++;
+    const each = (1.2 - FARMING) / Math.max(1, possible);
+    n.know.saved += gain / each;
+    for (let made = 0; made < 8; made++) {
+      const i = chooseNext(n.know, land, this.leaning(n), rng);
+      if (i < 0) { n.know.saved = Math.min(n.know.saved, 2); break; }
+      const k = wayFor(i, land), slot = WEB[i]!, way = slot.ways[k]!;
+      if (n.know.saved < way.cost) break;
+      n.know.saved -= way.cost;
+      n.know.way[i] = k; n.know.year[i] = year;
+      const first = !h.firsts[i];
+      if (first) h.firsts[i] = 1;
+      // the chronicle tells of turning points, the first time anyone reaches them; every discovery is kept in the nation's own record
+      if (slot.key && first) {
+        const lang = this.languageOf(n), cap = this.settlements[n.capital]!;
+        const own = compound(lang, way.words[0], way.words[1], year);
+        const inventor = y <= SUMMARY_YEARS ? this.person(rng, n, 'inventor', year, this.lifespan(sim, n.species) * (0.3 + rng.next() * 0.3), -1, -1) : null;
+        const ev = sim.emit({
+          type: 'invention', year, cellId: cap.cell, title: `${capital(way.name)}`,
+          description: inventor
+            ? `In ${cap.name}, ${inventor.name} of ${n.name} has made ${way.name} work. Their word for it is ${own.toLowerCase()}. ${slot.ways.length > 1 && k > 0 ? `Their land gave them no ${slot.ways[0]!.land === 'ore' ? 'ore' : 'easier way'}, so they found this one.` : 'No one anywhere had it before.'}`
+            : `${n.name} has ${way.name} now. Their word for it is ${own.toLowerCase()}.`,
+          causes: [n.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [n.species], data: { nation: n.id, slot: slot.id, way: way.id },
+        });
+        if (inventor) inventor.events.push(ev.id);
+      }
+    }
+    n.tech = Math.max(n.tech, Math.min(1.2, levelOf(n.know, land)));
+  }
+
+  /**
+   * Many years pass in one tick (a fast-forward). Rulers come and go faster than a tick, so they are not
+   * recorded one by one: the house counts its reigns, the ruler of the day is replaced in the same record,
+   * and a house that falls gives its record to the next. History then costs the same memory however long it runs.
+   */
+  private reignsPass(sim: Simulation, rng: RNG, n: Nation, y: number, year: number): void {
+    const h = this.h;
+    const span = this.lifespan(sim, n.species);
+    const reigns = Math.max(0, Math.floor(y / (0.34 * span) + rng.next()));
+    if (!reigns) return;
+    const ruler = h.people[n.ruler]!, house = h.dynasties[n.dynasty];
+    const lang = this.languageOf(n);
+    ruler.name = personName(lang, hash32(this.seedNum, n.id, Math.floor(year), 0x9e0));
+    ruler.born = year - span * (0.3 + rng.next() * 0.3); ruler.reignFrom = year - rng.next() * 0.3 * span;
+    ruler.bold = rng.next(); ruler.wise = rng.next(); ruler.cruel = rng.next(); ruler.pious = rng.next();
+    ruler.events.length = 0; ruler.parent = -1; ruler.role = 'ruler';
+    if (!house) return;
+    const heir = 0.84 + 0.14 * n.stability;
+    if (rng.chance(1 - Math.pow(heir, reigns))) {
+      const old = house.reigns + Math.floor(rng.next() * reigns);
+      n.stability = sat(n.stability - 0.12);
+      if (old >= 12) {
+        const cap = this.settlements[n.capital]!;
+        sim.emit({ type: 'dynasty', year, cellId: cap.cell, title: `A new house in ${n.name}`, description: `The ${house.name} is over after ${old} reigns. ${ruler.name} holds ${cap.name} now.`, causes: [n.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [n.species], data: { nation: n.id } });
+      }
+      house.name = `House of ${ruler.name}`; house.founded = year; house.reigns = 1; house.rulers = [ruler.id]; house.founder = ruler.id;
+    } else house.reigns += reigns;
   }
 
   /** The ruler is gone: an heir of the house follows, or the house falls and another takes its place. */
@@ -378,6 +493,7 @@ export class Civilization {
     if (house && rng.chance(0.84 + 0.14 * n.stability)) {
       const next = this.person(rng, n, 'ruler', year, span * (0.25 + rng.next() * 0.3), old.id, house.id);
       house.rulers.push(next.id);
+      house.reigns++;
       n.ruler = next.id;
       return;
     }
@@ -389,8 +505,8 @@ export class Civilization {
     const cap = this.settlements[n.capital]!;
     const ev = sim.emit({
       type: 'dynasty', year, cellId: cap.cell, title: `A new house in ${n.name}`,
-      description: house ? `${old.name} ${fate} and left no heir the great families would follow. ${next.name} takes ${cap.name}, and the ${house.name} is over after ${house.rulers.length} ${house.rulers.length === 1 ? 'reign' : 'reigns'}.` : `${next.name} takes power in ${cap.name}.`,
-      causes: [n.eventId].filter((x) => x >= 0), importance: house && house.rulers.length >= 12 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, person: next.id },
+      description: house ? `${old.name} ${fate} and left no heir the great families would follow. ${next.name} takes ${cap.name}, and the ${house.name} is over after ${house.reigns} ${house.reigns === 1 ? 'reign' : 'reigns'}.` : `${next.name} takes power in ${cap.name}.`,
+      causes: [n.eventId].filter((x) => x >= 0), importance: house && house.reigns >= 12 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, person: next.id },
     });
     next.events.push(ev.id); old.events.push(ev.id);
   }
@@ -429,8 +545,11 @@ export class Civilization {
     for (let salt = 0; h.nations.some((x) => x.name === name) && salt < 6; salt++) name = compound(lang, ['land', 'people', 'hold', 'march', 'reach', 'home'][salt]!, salt % 2 ? st.head : `${st.head}-${salt}`, year);
     const n: Nation = {
       id: h.nations.length, name, culture: culture.id, species: st.species, capital: st.id, founded: year, ended: -1, parent: from ? from.id : -1, government: 'chiefdom',
-      ruler: -1, dynasty: -1, stability: 0.7, tech: Math.max(st.tech, from ? from.tech * 0.8 : 0), era: eraOf(Math.max(st.tech, from ? from.tech * 0.8 : 0)), hue: (culture.hue + ((hash32(this.seedNum, h.nations.length, 7) % 1000) / 1000) * 0.3 + 0.85) % 1, eventId: -1, pop: st.pop, towns: 1,
+      ruler: -1, dynasty: -1, stability: 0.7, tech: st.tech, era: eraOf(st.tech), hue: (culture.hue + ((hash32(this.seedNum, h.nations.length, 7) % 1000) / 1000) * 0.3 + 0.85) % 1, eventId: -1, pop: st.pop, towns: 1,
+      know: newKnowledge(), land: [], surveyed: -1e9,
     };
+    // settlers carry what the old country knew; what their new land cannot support they will have to relearn another way
+    if (from) { n.know.way.set(from.know.way); n.know.year.set(from.know.year); n.land = from.land.slice(); n.tech = Math.max(st.tech, levelOf(n.know, new Set(n.land))); n.era = eraOf(n.tech); }
     h.nations.push(n);
     const span = this.lifespan(sim, st.species);
     const first = this.person(rng, n, 'founder', year, span * (0.3 + rng.next() * 0.25), -1, -1);
@@ -540,7 +659,16 @@ export class Civilization {
       st.pop *= 0.25;
       st.tech *= 0.55;
     }
-    for (const n of this.h.nations) if (n.ended < 0) { n.tech *= 0.55; n.era = eraOf(n.tech); n.stability *= 0.4; }
+    for (const n of this.h.nations) {
+      if (n.ended >= 0) continue;
+      // the newest knowledge is the first to go: everything above about half of what was known is lost
+      const land = new Set(n.land);
+      const keep = FARMING + (n.tech - FARMING) * 0.45;
+      for (let i = 0; i < WEB.length; i++) if (n.know.way[i]! >= 0 && WEB[i]!.level > keep) n.know.way[i] = -1;
+      n.know.saved = 0;
+      n.tech = Math.min(n.tech * 0.55, levelOf(n.know, land) + 0.02);
+      n.era = eraOf(n.tech); n.stability *= 0.4;
+    }
     this.h.topEra = this.h.nations.reduce((m, n) => (n.ended < 0 ? Math.max(m, n.era) : m), 0);
     this.spaceAgeYear = -1;
   }

@@ -239,3 +239,84 @@ describe('the history engine', () => {
     expect(Number.isFinite(s.civ.maxTech)).toBe(true);
   }, 120000);
 });
+
+import { INVENTIONS, SLOT_INDEX, WEB, chooseNext, levelOf, newKnowledge, open, wayFor, type Land } from '../src/sim/history/tech';
+
+/** Discover everything a land allows, in the order luck and leanings give. */
+function discoverAll(land: Land[], seed: number, lean = {}): { order: string[]; ways: string[]; level: number } {
+  const k = newKnowledge(), set = new Set(land), rng = new RNG(seed);
+  const order: string[] = [], ways: string[] = [];
+  for (let n = 0; n < 400; n++) {
+    const i = chooseNext(k, set, lean, rng);
+    if (i < 0) break;
+    const w = wayFor(i, set);
+    k.way[i] = w; k.year[i] = n;
+    order.push(WEB[i]!.id); ways.push(WEB[i]!.ways[w]!.id);
+  }
+  return { order, ways, level: levelOf(k, set) };
+}
+
+describe('the tech web (E1)', () => {
+  it('is a sound web of about 150 inventions', () => {
+    expect(INVENTIONS).toBeGreaterThanOrEqual(140);
+    expect(WEB.length).toBeGreaterThan(100);
+    const ids = new Set<string>();
+    for (const s of WEB) {
+      expect(s.ways.length).toBeGreaterThan(0);
+      for (const need of s.needs) { expect(SLOT_INDEX.has(need)).toBe(true); expect(WEB[SLOT_INDEX.get(need)!]!.level).toBeLessThan(s.level); }
+      for (const w of s.ways) { expect(ids.has(w.id)).toBe(false); ids.add(w.id); expect(w.cost).toBeGreaterThan(0); }
+    }
+    // the levels run from first fields to the top without gaps an era wide
+    const levels = WEB.map((s) => s.level).sort((a, b) => a - b);
+    expect(levels[0]).toBeGreaterThanOrEqual(0.22);
+    expect(levels[levels.length - 1]).toBeLessThanOrEqual(1.2);
+    for (let i = 1; i < levels.length; i++) expect(levels[i]! - levels[i - 1]!).toBeLessThan(0.03);
+  });
+
+  it('five seeds discover in five different orders, and needs always come before what needs them', () => {
+    const rich: Land[] = ['ore', 'coast', 'river', 'forest', 'beasts', 'sand', 'coal'];
+    const orders = [11, 22, 33, 44, 55].map((s) => discoverAll(rich, s));
+    expect(new Set(orders.map((o) => o.order.join(','))).size).toBe(5);
+    for (const o of orders) {
+      expect(o.level).toBeCloseTo(1.2, 5);
+      const at = new Map(o.order.map((id, i) => [id, i]));
+      for (const s of WEB) for (const need of s.needs) expect(at.get(need)!).toBeLessThan(at.get(s.id)!);
+    }
+    // a warlike people reaches arms sooner than a trading one
+    const pos = (lean: object) => { let sum = 0; for (let s = 1; s <= 12; s++) sum += discoverAll(rich, s, lean).order.indexOf('guns'); return sum / 12; };
+    expect(pos({ war: 2.2 })).toBeLessThan(pos({ war: 0.4 }));
+  });
+
+  it('a people with no ore never smelts, and still reaches the top by glass, bone and fired clay', () => {
+    const poor = discoverAll(['coast', 'river', 'forest', 'sand'], 7);
+    expect(poor.level).toBeCloseTo(1.2, 5);
+    for (const metal of ['copper', 'bronze', 'iron', 'steel', 'coinage', 'railways']) expect(poor.ways).not.toContain(metal);
+    expect(poor.ways).toContain('glassblade');
+    expect(poor.ways).toContain('glazed');
+    expect(poor.order).toContain('engine');
+    expect(poor.order).toContain('orbit');
+    // inland and dry: no seamanship at all, and what needed ships is reached without them
+    const inland = discoverAll(['ore', 'beasts'], 7);
+    expect(inland.order).not.toContain('sail');
+    expect(inland.order).not.toContain('ship2');
+    expect(inland.level).toBeCloseTo(1.2, 5);
+    expect(open(newKnowledge(), new Set<Land>()).length).toBeGreaterThan(3);
+  });
+
+  it('nations in a living world discover, name and record their inventions', () => {
+    const s = worldWithHistory('coral-dune-303');
+    expect(s).not.toBeNull();
+    for (let y = 0; y < 2500; y++) s!.step(1);
+    const h = s!.civ.h;
+    const n = [...h.nations].sort((a, b) => b.tech - a.tech)[0]!;
+    const known = [...n.know.way].filter((w) => w >= 0).length;
+    expect(known).toBeGreaterThan(8);
+    expect(n.tech).toBeGreaterThan(0.28);
+    const found = s!.events.events.filter((e) => e.type === 'invention');
+    expect(found.length).toBeGreaterThan(0);
+    for (const e of found) { expect(e.causes.length).toBeGreaterThan(0); expect(e.description).toMatch(/Their word for it is \w+/); }
+    // every discovery has its year
+    for (let i = 0; i < WEB.length; i++) if (n.know.way[i]! >= 0 && n.parent < 0) expect(n.know.year[i]!).toBeGreaterThanOrEqual(n.founded);
+    expect(h.people.some((p) => p.role === 'inventor')).toBe(true);
+  }, 240000);
+});

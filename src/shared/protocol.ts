@@ -143,6 +143,26 @@ export interface NationInfo {
   eventId: number;
 }
 
+/** One need of the tech web as one nation stands toward it. */
+export interface TechCell {
+  slot: string; field: string; level: number; era: number;
+  /** 0 not yet discovered, 1 discovered, 2 its land allows no way to it. */
+  state: number;
+  /** The invention that meets the need (the way this nation found, or would find), in plain words and in its own language. */
+  name: string; own: string;
+  /** Year of discovery, when discovered. */
+  year: number;
+  key: boolean;
+}
+
+/** Everything about one nation that is too big to send all the time. */
+export interface NationDetail {
+  id: number; name: string; land: string[];
+  tech: TechCell[];
+  /** Its rulers on record, oldest first. */
+  rulers: { name: string; from: number; to: number; fate: string; house: string }[];
+}
+
 /** A point in history the user can rewind to. */
 export interface TimelinePoint { index: number; simYear: number; title: string; }
 
@@ -169,6 +189,7 @@ export type ToWorker =
   | { type: 'fork' }
   | { type: 'load'; save: unknown; diverge?: boolean }
   | { type: 'requestLayer'; kind: 'diversity' | 'oxygen' }
+  | { type: 'requestNation'; id: number }
   | { type: 'rewindLimit'; count: number }
   /** Jump ahead by running the sim flat out (used by automated checks). */
   | { type: 'warp'; years: number };
@@ -183,6 +204,7 @@ export type FromWorker =
   | { type: 'herds'; herds: HerdSnapshot }
   | { type: 'saved'; slot: string; save: unknown }
   | { type: 'layer'; kind: 'diversity' | 'oxygen'; values: Float32Array }
+  | { type: 'nation'; detail: NationDetail }
   | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[] }
   | { type: 'timeline'; points: TimelinePoint[] }
   | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }

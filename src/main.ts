@@ -223,6 +223,7 @@ async function boot(): Promise<void> {
   const fossilCells = () => [...state.species.values()].filter((x) => x.extinctYear >= 0 && x.peakPop > 2e4).map((x) => x.homeCell);
   scene.onNations = (nations) => update({ nations });
   actions.project = (x, y, z) => scene.projectDir(x, y, z);
+  actions.openNation = (id) => { update({ panel: 'nation', nationDetail: state.nationDetail?.id === id ? state.nationDetail : null }); send({ type: 'requestNation', id }); };
   actions.setOverlay = (o) => {
     update({ overlay: o });
     scene.setNightMap(o === 'nations');
@@ -670,6 +671,9 @@ async function boot(): Promise<void> {
       case 'plants':
         for (const pl of msg.plants) state.plants.set(pl.id, pl);
         scene.setPlants(state.plants);
+        break;
+      case 'nation':
+        update({ nationDetail: msg.detail });
         break;
       case 'layer':
         if (state.overlay === msg.kind) scene.setLayerOverlay(msg.values, msg.kind === 'oxygen' ? [0.25, 0.85, 1.0] : [0.2, 1.0, 0.55]);

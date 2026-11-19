@@ -188,7 +188,12 @@ export class Simulation {
     return options[i]!;
   }
 
+  /** Set while history is being fast-forwarded: minor events are then not recorded at all. */
+  quietEvents = false;
+
   emit(e: Parameters<EventLog['add']>[1]): SimEvent {
+    // (a fast-forwarded history keeps only its turning points: firsts of an era and milestones)
+    if (this.quietEvents && (e.importance ?? 1) < 2) return { id: -1, type: e.type, simYear: e.year ?? this.simYear, cellId: e.cellId ?? -1, title: e.title, description: e.description, causes: [], causeWeights: [], effects: [], importance: 0 };
     const ev = this.events.add(this.simYear, e);
     if (ev.importance > this.bigEvent) this.bigEvent = ev.importance;
     // what happens at a place becomes part of that place's record

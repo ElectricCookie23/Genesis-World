@@ -5,9 +5,11 @@ import { G, P, PHEN_COUNT, sizeMetres } from './genetics';
 import { nearestCell } from './world';
 import { loadSimulation, saveSimulation, type SaveState } from './snapshot';
 import {
-  HISTORY_SPEED, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
+  HISTORY_SPEED, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type NationDetail, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
 } from '../shared/protocol';
-import { ERAS } from './history/eras';
+import { ERAS, eraOf } from './history/eras';
+import { compound } from './history/language';
+import { WEB, wayFor } from './history/tech';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 const TICK_HZ = 20;
@@ -133,6 +135,24 @@ function currentYps(): number {
   return performance.now() < slowUntil ? Math.min(yps, SLOW_YPS) : yps;
 }
 
+function nationDetail(s: Simulation, id: number): NationDetail | null {
+  const h = s.civ.h, n = h.nations[id];
+  if (!n) return null;
+  const land = new Set(n.land), lang = s.civ.languageOf(n);
+  const tech = WEB.map((slot, i) => {
+    const known = n.know.way[i]!;
+    const k = known >= 0 ? known : wayFor(i, land);
+    const way = slot.ways[Math.max(0, k)]!;
+    const year = known >= 0 ? n.know.year[i]! : -1;
+    return {
+      slot: slot.id, field: slot.field, level: slot.level, era: eraOf(slot.level), state: known >= 0 ? 1 : k < 0 ? 2 : 0, name: way.name,
+      own: compound(lang, way.words[0], way.words[1], known >= 0 ? year : Infinity), year, key: !!slot.key,
+    };
+  });
+  const rulers = h.people.filter((p) => p.nation === id && p.reignFrom >= 0).map((p) => ({ name: p.name, from: p.reignFrom, to: p.reignTo, fate: p.fate, house: h.dynasties[p.dynasty]?.name ?? '' }));
+  return { id, name: n.name, land: n.land.slice(), tech, rulers: rulers.slice(-60) };
+}
+
 function nationList(s: Simulation): NationInfo[] {
   const h = s.civ.h;
   return h.nations.map((n) => {
@@ -141,7 +161,7 @@ function nationList(s: Simulation): NationInfo[] {
       id: n.id, name: n.name, species: n.species, capital: n.capital, founded: n.founded, ended: n.ended, parent: n.parent, government: n.government,
       stability: n.stability, tech: n.tech, era: n.era, eraName: ERAS[n.era]!.name, hue: n.hue, pop: n.pop, towns: n.towns,
       culture: culture.name, language: h.languages[culture.language]!.name, ruler: ruler ? ruler.name : '', rulerSince: ruler ? ruler.reignFrom : -1,
-      house: house ? house.name : '', houseReigns: house ? house.rulers.length : 0, eventId: n.eventId,
+      house: house ? house.name : '', houseReigns: house ? house.reigns : 0, eventId: n.eventId,
     };
   });
 }
@@ -238,6 +258,7 @@ function tick(): void {
   const active = s.civ.historyActive;
   if (active !== wasHistory) { wasHistory = active; historyOverride = false; }
   // a whole copy of the world is kept at the start of every era, for replays and what-ifs
+  if (s.civ.h.topEra < snapshotEra) snapshotEra = s.civ.h.topEra;
   if (s.civ.h.topEra > snapshotEra) {
     snapshotEra = s.civ.h.topEra;
     const title = `Start of the ${ERAS[snapshotEra]!.name}`;
@@ -350,6 +371,9 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         post({ type: 'loaded', cells, stats: stats(sim), events: sim.events.events }, transfer);
         break;
       }
+      case 'requestNation':
+        if (sim) { const detail = nationDetail(sim, msg.id); if (detail) post({ type: 'nation', detail }); }
+        break;
       case 'requestLayer':
         if (sim) { const values = sim.layer(msg.kind); post({ type: 'layer', kind: msg.kind, values }, [values.buffer]); }
         break;
@@ -384,7 +408,9 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
       case 'warp':
         if (sim) {
           const end = sim.simYear + msg.years;
-          while (sim.simYear < end) sim.step(15000);
+          const had = sim.civ.historyActive;
+          // a jump through time stops where history begins (unless it began before the jump): that is the part worth watching
+          while (sim.simYear < end) { sim.step(15000); if (!had && sim.civ.historyActive) break; }
           cellsRequested = true;
         }
         break;

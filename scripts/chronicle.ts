@@ -23,7 +23,7 @@ for (const e of sim.events.events.slice(first)) kinds.set(e.type, (kinds.get(e.t
 console.log('events by kind:', [...kinds.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', '));
 for (const nat of h.nations.slice(0, 6)) {
   const house = h.dynasties.filter((d) => d.nation === nat.id);
-  console.log(`${nat.name}: ${nat.ended < 0 ? 'alive' : 'ended +' + Math.round(nat.ended - h.began)}, tech ${nat.tech.toFixed(2)} (${ERAS[nat.era]!.name}), ${nat.towns} towns, ${Math.round(nat.pop)}k, houses ${house.length} (longest ${Math.max(...house.map((d) => d.rulers.length))} reigns), ruler ${h.people[nat.ruler]?.name}`);
+  console.log(`${nat.name}: ${nat.ended < 0 ? 'alive' : 'ended +' + Math.round(nat.ended - h.began)}, tech ${nat.tech.toFixed(2)} (${ERAS[nat.era]!.name}), ${nat.towns} towns, ${Math.round(nat.pop)}k, houses ${house.length} (longest ${Math.max(...house.map((d) => d.reigns))} reigns), ruler ${h.people[nat.ruler]?.name}`);
 }
 console.log('towns:', sim.civ.settlements.filter((s) => s.ruined < 0).slice(0, 14).map((s) => s.name).join(', '));
 for (const e of sim.events.events.slice(first).filter((x) => x.importance >= 1).slice(0, 14)) console.log(`  [+${Math.round(e.simYear - h.began)}] ${e.title}: ${e.description.slice(0, 150)}`);

@@ -591,6 +591,69 @@ export function Futures() {
   );
 }
 
+const FIELD_COLOUR: Record<string, string> = {
+  food: '#b8d77a', craft: '#e6b56a', build: '#cfc2a8', war: '#e2806f', trade: '#e9d36b', mind: '#9fc4f0', power: '#f0a04a', life: '#8fd9b6', sea: '#6fc7dc', sky: '#c3a6f2',
+};
+const ERA_NAMES = ['Age of Camps', 'Age of Fields', 'Age of Kilns', 'Age of Walls', 'Age of Sails', 'Age of Presses', 'Age of Engines', 'Age of Signals', 'Age of Orbit', 'Age Beyond'];
+
+/** One nation's knowledge: the tech web era by era, and its rulers on record (expansion system E1). */
+export function NationPanel() {
+  const s = useStore();
+  const d = s.nationDetail;
+  const realm = d ? s.realms.find((r) => r.id === d.id) : undefined;
+  const year = s.stats?.simYear ?? 0;
+  const ago = (y: number) => `${Math.max(0, Math.round(year - y)).toLocaleString('en-US')} years ago`;
+  return (
+    <div class={`${css.panel} ${css.side}`} style={{ width: 'min(560px, 96vw)' }}>
+      <div class={css.head}><h2>{d ? d.name : 'A nation'}</h2><button class={css.close} onClick={() => update({ panel: 'peoples' })}>✕</button></div>
+      <div class={css.scroll}>
+        {!d && <p class={css.sub}>Asking the archives.</p>}
+        {d && realm && (
+          <p class={css.sub} style={{ margin: '0 0 8px' }}>
+            {realm.eraName}{realm.ended >= 0 ? ' (the nation is gone)' : ''}. {d.tech.filter((t) => t.state === 1).length} of {d.tech.filter((t) => t.state !== 2).length} things its land allows are known.
+            {' '}Its land offers {d.land.length ? d.land.join(', ') : 'little'}{d.land.includes('ore') ? '' : '; no ore, so no metal'}.
+          </p>
+        )}
+        {d && ERA_NAMES.map((era, e) => {
+          const cells = d.tech.filter((t) => t.era === e);
+          if (!cells.length) return null;
+          return (
+            <div key={era} style={{ margin: '0 0 10px' }}>
+              <div class={css.sub} style={{ margin: '0 0 4px', letterSpacing: '0.08em' }}>{era.toUpperCase()}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {cells.map((t) => (
+                  <span
+                    key={t.slot}
+                    title={t.state === 1 ? `${t.name}: "${t.own.toLowerCase()}" in their tongue, discovered ${ago(t.year)}` : t.state === 2 ? `${t.name}: nothing in their land makes this possible` : `${t.name}: not yet discovered`}
+                    style={{
+                      font: '500 11px/1.2 system-ui, sans-serif', padding: '3px 7px', borderRadius: '10px', whiteSpace: 'nowrap',
+                      border: `1px solid ${t.state === 1 ? FIELD_COLOUR[t.field] : '#ffffff26'}`,
+                      background: t.state === 1 ? `${FIELD_COLOUR[t.field]}2e` : 'transparent',
+                      color: t.state === 1 ? '#f2eee4' : '#ffffff66', textDecoration: t.state === 2 ? 'line-through' : 'none', fontWeight: t.key ? 700 : 500,
+                    }}
+                  >{t.name}</span>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        {d && (
+          <div class={css.sub} style={{ margin: '2px 0 10px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {Object.entries(FIELD_COLOUR).map(([f, c]) => <span key={f}><span style={{ color: c }}>●</span> {f}</span>)}
+          </div>
+        )}
+        {d && d.rulers.length > 0 && <div class={css.sub} style={{ margin: '8px 0 4px', letterSpacing: '0.08em' }}>RULERS ON RECORD</div>}
+        {d && [...d.rulers].reverse().slice(0, 30).map((r) => (
+          <div key={`${r.name}${r.from}`} class={css.when} style={{ color: '#cfc9bd', margin: '0 0 3px' }}>
+            {r.name}, {r.house}: {r.to < 0 ? `reigning, came to power ${ago(r.from)}` : `ruled ${Math.max(1, Math.round(r.to - r.from))} ${Math.round(r.to - r.from) === 1 ? 'year' : 'years'}, ${r.fate}`}
+          </div>
+        ))}
+        {d && d.rulers.length <= 1 && <p class={css.sub}>Rulers are recorded one by one only while time runs at the pace of history or slower.</p>}
+      </div>
+    </div>
+  );
+}
+
 export function Peoples() {
   const s = useStore();
   const live = s.settlements.filter((x) => x.ruined < 0).sort((a, b) => b.tech * 10 + Math.log(b.pop + 1) - (a.tech * 10 + Math.log(a.pop + 1))).slice(0, 60);
@@ -623,7 +686,10 @@ export function Peoples() {
                   );
                 })()}
               </div>
-              {cap && <button class={css.link} style={{ marginLeft: 'auto' }} onClick={() => { actions.setOverlay('nations'); actions.flyToCell(cap.cell, 1.2); }}>map</button>}
+              <span style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+                {cap && <button class={css.link} style={{ marginRight: 0 }} onClick={() => { actions.setOverlay('nations'); actions.flyToCell(cap.cell, 1.2); }}>map</button>}
+                {(() => { const realm = s.realms.find((r) => r.ended < 0 && r.capital === n.capital) ?? s.realms.find((r) => r.ended < 0 && r.name === n.name); return realm ? <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.id)}>knowledge</button> : null; })()}
+              </span>
             </div>
           );
         })}

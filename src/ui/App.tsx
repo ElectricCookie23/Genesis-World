@@ -1,7 +1,7 @@
 import { SPEEDS } from '../shared/protocol';
 import { actions, togglePanel, useStore } from './store';
 import { bigNumber, formatYear } from './format';
-import { Chronicle, CreatureCard, CrossSection, Designer, FlatMap, GodTools, Graphs, Guide, Futures, Help, NationLabels, Num, Peoples, Settings, SpeciesCard, TimelineStrip, Tree, Why } from './panels';
+import { Chronicle, CreatureCard, CrossSection, Designer, FlatMap, GodTools, Graphs, Guide, Futures, Help, NationLabels, NationPanel, Num, Peoples, Settings, SpeciesCard, TimelineStrip, Tree, Why } from './panels';
 import css from './ui.module.css';
 
 const STAGE: Record<string, string> = { barren: 'lifeless', microbes: 'microbes', algae: 'algae seas', animals: 'living world' };
@@ -48,6 +48,7 @@ export function App() {
           {s.panel === 'section' && <CrossSection />}
           {s.panel === 'guide' && <Guide />}
           {s.panel === 'peoples' && <Peoples />}
+          {s.panel === 'nation' && <NationPanel />}
           {s.panel === 'graphs' && <Graphs />}
           {s.whyEvent >= 0 && <Why />}
           {s.selectedSpecies >= 0 && s.whyEvent < 0 && <SpeciesCard />}

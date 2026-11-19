@@ -211,7 +211,7 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 
 | # | System | Status | Notes |
 |---|---|---|---|
-| E1 | The Tech Web | not started | |
+| E1 | The Tech Web | done | `sim/history/tech.ts`: 108 needs met by about 150 inventions; a need can have two or three ways depending on the land (ore, coast, river, forest, tamed beasts, sand, coal), so a people without ore meets the same needs with glass, bone and fired clay. Research is saved up from people, minds, stability and reach, and spent on what is open; which need comes next depends on the culture's and ruler's leanings and on luck. Every invention has a name in the nation's own language. First discoveries of turning points go in the chronicle with their inventor; every discovery keeps its year. Panel: Peoples, then "knowledge" on a nation. Tests: "the tech web (E1)" |
 | E2 | Era Progression | not started | |
 | E3 | Uneven History | not started | |
 | E4 | Rise and Fall | not started | |

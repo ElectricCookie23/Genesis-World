@@ -1,6 +1,7 @@
 // The entities of history. All of them are plain data, so the whole of history saves, loads and
 // rewinds with the rest of the simulation.
 import type { Language } from './language';
+import type { Knowledge, Land } from './tech';
 
 /** A way of life shared by one or more nations: a language, values and a look. */
 export interface Culture {
@@ -59,7 +60,10 @@ export interface Dynasty {
   founded: number;
   /** Year the line lost power, or -1. */
   ended: number;
+  /** Rulers of the house who were recorded one by one (those who reigned while time ran at a human pace). */
   rulers: number[];
+  /** How many reigns the house has had in all, recorded or not. */
+  reigns: number;
 }
 
 export type Government = 'band' | 'chiefdom' | 'kingdom' | 'republic' | 'empire' | 'council';
@@ -93,6 +97,12 @@ export interface Nation {
   pop: number;
   /** How many living settlements it had at the last tick. */
   towns: number;
+  /** What it has discovered (the tech web, system E1). `tech` above is the level this amounts to. */
+  know: Knowledge;
+  /** What its land offers, refreshed now and then. */
+  land: Land[];
+  /** Year the land was last surveyed. */
+  surveyed: number;
 }
 
 /** Everything the history engine keeps, in one saveable object. */
@@ -108,8 +118,10 @@ export interface HistoryState {
   began: number;
   /** Highest era any nation has reached. */
   topEra: number;
+  /** For each slot of the tech web, whether anyone has yet discovered it (1) in this history. */
+  firsts: number[];
 }
 
 export function emptyHistory(): HistoryState {
-  return { cultures: [], languages: [], nations: [], people: [], dynasties: [], pending: 0, began: -1, topEra: 0 };
+  return { cultures: [], languages: [], nations: [], people: [], dynasties: [], pending: 0, began: -1, topEra: 0, firsts: [] };
 }
