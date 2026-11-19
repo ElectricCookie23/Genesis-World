@@ -68,7 +68,7 @@ export class AuroraVolume {
             const centre = float(OVAL).add(fold.a.sub(0.5).mul(0.16)).add(fold2.a.sub(0.5).mul(0.05));
             // three thin sheets side by side, each a few hundredths of a radian apart
             const off = theta.sub(centre);
-            const sheet = (shift: number, width: number, gain: number): N => exp(off.sub(shift).div(width).pow(2).negate()).mul(gain);
+            const sheet = (shift: number, width: number, gain: number): N => exp(off.sub(shift).div(width).pow2().negate()).mul(gain);
             const sheets = sheet(0, 0.0065, 1).add(sheet(0.034, 0.005, 0.55)).add(sheet(-0.03, 0.008, 0.4));
             // vertical rays: the pattern depends on direction only, so it runs straight up the curtain
             const rays: N = noiseAt(dir.mul(31).add(vec3(t.mul(0.011), 0, t.mul(-0.007))));

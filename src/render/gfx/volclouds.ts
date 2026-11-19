@@ -202,7 +202,7 @@ export class VolumetricClouds {
           const width = float(0.012).add(pow(hN, 1.5).mul(0.05)).add(smoothstep(0.7, 1.0, hN).mul(0.045).mul(wnd.w));
           const billow = sin(p.x.mul(310).add(uTime.mul(0.4))).mul(sin(p.y.mul(270).sub(uTime.mul(0.3)))).mul(sin(p.z.mul(330))).mul(0.3).add(0.8);
           const top = float(1).sub(smoothstep(mix(float(0.5), float(0.92), wnd.w), mix(float(0.7), float(1.0), wnd.w), hN));
-          const dens = exp(ang.div(width).pow(2).negate()).mul(src.w).mul(billow).mul(top).mul(1.15);
+          const dens = exp(ang.div(width).pow2().negate()).mul(src.w).mul(billow).mul(top).mul(1.15);
           out.addAssign((vec3 as any)(dens, dens.mul(wnd.w), dens.mul(pow(float(1).sub(hN), 5)).mul(wnd.w).mul(0.5)));
         });
       }
@@ -279,7 +279,7 @@ export class VolumetricClouds {
             if (cityLight) {
               const CA: N = (samplePlanet(cityLight, dir) as any).level(0);
               const top = max(max(CA.r, CA.g), CA.b);
-              city = CA.rgb.div(max(top, 0.04)).mul(pow(CA.a, 1.4)).mul(float(1).sub(hN).pow(2)).mul(float(1).sub(day)).mul(0.5);
+              city = CA.rgb.div(max(top, 0.04)).mul(pow(CA.a, 1.4)).mul(float(1).sub(hN).pow2()).mul(float(1).sub(day)).mul(0.5);
             }
             const sootShare = pl.x.div(max(d, 1e-4));
             const tone: N = mix(vec3(1, 1, 1), mix(vec3(0.4, 0.38, 0.36), vec3(0.11, 0.1, 0.1), pl.y), sootShare);

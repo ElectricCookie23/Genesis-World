@@ -61,7 +61,7 @@ export class OceanSurface {
     // ---------------- vertex: sea level with tides, then the waves
     const pn = patchNodes();
     const vDir: N = pn.dir;
-    const tide = pow(dot(vDir, uMoonDir), 2).sub(1 / 3).mul(uTideKm);
+    const tide = dot(vDir, uMoonDir).pow2().sub(1 / 3).mul(uTideKm); // squared by multiplying: a power of a negative number is undefined on a GPU
     const fillKm = float(1).sub(uOceanFill).mul(-7.5);
     const levelKm: N = uSeaKm.add(tide).add(fillKm);
     const vA: N = (samplePlanet(data.height, vDir) as any).level(0);
@@ -92,7 +92,7 @@ export class OceanSurface {
     const A: N = samplePlanet(data.height, dir);
     const C: N = samplePlanet(data.life, dir);
     const X: N = samplePlanet(data.extra, dir);
-    const tideF = pow(dot(dir, uMoonDir), 2).sub(1 / 3).mul(uTideKm);
+    const tideF = dot(dir, uMoonDir).pow2().sub(1 / 3).mul(uTideKm);
     const level: N = uSeaKm.add(tideF).add(float(1).sub(uOceanFill).mul(-7.5));
     const depthKm: N = level.sub(A.r);
     const iceRaw: N = X.a;
@@ -227,15 +227,16 @@ export class OceanSurface {
     }
 
     // a meteor strike sends a bright ring across the sea as well
-    const impAge: N = uImpact.w;
+    // clamped before the square root: see the same lines in terrain.ts (a negative age made the whole sea black)
+    const impAge: N = max(uImpact.w, 0);
     const impAng = sqrt(max(float(2).sub(dot(dir, uImpact.xyz).mul(2)), 0));
-    const impRing = exp(impAng.sub(impAge.mul(0.085)).div(impAge.sqrt().mul(0.012).add(0.006)).pow(2).negate()).mul(exp(impAge.mul(-0.3))).mul(step(0, impAge));
+    const impRing = exp(impAng.sub(impAge.mul(0.085)).div(impAge.sqrt().mul(0.012).add(0.006)).pow2().negate()).mul(exp(impAge.mul(-0.3))).mul(step(0, uImpact.w));
     color = color.add(vec3(4.5, 2.6, 1.2).mul(impRing.mul(2)));
 
     // a mass hatching lights the sea from below: a glow that spreads from where it began, then fades
-    const hatchAge: N = uHatch.w;
+    const hatchAge: N = max(uHatch.w, 0);
     const hatchAng = sqrt(max(float(2).sub(dot(dir, uHatch.xyz).mul(2)), 0));
-    const hatchGlow = exp(hatchAng.div(hatchAge.mul(0.006).add(0.03)).pow(2).negate()).mul(exp(hatchAge.mul(-0.06))).mul(smoothstep(0, 2, hatchAge)).mul(step(0, hatchAge));
+    const hatchGlow = exp(hatchAng.div(hatchAge.mul(0.006).add(0.03)).pow2().negate()).mul(exp(hatchAge.mul(-0.06))).mul(smoothstep(0, 2, hatchAge)).mul(step(0, uHatch.w));
     color = color.add(mix(vec3(0.1, 0.9, 0.8), vec3(uLook.pigmentB), 0.3).mul(hatchGlow).mul(e2.r.mul(0.9).add(0.5)).mul(night.mul(1.6).add(0.25)));
 
     // ---- from below: the bright window of sky overhead, darkness beyond it

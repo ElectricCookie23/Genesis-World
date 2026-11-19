@@ -89,7 +89,7 @@ export function createAtmosphere(): Mesh {
     const away = dot(rd, L.negate());
     const bowAngle = away.clamp(-1, 1).acos();
     const band = bowAngle.sub(0.733).div(0.03);
-    const spectrum: N = vec3(exp(band.sub(0.6).pow(2).mul(-3)), exp(band.pow(2).mul(-3)), exp(band.add(0.6).pow(2).mul(-3)));
+    const spectrum: N = vec3(exp(band.sub(0.6).pow2().mul(-3)), exp(band.pow2().mul(-3)), exp(band.add(0.6).pow2().mul(-3)));
     const bow: N = spectrum.mul(uRainbow).mul(0.22).mul(smoothstep(0.0, 0.15, dot(rd, normalize(ro)).add(0.05)));
     return color.mul(5).mul(vec3(uLook.star)).mul(uAtmo).mul(vec3(uGradeTint)).mul(select(discA.greaterThan(0), 1, 0)).add(bow.mul(vec3(uLook.star)));
   });
@@ -122,7 +122,7 @@ export function createSky(): Mesh {
   const dir = normalize(positionLocal);
   const c = cos(uSkyAngle), s = sin(uSkyAngle);
   const sd = vec3(dir.x.mul(c).sub(dir.z.mul(s)), dir.y, dir.x.mul(s).add(dir.z.mul(c)));
-  const band = exp(pow(dot(sd, normalize(vec3(0.3, 0.9, 0.25))), 2).mul(-9));
+  const band = exp(dot(sd, normalize(vec3(0.3, 0.9, 0.25))).pow2().mul(-9));
   const stars = starLayer(sd, 70, band.mul(0.1).add(0.07)).add(starLayer(sd, 160, band.mul(0.22).add(0.1)).mul(0.5));
   const n1 = mx_fractal_noise_float(sd.mul(1.6), 4, 2.0, 0.55).mul(0.5).add(0.5);
   const n2 = mx_fractal_noise_float(sd.mul(2.3).add(vec3(11.0, 3.0, 7.0)), 4, 2.0, 0.55).mul(0.5).add(0.5);

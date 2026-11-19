@@ -253,14 +253,17 @@ export class TerrainSurface {
     lit = mix(lit, lit.mul(0.25).add(vec3(0.02, 0.014, 0.012)), crusted.mul(0.8));
     lit = lit.add(mix(vec3(2.6, 0.45, 0.04), vec3(4.2, 2.0, 0.5), lavaCracks.mul(heat)).mul(lavaCracks.mul(pow(heat, 0.5)).mul(1.6).add(heat.mul(heat).mul(0.5))).mul(flicker));
     // a meteor strike: a ring of fire racing outward over the ground, and a crater that glows for a while
-    const impAge: N = uImpact.w;
+    // No strike is under way while uImpact.w is negative. The age is clamped before the square root: the root of a
+    // negative number is not a number on real GPUs, and multiplying by zero afterwards does not clear it, which
+    // turned the whole surface black whenever no strike was in progress.
+    const impAge: N = max(uImpact.w, 0);
     const impAng = sqrt(max(float(2).sub(dot(dir, uImpact.xyz).mul(2)), 0));
-    const impOn = step(0, impAge);
+    const impOn = step(0, uImpact.w);
     const ringR = impAge.mul(0.085);
-    const ring = exp(impAng.sub(ringR).div(impAge.sqrt().mul(0.012).add(0.006)).pow(2).negate()).mul(exp(impAge.mul(-0.3))).mul(impOn);
+    const ring = exp(impAng.sub(ringR).div(impAge.sqrt().mul(0.012).add(0.006)).pow2().negate()).mul(exp(impAge.mul(-0.3))).mul(impOn);
     const rays = pow(sin(atan(dot(dir, t2).sub(dot(uImpact.xyz, t2)), dot(dir, t1).sub(dot(uImpact.xyz, t1))).mul(17).add(e1.r.mul(9))).mul(0.5).add(0.5), 3);
-    const crater = exp(impAng.div(0.035).pow(2).negate()).mul(exp(impAge.mul(-0.03))).mul(impOn);
-    const ejecta = exp(impAng.div(0.11).pow(2).negate()).mul(rays).mul(exp(impAge.mul(-0.08))).mul(impOn).mul(0.6);
+    const crater = exp(impAng.div(0.035).pow2().negate()).mul(exp(impAge.mul(-0.03))).mul(impOn);
+    const ejecta = exp(impAng.div(0.11).pow2().negate()).mul(rays).mul(exp(impAge.mul(-0.08))).mul(impOn).mul(0.6);
     lit = lit.add(vec3(4.5, 2.4, 0.9).mul(ring.mul(2.5))).add(vec3(3.6, 0.9, 0.1).mul(crater.mul(e2.r.mul(1.2).add(0.4)).add(ejecta)));
     // ---- civilization: city light in each nation's own colour, roads, and (with the Night Map on) borders
     if (civ) {
