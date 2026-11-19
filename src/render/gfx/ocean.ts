@@ -6,11 +6,12 @@ import {
   abs, cameraPosition, cameraViewMatrix, dot, exp, float, frontFacing, length, log2, max, min, mix, normalize, positionView, positionWorld, pow, reflect,
   screenUV, select, sin, smoothstep, texture, vec2, vec3, vec4, viewportDepthTexture, viewportSharedTexture, cameraNear, cameraFar, perspectiveDepthToViewZ,
 } from 'three/tsl';
-import { EXAG, uHazeAmount, uHazeTint, uMoonDir, uOceanFill, uSeaGlow, uSeaKm, uSunDir, uTideKm, uTime, uUnderwater } from '../common';
+import { EXAG, uOverlay, uHazeAmount, uHazeTint, uMoonDir, uOceanFill, uSeaGlow, uSeaKm, uSunDir, uTideKm, uTime, uUnderwater } from '../common';
 import { OceanFFT } from './fft';
 import { uLook } from './look';
 import { samplePlanet, type PlanetData } from './planetdata';
 import { QuadSphere, patchNodes } from './quadsphere';
+import type { CivMap } from './civmap';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
@@ -36,7 +37,7 @@ export class OceanSurface {
   readonly causticNode: N;
   readonly causticTile: number;
 
-  constructor(data: PlanetData, cloudShadow: (p: N) => N, erosionTex: Texture, resolution = 256, seed = 1, segments = 32, maxPatches = 700) {
+  constructor(data: PlanetData, cloudShadow: (p: N) => N, erosionTex: Texture, resolution = 256, seed = 1, civ?: CivMap, segments = 32, maxPatches = 700) {
     this.fft = new OceanFFT(resolution, seed);
     this.fft.setWind(REFERENCE_WIND, 0.6);
     const outs = this.fft.outputs;
@@ -181,7 +182,8 @@ export class OceanSurface {
     let color: N = mix(water, sky, fresnel).add(sunColor.mul(glint).mul(fresnel.mul(4).add(0.25).min(1))).add(vec3(uLook.moon).mul(moonGlint));
 
     // ---- foam: where waves fold over, in storms, and along the shore
-    const whitecaps = foamTex.mul(smoothstep(0.75, 1.5, state)).add(smoothstep(1.45, 2.3, state).mul(fold).mul(0.6));
+    // from far away single whitecaps cannot be seen: they become a faint paling of rough water
+    const whitecaps = mix(foamTex.mul(smoothstep(0.75, 1.5, state)).add(smoothstep(1.45, 2.3, state).mul(fold).mul(0.6)), smoothstep(1.0, 2.2, state).mul(0.08), far);
     const shore = float(1).sub(smoothstep(0.0, 0.11, depthKm));
     const swash = sin(depthKm.mul(95).sub(uTime.mul(1.2)).add(grad.x.add(grad.z).mul(9))).mul(0.5).add(0.5);
     const edge = float(1).sub(smoothstep(0.0, 0.00009, path));
@@ -200,12 +202,34 @@ export class OceanSurface {
     const iceColor: N = mix(vec3(0.9, 0.94, 0.98), vec3(0.25, 0.6, 0.9), leads).mul(whiteLit);
     color = mix(color, iceColor, ice);
 
+    // ---- ships and platforms: dotted lines of lamps along the sea lanes, lone lights off advanced coasts
+    if (civ) {
+      const CA: N = samplePlanet(civ.a, dir);
+      const CB: N = samplePlanet(civ.b, dir);
+      const RD: N = samplePlanet(civ.roads.texture, dir);
+      const strongest = max(max(CA.r, CA.g), CA.b);
+      const hue: N = mix(vec3(1.0, 0.82, 0.55), CA.rgb.div(max(strongest, 0.04)), smoothstep(0.05, 0.3, strongest));
+      const laneDist: N = RD.rgb.sub(0.5).mul(2 * civ.roads.range).length();
+      const code = RD.a.mul(255);
+      const isLane = smoothstep(127, 128, code);
+      const px = camDist.mul(0.0011);
+      const laneW = float(0.00016);
+      const lane = smoothstep(laneW.add(px), laneW.mul(0.4), laneDist).mul(isLane).mul(laneW.div(laneW.add(px.mul(0.8))).clamp(0.3, 1));
+      // ships are separate points of light moving slowly along the lane
+      const along = dot(dir, vec3(0.37, 0.71, 0.59)).mul(2600).add(uTime.mul(0.05));
+      const ships = smoothstep(0.72, 0.95, sin(along).mul(0.5).add(0.5));
+      const platforms = smoothstep(0.985, 0.995, e2.g.mul(0.5).add(e2.r.mul(0.5)).add(e1.r.mul(0.12))).mul(smoothstep(0.82, 0.95, CB.g)).mul(smoothstep(0.2, 0.5, strongest)).mul(float(1).sub(smoothstep(0.25, 0.6, depthKm)));
+      color = color.add(hue.mul(lane.mul(ships).mul(0.9).add(platforms.mul(1.6))).mul(night).mul(float(1).sub(ice)));
+    }
+
     // ---- from below: the bright window of sky overhead, darkness beyond it
     const cosUp = max(dot(V, Nw.negate()), 0);
     const windowAmt = smoothstep(0.62, 0.72, cosUp);
     const below: N = mix(deep.mul(0.6).add(shallow.mul(0.12)).mul(day.add(0.03)), sky.mul(1.4).add(sunColor.mul(pow(max(dot(V.negate(), L).negate(), 0), 40)).mul(4).mul(sunVis)), windowAmt);
     color = select(frontFacing, color, below);
 
+    const OV: N = samplePlanet(data.overlay, dir);
+    color = mix(color, OV.rgb.mul(OV.rgb).mul(0.85), select(frontFacing, uOverlay, float(0)));
     // aerial perspective, as on land
     const rim = pow(float(1).sub(max(dot(dir, V), 0)), 3);
     const haze: N = vec3(uHazeTint).mul(day.mul(0.9).add(0.02));

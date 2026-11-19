@@ -19,6 +19,8 @@ export class PlanetData {
   readonly life: CubeTexture;
   /** bytes: r = settlement light, g = leaf hue gene of the main plant, b = wind strength, a = sea ice */
   readonly extra: CubeTexture;
+  /** bytes: rgb = data overlay colour (temperature, rain, life or people), when one is switched on */
+  readonly overlay: CubeTexture;
   private scratch: Float32Array;
   private frame = 0;
 
@@ -28,7 +30,18 @@ export class PlanetData {
     this.cover = this.bake.create(false);
     this.life = this.bake.create(false);
     this.extra = this.bake.create(false);
+    this.overlay = this.bake.create(false);
     this.scratch = new Float32Array(grid.count);
+  }
+
+  /** Paint the data overlay from per-cell linear RGB (three floats per cell). */
+  setOverlay(colors: Float32Array): void {
+    const s = this.scratch, n = this.grid.count;
+    for (let ch = 0; ch < 3; ch++) {
+      for (let i = 0; i < n; i++) s[i] = Math.sqrt(Math.max(0, colors[i * 3 + ch]!));
+      this.bake.fill(this.overlay, ch, s);
+    }
+    this.bake.commit(this.overlay);
   }
 
   update(cells: CellSnapshot, plants: Map<number, PlantInfo>, full: boolean): void {
@@ -63,6 +76,7 @@ export class PlanetData {
   }
 }
 
+export interface PlanetDataOverlay { setOverlay(colors: Float32Array): void }
 /**
  * Sample one of the planet's cube maps along a world direction.
  * Three mirrors the x axis of ordinary cube textures; this undoes it so directions mean what they say.

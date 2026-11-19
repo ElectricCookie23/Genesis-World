@@ -4,13 +4,14 @@ import { MeshBasicNodeMaterial, type Vector3 } from 'three/webgpu';
 import {
   abs, cameraPosition, cross, dot, float, fract, max, min, mix, normalize, positionWorld, pow, reflect, select, sin, smoothstep, texture, varying, vec2, vec3,
 } from 'three/tsl';
-import { EXAG, uHazeAmount, uHazeTint, uMolten, uMoonDir, uRing, uSeaKm, uSun2, uSun2Dir, uSunDir, uTime } from '../common';
+import { EXAG, uOverlay, uHazeAmount, uHazeTint, uMolten, uMoonDir, uRing, uSeaKm, uSun2, uSun2Dir, uSunDir, uTime } from '../common';
 import { cloudShadowAt } from '../clouds';
 import type { ErosionBake } from './erosion';
 import { uLook } from './look';
 import { samplePlanet, type PlanetData } from './planetdata';
 import { QuadSphere, patchNodes } from './quadsphere';
 import { RIVER_MAX_WIDTH, type RiverMap } from './rivermap';
+import { uNightMap, type CivMap } from './civmap';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
@@ -28,7 +29,7 @@ export class TerrainSurface {
   maxLevel = 11;
   split = 5;
 
-  constructor(data: PlanetData, erosion: ErosionBake, rivers: RiverMap, segments = 32, maxPatches = 800, private shadowSteps = 8, caustics?: { node: N; tile: number }) {
+  constructor(data: PlanetData, erosion: ErosionBake, rivers: RiverMap, segments = 32, maxPatches = 800, private shadowSteps = 8, caustics?: { node: N; tile: number }, civ?: CivMap) {
     const material = new MeshBasicNodeMaterial();
     const eros = erosion.texture;
 
@@ -207,9 +208,53 @@ export class TerrainSurface {
     // lava and fire glow through whatever is on top
     const flicker = sin(uTime.mul(9).add(P.x.mul(700)).add(P.z.mul(500))).mul(0.2).add(0.8);
     lit = lit.add(vec3(3.2, 0.75, 0.08).mul(heat.mul(heat)).mul(flicker).mul(e2.r.mul(0.8).add(0.6)));
-    // settlement light on the night side (the nation map replaces this later)
-    const lamp = pow(X.r, 1.3).mul(e2.r.mul(1.4).add(0.3)).mul(float(1).sub(day));
-    lit = lit.add(vec3(2.4, 1.5, 0.55).mul(lamp));
+    // ---- civilization: city light in each nation's own colour, roads, and (with the Night Map on) borders
+    if (civ) {
+      const CA: N = samplePlanet(civ.a, dir);
+      const CB: N = samplePlanet(civ.b, dir);
+      const RD: N = samplePlanet(civ.roads.texture, dir);
+      const strongest = max(max(CA.r, CA.g), CA.b);
+      const hue: N = CA.rgb.div(max(strongest, 0.04));
+      const claimed = smoothstep(0.1, 0.45, strongest);
+      const nightAmt = float(1).sub(day);
+      const landMask = smoothstep(-0.01, 0.03, above);
+      const glowI: N = CA.a;
+      // roads first: cities stretch out along them
+      const roadDist: N = RD.rgb.sub(0.5).mul(2 * civ.roads.range).length();
+      const code = RD.a.mul(255);
+      const isRoad = smoothstep(0.5, 1.5, code).mul(float(1).sub(smoothstep(127, 128, code)));
+      const importance = code.div(127).clamp(0, 1);
+      const roadW = importance.mul(0.00022).add(0.00012);
+      const px = camDist.mul(0.0011);
+      const roadLine = smoothstep(roadW.add(px), roadW.mul(0.4), roadDist).mul(isRoad).mul(roadW.div(roadW.add(px.mul(0.6))).clamp(0.45, 1)).mul(landMask);
+      const roadNear = float(1).sub(smoothstep(roadW.mul(4), roadW.mul(30), roadDist)).mul(isRoad);
+      // a dense core that breaks up toward the edge into blocks, threads and scattered points
+      const coarse = smoothstep(0.3, 0.7, e1.r);
+      const reachI = glowI.mul(coarse.mul(0.8).add(0.5)).add(glowI.mul(roadNear).mul(0.6));
+      const fray = e2.r.mul(0.6).add(e3.r.mul(0.4));
+      const lower = float(0.66).sub(reachI.mul(0.8));
+      const built = smoothstep(lower, lower.add(0.18), fray).mul(smoothstep(0.0, 0.04, glowI));
+      const streets = pow(float(1).sub(abs(e3.r.mul(2).sub(1))), 5).mul(1.6).add(pow(float(1).sub(abs(e2.r.mul(2).sub(1))), 7));
+      const tech: N = CB.g;
+      const fire = float(1).sub(smoothstep(0.35, 0.55, tech)).mul(sin(uTime.mul(7).add(P.x.mul(900)).add(P.z.mul(1300))).mul(0.25));
+      const warFlick = float(1).sub(CB.b.mul(sin(uTime.mul(11).add(P.y.mul(1700)).add(e2.r.mul(30))).mul(0.5).add(0.5)).mul(0.9));
+      const alive = float(1).sub(CB.a.mul(0.95)).mul(warFlick);
+      const cityLight = built.mul(streets.add(0.12)).mul(pow(reachI.min(1), 0.8).mul(0.65).add(0.35)).mul(fire.add(1)).mul(alive).mul(landMask);
+      const traffic = e3.r.mul(0.8).add(0.5);
+      lit = mix(lit, lit.mul(0.6).add(sandC.mul(0.35).mul(day)), roadLine.mul(0.5).mul(day));
+      const roadLight = roadLine.mul(importance.mul(0.6).add(0.4)).mul(traffic).mul(alive).mul(0.9);
+      lit = lit.add(hue.mul(cityLight.mul(1.25).add(roadLight)).mul(nightAmt));
+      // the Night Map: borders as fine bright lines, and a faint wash of each nation's colour over its land
+      const border = float(1).sub(smoothstep(0.2, 0.42, CB.r));
+      const frontier = float(1).sub(smoothstep(0.6, 0.78, CB.r)).mul(0.3);
+      const lineAmt = max(border, frontier).mul(landMask).mul(uNightMap);
+      lit = lit.add(hue.mul(claimed).mul(0.03).mul(uNightMap).mul(landMask));
+      lit = mix(lit, hue.mul(1.5).add(0.12), lineAmt.mul(0.9));
+    }
+    // data overlays replace the surface colour but keep the shape of the land readable
+    const OV: N = samplePlanet(data.overlay, dir);
+    const relief = max(dot(Nrm, normalize(dir.add(t1.mul(0.6)).add(t2.mul(0.3)))), 0).mul(0.6).add(0.45);
+    lit = mix(lit, OV.rgb.mul(OV.rgb).mul(relief), uOverlay);
     // aerial perspective: distant ground takes on the colour of the air
     const rim = pow(float(1).sub(max(dot(dir, V), 0)), 3);
     const far = smoothstep(0.03, 0.9, camDist);

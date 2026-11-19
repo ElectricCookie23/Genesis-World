@@ -1,7 +1,7 @@
 import { SPEEDS } from '../shared/protocol';
 import { actions, togglePanel, useStore } from './store';
 import { bigNumber, formatYear } from './format';
-import { Chronicle, CreatureCard, CrossSection, Designer, FlatMap, GodTools, Graphs, Guide, Help, Num, Peoples, Settings, SpeciesCard, Tree, Why } from './panels';
+import { Chronicle, CreatureCard, CrossSection, Designer, FlatMap, GodTools, Graphs, Guide, Help, NationLabels, Num, Peoples, Settings, SpeciesCard, Tree, Why } from './panels';
 import css from './ui.module.css';
 
 const STAGE: Record<string, string> = { barren: 'lifeless', microbes: 'microbes', algae: 'algae seas', animals: 'living world' };
@@ -19,6 +19,7 @@ export function App() {
   const last = s.chronicle.length ? s.events[s.chronicle[s.chronicle.length - 1]!] : undefined;
   return (
     <div class={css.root}>
+      {!s.opening && s.overlay === 'nations' && <NationLabels />}
       {!s.opening && (
         <div class={`${css.fade} ${hidden ? css.hidden : ''}`}>
           <div class={`${css.panel} ${css.top}`}>

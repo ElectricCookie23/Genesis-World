@@ -6,7 +6,7 @@ import {
 import { dot, float, length, mx_fractal_noise_float, normalize, positionLocal, positionWorld, smoothstep, vec3 } from 'three/tsl';
 import type { Grid } from '../sim/world';
 import { nearestCell } from '../sim/world';
-import type { CellSnapshot, WorldStats } from '../shared/protocol';
+import type { CellSnapshot, WorldStats, SettlementInfo } from '../shared/protocol';
 import { hashSeed } from '../sim/rng';
 import { PlanetMesh } from './planet';
 import { OceanSurface } from './gfx/ocean';
@@ -27,9 +27,11 @@ import { ErosionBake } from './gfx/erosion';
 import { TerrainSurface } from './gfx/terrain';
 import { GroundSampler } from './gfx/ground';
 import { RiverMap } from './gfx/rivermap';
+import { CivMap, uNightMap } from './gfx/civmap';
+import type { Nation } from './gfx/nations';
 import { hashSeed as seedHash } from '../sim/rng';
 import type { HerdSnapshot, PlantInfo, SpeciesInfo } from '../shared/protocol';
-import { EXAG, MOON_DISTANCE, uBolts, uFlash, uRing, uSun2, uSun2Dir, uUnderwater, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime, uOceanFill } from './common';
+import { EXAG, MOON_DISTANCE, uBolts, uFlash, uRing, uSun2, uSun2Dir, uUnderwater, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime, uOceanFill, uOverlay } from './common';
 
 export type Quality = 'low' | 'medium' | 'high' | 'ultra';
 
@@ -54,6 +56,7 @@ export class GenesisScene {
   oceanResolution = 256;
   clouds?: VolumetricClouds;
   cloudNoiseSize = 64;
+  cloudLightSteps = 4;
   vegetation?: Vegetation;
   creatures?: CreatureLayer;
   rivers?: Rivers;
@@ -62,6 +65,7 @@ export class GenesisScene {
   terrain?: TerrainSurface;
   ground?: GroundSampler;
   riverMap?: RiverMap;
+  civ?: CivMap;
   riverSize = 512;
   shadowSteps = 8;
   /** Resolution of the baked planet maps per cube face, and of the erosion bake. Set before setGrid. */
@@ -164,11 +168,12 @@ export class GenesisScene {
     this.data = new PlanetData(grid, this.dataSize);
     this.erosion = new ErosionBake(this.erosionSize, this.erosionIterations, seedHash(`erosion:${seed}`));
     this.ground = new GroundSampler(grid);
-    this.clouds = new VolumetricClouds(this.data.life, seedHash(`clouds:${seed}`), this.cloudNoiseSize);
+    this.civ = new CivMap(grid, this.data.bake, this.riverSize);
+    this.clouds = new VolumetricClouds(this.data.life, seedHash(`clouds:${seed}`), this.cloudNoiseSize, this.cloudLightSteps, this.civ.a);
     setCloudShadow(this.clouds.shadow);
     this.riverMap = new RiverMap(grid, this.riverSize);
-    this.ocean = new OceanSurface(this.data, this.clouds.shadow, this.erosion.texture, this.oceanResolution, seedHash(`ocean:${seed}`));
-    this.terrain = new TerrainSurface(this.data, this.erosion, this.riverMap, 32, 800, this.shadowSteps, { node: this.ocean.causticNode, tile: this.ocean.causticTile });
+    this.ocean = new OceanSurface(this.data, this.clouds.shadow, this.erosion.texture, this.oceanResolution, seedHash(`ocean:${seed}`), this.civ);
+    this.terrain = new TerrainSurface(this.data, this.erosion, this.riverMap, 32, 800, this.shadowSteps, { node: this.ocean.causticNode, tile: this.ocean.causticTile }, this.civ);
     this.scene.add(this.terrain.sphere.mesh);
     this.planet.mesh.visible = false;
     this.scene.add(this.planet.mesh, this.ocean.sphere.mesh, this.clouds.mesh);
@@ -228,6 +233,7 @@ export class GenesisScene {
     this.ground?.setCells(cells.elevation, cells.seaLevel);
     this.riverMap?.update(cells, performance.now(), first);
     this.planet.update(cells, first);
+    if (this.overlayOn) this.data?.setOverlay(this.planet.cellColors);
     this.vegetation?.setCells(cells);
     this.creatures?.setCells(cells);
     this.rivers?.update(cells, performance.now(), first || cells.terrainChanged);
@@ -253,7 +259,33 @@ export class GenesisScene {
     return false;
   };
 
+  private speciesMap = new Map<number, SpeciesInfo>();
+  /** Called when the list of nations was rebuilt. */
+  onNations?: (nations: Nation[]) => void;
+  setSettlements(list: SettlementInfo[]): void {
+    this.civ?.setSettlements(list);
+  }
+  /** A war or plague event at a settlement's cell. */
+  civUnrest(cell: number, kind: 'war' | 'plague'): void {
+    this.civ?.disturb(cell, kind);
+  }
+  private projTmp = new Vector3();
+  /** Where a direction on the globe falls on screen (CSS pixels), and how visible it is (0 behind the planet). */
+  projectDir(x: number, y: number, z: number): [number, number, number] {
+    const cam = this.cam.camera;
+    const camR = cam.position.length();
+    const facing = (x * cam.position.x + y * cam.position.y + z * cam.position.z) / camR;
+    const p = this.projTmp.set(x, y, z).project(cam);
+    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    const vis = p.z < 1 && Math.abs(p.x) < 1.05 && Math.abs(p.y) < 1.05 ? Math.max(0, Math.min(1, (facing - 1 / camR) * 6)) : 0;
+    return [(p.x * 0.5 + 0.5) * w, (-p.y * 0.5 + 0.5) * h, vis];
+  }
+  setNightMap(on: boolean): void {
+    uNightMap.value = on ? 1 : 0;
+  }
+
   setSpecies(species: Map<number, SpeciesInfo>): void {
+    this.speciesMap = species;
     if (!this.creatures) return;
     this.creatures.setSpecies(species);
     for (const m of this.creatures.prune()) this.scene.remove(m);
@@ -302,7 +334,11 @@ export class GenesisScene {
     this.planet.overlay = mode;
     this.planet.colorblind = colorblind;
     if (this.lastCells) this.planet.update(this.lastCells, false);
+    this.overlayOn = mode !== 'none';
+    uOverlay.value = this.overlayOn ? 1 : 0;
+    if (this.overlayOn) this.data?.setOverlay(this.planet.cellColors);
   }
+  private overlayOn = false;
 
   /** Unit direction on the planet under a screen point, or null if the point misses it. */
   pick(clientX: number, clientY: number): Vector3 | null {
@@ -486,6 +522,7 @@ export class GenesisScene {
     // the erosion bake runs a few iterations a frame until it is done, then the terrain keeps its result
     if (this.erosion && !this.erosion.finished) this.erosion.step(this.renderer, this.erosionPerFrame);
     else if (this.erosion && this.ground) void this.ground.readDetail(this.renderer, this.erosion);
+    if (this.civ?.update(this.lastCells, this.speciesMap, performance.now(), dt)) this.onNations?.(this.civ.nations);
     this.terrain?.update(this.cam.camera.position);
     this.ocean?.update(this.renderer, this.cam.camera.position, this.time, this.keepSeaPatch);
     this.vegetation?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist);

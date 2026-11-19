@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import type { Nation } from '../render/gfx/nations';
 import { G, GENE_NAMES } from '../sim/genetics';
 import type { SimEvent } from '../sim/events';
 import type { SpeciesInfo } from '../shared/protocol';
@@ -445,6 +446,70 @@ export function Guide() {
 }
 
 /** The peoples of the world: every settlement, its size, and what it believes. */
+const css3 = (c: [number, number, number], k = 1): string => `rgb(${c.map((v) => Math.round(255 * Math.pow(Math.max(0, Math.min(1, v * k)), 1 / 2.2))).join(',')})`;
+
+/** A nation's flag: a simple geometric design in its two colours. */
+export function EmblemSvg({ nation, size = 22 }: { nation: Nation; size?: number }) {
+  const a = css3(nation.signature, 0.85), b = css3(nation.accent, 0.8), ink = '#f4efe2';
+  const e = nation.emblem;
+  const W = 30, H = 20;
+  const star = (cx: number, cy: number, r: number, n: number) => Array.from({ length: n * 2 }, (_, i) => { const rr = i % 2 ? r * 0.45 : r, t = (i * Math.PI) / n - Math.PI / 2; return `${cx + Math.cos(t) * rr},${cy + Math.sin(t) * rr}`; }).join(' ');
+  return (
+    <svg width={size * 1.5} height={size} viewBox={`0 0 ${W} ${H}`} style={{ borderRadius: 2, boxShadow: '0 0 0 1px rgba(255,255,255,0.25)', flex: 'none' }}>
+      <rect width={W} height={H} fill={a} />
+      {e.division === 1 && <rect x={W / 2} width={W / 2} height={H} fill={b} />}
+      {e.division === 2 && <rect y={H / 2} width={W} height={H / 2} fill={b} />}
+      {e.division === 3 && <polygon points={`0,${H} ${W},0 ${W},${H}`} fill={b} />}
+      {e.division === 4 && <><rect x={W / 2} width={W / 2} height={H / 2} fill={b} /><rect y={H / 2} width={W / 2} height={H / 2} fill={b} /></>}
+      {e.division === 5 && <rect x={2.5} y={2.5} width={W - 5} height={H - 5} fill="none" stroke={b} stroke-width={2.5} />}
+      {e.charge === 0 && <circle cx={W / 2} cy={H / 2} r={4.5} fill={ink} />}
+      {e.charge === 1 && <circle cx={W / 2} cy={H / 2} r={4.5} fill="none" stroke={ink} stroke-width={1.8} />}
+      {e.charge === 2 && <polygon points={star(W / 2, H / 2, 6, e.points)} fill={ink} />}
+      {e.charge === 3 && <polygon points={`${W / 2},4 ${W / 2 + 6},15 ${W / 2 - 6},15`} fill={ink} />}
+      {e.charge === 4 && <polygon points={`${W / 2},3.5 ${W / 2 + 5.5},10 ${W / 2},16.5 ${W / 2 - 5.5},10`} fill={ink} />}
+      {e.charge === 5 && <path d={`M ${W / 2 + 2} 4 A 6 6 0 1 0 ${W / 2 + 2} 16 A 4.6 4.6 0 1 1 ${W / 2 + 2} 4`} fill={ink} />}
+      {e.charge === 6 && <>{[-6, 0, 6].map((dx) => <circle cx={W / 2 + dx} cy={H / 2} r={1.9} fill={ink} />)}</>}
+      {e.charge === 7 && <rect x={5} y={H / 2 - 1.6} width={W - 10} height={3.2} fill={ink} />}
+    </svg>
+  );
+}
+
+/** Names and emblems of nations floating over their capitals while the Night Map is on. */
+export function NationLabels() {
+  const s = useStore();
+  const ref = useRef<HTMLDivElement>(null);
+  const top = [...s.nations].sort((a, b) => b.pop - a.pop).slice(0, 14);
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const host = ref.current;
+      if (host) {
+        for (let i = 0; i < host.children.length; i++) {
+          const el = host.children[i] as HTMLElement;
+          const n = top[i];
+          if (!n) continue;
+          const [x, y, vis] = actions.project(n.dir[0], n.dir[1], n.dir[2]);
+          el.style.opacity = String(vis);
+          el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -130%)`;
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  });
+  return (
+    <div ref={ref} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+      {top.map((n) => (
+        <div key={n.capital} style={{ position: 'absolute', left: 0, top: 0, opacity: 0, display: 'flex', alignItems: 'center', gap: '7px', whiteSpace: 'nowrap', fontFamily: "'Cormorant Garamond', 'Cormorant', Georgia, serif", fontSize: `${Math.round(15 + Math.min(9, Math.log10(1 + n.pop) * 2.2))}px`, letterSpacing: '0.06em', color: '#f4efe2', textShadow: '0 1px 6px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.9)', transition: 'opacity 0.4s' }}>
+          <EmblemSvg nation={n} size={15} />
+          <span>{n.name}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function Peoples() {
   const s = useStore();
   const live = s.settlements.filter((x) => x.ruined < 0).sort((a, b) => b.tech * 10 + Math.log(b.pop + 1) - (a.tech * 10 + Math.log(a.pop + 1))).slice(0, 60);
@@ -455,6 +520,22 @@ export function Peoples() {
       <div class={css.head}><h2>Peoples</h2><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
       <div class={css.scroll}>
         {s.settlements.length === 0 && <p class={css.sub}>No one has lit a fire yet. In some worlds, no one ever does.</p>}
+        {s.nations.length > 0 && <div class={css.sub} style={{ margin: '4px 0 6px' }}>NATIONS</div>}
+        {[...s.nations].sort((a, b) => b.pop - a.pop).slice(0, 24).map((n) => {
+          const cap = s.settlements.find((x) => x.id === n.capital);
+          const sp = s.species.get(n.species);
+          return (
+            <div key={`n${n.capital}`} style={{ display: 'flex', gap: '10px', alignItems: 'center', margin: '0 0 9px' }}>
+              <EmblemSvg nation={n} size={24} />
+              <div style={{ minWidth: 0 }}>
+                <div class={css.what} style={{ color: '#ece7db' }}>{n.name}</div>
+                <div class={css.when} style={{ color: '#cfc9bd' }}>{n.members.length} {n.members.length === 1 ? 'settlement' : 'settlements'}, {bigNumber(n.pop * 1000)} {sp ? sp.name : 'people'}. Capital: {cap ? cap.name : 'unknown'}. <span style={{ color: css3(n.color, 1.1) }}>●</span> its lights</div>
+              </div>
+              {cap && <button class={css.link} style={{ marginLeft: 'auto' }} onClick={() => { actions.setOverlay('nations'); actions.flyToCell(cap.cell, 1.2); }}>map</button>}
+            </div>
+          );
+        })}
+        {s.nations.length > 0 && <div class={css.sub} style={{ margin: '12px 0 4px' }}>SETTLEMENTS</div>}
         {live.map((st) => {
           const sp = s.species.get(st.species);
           const belief = s.events[st.belief];
@@ -560,7 +641,7 @@ export function Settings() {
         <div class={css.row}><span>Colour-blind safe overlays</span><button class={css.btn} onClick={() => actions.setColorblind(!s.colorblind)}>{s.colorblind ? 'on' : 'off'}</button></div>
         <div class={css.row}>
           <span>Overlay (O)</span>
-          <span>{(['none', 'temp', 'rain', 'life', 'people', 'fossils'] as const).map((o) => <button class={css.btn} style={{ marginLeft: 4, opacity: s.overlay === o ? 1 : 0.55 }} onClick={() => actions.setOverlay(o)}>{o}</button>)}</span>
+          <span>{(['none', 'temp', 'rain', 'life', 'people', 'fossils', 'nations'] as const).map((o) => <button class={css.btn} style={{ marginLeft: 4, opacity: s.overlay === o ? 1 : 0.55 }} onClick={() => actions.setOverlay(o)}>{o}</button>)}</span>
         </div>
         <div class={css.sub} style={{ margin: '12px 0 2px' }}>CAMERA AND KEEPSAKES</div>
         <div class={css.row}>

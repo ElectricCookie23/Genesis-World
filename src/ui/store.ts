@@ -2,9 +2,10 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
 import type { PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
+import type { Nation } from '../render/gfx/nations';
 
 export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section';
-export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils';
+export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations';
 
 export interface UIState {
   stats: WorldStats | null;
@@ -42,6 +43,8 @@ export interface UIState {
   reducedMotion: boolean;
   slots: SlotInfo[];
   settlements: SettlementInfo[];
+  /** Nations derived from the settlements (name, colours, emblem), for the Night Map and the Peoples panel. */
+  nations: Nation[];
   timeline: TimelinePoint[];
   overlay: Overlay;
   colorblind: boolean;
@@ -91,6 +94,7 @@ export const state: UIState = {
   reducedMotion: false,
   slots: [],
   settlements: [],
+  nations: [],
   timeline: [],
   overlay: 'none',
   colorblind: false,
@@ -155,6 +159,8 @@ export const actions = {
   drawSection: (_canvas: HTMLCanvasElement) => {},
   familyOf: (_key: number): string[] => [],
   fork: () => {},
+  /** Screen position of a direction on the globe: [x, y, visible 0..1]. */
+  project: (_x: number, _y: number, _z: number): [number, number, number] => [0, 0, 0],
 };
 
 export function togglePanel(p: Panel): void {

@@ -104,7 +104,7 @@ export class VolumetricClouds {
   /** Light reaching a point on the ground or sea (1 = full sun). */
   readonly shadow: (p: N) => N;
 
-  constructor(cover: CubeTexture, seed: number, noiseSize = 64, lightSteps = 4) {
+  constructor(cover: CubeTexture, seed: number, noiseSize = 64, lightSteps = 4, cityLight?: CubeTexture) {
     this.noise = buildCloudNoise(noiseSize, seed);
     const noise = this.noise;
     const L: N = uSunDir, M: N = uMoonDir;
@@ -248,7 +248,14 @@ export class VolumetricClouds {
               const dv = p.sub(bb.xyz.mul(CLOUD_BASE + THICK * 0.3));
               flash = flash.add(exp(dot(dv, dv).mul(-2200)).mul(bb.w));
             }
-            const light = sunLit.add(skyLit).add(moonLit).add(glow).add(vec3(0.75, 0.83, 1.0).mul(flash).mul(5));
+            // cities under cloud light it softly from below, in their own colour
+            let city: N = vec3(0, 0, 0);
+            if (cityLight) {
+              const CA: N = (samplePlanet(cityLight, dir) as any).level(0);
+              const top = max(max(CA.r, CA.g), CA.b);
+              city = CA.rgb.div(max(top, 0.04)).mul(pow(CA.a, 1.4)).mul(float(1).sub(hN).pow(2)).mul(float(1).sub(day)).mul(0.5);
+            }
+            const light = sunLit.add(skyLit).add(moonLit).add(glow).add(city).add(vec3(0.75, 0.83, 1.0).mul(flash).mul(5));
             const a = float(1).sub(exp(d.mul(ds).mul(-SIGMA)));
             C.addAssign(light.mul(a).mul(T));
             T.mulAssign(float(1).sub(a));

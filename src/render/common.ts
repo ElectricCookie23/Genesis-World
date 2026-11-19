@@ -47,3 +47,5 @@ export const uRing = uniform(0);
 export const uSeaGlow = uniform(0.35);
 /** 1 when the camera is under water. */
 export const uUnderwater = uniform(0);
+/** 0..1: how strongly the data overlay (temperature, rain, life, people) covers the surface. */
+export const uOverlay = uniform(0);
