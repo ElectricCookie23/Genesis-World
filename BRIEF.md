@@ -95,6 +95,12 @@ The "Why did this happen?" panel walks this graph backward and shows it as a ver
 
 ## 3. GRAPHICS AND ART DIRECTION
 
+> **Superseded (owner's direction).** The art direction below (stylized low-poly diorama, Earth-like colours) has been replaced. The current direction is in `docs/GRAPHICS_BRIEF.md`:
+> 1. **It is an alien world, not Earth.** Its own star, sky, seas, rocks, life and nations. Colours come from the simulation and the seed (star type, air composition, minerals, plant pigments), never from Earth defaults.
+> 2. **High-fidelity, cinematic 3D** at every scale, not low-poly: smooth quadtree LOD terrain with per-pixel PBR materials and GPU-eroded detail, FFT ocean, volumetric clouds, multiple-scattering atmosphere, readable night side with nations as coloured networks of light, translucent aurora curtains, real plant and creature detail, TAA.
+>
+> Rules: full techniques on WebGL2 (ping-pong render targets, history buffer), quadtree LOD instead of tessellation, WebGPU optional, WebGL2 must match on High. The original text is kept below for reference only.
+
 The look sets the tone for everything. Spend real effort here.
 
 ### Overall style

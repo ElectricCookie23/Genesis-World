@@ -22,7 +22,7 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 
 | Step | What | Status | Notes |
 |---|---|---|---|
-| 0 | "Before" screenshots of the eight fixed views | not started | |
+| 0 | "Before" screenshots of the eight fixed views | done | `docs/screenshots/before/`, seed amber-reef-101 at 150 My; night map uses test lights (no settlements yet at that age) |
 | 1 | Alien art direction: star type per seed, sky and sunlight from it, plant pigments, ocean minerals, tinted moon | not started | |
 | 2 | Planet: cube-map bake of sim data, quadtree cube-sphere LOD, GPU hydraulic erosion (ping-pong), per-pixel PBR materials with triplanar mapping | not started | |
 | 3 | Lighting and night side: moonlight, airglow, starlight fill, soft terminator, shadows, GTAO | not started | |
