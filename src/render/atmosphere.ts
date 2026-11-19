@@ -8,6 +8,7 @@ import {
 } from 'three/tsl';
 import { ATMO_RADIUS, MOON_RADIUS, uAtmo, uGradeTint, uHazeTint, uSkyAngle, uSun2, uSun2Dir, uSunDir, uTime } from './common';
 import { RNG } from '../sim/rng';
+import { uLook } from './gfx/look';
 import { makeNoise, fbm } from '../sim/noise';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -38,8 +39,11 @@ export function createAtmosphere(): Mesh {
     const hitPlanet = discP.greaterThan(0).and(tPlanet.greaterThan(0));
     const tFar = select(hitPlanet, min(tFarA, tPlanet), tFarA);
     const ds = max(tFar.sub(tNear), 0).div(STEPS);
-    const betaR = vec3(0.046, 0.108, 0.265).div(HR).mul(vec3(uHazeTint).div(vec3(0.42, 0.62, 1.0)));
-    const betaM = float(0.02 / HM);
+    // which colours the air scatters depends on what it is made of: uHazeTint carries the world's sky colour
+    // (shifted by era), and the strongest channel scatters about as much as blue does on Earth
+    const tint: N = vec3(uHazeTint);
+    const betaR = tint.div(max(max(tint.x, tint.y), tint.z)).pow(vec3(1.6, 1.6, 1.6)).mul(0.25).mul(uLook.air).div(HR);
+    const betaM = float(0.02 / HM).mul(uLook.air);
     const sumR = vec3(0).toVar();
     const sumM = float(0).toVar();
     const odR = float(0).toVar();
@@ -75,7 +79,7 @@ export function createAtmosphere(): Mesh {
     const phaseM = float((3 / (8 * Math.PI)) * (1 - g * g)).mul(mu.mul(mu).add(1))
       .div(float(2 + g * g).mul(pow(float(1 + g * g).sub(mu.mul(2 * g)), 1.5)));
     const color = sumR.mul(betaR).mul(phaseR).add(sumM.mul(betaM).mul(phaseM));
-    return color.mul(5).mul(uAtmo).mul(vec3(uGradeTint)).mul(select(discA.greaterThan(0), 1, 0));
+    return color.mul(5).mul(vec3(uLook.star)).mul(uAtmo).mul(vec3(uGradeTint)).mul(select(discA.greaterThan(0), 1, 0));
   });
   material.colorNode = scatter();
   const mesh = new Mesh(new SphereGeometry(ATMO_RADIUS, 96, 64), material);
@@ -113,7 +117,9 @@ export function createSky(): Mesh {
   const nebula = vec3(0.16, 0.07, 0.3).mul(pow(n1, 3)).add(vec3(0.03, 0.17, 0.22).mul(pow(n2, 3))).mul(0.16)
     .add(vec3(0.55, 0.5, 0.62).mul(band).mul(0.022).mul(n1.add(0.4)));
   const mu = dot(dir, uSunDir);
-  const sun = vec3(1.0, 0.93, 0.8).mul(smoothstep(0.99955, 0.9998, mu).mul(60).add(pow(max(mu, 0), 900).mul(3)).add(pow(max(mu, 0), 40).mul(0.12)));
+  // the star: its colour and apparent size depend on what kind of star it is
+  const edge = float(1).sub(float(0.00045).mul(uLook.starSize).mul(uLook.starSize));
+  const sun = vec3(uLook.star).mul(smoothstep(edge, edge.add(0.00025), mu).mul(60).add(pow(max(mu, 0), float(900).div(uLook.starSize)).mul(3)).add(pow(max(mu, 0), 40).mul(0.12)));
   // binary systems: a smaller, bluer companion sun
   const mu2 = dot(dir, uSun2Dir);
   const sun2 = vec3(0.75, 0.86, 1.0).mul(smoothstep(0.99975, 0.9999, mu2).mul(40).add(pow(max(mu2, 0), 1400).mul(2))).mul(uSun2);
@@ -155,7 +161,7 @@ export function createMoon(seed: number): Mesh {
   geo.computeVertexNormals();
   const material = new MeshBasicNodeMaterial();
   const ndl = max(dot(normalize(normalWorld), uSunDir), 0);
-  material.colorNode = attribute('color', 'vec3').mul(ndl.mul(1.5).add(0.012));
+  material.colorNode = attribute('color', 'vec3').mul(vec3(uLook.moon)).mul(vec3(uLook.star)).mul(ndl.mul(1.5).add(0.012));
   const mesh = new Mesh(geo, material);
   return mesh;
 }

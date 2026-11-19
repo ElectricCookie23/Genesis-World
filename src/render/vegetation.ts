@@ -104,6 +104,8 @@ export class Vegetation {
   private lastBuild = 0;
   private triCentre: Float32Array;
   maxInstances: number;
+  pigmentA: [number, number, number] = [0.1, 0.3, 0.1];
+  pigmentB: [number, number, number] = [0.3, 0.3, 0.05];
   /** Season signal: sun declination over axial tilt, -1..1 (0 when seasons are not shown). */
   autumn = 0;
 
@@ -250,7 +252,17 @@ export class Vegetation {
         const fruit = genes ? genes[PG.Fruit]! : 0;
         const flower = genes && fruit > 0.45 && hash(t * 97 + k * 13) < 0.25;
         if (flower) color.setHSL(genes![PG.FlowerHue]!, 0.75, 0.6);
-        else color.setHSL(hue + (hash(t + k * 5) - 0.5) * 0.04, 0.5 + 0.2 * (1 - leaf), kind === 'tuft' ? 0.36 : 0.22 + 0.12 * hash(t * 11 + k));
+        else {
+          // leaves use this world's pigments: the leaf-hue gene runs between the two the star allows
+          const tHue = Math.max(0, Math.min(1, (genes ? genes[PG.LeafHue]! : 0.5) + (hash(t + k * 5) - 0.5) * 0.18));
+          const lightness = (kind === 'tuft' ? 1.5 : 1) * (0.8 + 0.5 * hash(t * 11 + k));
+          color.setRGB(
+            (this.pigmentA[0] + (this.pigmentB[0] - this.pigmentA[0]) * tHue) * lightness,
+            (this.pigmentA[1] + (this.pigmentB[1] - this.pigmentA[1]) * tHue) * lightness,
+            (this.pigmentA[2] + (this.pigmentB[2] - this.pigmentA[2]) * tHue) * lightness,
+          );
+        }
+        void hue; void leaf;
         // autumn: where the cold season is coming, broad leaves turn gold and red, then brown
         if (kind === 'broadleaf' && this.autumn !== 0) {
           const lat = up.y;

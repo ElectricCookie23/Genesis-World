@@ -23,8 +23,8 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | Step | What | Status | Notes |
 |---|---|---|---|
 | 0 | "Before" screenshots of the eight fixed views | done | `docs/screenshots/before/`, seed amber-reef-101 at 150 My; night map uses test lights (no settlements yet at that age) |
-| 1 | Alien art direction: star type per seed, sky and sunlight from it, plant pigments, ocean minerals, tinted moon | not started | |
-| 2 | Planet: cube-map bake of sim data, quadtree cube-sphere LOD, GPU hydraulic erosion (ping-pong), per-pixel PBR materials with triplanar mapping | not started | |
+| 1 | Alien art direction: star type per seed, sky and sunlight from it, plant pigments, ocean minerals, tinted moon | in progress | `gfx/look.ts`: star type, air, seas, rocks, pigments, moon and aurora colours all derive from the seed and drive the atmosphere, sun, ocean, plants, moon and aurora. Not yet exposed in the UI or tied to sim eras |
+| 2 | Planet: cube-map bake of sim data, quadtree cube-sphere LOD, GPU hydraulic erosion (ping-pong), per-pixel PBR materials with triplanar mapping | in progress | Working and checked in software rendering: sim data baked to cube maps, quadtree cube-sphere (smooth silhouette), pipe-model erosion bake in ping-pong targets used as triplanar detail, per-pixel materials (strata rock, sand, soil, salt crust, plant cover, farmland, ash, sea bed and coral, snow and fractured ice), moonlight and airglow. To do: plants and creatures placed on the new ground, rivers in the surface, material textures at close range, shadows |
 | 3 | Lighting and night side: moonlight, airglow, starlight fill, soft terminator, shadows, GTAO | not started | |
 | 4 | Clouds: ray-marched volumetric clouds, types from the sim, shadows, lightning | not started | |
 | 5 | Ocean: FFT waves (ping-pong) driven by sim wind, foam, subsurface glow, reflections, underwater | not started | |

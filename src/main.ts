@@ -61,6 +61,10 @@ async function boot(): Promise<void> {
     fatal('Genesis needs WebGPU or WebGL2 to draw its planet. Please open it in a recent version of Chrome, Edge, Firefox or Safari.');
     return;
   }
+  // development switches for slow machines: smaller planet maps and a shorter erosion bake
+  if (params.get('dsize')) scene.dataSize = Number(params.get('dsize'));
+  if (params.get('esize')) scene.erosionSize = Number(params.get('esize'));
+  if (params.get('eiter')) scene.erosionIterations = Number(params.get('eiter'));
   scene.setPixelRatio(mobile ? 1 : 2);
   scene.plantBudget = mobile ? 15000 : 60000;
   scene.creatureBudget = mobile ? 1500 : 5000;

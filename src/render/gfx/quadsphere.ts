@@ -31,7 +31,7 @@ export interface PatchNodes {
 
 /** Nodes describing the current vertex of a patch. Use inside the material's positionNode. */
 export function patchNodes(): PatchNodes {
-  const patch: N = attribute('patch', 'vec4');
+  const patch: N = attribute('qpatch', 'vec4');
   const local: N = attribute('position', 'vec3');
   const u = patch.x.add(local.x.mul(patch.z)).mul(2).sub(1);
   const v = patch.y.add(local.y.mul(patch.z)).mul(2).sub(1);
@@ -84,7 +84,7 @@ export class QuadSphere {
     geometry.setIndex(index);
     this.patch = new InstancedBufferAttribute(new Float32Array(maxPatches * 4), 4);
     this.patch.setUsage(DynamicDrawUsage);
-    geometry.setAttribute('patch', this.patch);
+    geometry.setAttribute('qpatch', this.patch);
     this.mesh = new InstancedMesh(geometry, material, maxPatches);
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;

@@ -8,6 +8,7 @@ import type { Grid } from '../sim/world';
 import type { CellSnapshot } from '../shared/protocol';
 import { EXAG, uMoonDir, uOceanFill, uSeaGlow, uSeaKm, uSunDir, uTideKm, uTime, uHazeTint } from './common';
 import { cloudShadowAt } from './clouds';
+import { uLook } from './gfx/look';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export class OceanMesh {
@@ -56,15 +57,16 @@ export class OceanMesh {
     const ripple = mx_noise_vec3(P.mul(140).add(vec3(t.mul(0.35), t.mul(0.22), t.mul(-0.3))));
     const swell = mx_noise_vec3(P.mul(22).add(vec3(t.mul(-0.07), t.mul(0.05), t.mul(0.06))));
     const N = normalize(up.add(ripple.mul(windAmt.mul(0.05).add(0.022))).add(swell.mul(0.03)));
-    const shallow = vec3(0.05, 0.5, 0.5);
-    const mid = vec3(0.01, 0.14, 0.34);
-    const deep = vec3(0.003, 0.022, 0.1);
-    let water = mix(shallow, mid, float(1).sub(exp(depthNow.mul(-3.2))));
+    // the colour of this world's seas comes from what is dissolved in them
+    const shallow: any = vec3(uLook.oceanShallow);
+    const deep: any = vec3(uLook.oceanDeep);
+    const mid: any = mix(shallow, deep, 0.62);
+    let water: any = mix(shallow, mid, float(1).sub(exp(depthNow.mul(-3.2))));
     water = mix(water, deep, float(1).sub(exp(depthNow.mul(-0.55))));
     // plankton blooms stain the water green; by night they glow where the waves stir them
     const life: any = attribute('sealife', 'vec2');
     water = mix(water, vec3(0.05, 0.36, 0.22), life.x.mul(0.5));
-    const sunColor = mix(vec3(1.0, 0.36, 0.13), vec3(1.0, 0.95, 0.88), smoothstep(-0.05, 0.4, sunHeight));
+    const sunColor = mix(vec3(uLook.dusk), vec3(uLook.star), smoothstep(-0.05, 0.4, sunHeight));
     const shadow = cloudShadowAt(P, attribute('cloudCover', 'float'));
     const diffuse = max(dot(N, L), 0).mul(0.75).add(0.25).mul(day).mul(shadow);
     const fres = pow(float(1).sub(max(dot(N, V), 0)), 5).mul(0.96).add(0.04);

@@ -1,6 +1,7 @@
 // Shared sun, sky and night lighting for small objects (plants, creatures).
 import { Fn, dot, float, max, mix, normalize, smoothstep, vec3 } from 'three/tsl';
 import { uSunDir } from './common';
+import { uLook } from './gfx/look';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
@@ -10,10 +11,10 @@ export const surfaceLight = Fn(([n, p]: [N, N]) => {
   const up = normalize(p);
   const sunHeight = dot(up, uSunDir);
   const day = smoothstep(-0.12, 0.22, sunHeight);
-  const sunColor = mix(vec3(1.0, 0.36, 0.13), vec3(1.0, 0.95, 0.88), smoothstep(-0.05, 0.4, sunHeight));
+  const sunColor = mix(vec3(uLook.dusk), vec3(uLook.star), smoothstep(-0.05, 0.4, sunHeight));
   // soft wrap lighting so the shaded side of small objects stays readable
   const diffuse = max(dot(n, uSunDir).mul(0.5).add(0.5), 0).mul(day);
-  const sky = vec3(0.42, 0.52, 0.7).mul(0.42).mul(day).mul(dot(n, up).mul(0.35).add(0.65));
+  const sky = mix(vec3(uLook.sky), vec3(0.6, 0.6, 0.6), 0.45).mul(0.42).mul(day).mul(dot(n, up).mul(0.35).add(0.65));
   return sunColor.mul(diffuse).mul(1.2).add(sky).add(vec3(0.026, 0.038, 0.07).mul(dot(n, up).mul(0.4).add(0.6)));
 });
 

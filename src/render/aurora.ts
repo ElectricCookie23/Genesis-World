@@ -2,6 +2,7 @@
 import { AdditiveBlending, BufferAttribute, BufferGeometry, DoubleSide, Mesh, MeshBasicNodeMaterial } from 'three/webgpu';
 import { attribute, dot, float, mix, mx_fractal_noise_float, normalize, positionWorld, pow, sin, smoothstep, uniform, vec3 } from 'three/tsl';
 import { uSunDir, uTime } from './common';
+import { uLook } from './gfx/look';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /** 0 = none, 1 = normal, higher during solar events. */
@@ -43,7 +44,7 @@ export function createAuroras(): Mesh[] {
     const folds = mx_fractal_noise_float(vec3(uv.x.mul(7), t.mul(0.6), float(lat * 2)), 2, 2.0, 0.5).mul(0.5).add(0.5);
     const curtain = pow(rays, 1.6).mul(smoothstep(0.15, 0.6, folds)).add(folds.mul(0.18));
     const fade = smoothstep(0.0, 0.12, uv.y).mul(pow(float(1).sub(uv.y), 1.6));
-    const color = mix(vec3(0.1, 1.0, 0.45), vec3(0.55, 0.2, 0.95), smoothstep(0.25, 0.95, uv.y));
+    const color = mix(vec3(uLook.auroraLow), vec3(uLook.auroraHigh), smoothstep(0.25, 0.95, uv.y));
     const night = float(1).sub(smoothstep(-0.25, 0.2, dot(normalize(positionWorld), uSunDir)));
     material.colorNode = color.mul(curtain).mul(fade).mul(night.mul(0.94).add(0.04)).mul(uAurora).mul(4.2);
     const mesh = new Mesh(ring(pole, lat, 220), material);
