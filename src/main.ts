@@ -149,7 +149,8 @@ async function boot(): Promise<void> {
     const ratio = Math.min(window.devicePixelRatio || 1, q.ratio);
     scene.setPixelRatio(Math.max(0.75, ratio - (adaptive >= 2 ? 0.5 : 0) - (adaptive >= 5 ? 0.5 : 0)));
     scene.presetLive(state.quality, cut, false, march);
-    scene.post.set({ bloom: q.bloom && adaptive < 4, taa: q.taa && adaptive < 5, ao: q.ao && adaptive < 4, fringe: q.fringe });
+    // the lens fringe goes with anti-aliasing: on hard, aliased edges it reads as red and blue outlines
+    scene.post.set({ bloom: q.bloom && adaptive < 4, taa: q.taa && adaptive < 5, ao: q.ao && adaptive < 4, fringe: q.fringe && adaptive < 5 });
     scene.post.allowDof = state.quality !== 'low' && adaptive < 4;
     // blurred glass panels are costly on weak GPUs: use plain dark panels below the high preset
     document.documentElement.classList.toggle('lite', state.quality === 'low' || state.quality === 'medium' || adaptive >= 4);

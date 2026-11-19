@@ -178,7 +178,7 @@ export class OceanSurface {
     const power = mix(float(520), farPower.mul(1.6), far);
     const H: N = normalize(V.add(L));
     const nh = max(dot(Nrm, H), 0);
-    const fresnel = float(0.02).add(pow(float(1).sub(max(dot(Nrm, V), 0)), 5).mul(0.98).mul(mix(float(1), float(0.55), far)));
+    const fresnel = float(0.02).add(pow(float(1).sub(dot(Nrm, V).clamp(0, 1)), 5).mul(0.98).mul(mix(float(1), float(0.55), far)));
     const glint = pow(nh, power).mul(power.add(8)).mul(0.0398).mul(sunVis).mul(smoothstep(0.0, 0.06, dot(Nrm, L))).min(60);
     const Hm: N = normalize(V.add(M));
     const moonGlint = pow(max(dot(Nrm, Hm), 0), power).mul(power.add(8)).mul(0.0398).mul(moonUp).mul(night).mul(0.045).min(3);
@@ -252,7 +252,7 @@ export class OceanSurface {
     const OV: N = samplePlanet(data.overlay, dir);
     color = mix(color, OV.rgb.mul(OV.rgb).mul(0.85), select(frontFacing, uOverlay, float(0)));
     // aerial perspective, as on land
-    const rim = pow(float(1).sub(max(dot(dir, V), 0)), 3);
+    const rim = pow(float(1).sub(dot(dir, V).clamp(0, 1)), 3);
     const haze: N = vec3(uHazeTint).mul(day.mul(0.9).add(0.02));
     color = mix(color, haze, select(frontFacing, rim.mul(0.3).mul(smoothstep(0.03, 0.9, camDist)).add(uHazeAmount).clamp(0, 0.9), float(0)));
     material.colorNode = color;

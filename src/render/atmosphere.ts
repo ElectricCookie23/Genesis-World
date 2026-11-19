@@ -126,7 +126,7 @@ export function createSky(): Mesh {
   const stars = starLayer(sd, 70, band.mul(0.1).add(0.07)).add(starLayer(sd, 160, band.mul(0.22).add(0.1)).mul(0.5));
   const n1 = mx_fractal_noise_float(sd.mul(1.6), 4, 2.0, 0.55).mul(0.5).add(0.5);
   const n2 = mx_fractal_noise_float(sd.mul(2.3).add(vec3(11.0, 3.0, 7.0)), 4, 2.0, 0.55).mul(0.5).add(0.5);
-  const nebula = vec3(0.16, 0.07, 0.3).mul(pow(n1, 3)).add(vec3(0.03, 0.17, 0.22).mul(pow(n2, 3))).mul(0.16)
+  const nebula = vec3(0.16, 0.07, 0.3).mul(pow(max(n1, 0), 3)).add(vec3(0.03, 0.17, 0.22).mul(pow(max(n2, 0), 3))).mul(0.16)
     .add(vec3(0.55, 0.5, 0.62).mul(band).mul(0.022).mul(n1.add(0.4)));
   const mu = dot(dir, uSunDir);
   // the star: its colour and apparent size depend on what kind of star it is

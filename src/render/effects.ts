@@ -15,7 +15,7 @@ export function createDustDisc(): Mesh {
   const swirl = a.add(r.mul(2.2)).add(uTime.mul(0.35)).add(uDiscCollapse.mul(6));
   const q = vec3(swirl.cos().mul(r), swirl.sin().mul(r), uTime.mul(0.05));
   const n = mx_fractal_noise_float(q.mul(1.8), 5, 2.2, 0.55).mul(0.5).add(0.5);
-  const clumps = pow(mx_fractal_noise_float(q.mul(9), 3, 2.0, 0.5).mul(0.5).add(0.5), 5).mul(6);
+  const clumps = pow(mx_fractal_noise_float(q.mul(9), 3, 2.0, 0.5).mul(0.5).add(0.5).max(0), 5).mul(6);
   const outer = float(4.6).sub(uDiscCollapse.mul(3.9));
   const falloff = smoothstep(outer, outer.mul(0.35), r).mul(smoothstep(0.0, 0.5, r));
   const core = exp(r.mul(-2.6)).mul(3.5);

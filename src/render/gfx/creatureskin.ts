@@ -155,7 +155,7 @@ export function makeCreatureMaterial(data: PlanetData, erosionTex: Texture, clou
   const sunColor: N = mix(vec3(uLook.dusk), vec3(uLook.star), smoothstep(-0.05, 0.4, sunH));
   const sunVis = smoothstep(-0.08, 0.1, sunH).mul(cloudShadow(vBase)).mul(eclipseLight(vBase));
   const thin = is(zone, ZONE.membrane).add(is(zone, ZONE.bladder).mul(0.7));
-  const nv = max(dot(Nrm, V), 0);
+  const nv = dot(Nrm, V).clamp(0, 1); // clamped above too: a power of a slightly negative 1 - nv is not a number on a GPU
   // shifting colours on some skins, strongest at glancing angles
   const film: N = (cos as any)((vec3 as any)(0, 2.09, 4.19).add(nv.mul(9.4)).add(u.mul(12.6))).mul(0.5).add(0.5);
   albedo = mix(albedo, film, iri.mul(pow(float(1).sub(nv), 0.7)).mul(0.6).mul(patterned).clamp(0, 0.8));
