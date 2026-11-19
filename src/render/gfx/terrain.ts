@@ -1,6 +1,6 @@
 // The planet's surface: quadtree cube-sphere geometry displaced by the baked height map plus
 // GPU-eroded detail, shaded per pixel with materials blended from slope, height, moisture and temperature.
-import { MeshBasicNodeMaterial, type Vector3 } from 'three/webgpu';
+import { MeshBasicNodeMaterial, type Texture, type Vector3 } from 'three/webgpu';
 import {
   abs, cameraPosition, cross, dot, float, fract, max, min, mix, normalize, positionWorld, pow, reflect, select, sin, smoothstep, texture, varying, vec2, vec3,
 } from 'three/tsl';
@@ -22,6 +22,23 @@ const TILE_FINE = 70;
 const TILE_MICRO = 610;
 /** Stored slopes are 0.22 x d(height)/d(uv); see ErosionBake's output pass. */
 const SLOPE_UNIT = 1 / 0.22;
+
+/**
+ * Radius of the ground along a unit direction, for use in vertex shaders: the same baked elevation
+ * plus eroded detail that the terrain itself is displaced by. Anything placed with this stands exactly on the land.
+ */
+export function groundRadiusNode(data: PlanetData, erosionTex: Texture, dir: N): N {
+  const s = (uvn: N): N => (texture(erosionTex, uvn) as any).level(0);
+  const a = pow(abs(dir), vec3(4, 4, 4));
+  const w = a.div(a.x.add(a.y).add(a.z));
+  const tri = (scale: number): N => s(dir.zy.mul(scale)).r.mul(w.x).add(s(dir.xz.mul(scale)).r.mul(w.y)).add(s(dir.xy.mul(scale)).r.mul(w.z));
+  const elev: N = (samplePlanet(data.height, dir) as any).level(0).r;
+  const land = smoothstep(-0.25, 0.1, elev.sub(uSeaKm));
+  const coarse = mix(float(0.1), float(0.55), smoothstep(0.2, 3.5, elev.sub(uSeaKm))).mul(mix(float(0.3), float(1), land));
+  const fine = mix(float(0.012), float(0.04), land);
+  const h = elev.add(tri(TILE_COARSE).sub(0.5).mul(2).mul(coarse)).add(tri(TILE_FINE).sub(0.5).mul(2).mul(fine));
+  return float(1).add(h.mul(EXAG));
+}
 
 export class TerrainSurface {
   readonly sphere: QuadSphere;

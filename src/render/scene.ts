@@ -17,7 +17,7 @@ import { createAtmosphere, createMoon, createSky } from './atmosphere';
 import { createDustDisc, ParticleSystem } from './effects';
 import { OrbitCamera } from './camera';
 import { PostFX } from './postfx';
-import { Vegetation } from './vegetation';
+import { Flora } from './gfx/flora';
 import { CreatureLayer, type Individual } from './creatures';
 import { Rivers } from './rivers';
 import { AuroraVolume, uAurora } from './gfx/aurora';
@@ -58,7 +58,7 @@ export class GenesisScene {
   clouds?: VolumetricClouds;
   cloudNoiseSize = 64;
   cloudLightSteps = 4;
-  vegetation?: Vegetation;
+  vegetation?: Flora;
   creatures?: CreatureLayer;
   rivers?: Rivers;
   data?: PlanetData;
@@ -70,6 +70,9 @@ export class GenesisScene {
   aurora?: AuroraVolume;
   riverSize = 512;
   shadowSteps = 8;
+  /** Most real plant models and grass tufts drawn near the camera. */
+  plantModels = 1600;
+  grassBudget = 6000;
   /** Resolution of the baked planet maps per cube face, and of the erosion bake. Set before setGrid. */
   dataSize = 256;
   erosionSize = 512;
@@ -180,8 +183,7 @@ export class GenesisScene {
     this.scene.add(this.terrain.sphere.mesh);
     this.planet.mesh.visible = false;
     this.scene.add(this.planet.mesh, this.ocean.sphere.mesh, this.clouds.mesh);
-    this.vegetation = new Vegetation(grid, this.plantBudget);
-    this.vegetation.ground = this.ground;
+    this.vegetation = new Flora(grid, this.data, this.erosion.texture, this.clouds.shadow, this.plantBudget, this.plantModels, this.grassBudget);
     this.vegetation.pigmentA = this.look.pigmentA;
     this.vegetation.pigmentB = this.look.pigmentB;
     for (const m of this.vegetation.meshes) this.scene.add(m);
@@ -533,7 +535,7 @@ export class GenesisScene {
     uAurora.value = (0.8 + 0.3 * Math.sin(this.time * 0.037) + 0.2 * Math.sin(this.time * 0.011 + 1.3)) * this.solar * uAtmo.value;
     this.terrain?.update(this.cam.camera.position);
     this.ocean?.update(this.renderer, this.cam.camera.position, this.time, this.keepSeaPatch);
-    this.vegetation?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist);
+    this.vegetation?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist, this.cam.camera.position, this.renderer);
     const c = this.cam.camera;
     const far = c.position.length() + this.moonDistance + 4;
     c.far = far;

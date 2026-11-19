@@ -4,7 +4,7 @@ import {
 } from 'three/webgpu';
 import {
   Fn, Loop, attribute, cameraPosition, cos, dot, exp, float, floor, fract, length, max, min, mix, mx_fractal_noise_float, normalWorld, normalize,
-  positionLocal, positionWorld, pow, select, sin, smoothstep, sqrt, vec3,
+  positionLocal, positionWorld, pow, select, sin, smoothstep, sqrt, vec3, cameraFar, cameraNear, perspectiveDepthToViewZ, positionView, viewportDepthTexture,
 } from 'three/tsl';
 import { ATMO_RADIUS, MOON_RADIUS, uAtmo, uGradeTint, uHazeTint, uSkyAngle, uSun2, uSun2Dir, uSunDir, uTime } from './common';
 import { RNG } from '../sim/rng';
@@ -37,7 +37,9 @@ export function createAtmosphere(): Mesh {
     const discP = b.mul(b).sub(rr.sub(RP * RP));
     const tPlanet = b.negate().sub(sqrt(max(discP, 0)));
     const hitPlanet = discP.greaterThan(0).and(tPlanet.greaterThan(0));
-    const tFar = select(hitPlanet, min(tFarA, tPlanet), tFarA);
+    // air in front of solid things only: a tree trunk against the sky must not be fogged by the sky behind it
+    const tSolid: N = perspectiveDepthToViewZ(viewportDepthTexture(), cameraNear, cameraFar).div(normalize(positionView).z);
+    const tFar = min(select(hitPlanet, min(tFarA, tPlanet), tFarA), max(tSolid, tNear));
     const ds = max(tFar.sub(tNear), 0).div(STEPS);
     // which colours the air scatters depends on what it is made of: uHazeTint carries the world's sky colour
     // (shifted by era), and the strongest channel scatters about as much as blue does on Earth
