@@ -23,6 +23,7 @@ import { applyLook, worldLook, type WorldLook } from './gfx/look';
 import { PlanetData } from './gfx/planetdata';
 import { ErosionBake } from './gfx/erosion';
 import { TerrainSurface } from './gfx/terrain';
+import { GroundSampler } from './gfx/ground';
 import { hashSeed as seedHash } from '../sim/rng';
 import type { HerdSnapshot, PlantInfo, SpeciesInfo } from '../shared/protocol';
 import { EXAG, MOON_DISTANCE, uBolts, uFlash, uRing, uSun2, uSun2Dir, uUnderwater, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime } from './common';
@@ -54,6 +55,7 @@ export class GenesisScene {
   data?: PlanetData;
   erosion?: ErosionBake;
   terrain?: TerrainSurface;
+  ground?: GroundSampler;
   /** Resolution of the baked planet maps per cube face, and of the erosion bake. Set before setGrid. */
   dataSize = 256;
   erosionSize = 512;
@@ -153,6 +155,7 @@ export class GenesisScene {
     // the new surface: baked planet data, GPU-eroded detail, quadtree cube-sphere
     this.data = new PlanetData(grid, this.dataSize);
     this.erosion = new ErosionBake(this.erosionSize, this.erosionIterations, seedHash(`erosion:${seed}`));
+    this.ground = new GroundSampler(grid);
     this.terrain = new TerrainSurface(this.data, this.erosion);
     this.scene.add(this.terrain.sphere.mesh);
     this.planet.mesh.visible = false;
@@ -160,6 +163,7 @@ export class GenesisScene {
     this.clouds = new CloudLayer(grid);
     this.scene.add(this.planet.mesh, this.ocean.mesh, this.clouds.mesh);
     this.vegetation = new Vegetation(grid, this.plantBudget);
+    this.vegetation.ground = this.ground;
     this.vegetation.pigmentA = this.look.pigmentA;
     this.vegetation.pigmentB = this.look.pigmentB;
     for (const m of this.vegetation.meshes) this.scene.add(m);
@@ -202,7 +206,7 @@ export class GenesisScene {
     // the old ribbons sit on the old faceted ground; rivers return as part of the new surface
     this.rivers.mesh.visible = false;
     for (const a of createAuroras()) this.scene.add(a);
-    this.creatures = new CreatureLayer(grid, this.creatureBudget);
+    this.creatures = new CreatureLayer(grid, this.creatureBudget, this.ground!);
     this.creatures.onMesh = (m) => this.scene.add(m);
     void hashSeed(seed);
   }
@@ -211,6 +215,7 @@ export class GenesisScene {
     if (!this.planet || !this.ocean || !this.clouds) return;
     this.lastCells = cells;
     this.data?.update(cells, this.plantsForBake, first);
+    this.ground?.setCells(cells.elevation, cells.seaLevel);
     this.planet.update(cells, first);
     this.ocean.update(cells);
     this.clouds.update(cells);
@@ -253,7 +258,8 @@ export class GenesisScene {
   surfaceRadius(x: number, y: number, z: number): number {
     if (!this.grid || !this.lastElevation) return 1;
     this.lastCell = nearestCell(this.grid, x, y, z, this.lastCell);
-    const e = this.underwater ? this.lastElevation[this.lastCell]! : Math.max(this.lastElevation[this.lastCell]!, uSeaKm.value);
+    const h = this.ground ? this.ground.heightAt(x, y, z, this.lastCell) : this.lastElevation[this.lastCell]!;
+    const e = this.underwater ? h : Math.max(h, uSeaKm.value);
     return 1 + e * EXAG;
   }
 
@@ -451,6 +457,7 @@ export class GenesisScene {
     if (this.vegetation) this.vegetation.autumn = this.tilt > 0 ? this.declination / this.tilt : 0;
     // the erosion bake runs a few iterations a frame until it is done, then the terrain keeps its result
     if (this.erosion && !this.erosion.finished) this.erosion.step(this.renderer, this.erosionPerFrame);
+    else if (this.erosion && this.ground) void this.ground.readDetail(this.renderer, this.erosion);
     this.terrain?.update(this.cam.camera.position);
     this.vegetation?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist);
     const c = this.cam.camera;

@@ -16,6 +16,7 @@ import { buildRegions, type Regions } from '../sim/regions';
 import type { CellSnapshot, HerdSnapshot, SpeciesInfo } from '../shared/protocol';
 import { EXAG, uSeaKm, uTime } from './common';
 import { dayAmount, surfaceLight } from './lighting';
+import type { GroundSampler } from './gfx/ground';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -289,26 +290,11 @@ export class CreatureLayer {
   private chase = 0;
   mounds?: InstancedMesh;
   private moundData: { ind: Individual; size: number }[] = [];
-  private cellTriStart: Int32Array;
-  private cellTriList: Int32Array;
 
-  constructor(private grid: Grid, budget: number) {
+
+  constructor(private grid: Grid, budget: number, private ground: GroundSampler) {
     this.budget = budget;
     this.regions = buildRegions(grid);
-    // triangles around each cell, for exact ground height
-    const tris = grid.tris;
-    const start = new Int32Array(grid.count + 1);
-    for (let t = 0; t < tris.length; t++) start[tris[t]! + 1] = start[tris[t]! + 1]! + 1;
-    for (let i = 0; i < grid.count; i++) start[i + 1] = start[i + 1]! + start[i]!;
-    const fill = start.slice(0, grid.count);
-    const list = new Int32Array(tris.length);
-    for (let t = 0; t < tris.length; t++) {
-      const c = tris[t]!;
-      list[fill[c]!] = t - (t % 3);
-      fill[c] = fill[c]! + 1;
-    }
-    this.cellTriStart = start;
-    this.cellTriList = list;
   }
 
   setSpecies(species: Map<number, SpeciesInfo>): void {
@@ -504,46 +490,10 @@ export class CreatureLayer {
     return gone;
   }
 
-  /** Exact height of the faceted terrain along a direction: find the triangle under it and hit its plane. */
+  /** Height of the ground under a direction, from the shared ground sampler. */
   private groundRadius(ind: Individual, dir: Vector3): number {
-    const cells = this.cells!;
-    const { pos, neighbors, ncount, tris } = this.grid;
-    let cur = ind.cell;
-    let best = pos[cur * 3]! * dir.x + pos[cur * 3 + 1]! * dir.y + pos[cur * 3 + 2]! * dir.z;
-    for (let guard = 0; guard < 6; guard++) {
-      let moved = false;
-      for (let k = 0; k < ncount[cur]!; k++) {
-        const nb = neighbors[cur * 6 + k]!;
-        const d = pos[nb * 3]! * dir.x + pos[nb * 3 + 1]! * dir.y + pos[nb * 3 + 2]! * dir.z;
-        if (d > best) { best = d; cur = nb; moved = true; }
-      }
-      if (!moved) break;
-    }
-    ind.cell = cur;
-    const el = cells.elevation;
-    let bestR = 1 + el[cur]! * EXAG, bestIn = -Infinity;
-    for (let k = this.cellTriStart[cur]!; k < this.cellTriStart[cur + 1]!; k++) {
-      const t = this.cellTriList[k]!;
-      const ia = tris[t]!, ib = tris[t + 1]!, ic = tris[t + 2]!;
-      const ra = 1 + el[ia]! * EXAG, rb = 1 + el[ib]! * EXAG, rc = 1 + el[ic]! * EXAG;
-      const ax = pos[ia * 3]! * ra, ay = pos[ia * 3 + 1]! * ra, az = pos[ia * 3 + 2]! * ra;
-      const bx = pos[ib * 3]! * rb - ax, by = pos[ib * 3 + 1]! * rb - ay, bz = pos[ib * 3 + 2]! * rb - az;
-      const cx = pos[ic * 3]! * rc - ax, cy = pos[ic * 3 + 1]! * rc - ay, cz = pos[ic * 3 + 2]! * rc - az;
-      const nx = by * cz - bz * cy, ny = bz * cx - bx * cz, nz = bx * cy - by * cx;
-      const denom = nx * dir.x + ny * dir.y + nz * dir.z;
-      if (Math.abs(denom) < 1e-12) continue;
-      const r = (nx * ax + ny * ay + nz * az) / denom;
-      // barycentric test of the hit point
-      const px = dir.x * r - ax, py = dir.y * r - ay, pz = dir.z * r - az;
-      const d00 = bx * bx + by * by + bz * bz, d01 = bx * cx + by * cy + bz * cz, d11 = cx * cx + cy * cy + cz * cz;
-      const d20 = px * bx + py * by + pz * bz, d21 = px * cx + py * cy + pz * cz;
-      const inv = 1 / (d00 * d11 - d01 * d01);
-      const v = (d11 * d20 - d01 * d21) * inv, w = (d00 * d21 - d01 * d20) * inv;
-      const inside = Math.min(v, w, 1 - v - w);
-      if (inside > bestIn) { bestIn = inside; bestR = r; }
-      if (inside >= 0) break;
-    }
-    return bestR;
+    ind.cell = this.ground.cellAt(dir.x, dir.y, dir.z, ind.cell);
+    return this.ground.radiusAt(dir.x, dir.y, dir.z, ind.cell);
   }
 
   private place(ind: Individual, t: number, out: Vector3): void {

@@ -9,6 +9,7 @@ import type { CellSnapshot, PlantInfo } from '../shared/protocol';
 import { PG } from '../sim/genetics';
 import { EXAG, uTime } from './common';
 import { dayAmount, surfaceLight } from './lighting';
+import type { GroundSampler } from './gfx/ground';
 
 /** Merge simple geometries into one non-indexed geometry with vertex colours. */
 function merge(parts: { geo: BufferGeometry; color: [number, number, number]; sway: number }[]): BufferGeometry {
@@ -104,6 +105,7 @@ export class Vegetation {
   private lastBuild = 0;
   private triCentre: Float32Array;
   maxInstances: number;
+  ground?: GroundSampler;
   pigmentA: [number, number, number] = [0.1, 0.3, 0.1];
   pigmentB: [number, number, number] = [0.3, 0.3, 0.05];
   /** Season signal: sun declination over axial tilt, -1..1 (0 when seasons are not shown). */
@@ -241,6 +243,8 @@ export class Vegetation {
           pos[ia * 3 + 2]! * ra * w + pos[ib * 3 + 2]! * rb * u + pos[ic * 3 + 2]! * rc * v,
         );
         up.copy(p).normalize();
+        // stand on the real ground, eroded detail included
+        if (this.ground) p.copy(up).multiplyScalar(this.ground.radiusAt(up.x, up.y, up.z, near));
         q.setFromUnitVectors(Y, up);
         yaw.setFromAxisAngle(Y, h0 * 40);
         q.multiply(yaw);
