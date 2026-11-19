@@ -99,6 +99,13 @@ Not bugs, for the record: `stats.stage` stays "animals" by design once life is c
 
 Still open, for whoever gets to it: conifer and broadleaf leaves as flat cards (some hanging edge-on as spikes), the river draped over hills through a town, no streets in towns and buildings tilted or overlapping on slopes, hexagon-stepped borders, ball feet on small animals, a very dark night side from orbit, harsh snow-and-shadow speckle at 5 km, the white fog smudge over tree lines, the sea's diamond-grid pattern from 0.3, the flat looking-down view under water and plain-tube reef plants, bare ground under trees, Ultra's cost in a warped world, whether the dotted lines across the sea on the Night Map are shipping lanes, and the sky at altitude on WebGL2.
 
+**The latest GPU check could not be completed** ("Check of commit 6249d6c: not completed", top of `docs/GPU_REVIEW.md`), and two of its findings are for the build session:
+- On the build with E1 to E5, seed amber-reef-101: settlements appear at about 59 My and by 90 My none is live (698 records; 5,359 at 200 My, none live, `maxTech` 0, 0 nations). On `6766d4a` the same seed had 468 live settlements and 15 nations at 200 My. Read from `settlement.ruined < 0`, `stats.maxTech`, `state.nations`; if those changed meaning with the history model, that is the cause instead.
+- A scripted `warp` stops at each milestone and has to be re-sent, and `stats.simYear` reads 0.01 My for about a minute while it runs. Every check script and the reviewers' tooling stall on this: a way to say "run through" is needed.
+- The fix session has taken the third finding, holes in the land with lines across the sea (`retest5-webgpu-broadleaf-0.06.jpg`); not the quadtree running short (measured), cause not found yet.
+
+**Direction from the owner (2026-11-20), see `docs/DIRECTION_DRAFT.md`:** a goals mode as an optional feature, the game otherwise relaxed sandbox play with no energy or budget on tools; fun first, for teenagers to adults; Kerbal Space Program and SimEarth in feel. Open: whether to pause the expansion list. Assets still later.
+
 ## Graphics: still open
 - The first real-GPU review is in (see above). Colours, exposure, cloud cost, aurora and preset costs still need tuning from it.
 - Not built: screen-space reflections on water, parallax occlusion mapping, footprints, lens flare, ground fog, canopy texture on far terrain, glow cast on the ground by glowing plants, a WebGPU compute path (WebGL2-style passes run on both backends instead).

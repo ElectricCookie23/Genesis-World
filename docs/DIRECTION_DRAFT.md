@@ -1,6 +1,6 @@
 # Genesis: direction (draft for the owner to edit)
 
-Status: a draft written from a conversation with the owner on 2026-11-20. It is **not agreed yet** and changes nothing until the owner says so. It sits on the fix session's branch, not on `main`, so that it does not steer the build before then.
+Status: written from a conversation with the owner on 2026-11-20. The section "Decided by the owner" is agreed; the rest is the fix session's proposal and can be changed by the owner at any time.
 
 ## In one line
 
@@ -23,8 +23,8 @@ The first brief says Genesis is "a living simulation you watch and poke at, not 
 
 ## Four pillars
 
-1. **You act, the planet answers.** A proper set of planet tools: raise and sink land, steer climate, seed and move life, nudge a species, strike with a meteor, found or spare a people. Each has a cost and a visible consequence.
-2. **Missions with stakes.** Short, optional goals with a clear win and many ways to fail: get something to fly, bring life back after an impact, carry a civilization through an ice age, reach the space age on a world with no metal. A handful to start, more later, and a free sandbox for those who want none.
+1. **You act, the planet answers.** A proper set of planet tools: raise and sink land, steer climate, seed and move life, nudge a species, strike with a meteor, found or spare a people. Each is free to use and has a visible consequence.
+2. **Missions with stakes, as an optional mode.** Short goals with a clear win and many ways to fail: get something to fly, bring life back after an impact, carry a civilization through an ice age, reach the space age on a world with no metal. A handful to start, more later, and a free sandbox for those who want none.
 3. **Why did that happen?** After a success or a collapse, the game shows the chain of causes it already records for every extinction, new species and war, in plain words, with a note on where the same thing happened on Earth. Then it offers to rewind and try again. Rewind and "what if" forks already exist.
 4. **Make it and share it.** A creature you designed, a world you shaped, a mission you beat, a disaster worth showing: each can be shared as a link that opens the same world, or as a picture or clip. Seed links, postcards and GIF export already exist.
 
@@ -47,14 +47,24 @@ Stylised and clean rather than realistic, and readable at a glance. What it lack
 ## First steps, in order
 
 1. A mission framework and five starter missions, each with a win condition, failure messages and a debrief.
-2. The planet tools gathered into one clear toolbar, with costs.
+2. The planet tools gathered into one clear toolbar (free to use).
 3. The debrief panel: the chain of causes for the last big event, and "rewind to here".
 4. A simple creature designer: set a few traits, release it, follow its descendants.
 5. A look pass on plants, ground and buildings.
 
+## Decided by the owner (2026-11-20)
+
+In their words: "i want the game to have a feature where you could play with goals, but for the most part it could be fun and games and chill with no energy or whatever."
+
+- **Goals are a feature, not the frame.** Missions exist as an optional mode. The default is relaxed sandbox play.
+- **No energy or budget.** Tools are free. Nothing meters what the player may do.
+- Audience: teenagers, college students and adults. Fun first; anything educational comes from play.
+- Feel: a hybrid in the direction of Kerbal Space Program and SimEarth.
+- Platform: a download is acceptable as long as it stays easy to share; the browser version remains the base.
+- The owner also said the sessions may proceed as they judge best ("you can do whatever you want, however you want whenever you want").
+
 ## Questions still open
 
-1. Should tools cost something (an energy or influence budget, as SimEarth had), or stay free in sandbox and limited only inside missions?
-2. Is progression wanted (unlocking tools and missions as you go, like Kerbal's career mode), or everything open from the start?
-3. Should the build session pause the expansion brief now, or finish its current section first?
-4. Does the "assets later" decision still stand, given that the look is one of the main complaints?
+1. Is progression wanted inside the goals mode (unlocking missions as you go), or all missions open from the start? Default if unanswered: all open.
+2. Should the build session pause the expansion brief now, or finish its current section first? Default if unanswered: finish the section in progress, then re-order the rest against the pillars above.
+3. Does the "assets later" decision still stand, given that the look is one of the main complaints? It stands until the owner changes it.
