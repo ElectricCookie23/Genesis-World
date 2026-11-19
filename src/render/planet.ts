@@ -108,8 +108,9 @@ export class PlanetMesh {
     lit = lit.add(vec3(3.2, 0.75, 0.08).mul(heat.mul(heat)).mul(flicker));
     // firelight and city light: warm points that only show on the night side
     const town = attribute('lights', 'float');
-    const sparkle = mx_fractal_noise_float(P.mul(900), 2, 2.0, 0.5).mul(0.5).add(0.5);
-    const lamp = pow(town, 1.5).mul(smoothstep(0.35, 0.75, sparkle.add(town.mul(0.5)))).mul(float(1).sub(day));
+    const sparkle = mx_fractal_noise_float(P.mul(260), 2, 2.0, 0.5).mul(0.5).add(0.5);
+    // a steady glow that reads from orbit, with brighter specks that resolve as you come closer
+    const lamp = pow(town, 1.2).mul(smoothstep(0.3, 0.8, sparkle).mul(1.6).add(0.45)).mul(float(1).sub(day));
     lit = lit.add(vec3(2.6, 1.55, 0.55).mul(lamp));
     material.colorNode = lit;
     this.mesh = new Mesh(this.geometry, material);

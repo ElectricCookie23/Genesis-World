@@ -16,6 +16,10 @@ Seed `amber-reef-101` after 120 million years (captured with software rendering 
 | **Near the ground** | **Woodland** |
 | ![Shrubs, trees and small land animals by the shore](docs/ground.jpg) | ![Broadleaf trees and succulents](docs/woodland.jpg) |
 
+The night side, with an aurora over the pole and city lights (this frame uses test lights to show the rendering; in a run they come from real settlements):
+
+![Night side with aurora and city lights](docs/night.jpg)
+
 ## Run it locally
 
 ```bash
