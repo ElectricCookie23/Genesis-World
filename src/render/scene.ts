@@ -63,13 +63,13 @@ export const PRESETS: Record<Preset, {
   ratio: number; dataSize: number; erosionSize: number; erosionIterations: number; oceanResolution: number; fftEvery: number;
   cloudSteps: number; cloudLight: number; cloudDetail: number; cloudNoise: number;
   /** Share of the screen resolution the clouds are marched at. */
-  cloudScale: number; auroraSteps: number; shadowSteps: number; maxLevel: number; lineSize: number;
+  cloudScale: number; imposter: number; lod: number; auroraSteps: number; shadowSteps: number; maxLevel: number; lineSize: number;
   plants: number; models: number; grass: number; creatures: number; rain: number; taa: boolean; ao: boolean; bloom: boolean; fringe: boolean;
 }> = {
-  low: { ratio: 1, cloudScale: 0.4, dataSize: 128, erosionSize: 256, erosionIterations: 160, oceanResolution: 64, fftEvery: 2, cloudSteps: 8, cloudLight: 2, cloudDetail: 0, cloudNoise: 32, auroraSteps: 12, shadowSteps: 3, maxLevel: 9, lineSize: 256, plants: 4000, models: 200, grass: 0, creatures: 600, rain: 1500, taa: false, ao: false, bloom: false, fringe: false },
-  medium: { ratio: 1.25, cloudScale: 0.5, dataSize: 192, erosionSize: 384, erosionIterations: 240, oceanResolution: 128, fftEvery: 1, cloudSteps: 12, cloudLight: 3, cloudDetail: 1, cloudNoise: 48, auroraSteps: 18, shadowSteps: 6, maxLevel: 10, lineSize: 512, plants: 15000, models: 600, grass: 2000, creatures: 3000, rain: 3000, taa: false, ao: false, bloom: true, fringe: false },
-  high: { ratio: 1.5, cloudScale: 0.5, dataSize: 256, erosionSize: 512, erosionIterations: 320, oceanResolution: 256, fftEvery: 1, cloudSteps: 18, cloudLight: 4, cloudDetail: 1, cloudNoise: 64, auroraSteps: 28, shadowSteps: 8, maxLevel: 11, lineSize: 512, plants: 40000, models: 1600, grass: 6000, creatures: 5000, rain: 6000, taa: true, ao: true, bloom: true, fringe: true },
-  ultra: { ratio: 2, cloudScale: 0.75, dataSize: 384, erosionSize: 768, erosionIterations: 400, oceanResolution: 512, fftEvery: 1, cloudSteps: 32, cloudLight: 5, cloudDetail: 1, cloudNoise: 64, auroraSteps: 40, shadowSteps: 12, maxLevel: 12, lineSize: 1024, plants: 60000, models: 2600, grass: 10000, creatures: 5000, rain: 10000, taa: true, ao: true, bloom: true, fringe: true },
+  low: { ratio: 1, cloudScale: 0.4, imposter: 160, lod: 0.02, dataSize: 128, erosionSize: 256, erosionIterations: 160, oceanResolution: 64, fftEvery: 2, cloudSteps: 8, cloudLight: 2, cloudDetail: 0, cloudNoise: 32, auroraSteps: 12, shadowSteps: 3, maxLevel: 9, lineSize: 256, plants: 4000, models: 200, grass: 0, creatures: 600, rain: 1500, taa: false, ao: false, bloom: false, fringe: false },
+  medium: { ratio: 1.25, cloudScale: 0.5, imposter: 224, lod: 0.028, dataSize: 192, erosionSize: 384, erosionIterations: 240, oceanResolution: 128, fftEvery: 1, cloudSteps: 12, cloudLight: 3, cloudDetail: 1, cloudNoise: 48, auroraSteps: 18, shadowSteps: 6, maxLevel: 10, lineSize: 512, plants: 15000, models: 600, grass: 2000, creatures: 3000, rain: 3000, taa: false, ao: false, bloom: true, fringe: false },
+  high: { ratio: 1.5, cloudScale: 0.5, imposter: 352, lod: 0.042, dataSize: 256, erosionSize: 512, erosionIterations: 320, oceanResolution: 256, fftEvery: 1, cloudSteps: 18, cloudLight: 4, cloudDetail: 1, cloudNoise: 64, auroraSteps: 28, shadowSteps: 8, maxLevel: 11, lineSize: 512, plants: 40000, models: 1600, grass: 6000, creatures: 5000, rain: 6000, taa: true, ao: true, bloom: true, fringe: true },
+  ultra: { ratio: 2, cloudScale: 0.75, imposter: 480, lod: 0.055, dataSize: 384, erosionSize: 768, erosionIterations: 400, oceanResolution: 512, fftEvery: 1, cloudSteps: 32, cloudLight: 5, cloudDetail: 1, cloudNoise: 64, auroraSteps: 40, shadowSteps: 12, maxLevel: 12, lineSize: 1024, plants: 60000, models: 2600, grass: 10000, creatures: 5000, rain: 10000, taa: true, ao: true, bloom: true, fringe: true },
 };
 
 export class GenesisScene {
@@ -107,6 +107,7 @@ export class GenesisScene {
   shadowSteps = 8;
   /** Most real plant models and grass tufts drawn near the camera. */
   plantModels = 1600;
+  imposterTile = 192;
   grassBudget = 6000;
   rainDrops = 6000;
   /** Resolution of the baked planet maps per cube face, and of the erosion bake. Set before setGrid. */
@@ -206,6 +207,7 @@ export class GenesisScene {
     this.dataSize = p.dataSize; this.erosionSize = p.erosionSize; this.erosionIterations = p.erosionIterations;
     this.oceanResolution = p.oceanResolution; this.cloudNoiseSize = p.cloudNoise; this.cloudLightSteps = p.cloudLight;
     this.shadowSteps = p.shadowSteps; this.riverSize = p.lineSize;
+    this.imposterTile = p.imposter;
     this.plantBudget = p.plants; this.plantModels = p.models; this.grassBudget = p.grass; this.creatureBudget = p.creatures; this.rainDrops = p.rain;
   }
 
@@ -220,6 +222,10 @@ export class GenesisScene {
     if (this.aurora) this.aurora.steps.value = Math.max(Math.min(p.auroraSteps, 10), Math.round(p.auroraSteps * march));
     if (this.terrain) this.terrain.maxLevel = p.maxLevel;
     if (this.ocean) { this.ocean.maxLevel = p.maxLevel; this.ocean.fftEvery = p.fftEvery; }
+    // Far trees are flat pictures; real models take over inside this distance. On a sharp display the pictures were
+    // magnified several times at mid distance and read as pixel art, so better presets bake them larger and hand
+    // over to models from further out.
+    if (this.vegetation) this.vegetation.uLod.value = p.lod;
     if (this.vegetation) { this.vegetation.maxInstances = Math.round(p.plants * cut); this.vegetation.modelBudget = Math.round(p.models * cut); this.vegetation.grassBudget = Math.round(p.grass * cut); }
     if (this.creatures) this.creatures.budget = Math.round(p.creatures * cut);
     if (post) this.post.set({ taa: p.taa, ao: p.ao, bloom: p.bloom, fringe: p.fringe });
@@ -248,7 +254,7 @@ export class GenesisScene {
     this.scene.add(this.terrain.sphere.mesh);
     this.planet.mesh.visible = false;
     this.scene.add(this.planet.mesh, this.ocean.sphere.mesh, this.clouds.mesh);
-    this.vegetation = new Flora(grid, this.data, this.erosion.texture, this.clouds.shadow, this.plantBudget, this.plantModels, this.grassBudget);
+    this.vegetation = new Flora(grid, this.data, this.erosion.texture, this.clouds.shadow, this.plantBudget, this.plantModels, this.grassBudget, this.imposterTile);
     this.vegetation.pigmentA = this.look.pigmentA;
     this.vegetation.pigmentB = this.look.pigmentB;
     for (const m of this.vegetation.meshes) this.scene.add(m);
@@ -348,11 +354,16 @@ export class GenesisScene {
     if (!g || !el || size > 0.032 || uOceanFill.value < 1) return true;
     const limit = uSeaKm.value + 0.4;
     const d = this.seaProbe;
+    const nb = this.grid?.neighbors, nc = this.grid?.ncount;
     for (let j = 0; j <= 4; j++) {
       for (let i = 0; i <= 4; i++) {
         faceDirection(face, (x0 + (size * i) / 4) * 2 - 1, (y0 + (size * j) / 4) * 2 - 1, d);
         this.seaCell = g.cellAt(d[0], d[1], d[2], this.seaCell);
         if (el[this.seaCell]! < limit) return true;
+        // The drawn ground is blended between cells, so inside a high cell it can still dip under the sea toward a
+        // low neighbour. A patch is dropped only where the neighbours are high too: without this, the sea was missing
+        // in square pieces beside small islands, showing the bare sea bed with straight edges.
+        if (nb && nc) for (let k = 0; k < nc[this.seaCell]!; k++) if (el[nb[this.seaCell * 6 + k]!]! < limit) return true;
       }
     }
     return false;

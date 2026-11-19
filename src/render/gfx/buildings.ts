@@ -186,7 +186,11 @@ export class Towns {
       const radius: N = boat ? float(1).add(uSeaKm.mul(EXAG)).add(bobbing) : groundRadiusNode(data, erosionTex, aDir);
       const base: N = aDir.mul(radius);
       const roll: N = boat ? (vec3 as any)(0, sin(uTime.mul(1.1).add(aData.y.mul(30))).mul(0.06).mul((positionGeometry as any).z), 0) : vec3(0, 0, 0);
-      material.positionNode = base.add(rotate((positionGeometry as any).add(roll).mul(aData.x), aQuat));
+      // Nothing is built in the water. Sites are chosen by the nearest cell, but the drawn ground is blended between
+      // cells and can dip under the tide inside a land cell: such a building shrinks to nothing (huts stood half
+      // under water in the surf).
+      const dry: N = boat ? float(1) : step(float(1).add(uSeaKm.mul(EXAG)).add(0.00002), radius);
+      material.positionNode = base.add(rotate((positionGeometry as any).add(roll).mul(aData.x).mul(dry), aQuat));
       const nW: N = varying(normalize(rotate(normalGeometry, aQuat)));
       const vPart: N = varying(attribute('bpart', 'float'));
       const vUv: N = varying(attribute('buv', 'vec2'));
@@ -313,6 +317,10 @@ export class Towns {
         east.set(-c.z, 0, c.x).normalize();
         north.crossVectors(c, east);
         const lit = st.tech < 0.3 ? 0.15 : 0.25 + 0.5 * st.tech;
+        // What gets built follows how many people there are as well as what they know: a few hundred farmers with
+        // advanced neighbours do not raise tower blocks and domes. (Seen on a real GPU: a town of 503 drawn as a
+        // modern skyline.) Small places stay huts, houses and a hall whatever the age.
+        const era = Math.min(st.tech, 0.15 + size * 0.95);
         if (st.temple) { this.put('temple', c, hash(st.id * 31) * 6.28, 0.0009 * boost, hash(st.id), lit, st.tech, tint, light); total++; }
         for (let k = 0; k < count && total < this.budget; k++) {
           const h1 = hash(st.id * 7919 + k * 31), h2 = hash(st.id * 104729 + k * 17), h3 = hash(st.id * 1299709 + k * 7);
@@ -326,13 +334,13 @@ export class Towns {
           if (elevation[cell]! <= seaLevel + 0.01) continue;
           const central = ring < 0.3;
           let kind: Building;
-          if (st.tech < 0.3) kind = 'hut';
-          else if (st.tech < 0.6) kind = central && h3 < 0.25 ? 'hall' : h3 < 0.2 ? 'hut' : 'house';
-          else if (st.tech < 0.85) kind = central ? (h3 < 0.45 ? 'tower' : 'hall') : h3 < 0.12 ? 'tower' : 'house';
+          if (era < 0.3) kind = 'hut';
+          else if (era < 0.6) kind = central && h3 < 0.25 ? 'hall' : h3 < 0.2 ? 'hut' : 'house';
+          else if (era < 0.85) kind = central ? (h3 < 0.45 ? 'tower' : 'hall') : h3 < 0.12 ? 'tower' : 'house';
           else kind = central ? (h3 < 0.3 ? 'spire' : h3 < 0.75 ? 'tower' : 'dome') : h3 < 0.25 ? 'tower' : h3 < 0.35 ? 'dome' : 'house';
           const sz = (kind === 'hut' ? 0.00026 : kind === 'house' ? 0.00034 : kind === 'hall' ? 0.00044 : kind === 'dome' ? 0.0006 : 0.00046) * boost * (0.8 + 0.5 * h3);
           // face along the ring, like buildings along a street
-          this.put(kind, up, a + (h3 < 0.5 ? 0 : Math.PI / 2) + (h1 - 0.5) * 0.3, sz, h2, lit, st.tech, tint, light);
+          this.put(kind, up, a + (h3 < 0.5 ? 0 : Math.PI / 2) + (h1 - 0.5) * 0.3, sz, h2, lit, era, tint, light);
           total++;
         }
       }

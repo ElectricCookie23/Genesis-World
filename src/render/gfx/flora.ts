@@ -27,7 +27,8 @@ import { eclipseLight } from './eclipse';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
 
-const TILE = 192;
+/** Default side of one imposter picture, in texels; presets ask for more or less. */
+const DEFAULT_TILE = 192;
 const VIEWS = 3;
 /** Half-width of the square the imposter camera sees, in model units; models are about one unit tall. */
 const BAKE_HALF = 0.78;
@@ -116,7 +117,7 @@ export class Flora {
   private triCentre: Float32Array;
   private grassCell = 0;
 
-  constructor(private grid: Grid, private data: PlanetData, erosionTex: Texture, private cloudShadow: (p: N) => N, maxInstances: number, fullCap = 1600, grassCap = 6000) {
+  constructor(private grid: Grid, private data: PlanetData, erosionTex: Texture, private cloudShadow: (p: N) => N, maxInstances: number, fullCap = 1600, grassCap = 6000, private tile = DEFAULT_TILE) {
     this.maxInstances = maxInstances;
     const radius = (dir: N): N => groundRadiusNode(data, erosionTex, dir);
     const rotate = (v: N, q: N): N => v.add(cross(q.xyz, cross(q.xyz, v).add(v.mul(q.w))).mul(2));
@@ -212,7 +213,7 @@ export class Flora {
       const row: N = varying(step(0.4, e).add(step(0.82, e)));
       const col: N = varying(aData.y);
       const quv: N = uv();
-      const inset = 0.5 / TILE;
+      const inset = 0.5 / this.tile;
       const tuv = vec2(col.add(quv.x.mul(1 - 2 * inset).add(inset)).div(FORMS.length), row.add(quv.y.mul(1 - 2 * inset).add(inset)).div(VIEWS));
       const tex: N = this.atlasNode.sample(tuv);
       const vTint: N = varying(attribute('iTint', 'vec3')), vTint2: N = varying(attribute('iTint2', 'vec3'));
@@ -308,7 +309,7 @@ export class Flora {
       material.opacityNode = cutout(card);
       const mesh = new Mesh(this.geos.get('broadleaf')!, material);
       scene.add(mesh);
-      const W = TILE * FORMS.length, H = TILE * VIEWS;
+      const W = this.tile * FORMS.length, H = this.tile * VIEWS;
       const atlas = new Uint8Array(W * H * 4);
       const prevTarget = renderer.getRenderTarget();
       const prevColor = (renderer as any).getClearColor(new Color()) as Color;
@@ -349,7 +350,7 @@ export class Flora {
           cam.up.set(0, 1, 0);
           cam.lookAt(0, BAKE_CENTRE, 0);
           cam.updateMatrixWorld();
-          const rt = new RenderTarget(TILE, TILE, { type: UnsignedByteType, format: RGBAFormat, depthBuffer: true });
+          const rt = new RenderTarget(this.tile, this.tile, { type: UnsignedByteType, format: RGBAFormat, depthBuffer: true });
           renderer.setRenderTarget(rt);
           renderer.render(scene, cam);
           targets.push(rt);
@@ -357,32 +358,32 @@ export class Flora {
       }
       renderer.setRenderTarget(prevTarget);
       (renderer as any).setClearColor(prevColor, prevAlpha);
-      const pixels = await Promise.all(targets.map((rt) => renderer.readRenderTargetPixelsAsync(rt, 0, 0, TILE, TILE) as unknown as Promise<Uint8Array>));
+      const pixels = await Promise.all(targets.map((rt) => renderer.readRenderTargetPixelsAsync(rt, 0, 0, this.tile, this.tile) as unknown as Promise<Uint8Array>));
       for (let f = 0; f < FORMS.length; f++) {
         for (let v = 0; v < VIEWS; v++) {
           const px = pixels[f * VIEWS + v]!;
           // spread colour into the empty texels around the plant so filtering does not darken its edges
-          const tile = new Uint8Array(TILE * TILE * 4);
-          for (let y = 0; y < TILE; y++) {
-            const sy = flipped ? TILE - 1 - y : y;
-            tile.set(px.subarray(sy * TILE * 4, (sy + 1) * TILE * 4), y * TILE * 4);
+          const tile = new Uint8Array(this.tile * this.tile * 4);
+          for (let y = 0; y < this.tile; y++) {
+            const sy = flipped ? this.tile - 1 - y : y;
+            tile.set(px.subarray(sy * this.tile * 4, (sy + 1) * this.tile * 4), y * this.tile * 4);
           }
           for (let pass = 0; pass < 3; pass++) {
             const src = tile.slice();
-            for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
-              const o = (y * TILE + x) * 4;
+            for (let y = 0; y < this.tile; y++) for (let x = 0; x < this.tile; x++) {
+              const o = (y * this.tile + x) * 4;
               if (src[o + 3]! > 127) continue;
               let r = 0, g = 0, b = 0, n = 0;
               for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
                 const xx = x + dx, yy = y + dy;
-                if (xx < 0 || yy < 0 || xx >= TILE || yy >= TILE) continue;
-                const q = (yy * TILE + xx) * 4;
+                if (xx < 0 || yy < 0 || xx >= this.tile || yy >= this.tile) continue;
+                const q = (yy * this.tile + xx) * 4;
                 if (src[q + 3]! > 127 || (src[q]! + src[q + 1]! + src[q + 2]! > 0 && pass > 0)) { r += src[q]!; g += src[q + 1]!; b += src[q + 2]!; n++; }
               }
               if (n) { tile[o] = r / n; tile[o + 1] = g / n; tile[o + 2] = b / n; }
             }
           }
-          for (let y = 0; y < TILE; y++) atlas.set(tile.subarray(y * TILE * 4, (y + 1) * TILE * 4), ((v * TILE + y) * W + f * TILE) * 4);
+          for (let y = 0; y < this.tile; y++) atlas.set(tile.subarray(y * this.tile * 4, (y + 1) * this.tile * 4), ((v * this.tile + y) * W + f * this.tile) * 4);
         }
       }
       for (const rt of targets) rt.dispose();
