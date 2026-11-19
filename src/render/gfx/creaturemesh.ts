@@ -3,6 +3,7 @@
 // fur. Every vertex carries what the skin shader needs to animate it (which part it belongs to and
 // how strongly it follows that part's motion) and to shade it (a skin uv and a material zone).
 // Local frame: +X forward, +Y up, torso length 1, feet on y = 0.
+import { packAttributes } from './gpu';
 import { BufferAttribute, BufferGeometry, Color } from 'three/webgpu';
 import { G, Limb, limbKind } from '../../sim/genetics';
 
@@ -121,6 +122,8 @@ class Mesh {
     g.setAttribute('skin', new BufferAttribute(new Float32Array(this.skin), 4));
     g.setAttribute('emissive', new BufferAttribute(new Float32Array(this.emi), 3));
     g.setIndex(this.idx);
+    // one buffer for all of it: WebGPU allows only eight vertex buffers per draw
+    packAttributes(g);
     return g;
   }
 }

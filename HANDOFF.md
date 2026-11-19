@@ -10,13 +10,48 @@ Read this first when resuming. Then PROGRESS.md, DECISIONS.md and `git log`.
 - Graphics rules (owner): full techniques on WebGL2 (FFT ocean, GPU erosion, TAA with a history buffer), quadtree LOD terrain, WebGPU optional, screenshots here check correctness only, push every step.
 
 ## Where things stand
-Work queue items 1 to 3 are finished: every feature row in PROGRESS.md is "done", and all twelve graphics steps have a first pass. **Next is item 4, the expansion brief** (`docs/EXPANSION_BRIEF.md`): architecture additions first, then sections 1 to 10 in order.
+Work queue items 1 to 3 are finished (every feature row in PROGRESS.md is "done"; all twelve graphics steps have a first pass). **The owner's real-GPU review arrived: `docs/GPU_REVIEW.md` with screenshots in `docs/screenshots/gpu/`. Fixing what it found comes before the expansion brief.** Tick items off here as they are fixed and pushed.
 
-The last batch of the "simplified" pass: timeline strip with thinned rewind points (86), diversity and oxygen overlays (90), positional sound (94), two futures side by side (143), real ancestry in the family tree (144), ocean currents that remember (56). Trails, hibernation, pollinators and symbiosis were retuned against real histories so their events fire (DECISIONS 65). `scripts/systems.ts <seed> <My>` prints when each of these events first fires and the gene ranges behind them.
+### GPU review fix list (in order)
+Critical:
+- [x] C1/C2 WebGPU allows 8 vertex buffers: near plants (10), creatures (14) and buildings (9) were not drawn. Per-vertex attributes are now packed into one interleaved buffer (`packAttributes` in `gfx/gpu.ts`). Checked on software WebGPU: see "Checking WebGPU here" below.
+- [ ] C3 land and sea black after loading a save (also once mid-session): **not reproduced** here in software rendering on either backend. Ruled out: the load path, save fidelity (a reloaded sim matches the original step for step), every shared uniform (identical before and after). What is left is a non-finite number reaching the land and sea shaders on Metal. Hardened: planet textures never receive non-finite values, uniforms are checked every frame and reset with a console warning (`render/diagnose.ts`), exposure is guarded, the impact ring no longer takes the square root of a negative age. **Shift+D saves a diagnostic file** (`__genesis.diagnose()`): if it happens again, that file names the bad input.
+- [x] C4 white glare on WebGL2 and flat white discs: these were the system's other planets drawn about twenty times too large (a vec4 was normalised and dotted whole, so its size component leaked into the direction). Fixed in `atmosphere.ts`.
+- [x] C2 creatures on WebGL2: they do draw (seen in captures). They were as tall as trees; halved. Their look still needs a pass of its own (smooth single-colour bodies).
+- [x] WebGPU Low "binding size is zero": the grass mesh had zero capacity on Low; never zero now.
+Frame rate:
+- [x] clouds are marched at half resolution in their own pass and drawn back at full resolution with the occlusion test done per full-resolution pixel (`gfx/volclouds.ts`, DECISIONS 70). In software this alone made frames about five times faster.
+- [x] step-downs reordered: resolution first, then counts and cloud steps, then AO and fringe, then bloom, anti-aliasing last. High now asks for pixel ratio 1.5, Ultra 2, Medium 1.25.
+- [ ] not measured on a real GPU yet.
+Look:
+- [x] milestone titles after a warp: only the latest is shown, stale ones are dropped
+- [x] depth of field only while following an animal, and gentle
+- [x] aurora: thinner sheets, lower, night only, soft-capped so it cannot pile up into a wall, held back as exposure opens
+- [x] white hoops in the sky: they were the echolocation "sound ripples". Now faint and only from close by.
+- [x] atmosphere: thinner shell (fine rim from orbit), brighter sky from inside, exposure capped from orbit, the star's wide haze cut down
+- [x] nest mounds: small rounded heaps, upright, on dry ground only, only from near
+- [x] ground under plants is earthy (litter under trees, patchy meadow in the open) so plants stand out; bark is dark; leaves shade from inside to tip
+- [x] conifer trunks no longer poke out of the crown; imposter tiles 192 px (were 128); crossfade band narrowed
+- [x] animals are drawn only from near (they were specks all over land, ice and sea from far off); plants stay off deep snow
+- [x] green lines on the sea: rivers were building causeways across the ocean (delta mud piling up cell after cell). Deltas now fill only shallow water and waves take unfed mud away.
+- [x] trails were drawn as a cell-wide band; now thin braided threads, and a path is harder to wear the more worn it is
+- [ ] under water is flat and empty (no caustics, shafts, fog gradient, plants or animals)
+- [ ] coastline is a hard polygon; rivers read as a drawn line of even width; foam is lilac
+- [ ] grass blades are wide ribbons; plants take no terrain shadow
+- [ ] creature look: bodies are smooth and single-coloured, patterns and fur not visible
+- [ ] lens fringe after step-downs (now turned off with AO); audio "Max polyphony exceeded"; a 404; `toNonIndexed` warnings
+- [ ] no civilization arose in five worlds by 150 My: nothing built could be reviewed (matters for the expansion)
 
-Checked in the headless browser: two futures run and cross over, young animals follow parents, the family tree links real herd-mates and young, the field guide shows sketch cards. Not yet seen in a browser frame: trails on the ground, the rainbow, the timeline strip, the GIF and PDF buttons (the UI hides itself after four seconds without input, which empties page screenshots).
+### Checking visuals here (new, fast)
+- `scripts/grow.ts <seed> <My> <out.json>` grows a world in Node (150 My in about seven minutes) and writes it as a save. A harness puts that file into save slot 0 of the page (IndexedDB `keyval-store`/`keyval`, key `genesis:slot:0`) and opens `?slot=0`, so a check starts from an old world in seconds. The harness and scripts live in the session scratchpad (`h.cjs`, `views.cjs`, `gpucheck.cjs`); if they are gone, rebuild them from this description.
+- Test against a built copy served statically (`npm run build`, copy `dist`, `python3 -m http.server`), not the dev server: then editing `src` cannot reload the page under a running check.
+- `&noadapt` in the URL turns the automatic step-downs off (software rendering is always "too slow" and would otherwise drop to the lowest settings within seconds).
+- A throwaway browser context has a small storage quota and silently fails to save big worlds: use a persistent profile for save and load checks.
+- Checking WebGPU here: headless Chromium has a software WebGPU adapter (`--enable-unsafe-webgpu --use-webgpu-adapter=swiftshader --enable-features=Vulkan`, page on `http://localhost`). It cannot present to a canvas (the device is destroyed), so the harness replaces `canvas.getContext('webgpu')` with a stand-in whose `getCurrentTexture()` is an ordinary texture, and reads that back. It is very slow (tens of seconds a frame) but it reports pipeline validation errors, which WebGL2 never will.
 
-A card "Review Genesis live site on a real GPU" was left in the owner's desktop app. If they run it, its findings arrive as `docs/GPU_REVIEW.md` and `docs/screenshots/gpu/` on main: pull and tune from them.
+After the review fixes: item 4, the expansion brief (`docs/EXPANSION_BRIEF.md`): architecture additions first, then sections 1 to 10 in order. Design note already settled: history needs human-scale time (a yearly civilisation tick, a "History" speed of about 20 years a second that the sim drops to when farming starts, coarser ticks under warp).
+
+The last batch of the "simplified" pass: timeline strip with thinned rewind points (86), diversity and oxygen overlays (90), positional sound (94), two futures side by side (143), real ancestry in the family tree (144), ocean currents that remember (56). Trails, hibernation, pollinators and symbiosis were retuned against real histories so their events fire (DECISIONS 65). `scripts/systems.ts <seed> <My>` prints when each of these events first fires; `scripts/floor.ts <seed>` prints how often a seed falls under the test's species floor.
 
 ## Work queue, in the owner's order
 1. Original brief: built (every feature in PROGRESS.md is done or simplified).
@@ -61,7 +96,7 @@ Everything reads the planet from cube-map textures baked from the simulation's c
 - Speciation thresholds are measured in average cohort sizes (see DECISIONS 40). Soft cap 40 living species, hard cap 64, four cohorts per region.
 - Civilization: settlements founded after a lineage stays above intelligence 0.5 for 60 My; technology drives every stage.
 - Stats now also carry `cyclones` (cells) and `solar`.
-- Tests: `npm test` (18 tests, about six minutes). `scripts/history.ts <seed> <My> <gridN>` prints a whole history (`npx vite-node`).
+- Tests: `npm test` (19 tests, about six minutes). `scripts/history.ts <seed> <My> <gridN>` prints a whole history (`npx vite-node`).
 
 ## Known issues
 - Powered flight is rare and cold seeds can lose their land animals; see git log for the tuning history.

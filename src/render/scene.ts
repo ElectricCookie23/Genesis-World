@@ -26,6 +26,7 @@ import { CLOUD_TOP } from './gfx/volclouds';
 import { applyLook, worldLook, type WorldLook } from './gfx/look';
 import { PlanetData } from './gfx/planetdata';
 import { ErosionBake } from './gfx/erosion';
+import { dumpUniforms, guardUniforms, summariseCells } from './diagnose';
 import { TerrainSurface } from './gfx/terrain';
 import { GroundSampler } from './gfx/ground';
 import { RiverMap } from './gfx/rivermap';
@@ -56,13 +57,15 @@ export type Preset = 'low' | 'medium' | 'high' | 'ultra';
 /** What each quality preset turns on. Ultra may need a strong desktop GPU; Low is for phones. */
 export const PRESETS: Record<Preset, {
   ratio: number; dataSize: number; erosionSize: number; erosionIterations: number; oceanResolution: number; fftEvery: number;
-  cloudSteps: number; cloudLight: number; cloudDetail: number; cloudNoise: number; auroraSteps: number; shadowSteps: number; maxLevel: number; lineSize: number;
+  cloudSteps: number; cloudLight: number; cloudDetail: number; cloudNoise: number;
+  /** Share of the screen resolution the clouds are marched at. */
+  cloudScale: number; auroraSteps: number; shadowSteps: number; maxLevel: number; lineSize: number;
   plants: number; models: number; grass: number; creatures: number; rain: number; taa: boolean; ao: boolean; bloom: boolean; fringe: boolean;
 }> = {
-  low: { ratio: 1, dataSize: 128, erosionSize: 256, erosionIterations: 160, oceanResolution: 64, fftEvery: 2, cloudSteps: 8, cloudLight: 2, cloudDetail: 0, cloudNoise: 32, auroraSteps: 12, shadowSteps: 3, maxLevel: 9, lineSize: 256, plants: 4000, models: 200, grass: 0, creatures: 600, rain: 1500, taa: false, ao: false, bloom: false, fringe: false },
-  medium: { ratio: 1.5, dataSize: 192, erosionSize: 384, erosionIterations: 240, oceanResolution: 128, fftEvery: 1, cloudSteps: 14, cloudLight: 3, cloudDetail: 1, cloudNoise: 48, auroraSteps: 18, shadowSteps: 6, maxLevel: 10, lineSize: 512, plants: 15000, models: 600, grass: 2000, creatures: 3000, rain: 3000, taa: false, ao: false, bloom: true, fringe: true },
-  high: { ratio: 2, dataSize: 256, erosionSize: 512, erosionIterations: 320, oceanResolution: 256, fftEvery: 1, cloudSteps: 22, cloudLight: 4, cloudDetail: 1, cloudNoise: 64, auroraSteps: 28, shadowSteps: 8, maxLevel: 11, lineSize: 512, plants: 40000, models: 1600, grass: 6000, creatures: 5000, rain: 6000, taa: true, ao: true, bloom: true, fringe: true },
-  ultra: { ratio: 3, dataSize: 384, erosionSize: 768, erosionIterations: 400, oceanResolution: 512, fftEvery: 1, cloudSteps: 40, cloudLight: 6, cloudDetail: 1, cloudNoise: 64, auroraSteps: 40, shadowSteps: 12, maxLevel: 12, lineSize: 1024, plants: 60000, models: 2600, grass: 10000, creatures: 5000, rain: 10000, taa: true, ao: true, bloom: true, fringe: true },
+  low: { ratio: 1, cloudScale: 0.4, dataSize: 128, erosionSize: 256, erosionIterations: 160, oceanResolution: 64, fftEvery: 2, cloudSteps: 8, cloudLight: 2, cloudDetail: 0, cloudNoise: 32, auroraSteps: 12, shadowSteps: 3, maxLevel: 9, lineSize: 256, plants: 4000, models: 200, grass: 0, creatures: 600, rain: 1500, taa: false, ao: false, bloom: false, fringe: false },
+  medium: { ratio: 1.25, cloudScale: 0.5, dataSize: 192, erosionSize: 384, erosionIterations: 240, oceanResolution: 128, fftEvery: 1, cloudSteps: 14, cloudLight: 3, cloudDetail: 1, cloudNoise: 48, auroraSteps: 18, shadowSteps: 6, maxLevel: 10, lineSize: 512, plants: 15000, models: 600, grass: 2000, creatures: 3000, rain: 3000, taa: false, ao: false, bloom: true, fringe: true },
+  high: { ratio: 1.5, cloudScale: 0.5, dataSize: 256, erosionSize: 512, erosionIterations: 320, oceanResolution: 256, fftEvery: 1, cloudSteps: 22, cloudLight: 3, cloudDetail: 1, cloudNoise: 64, auroraSteps: 28, shadowSteps: 8, maxLevel: 11, lineSize: 512, plants: 40000, models: 1600, grass: 6000, creatures: 5000, rain: 6000, taa: true, ao: true, bloom: true, fringe: true },
+  ultra: { ratio: 2, cloudScale: 0.75, dataSize: 384, erosionSize: 768, erosionIterations: 400, oceanResolution: 512, fftEvery: 1, cloudSteps: 32, cloudLight: 4, cloudDetail: 1, cloudNoise: 64, auroraSteps: 40, shadowSteps: 12, maxLevel: 12, lineSize: 1024, plants: 60000, models: 2600, grass: 10000, creatures: 5000, rain: 10000, taa: true, ao: true, bloom: true, fringe: true },
 };
 
 export class GenesisScene {
@@ -208,7 +211,7 @@ export class GenesisScene {
    */
   presetLive(name: Preset, cut = 1, post = true): void {
     const p = PRESETS[name];
-    if (this.clouds) { this.clouds.steps.value = p.cloudSteps; this.clouds.detail.value = p.cloudDetail; }
+    if (this.clouds) { this.clouds.steps.value = Math.max(6, Math.round(p.cloudSteps * (cut < 1 ? 0.7 : 1))); this.clouds.detail.value = p.cloudDetail; this.clouds.scale = p.cloudScale * (cut < 1 ? 0.8 : 1); }
     if (this.aurora) this.aurora.steps.value = p.auroraSteps;
     if (this.terrain) this.terrain.maxLevel = p.maxLevel;
     if (this.ocean) { this.ocean.maxLevel = p.maxLevel; this.ocean.fftEvery = p.fftEvery; }
@@ -666,6 +669,27 @@ export class GenesisScene {
     this.flashLevel = Math.max(this.flashLevel, amount);
   }
 
+  /** Everything the picture is drawn from, for a bug report (Shift+D in the page saves it as a file). */
+  diagnose(): Record<string, unknown> {
+    const r = this.renderer as unknown as { backend: { isWebGPUBackend?: boolean }; info: { render: object; memory: object }; getPixelRatio(): number };
+    const c = this.cam;
+    return {
+      when: new Date().toISOString(),
+      backend: r.backend.isWebGPUBackend ? 'webgpu' : 'webgl2',
+      preset: this.builtWith,
+      pixelRatio: r.getPixelRatio(),
+      canvas: [this.canvas.width, this.canvas.height],
+      fps: this.fpsAvg,
+      render: r.info.render,
+      memory: r.info.memory,
+      camera: { lon: c.lon, lat: c.lat, dist: c.dist, position: c.camera.position.toArray() },
+      scene: { time: this.time, dayAngle: this.dayAngle, declination: this.declination, moons: this.moons, solar: this.solar, underwater: this.underwater, following: this.following, overlayOn: this.overlayOn, layerOn: this.layerOn, fungalOn: this.fungalOn, showFossils: this.showFossils },
+      exposure: { value: this.post.autoExposure, measured: this.post.measured },
+      uniforms: dumpUniforms(),
+      cells: summariseCells(this.lastCells),
+    };
+  }
+
   cellAt(x: number, y: number, z: number): number {
     if (!this.grid) return 0;
     this.lastCell = nearestCell(this.grid, x, y, z, this.lastCell);
@@ -763,9 +787,10 @@ export class GenesisScene {
       this.creatures.season = this.tilt > 0 ? this.declination / this.tilt : 0;
       this.creatures.update(this.time, this.cam.dist, uSunDir.value as Vector3);
       // echolocation shown as ripples of sound
-      if (this.particles && this.cam.dist < 0.3 && Math.random() < dt * 4) for (const e of this.creatures.echoers(2)) this.particles.ripple(e.pos, e.size * 9);
+      // (only from close by: from further off these were big bright hoops hanging in the sky)
+      if (this.particles && this.cam.dist < 0.03 && Math.random() < dt * 1.5) for (const e of this.creatures.echoers(1)) this.particles.ripple(e.pos, e.size * 3);
       // depth of field while following a creature
-      this.post.setFocus(this.following !== null || this.cinematic, this.cam.dist);
+      this.post.setFocus(this.following !== null, this.cam.dist);
       if (this.following !== null) {
         const ind = this.creatures.byKey(this.following);
         if (ind) {
@@ -808,7 +833,8 @@ export class GenesisScene {
     this.updateWeather();
     this.aurora?.setCameraRadius(this.cam.camera.position.length(), CLOUD_TOP);
     // the aurora breathes with the star's activity, and needs air to glow in
-    uAurora.value = (0.8 + 0.3 * Math.sin(this.time * 0.037) + 0.2 * Math.sin(this.time * 0.011 + 1.3)) * this.solar * uAtmo.value;
+    // mostly quiet, now and then a strong display; storms on the star make it much stronger
+    uAurora.value = Math.max(0.08, 0.38 + 0.3 * Math.sin(this.time * 0.037) + 0.22 * Math.sin(this.time * 0.011 + 1.3)) * this.solar * uAtmo.value;
     this.terrain?.update(this.cam.camera.position);
     this.ocean?.update(this.renderer, this.cam.camera.position, this.time, this.keepSeaPatch);
     this.vegetation?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist, this.cam.camera.position, this.renderer);
@@ -818,6 +844,10 @@ export class GenesisScene {
     c.updateProjectionMatrix();
     this.sky.position.copy(c.position);
     this.sky.scale.setScalar((far * 0.9) / 400);
+    guardUniforms();
+    this.post.maxExposure = 1.5 + 2.1 * Math.max(0, Math.min(1, (1.2 - this.cam.dist) / 1.0));
+    if (this.clouds) this.clouds.jitter.value = this.post.temporal ? 1 : 0.3;
+    this.clouds?.render(this.renderer, this.cam.camera);
     this.post.render(dt);
     if (dt > 0) this.fpsAvg += (1 / dt - this.fpsAvg) * 0.05;
   }

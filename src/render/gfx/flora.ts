@@ -15,7 +15,7 @@ import type { CellSnapshot, PlantInfo } from '../../shared/protocol';
 import { PG } from '../../sim/genetics';
 import { EXAG, uDitherFrame, uMoonDir, uSunDir, uTime } from '../common';
 import { faceDirection } from './cubebake';
-import { Pass, makeTarget } from './gpu';
+import { Pass, makeTarget, packAttributes } from './gpu';
 import { uLook } from './look';
 import type { PlanetData } from './planetdata';
 import { FORMS, PART, buildPlant, type Form } from './plantmesh';
@@ -25,7 +25,7 @@ import { eclipseLight } from './eclipse';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
 
-const TILE = 128;
+const TILE = 192;
 const VIEWS = 3;
 /** Half-width of the square the imposter camera sees, in model units; models are about one unit tall. */
 const BAKE_HALF = 0.78;
@@ -156,7 +156,7 @@ export class Flora {
       const fp: N = vCard.z;
       const fThin = is(fp, PART.leaf).add(is(fp, PART.needle)).add(is(fp, PART.frond)).add(is(fp, PART.blade)).add(is(fp, PART.petal));
       // colour by part
-      const leafCol: N = vTint.mul(vCard.y.mul(0.35).add(0.8));
+      const leafCol: N = vTint.mul(mix(float(0.5), float(1.3), smoothstep(0.0, 1.0, vCard.y))).mul(vCard.w.mul(0.45).add(0.6));
       const barkCol: N = vColor.mul(sin(vCard.y.mul(60)).mul(0.08).add(0.95));
       const capSpots = smoothstep(0.75, 0.9, sin(vCard.x.mul(38)).mul(sin(vCard.y.mul(23))).mul(0.5).add(0.5));
       const capCol: N = mix(vTint, vec3(0.95, 0.92, 0.85), capSpots.mul(0.7));
@@ -176,7 +176,7 @@ export class Flora {
       material.colorNode = color;
       // hand over to imposters with a dither, so nothing pops
       const dCam = length(cameraPosition.sub(vBase));
-      const keep = float(1).sub(smoothstep(this.uLod.mul(0.85), this.uLod.mul(1.15), dCam));
+      const keep = float(1).sub(smoothstep(this.uLod.mul(0.94), this.uLod.mul(1.06), dCam));
       material.opacityNode = cutout(vCard).mul(step(ign(), keep.add(0.001)));
       const mesh = new InstancedMesh(g, material, cap);
       mesh.count = 0;
@@ -189,6 +189,7 @@ export class Flora {
     {
       const cap = Math.max(256, maxInstances);
       const g = new PlaneGeometry(1, 1);
+      packAttributes(g);
       const iDir = new InstancedBufferAttribute(new Float32Array(cap * 3), 3);
       const iData = new InstancedBufferAttribute(new Float32Array(cap * 4), 4); // size, form index, glow, seed
       const iTint = new InstancedBufferAttribute(new Float32Array(cap * 3), 3);
@@ -231,7 +232,7 @@ export class Flora {
       color = color.add(vTint2.mul(tex.b).mul(night.mul(2.2).add(0.3))).add(albedo.mul(vGlow).mul(night).mul(0.55).mul(tex.g));
       material.colorNode = color;
       const dCam = length(cameraPosition.sub(vBase));
-      const keep = smoothstep(this.uLod.mul(0.85), this.uLod.mul(1.15), dCam);
+      const keep = smoothstep(this.uLod.mul(0.94), this.uLod.mul(1.06), dCam);
       material.opacityNode = tex.a.mul(step(float(1).sub(keep), ign()));
       const mesh = new InstancedMesh(g, material, cap);
       mesh.count = 0;
@@ -242,7 +243,8 @@ export class Flora {
 
     // ---------------- grass and ground plants underfoot
     {
-      const cap = grassCap;
+      // never zero: an empty instance buffer is an error on WebGPU
+      const cap = Math.max(1, grassCap);
       const g = buildPlant('tuft', 3);
       const iDir = new InstancedBufferAttribute(new Float32Array(cap * 3), 3);
       const iData = new InstancedBufferAttribute(new Float32Array(cap * 4), 4); // size, yaw, wind, seed
@@ -473,7 +475,8 @@ export class Flora {
         const e = elevation[ia]! * w + elevation[ib]! * u + elevation[ic]! * v;
         if (e <= seaLevel + 0.02) continue;
         const near = w >= u && w >= v ? ia : u >= v ? ib : ic;
-        if (snow[near]! > 4) continue;
+        // nothing grows out of deep snow: a thin cover thins the plants, a thick one buries them
+        if (snow[near]! > 0.5 + 1.5 * h0) continue;
         const sp = this.plants.get(flora[near]!);
         const genes = sp?.genes;
         const height = genes ? genes[PG.Height]! : canopy[near]!;

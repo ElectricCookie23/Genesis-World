@@ -5,6 +5,7 @@ import { computeDrainage, countContinents } from '../src/sim/geology';
 import { driftPlatesMoving } from '../src/sim/tectonics';
 import { dustFall, shapeLandforms } from '../src/sim/landforms';
 import { computeCurrents } from '../src/sim/climate';
+import { loadSimulation, saveSimulation } from '../src/sim/snapshot';
 
 const landShare = (sim: Simulation) => { let n = 0; const w = sim.world; for (let i = 0; i < w.elevation.length; i++) if (w.elevation[i]! > w.seaLevel) n++; return n / w.elevation.length; };
 
@@ -134,4 +135,19 @@ describe('ocean currents', () => {
     }
     expect(worn).toBeGreaterThan(0);
   }, 60000);
+});
+
+describe('saving and loading', () => {
+  it('a reloaded world carries on exactly as the original would have', () => {
+    const a = new Simulation('amber-reef-101', 21);
+    for (let i = 0; i < 600; i++) a.step(15000);
+    const b = new Simulation('amber-reef-101', 21);
+    loadSimulation(b, saveSimulation(a, 'test'));
+    expect(b.digest()).toBe(a.digest());
+    for (let i = 0; i < 120; i++) { a.step(15000); b.step(15000); }
+    expect(b.simYear).toBe(a.simYear);
+    expect(b.digest()).toBe(a.digest());
+    expect(b.events.events.length).toBe(a.events.events.length);
+    expect(b.creatures.livingSpecies).toBe(a.creatures.livingSpecies);
+  }, 120000);
 });

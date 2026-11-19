@@ -2,6 +2,7 @@
 // Every vertex carries what the shader needs: a part id (bark, leaf cluster, needles, frond, blade,
 // glow bulb, cap, succulent flesh, petal), a card uv for cut-out leaf shapes, baked ambient
 // occlusion, and wind weights for trunk bend, branch sway and leaf flutter.
+import { packAttributes } from './gpu';
 import { BufferAttribute, BufferGeometry } from 'three/webgpu';
 
 export const PART = { bark: 0, leaf: 1, needle: 2, frond: 3, blade: 4, bulb: 5, cap: 6, flesh: 7, petal: 8 } as const;
@@ -159,13 +160,15 @@ class Builder {
     g.setAttribute('card', new BufferAttribute(new Float32Array(this.card), 4));
     g.setAttribute('wind', new BufferAttribute(new Float32Array(this.wind), 3));
     g.setIndex(this.idx);
+    // one buffer for all of it: WebGPU allows only eight vertex buffers per draw
+    packAttributes(g);
     return g;
   }
 }
 
-const BARK: V3 = [0.3, 0.22, 0.16];
-const PALE_BARK: V3 = [0.52, 0.47, 0.4];
-const DARK_BARK: V3 = [0.16, 0.12, 0.1];
+const BARK: V3 = [0.15, 0.105, 0.08];
+const PALE_BARK: V3 = [0.34, 0.3, 0.25];
+const DARK_BARK: V3 = [0.085, 0.065, 0.055];
 
 interface TreeSpec {
   height: number; trunkR: number; lean: number; levels: number; children: number[]; angle: number; ratio: number; firstBranch: number;
@@ -231,14 +234,17 @@ export function buildPlant(form: Form, seed = 1): BufferGeometry {
     case 'conifer': {
       b.crown = [0, 0.6, 0]; b.crownR = 0.6;
       const trunk: V3[] = [], radii: number[] = [];
-      for (let i = 0; i <= 6; i++) { trunk.push([b.r(-0.01, 0.01), (i / 6) * 1.15, b.r(-0.01, 0.01)]); radii.push(0.045 * (1 - (i / 6) * 0.9)); }
+      for (let i = 0; i <= 6; i++) { trunk.push([b.r(-0.01, 0.01), (i / 6) * 1.06, b.r(-0.01, 0.01)]); radii.push(0.042 * (1 - (i / 6) * 0.93)); }
       b.limb(trunk, radii, 6, BARK, PART.bark, 0, 0);
-      const whorls = 8;
+      // the leading shoot: two crossed cards that close the top of the crown over the tip of the trunk
+      b.quad([0, 1.07, 0], [1, 0, 0], [0, 1, 0], 0.11, 0.3, PART.needle, 9.1, 0.85, [1, 1, 1], 0.5, 2, 0.1);
+      b.quad([0, 1.07, 0], [0, 0, 1], [0, 1, 0], 0.11, 0.3, PART.needle, 9.6, 0.85, [1, 1, 1], 0.5, 2, 0.1);
+      const whorls = 10;
       for (let w = 0; w < whorls; w++) {
-        const t = 0.16 + (w / whorls) * 0.8;
+        const t = 0.14 + (w / (whorls - 1)) * 0.8;
         const y = t * 1.15;
-        const reach = 0.42 * (1 - t) + 0.06;
-        const count = 5;
+        const reach = 0.44 * (1 - t) + 0.07;
+        const count = w < 6 ? 6 : 5;
         for (let k = 0; k < count; k++) {
           const ang = (k / count) * Math.PI * 2 + w * 0.9;
           const out: V3 = [Math.cos(ang), -0.25, Math.sin(ang)];

@@ -138,14 +138,16 @@ async function boot(): Promise<void> {
   let adaptive = 0;
   const applyQuality = () => {
     const q = PRESETS[state.quality];
-    const cut = adaptive >= 2 ? 0.5 : 1;
-    // dynamic resolution: the last two steps lower the resolution to hold the frame rate
-    scene.setPixelRatio(Math.max(0.75, q.ratio - (adaptive >= 3 ? 0.5 : 0) - (adaptive >= 4 ? 0.5 : 0)));
+    // step-downs, cheapest loss first: resolution (anti-aliasing hides it), then cloud detail and instance counts,
+    // then ambient occlusion and the lens fringe, then bloom, and anti-aliasing only as the last resort
+    const cut = adaptive >= 3 ? 0.5 : 1;
+    const drop = [0, 0.25, 0.5, 0.5, 0.5, 0.5, 0.75][Math.min(6, adaptive)]!;
+    scene.setPixelRatio(Math.max(adaptive >= 6 ? 0.75 : 1, q.ratio - drop));
     scene.presetLive(state.quality, cut, false);
-    scene.post.set({ bloom: q.bloom && adaptive < 1, taa: q.taa && adaptive < 2, ao: q.ao && adaptive < 1, fringe: q.fringe });
-    scene.post.allowDof = state.quality !== 'low' && adaptive < 2;
+    scene.post.set({ ao: q.ao && adaptive < 4, fringe: q.fringe && adaptive < 4, bloom: q.bloom && adaptive < 5, taa: q.taa && adaptive < 6 });
+    scene.post.allowDof = state.quality !== 'low' && adaptive < 4;
     // blurred glass panels are costly on weak GPUs: use plain dark panels below the high preset
-    document.documentElement.classList.toggle('lite', state.quality === 'low' || state.quality === 'medium' || adaptive >= 1);
+    document.documentElement.classList.toggle('lite', state.quality === 'low' || state.quality === 'medium' || adaptive >= 3);
   };
   actions.setQuality = (q) => {
     adaptive = 0;
@@ -507,9 +509,14 @@ async function boot(): Promise<void> {
   let toastUntil = 0;
   const pumpToasts = (now: number) => {
     if (state.milestone && now > toastUntil) update({ milestone: null });
+    // after a jump through time a whole era of milestones arrives at once: only the latest is news, the rest
+    // are already in the chronicle. A title is also dropped if the world has since moved a long way past it.
+    if (toasts.length > 2) toasts.splice(0, toasts.length - 1);
+    const year = state.stats?.simYear ?? 0, yps = state.stats?.yearsPerSecond ?? 0;
+    while (toasts.length && year - toasts[0]!.simYear > Math.max(2e5, yps * 20)) toasts.shift();
     if (!state.milestone && toasts.length && !state.opening) {
       update({ milestone: toasts.shift()! });
-      toastUntil = now + 7000;
+      toastUntil = now + (toasts.length ? 3500 : 6000);
     }
   };
 
@@ -759,6 +766,11 @@ async function boot(): Promise<void> {
     else if (k === 'x') togglePanel('section');
     else if (k === 'u') { scene.underwater = !scene.underwater; update({ notice: scene.underwater ? 'Diving allowed: zoom in over the sea to go under.' : '' }); window.setTimeout(() => update({ notice: '' }), 2500); }
     else if (k === 'v') scene.firstPerson = !scene.firstPerson;
+    else if (k === 'd' && e.shiftKey) {
+      // a black-box report of everything the picture is drawn from, for bug reports
+      const report = { ...scene.diagnose(), seed, url: location.search, stats: state.stats, quality: state.quality, overlay: state.overlay, speed: state.speedIndex };
+      download(URL.createObjectURL(new Blob([JSON.stringify(report, null, 1)], { type: 'application/json' })), `genesis-${seed}-diagnostic.json`);
+    }
     else if (k === 'o') { const order = ['none', 'temp', 'rain', 'life', 'people', 'fossils', 'nations', 'fungal', 'diversity', 'oxygen'] as const; actions.setOverlay(order[(order.indexOf(state.overlay) + 1) % order.length]!); }
     else if (k === 'f') { if (state.creature) actions.followCreature(!state.creature.following); }
     else if (k === 'escape' && scene.following !== null) actions.followCreature(false);
@@ -800,11 +812,11 @@ async function boot(): Promise<void> {
         if ((state.overlay === 'diversity' || state.overlay === 'oxygen') && now - lastLayer > 4000) { lastLayer = now; send({ type: 'requestLayer', kind: state.overlay }); }
         if (rain > 0.2 && near > 0.2 && Math.random() < 0.12) music.thunder();
       }
-      // adaptive quality: two seconds under target steps down bloom, then instance counts, then resolution
+      // adaptive quality: two seconds under target steps down resolution first, effects after (see applyQuality)
       const target = mobile ? 26 : 50;
-      if (!state.opening && scene.fpsAvg < target && document.visibilityState === 'visible') {
+      if (!state.opening && !params.has('noadapt') && scene.fpsAvg < target && document.visibilityState === 'visible') {
         slowFor += dt;
-        if (slowFor > 2 && adaptive < 4) { adaptive++; slowFor = 0; applyQuality(); }
+        if (slowFor > 2 && adaptive < 6) { adaptive++; slowFor = 0; applyQuality(); }
       } else slowFor = 0;
       scene.cam.autoOrbit = state.reducedMotion ? 0 : state.postcard ? 0.035 : 0.012;
       // postcard mode: a slow cinematic drift in and out, with depth of field up close
@@ -824,7 +836,7 @@ async function boot(): Promise<void> {
   // hooks for automated visual checks
   // grab the 3D canvas straight after a render (cheap way to capture frames in automated checks)
   const grab = () => { scene.frame(0); return canvas.toDataURL('image/jpeg', 0.9); };
-  (window as unknown as { __genesis: unknown }).__genesis = { scene, state, setSpeed, update, actions, send, grab, music, skip: () => opening?.skip(), opening: () => opening };
+  (window as unknown as { __genesis: unknown }).__genesis = { scene, state, setSpeed, update, actions, send, grab, music, diagnose: () => scene.diagnose(), skip: () => opening?.skip(), opening: () => opening };
 }
 
 boot().catch((err) => {

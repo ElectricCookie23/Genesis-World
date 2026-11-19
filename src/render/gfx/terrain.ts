@@ -151,14 +151,19 @@ export class TerrainSurface {
     const pigment: N = mix(vec3(uLook.pigmentA), vec3(uLook.pigmentB), X.g);
     // plants crowd the river banks, even in dry country
     const vegMask = smoothstep(0.12, 0.55, veg.mul(bank.mul(1.2).add(1.25)).add(bank.mul(smoothstep(0.02, 0.2, veg)).mul(0.25)).add(e2.r.sub(0.5).mul(0.45))).mul(float(1).sub(steep.mul(0.75)));
-    albedo = mix(albedo, pigment.mul(float(1).sub(canopy.mul(0.4))).mul(e2.r.mul(0.6).add(0.7)), vegMask);
+    const litter: N = mix(soilC.mul(0.7), pigment.mul(0.34), 0.42);
+    const meadow: N = mix(pigment.mul(0.62), mix(pigment.mul(0.9), sandC, 0.4), smoothstep(0.3, 0.75, e2.r));
+    const forestFloor = smoothstep(0.12, 0.55, canopy);
+    // under trees the ground lies in broken shade
+    const dapple = mix(float(1), smoothstep(0.3, 0.7, e2.r).mul(0.5).add(0.5), forestFloor);
+    albedo = mix(albedo, mix(meadow, litter, forestFloor).mul(e2.r.mul(0.4).add(0.8)).mul(dapple), vegMask.mul(0.94));
     // farmland: ploughed strips in alternating crops
     const rows = sin(dot(dir, t1).mul(5200).add(e1.r.mul(40))).mul(0.5).add(0.5);
     albedo = mix(albedo, mix(sandC.mul(0.8), pigment.mul(1.4), rows), C.r.mul(0.8).mul(float(1).sub(steep)));
     // trails worn by herds: braided paths of bare, pale earth through whatever grows there
     const braid = pow(float(1).sub(abs(e2.r.mul(2).sub(1))), 5).add(pow(float(1).sub(abs(e1.r.mul(2).sub(1))), 9).mul(0.7));
-    const worn = smoothstep(0.75, 1.1, X.r.mul(braid.mul(1.3).add(0.35))).mul(smoothstep(-0.01, 0.03, above)).mul(float(1).sub(smoothstep(0.3, 1.5, snow)));
-    albedo = mix(albedo, mix(soilC, sandC, 0.6).mul(1.1), worn.mul(0.85));
+    const worn = smoothstep(0.55, 0.95, braid).mul(smoothstep(0.3, 0.8, X.r)).mul(smoothstep(-0.01, 0.03, above)).mul(float(1).sub(smoothstep(0.3, 1.5, snow))).mul(float(1).sub(steep));
+    albedo = mix(albedo, mix(soilC, sandC, 0.6).mul(1.05), worn.mul(0.6));
     albedo = albedo.mul(mix(float(1), e3.r.mul(0.7).add(0.65), microFade));
     // hot springs: a pool of mineral-blue water in a pale crust, ringed with rust-coloured terraces
     const springField: N = samplePlanet(data.overlay, dir).a.mul(e1.r.mul(0.7).add(0.55));
@@ -257,7 +262,7 @@ export class TerrainSurface {
     const impAng = sqrt(max(float(2).sub(dot(dir, uImpact.xyz).mul(2)), 0));
     const impOn = step(0, impAge);
     const ringR = impAge.mul(0.085);
-    const ring = exp(impAng.sub(ringR).div(impAge.sqrt().mul(0.012).add(0.006)).pow(2).negate()).mul(exp(impAge.mul(-0.3))).mul(impOn);
+    const ring = exp(impAng.sub(ringR).div(impAge.max(0).sqrt().mul(0.012).add(0.006)).pow(2).negate()).mul(exp(impAge.mul(-0.3))).mul(impOn);
     const rays = pow(sin(atan(dot(dir, t2).sub(dot(uImpact.xyz, t2)), dot(dir, t1).sub(dot(uImpact.xyz, t1))).mul(17).add(e1.r.mul(9))).mul(0.5).add(0.5), 3);
     const crater = exp(impAng.div(0.035).pow(2).negate()).mul(exp(impAge.mul(-0.03))).mul(impOn);
     const ejecta = exp(impAng.div(0.11).pow(2).negate()).mul(rays).mul(exp(impAge.mul(-0.08))).mul(impOn).mul(0.6);

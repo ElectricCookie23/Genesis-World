@@ -3,17 +3,18 @@
 // tileable 3D noise. They shade themselves, take the colour of the star at dusk and of the moon at
 // night, glow from inside with lightning, and cast shadows on the ground and sea.
 import {
-  BackSide, Data3DTexture, LinearFilter, Mesh, MeshBasicNodeMaterial, RGBAFormat, RepeatWrapping, IcosahedronGeometry, UnsignedByteType, Vector4,
-  type CubeTexture,
+  BackSide, Data3DTexture, LinearFilter, Matrix4, Mesh, MeshBasicNodeMaterial, RGBAFormat, RepeatWrapping, IcosahedronGeometry, UnsignedByteType, Vector2, Vector3, Vector4,
+  type CubeTexture, type PerspectiveCamera, type RenderTarget, type WebGPURenderer,
 } from 'three/webgpu';
 import {
   Break, Fn, If, Loop, abs, cameraFar, cameraNear, cameraPosition, cos, dot, exp, float, int, length, max, min, mix, normalize, perspectiveDepthToViewZ,
-  positionView, positionWorld, pow, screenCoordinate, select, sin, smoothstep, sqrt, texture3D, uniform, vec3, vec4, viewportDepthTexture, atan, log,
+  positionView, positionWorld, pow, screenCoordinate, screenUV, select, sin, smoothstep, sqrt, texture, texture3D, uniform, vec2, vec3, vec4, viewportDepthTexture, atan, log,
 } from 'three/tsl';
 import { EXAG, uDitherFrame, uBolts, uCloudAmount, uHazeTint, uMoonDir, uPlumeWind, uPlumes, uSteam, uSunDir, uTime } from '../common';
 import { uLook } from './look';
 import { samplePlanet } from './planetdata';
 import { eclipseLight } from './eclipse';
+import { Pass, makeTarget } from './gpu';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
@@ -100,10 +101,21 @@ export class VolumetricClouds {
   readonly noise: Data3DTexture;
   /** Ray-march steps through the layer; fewer on weak devices. */
   readonly steps = uniform(22, 'int');
+  /** How far each ray's first step is shifted to hide banding: 1 when a temporal filter averages the noise away, less without one. */
+  readonly jitter = uniform(1);
   /** 0 or 1: skip the finest erosion noise on weak devices. */
   readonly detail = uniform(1);
   /** Light reaching a point on the ground or sea (1 = full sun). */
   readonly shadow: (p: N) => N;
+  /** The march runs at this share of the screen's resolution (it is the costliest thing in the frame) and is drawn back at full size. */
+  scale = 0.5;
+  private readonly pass: Pass;
+  private readonly target: RenderTarget;
+  private readonly uCamPos = uniform(new Vector3(0, 0, 3));
+  private readonly uInvProj = uniform(new Matrix4());
+  private readonly uCamWorld = uniform(new Matrix4());
+  private readonly uTexel = uniform(new Vector2(1 / 256, 1 / 256));
+  private readonly size = new Vector2();
 
   constructor(cover: CubeTexture, seed: number, noiseSize = 64, lightSteps = 4, cityLight?: CubeTexture) {
     this.noise = buildCloudNoise(noiseSize, seed);
@@ -125,6 +137,7 @@ export class VolumetricClouds {
       const storm = smoothstep(0.62, 0.9, c).toVar();
       for (const cy of uCyclones) {
         const u: N = cy;
+        If(u.w.greaterThan(0.001), () => {
         const centre: N = u.xyz;
         const rho = sqrt(max(float(2).sub(dot(dir, centre).mul(2)), 1e-8));
         // a frame around the centre to measure the angle of the spiral arms
@@ -139,6 +152,7 @@ export class VolumetricClouds {
         const add = max(body.mul(arms.mul(0.85).add(0.15)), wall).mul(eye).mul(u.w);
         amount.assign(mix(amount, max(amount, add.mul(1.05)), u.w.mul(float(1).sub(smoothstep(reach.mul(0.8), reach, rho)))).mul(mix(float(1), eye, u.w)));
         storm.assign(max(storm, wall.mul(eye).mul(u.w)));
+        });
       }
       return vec4(amount, storm, c, 0);
     });
@@ -209,10 +223,8 @@ export class VolumetricClouds {
       return vec3(out.x, out.y.div(max(out.x, 1e-4)), out.z);
     });
 
-    const material = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, depthTest: false, side: BackSide });
-    const march = Fn(() => {
-      const ro: N = cameraPosition;
-      const rd: N = normalize(positionWorld.sub(cameraPosition));
+    /** Where a ray enters and leaves the cloud layer. */
+    const layerSpan = (ro: N, rd: N): { start: N; endRaw: N; valid: N; above: N } => {
       const b = dot(ro, rd), c = dot(ro, ro);
       const discT = b.mul(b).sub(c.sub(CLOUD_TOP * CLOUD_TOP));
       const discB = b.mul(b).sub(c.sub(CLOUD_BASE * CLOUD_BASE));
@@ -223,16 +235,21 @@ export class VolumetricClouds {
       const hitsBase = discB.greaterThan(0).and(tB0.greaterThan(0));
       const start = select(above, max(tT0, 0), select(below, tB1, float(0)));
       const endRaw = select(below, tT1, select(hitsBase, tB0, tT1));
-      // nothing behind solid ground, trees or animals
-      const depth: N = viewportDepthTexture();
-      const viewZ: N = perspectiveDepthToViewZ(depth, cameraNear, cameraFar);
-      const tSolid = viewZ.div(normalize(positionView).z);
-      const end = min(min(endRaw, tSolid), start.add(0.7));
-      const span = max(end.sub(start), 0).mul(select(discT.greaterThan(0).and(tT1.greaterThan(0)), 1, 0));
+      return { start, endRaw, valid: select(discT.greaterThan(0).and(tT1.greaterThan(0)), 1, 0), above };
+    };
+    const march = Fn(() => {
+      // a full-screen pass: the ray through this pixel comes from the camera's matrices
+      const ro: N = this.uCamPos;
+      const ndc = vec4(screenUV.x.mul(2).sub(1), float(1).sub(screenUV.y).mul(2).sub(1), 1, 1);
+      const view: N = this.uInvProj.mul(ndc);
+      const rd: N = normalize(this.uCamWorld.mul(vec4(view.xyz.div(view.w), 0)).xyz);
+      const { start, endRaw, valid, above } = layerSpan(ro, rd);
+      const end = min(endRaw, start.add(0.7));
+      const span = max(end.sub(start), 0).mul(valid);
       const ds = span.div(float(this.steps));
       // a per-pixel offset hides the banding of the steps
       const sc: N = screenCoordinate;
-      const jitter = sc.x.add(uDitherFrame).mul(0.06711056).add(sc.y.add(uDitherFrame).mul(0.00583715)).fract().mul(52.9829189).fract();
+      const jitter = sc.x.add(uDitherFrame).mul(0.06711056).add(sc.y.add(uDitherFrame).mul(0.00583715)).fract().mul(52.9829189).fract().sub(0.5).mul(this.jitter).add(0.5);
       const T = float(1).toVar();
       const C = vec3(0).toVar();
       const mu = dot(rd, L);
@@ -295,15 +312,50 @@ export class VolumetricClouds {
       // far clouds sink into the colour of the air
       const haze = vec3(uHazeTint).mul(smoothstep(-0.2, 0.3, dot(normalize(ro.add(rd.mul(start))), L)).mul(0.85).add(0.02));
       const farFade = select(above, float(0), smoothstep(0.08, 0.6, start).mul(0.75));
-      return vec4(mix(C.div(max(alpha, 1e-4)), haze, farFade), alpha);
+      // seen from space, rays that only graze the layer above the horizon would draw the clouds edge-on as a ragged
+      // woolly outline round the whole planet: those fade out, so the limb stays a clean curve
+      const closest = sqrt(max(dot(ro, ro).sub(dot(ro, rd).mul(dot(ro, rd))), 0));
+      const limb = mix(float(1), smoothstep(CLOUD_BASE + THICK * 0.75, CLOUD_BASE + THICK * 0.1, closest), select(above, float(1), float(0)));
+      // colour times cover, so that the picture can be enlarged without dark fringes
+      return vec4(mix(C, haze.mul(alpha), farFade).mul(limb), alpha.mul(limb));
     });
-    const out: N = march();
-    material.colorNode = out.rgb;
-    material.opacityNode = out.a;
+    this.pass = new Pass(march());
+    this.target = makeTarget(256, 256, { linear: true });
+
+    // ---- drawn back into the scene at full resolution, on a shell around the planet (so the air and aurora still draw over it)
+    const material = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, depthTest: false, side: BackSide });
+    const tex = (offX: number, offY: number): N => texture(this.target.texture, screenUV.add(vec2(offX, offY).mul(this.uTexel)));
+    // four taps, each already a blend of four texels: a small blur that takes the grain out of the enlarged picture
+    const cloud: N = tex(-0.75, -0.75).add(tex(0.75, -0.75)).add(tex(-0.75, 0.75)).add(tex(0.75, 0.75)).mul(0.17)
+      .add(tex(-2, 0).add(tex(2, 0)).add(tex(0, -2)).add(tex(0, 2)).mul(0.08));
+    // nothing in front of solid ground, trees or animals: tested here, per full-resolution pixel, so silhouettes stay sharp
+    const cro: N = cameraPosition;
+    const crd: N = normalize(positionWorld.sub(cameraPosition));
+    const lay = layerSpan(cro, crd);
+    const viewZ: N = perspectiveDepthToViewZ(viewportDepthTexture(), cameraNear, cameraFar);
+    const tSolid = viewZ.div(normalize(positionView).z);
+    const through = max(min(lay.endRaw, lay.start.add(0.7)).sub(lay.start), 1e-5);
+    const clear = tSolid.sub(lay.start).div(through.mul(0.8)).clamp(0, 1);
+    material.colorNode = cloud.rgb.div(max(cloud.a, 1e-3));
+    material.opacityNode = cloud.a.mul(clear);
     // an icosphere has no seam or poles, so the shell never shows a hairline where its edges meet
     this.mesh = new Mesh(new IcosahedronGeometry(CLOUD_TOP * 1.03, 5), material);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 3;
+  }
+
+  /** March the clouds for this frame into their own small picture. Call before the scene is drawn. */
+  render(renderer: WebGPURenderer, camera: PerspectiveCamera): void {
+    if (!this.mesh.visible) return;
+    renderer.getDrawingBufferSize(this.size);
+    const w = Math.max(8, Math.round(this.size.x * this.scale)), h = Math.max(8, Math.round(this.size.y * this.scale));
+    if (this.target.width !== w || this.target.height !== h) this.target.setSize(w, h);
+    (this.uTexel.value as Vector2).set(1 / w, 1 / h);
+    camera.updateMatrixWorld();
+    (this.uCamPos.value as Vector3).setFromMatrixPosition(camera.matrixWorld);
+    (this.uInvProj.value as Matrix4).copy(camera.projectionMatrixInverse);
+    (this.uCamWorld.value as Matrix4).copy(camera.matrixWorld);
+    this.pass.render(renderer, this.target);
   }
 
   /** Place cyclones (cells of hurricanes and of the eternal storm). */

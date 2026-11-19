@@ -78,7 +78,7 @@ export class ParticleSystem {
     material.colorNode = vec3(c.x, c.y, c.z).mul(mix(dayLit, float(1), selfLit));
     // soft round puffs rather than squares
     const rd = length(uv().sub(0.5));
-    const round = mix(smoothstep(0.5, 0.15, rd), smoothstep(0.36, 0.44, rd).mul(smoothstep(0.5, 0.45, rd)), ripple);
+    const round = mix(smoothstep(0.5, 0.15, rd), smoothstep(0.42, 0.46, rd).mul(smoothstep(0.5, 0.47, rd)), ripple);
     material.opacityNode = c.w.mul(alive).mul(round);
     this.sprite = new Sprite(material);
     (this.sprite as any).count = MAX_PARTICLES;
@@ -121,7 +121,7 @@ export class ParticleSystem {
 
   /** A ripple of sound spreading from a calling animal. */
   ripple(p: V3, size: number): void {
-    this.emit(p, 0, 0, 0, 1.3, size, 99, 0.75, 0.95, 1.0, 0.55);
+    this.emit(p, 0, 0, 0, 1.1, size, 99, 0.6, 0.75, 0.8, 0.1);
   }
 
   /** Debris, fireball and dust from a meteor strike at a unit direction. */

@@ -229,7 +229,7 @@ export class OceanSurface {
     // a meteor strike sends a bright ring across the sea as well
     const impAge: N = uImpact.w;
     const impAng = sqrt(max(float(2).sub(dot(dir, uImpact.xyz).mul(2)), 0));
-    const impRing = exp(impAng.sub(impAge.mul(0.085)).div(impAge.sqrt().mul(0.012).add(0.006)).pow(2).negate()).mul(exp(impAge.mul(-0.3))).mul(step(0, impAge));
+    const impRing = exp(impAng.sub(impAge.mul(0.085)).div(impAge.max(0).sqrt().mul(0.012).add(0.006)).pow(2).negate()).mul(exp(impAge.mul(-0.3))).mul(step(0, impAge));
     color = color.add(vec3(4.5, 2.6, 1.2).mul(impRing.mul(2)));
 
     // a mass hatching lights the sea from below: a glow that spreads from where it began, then fades

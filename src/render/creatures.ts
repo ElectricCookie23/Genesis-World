@@ -5,7 +5,7 @@ import {
   InstancedMesh, Matrix4, MeshBasicNodeMaterial, OctahedronGeometry, Quaternion, Vector3, type PerspectiveCamera, type Texture,
 } from 'three/webgpu';
 import {
-  abs, attribute, cameraPosition, cos, cross, dot, float, instancedBufferAttribute, max, normalLocal, normalize, positionGeometry, positionWorld, pow,
+  abs, attribute, cameraPosition, cos, cross, dot, float, instancedBufferAttribute, max, normalLocal, normalWorld, normalize, positionGeometry, positionWorld, pow,
   sin, step, varying, vec3,
 } from 'three/tsl';
 import { G, Limb, limbKind, sizeMetres } from '../sim/genetics';
@@ -18,6 +18,7 @@ import { EXAG, uSeaKm, uTime } from './common';
 import { dayAmount, surfaceLight } from './lighting';
 import type { GroundSampler } from './gfx/ground';
 import { buildCreatureModel } from './gfx/creaturemesh';
+import { packAttributes } from './gfx/gpu';
 import { makeCreatureMaterial } from './gfx/creatureskin';
 import type { PlanetData } from './gfx/planetdata';
 import { eclipseAt } from './gfx/eclipse';
@@ -141,6 +142,8 @@ export class CreatureLayer {
       for (let i = 0; i < CAP; i++) arr.set(value, i * 4);
       geo.setAttribute(name, new InstancedBufferAttribute(arr, 4));
     }
+    // these never change, so they share one buffer (WebGPU allows eight per draw)
+    packAttributes(geo, ['iSkinA', 'iSkinB', 'iSkinC'], true);
     const mesh = new InstancedMesh(geo, this.material, CAP);
     const m = new Matrix4();
     for (let i = 0; i < CAP; i++) mesh.setMatrixAt(i, m);
@@ -195,7 +198,7 @@ export class CreatureLayer {
         const e2 = new Vector3().crossVectors(home, e1).normalize();
         list.push({
           key, species: h.species[i]!, region: r, medium, home, e1, e2, h: hash(key * 31 + 5),
-          size: 0.0006 + 0.0038 * Math.pow(info.genes[G.Size]!, 1.3), social: info.genes[G.Sociality]!, fed: h.fed[i]!,
+          size: 0.00035 + 0.0019 * Math.pow(info.genes[G.Size]!, 1.3), social: info.genes[G.Sociality]!, fed: h.fed[i]!,
           pos: home.clone(), fwd: e1.clone(), moving: 0, cell, night: info.genes[G.Nocturnal]!,
           larva: info.genes[G.Metamorphosis]! > 0.6 && hash(key * 53 + 7) < 0.35,
           rival: null, hunter: info.genes[G.Diet]! > 0.6, migrate: info.genes[G.Migration]!, echo: info.genes[G.Echo]! > 0.6,
@@ -265,10 +268,19 @@ export class CreatureLayer {
   private layoutMounds(list: Individual[]): void {
     if (!this.mounds) {
       const material = new MeshBasicNodeMaterial();
-      material.colorNode = (attribute('color', 'vec3') as any).mul(surfaceLight(normalize(normalLocal), positionWorld) as any);
-      const geo = new ConeGeometry(0.5, 1, 7).translate(0, 0.5, 0).toNonIndexed();
-      const col = new Float32Array(geo.attributes.position!.count * 3);
-      for (let i = 0; i < col.length; i += 3) { col[i] = 0.36; col[i + 1] = 0.26; col[i + 2] = 0.17; }
+      material.colorNode = (attribute('color', 'vec3') as any).mul(surfaceLight(normalize(normalWorld), positionWorld) as any);
+      // a rounded heap of earth, darker toward the ground, with smooth shading
+      const geo = new IcosahedronGeometry(0.5, 2);
+      const pos = geo.attributes.position!;
+      const col = new Float32Array(pos.count * 3);
+      for (let i = 0; i < pos.count; i++) {
+        const y = Math.max(0, pos.getY(i));
+        // pull the top up into a blunt peak and spread the foot
+        const k = 1 + 0.35 * (0.5 - y);
+        pos.setXYZ(i, pos.getX(i) * k, y * 1.5, pos.getZ(i) * k);
+        const shade = 0.75 + 0.5 * y;
+        col[i * 3] = 0.33 * shade; col[i * 3 + 1] = 0.25 * shade; col[i * 3 + 2] = 0.17 * shade;
+      }
       geo.setAttribute('color', new BufferAttribute(col, 3));
       geo.computeVertexNormals();
       this.mounds = new InstancedMesh(geo, material, 256);
@@ -287,7 +299,7 @@ export class CreatureLayer {
       const nest = info.genes[G.Care]! > 0.55;
       if (!hive && !nest) continue;
       seen.add(key);
-      this.moundData.push({ ind, size: hive ? 0.004 : 0.0012 });
+      this.moundData.push({ ind, size: hive ? 0.0011 : 0.00045 });
     }
   }
 
@@ -345,14 +357,16 @@ export class CreatureLayer {
   update(time: number, dist: number, sunDir: Vector3): void {
     if (!this.cells) return;
     for (const s of this.slots.values()) s.used = 0;
-    if (dist > 1.25 || !this.individuals.length) {
+    if (dist > 0.16 || !this.individuals.length) {
       for (const s of this.slots.values()) s.mesh.count = 0;
       return;
     }
     const a = new Vector3(), b = new Vector3(), fwd = new Vector3(), up = new Vector3(), right = new Vector3();
     const m = new Matrix4(), q = new Quaternion();
     const sea = 1 + uSeaKm.value * EXAG;
-    const boost = 1 + Math.min(2.6, dist * 5);
+    // a little larger with distance so a herd still reads from above, then gone: nothing that small shows from orbit
+    const boost = 1 + Math.min(1.2, dist * 9);
+    const farFade = Math.max(0, Math.min(1, (0.16 - dist) / 0.05));
     for (const ind of this.individuals) {
       const slot = this.slot(ind.larva ? -ind.species - 1 : ind.species);
       if (!slot || slot.used >= CAP) continue;
@@ -375,7 +389,8 @@ export class CreatureLayer {
       // in the moon's shadow, day animals stop and settle as if night had come
       const dark = this.moonBody.w > 0 && sun > 0 && eclipseAt(a, sunDir, this.moonBody, this.moonBody.w) < 0.35;
       const asleep = ind.night > 0.6 ? sun > 0.1 && !dark : ind.night < 0.3 ? sun < -0.15 || dark : dark;
-      const size = ind.size * boost * (ind.larva ? 0.5 : 1);
+      const size = ind.size * boost * (ind.larva ? 0.5 : 1) * farFade;
+      if (size <= 0) continue;
       ind.fwd.copy(fwd);
       let r: number;
       if (ind.medium === 1) r = Math.max(this.groundRadius(ind, a), sea);
@@ -402,12 +417,14 @@ export class CreatureLayer {
     if (this.mounds) {
       const mm = new Matrix4(), mq = new Quaternion(), mp = new Vector3(), ms = new Vector3(), Y = new Vector3(0, 1, 0);
       this.moundData.forEach((d, i) => {
-        mp.copy(d.ind.home);
-        const r = this.groundRadius(d.ind, mp);
+        mp.copy(d.ind.home).normalize();
+        const cell = this.ground.cellAt(mp.x, mp.y, mp.z, d.ind.cell);
+        const r = this.ground.radiusAt(mp.x, mp.y, mp.z, cell);
         mq.setFromUnitVectors(Y, mp);
-        const sc = d.size * boost;
-        ms.set(sc, sc * (d.size > 0.002 ? 1.6 : 0.5), sc);
-        mm.compose(mp.clone().multiplyScalar(r), mq, ms);
+        // only on dry ground, only seen from near, and never blown up with distance the way animals are
+        const sc = r > sea + 2e-5 && dist < 0.2 ? d.size : 0;
+        ms.set(sc, sc * (d.size > 0.001 ? 1.2 : 0.45), sc);
+        mm.compose(mp.clone().multiplyScalar(r - sc * 0.05), mq, ms);
         this.mounds!.setMatrixAt(i, mm);
       });
       this.mounds.count = this.moundData.length;

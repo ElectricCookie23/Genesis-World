@@ -6,7 +6,7 @@ import {
   Fn, If, Loop, abs, cameraFar, cameraNear, cameraPosition, dot, exp, float, int, length, max, min, mix, normalize, perspectiveDepthToViewZ, positionView,
   positionWorld, screenCoordinate, select, sin, smoothstep, sqrt, texture3D, uniform, vec3, viewportDepthTexture,
 } from 'three/tsl';
-import { EXAG, uDitherFrame, uSunDir, uTime } from '../common';
+import { EXAG, uDitherFrame, uExposure, uSunDir, uTime } from '../common';
 import { uLook } from './look';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -18,10 +18,10 @@ export const uAurora = uniform(1);
 export const uMagneticPole = uniform(new Vector3(0.14, 0.985, 0.1).normalize());
 
 /** The curtains hang between these heights (planet radii). */
-const LOW = 1 + 11.5 * EXAG;
-const HIGH = 1 + 26 * EXAG;
+const LOW = 1 + 10 * EXAG;
+const HIGH = 1 + 16.5 * EXAG;
 /** Angle from the magnetic pole to the middle of the oval (about 70 degrees magnetic latitude). */
-const OVAL = 0.35;
+const OVAL = 0.3;
 
 export class AuroraVolume {
   readonly mesh: Mesh;
@@ -69,24 +69,29 @@ export class AuroraVolume {
             // three thin sheets side by side, each a few hundredths of a radian apart
             const off = theta.sub(centre);
             const sheet = (shift: number, width: number, gain: number): N => exp(off.sub(shift).div(width).pow(2).negate()).mul(gain);
-            const sheets = sheet(0, 0.0065, 1).add(sheet(0.034, 0.005, 0.55)).add(sheet(-0.03, 0.008, 0.4));
+            const sheets = sheet(0, 0.0045, 1).add(sheet(0.03, 0.0035, 0.5)).add(sheet(-0.027, 0.005, 0.35));
             // vertical rays: the pattern depends on direction only, so it runs straight up the curtain
             const rays: N = noiseAt(dir.mul(31).add(vec3(t.mul(0.011), 0, t.mul(-0.007))));
             const fine: N = noiseAt(dir.mul(96).add(vec3(0, t.mul(0.02), 0)));
-            const streaks = smoothstep(0.3, 0.75, rays.g.mul(0.65).add(fine.b.mul(0.35))).mul(0.85).add(0.15);
+            const streaks = smoothstep(0.35, 0.8, rays.g.mul(0.65).add(fine.b.mul(0.35))).mul(0.94).add(0.06);
             // patches of the oval are bright and others nearly dark; pulses run along it
-            const patch = smoothstep(0.38, 0.62, fold.r).mul(0.9).add(0.1);
+            const patch = smoothstep(0.42, 0.68, fold.r).mul(0.97).add(0.03);
             const pulse = sin(dot(dir, vec3(3.1, 0.4, -2.7)).mul(6).sub(t.mul(0.55))).mul(0.3).add(0.7);
             // bright sharp lower border, fading upward
-            const height = smoothstep(0.0, 0.07, h).mul(exp(h.mul(-3.4))).mul(float(1).sub(smoothstep(0.85, 1.0, h)));
+            const height = smoothstep(0.0, 0.07, h).mul(exp(h.mul(-4.2))).mul(float(1).sub(smoothstep(0.7, 1.0, h)));
             const colour = mix(vec3(uLook.auroraLow), vec3(uLook.auroraHigh), smoothstep(0.12, 0.7, h)).add(vec3(1.0, 0.35, 0.55).mul(float(1).sub(smoothstep(0.0, 0.06, h))).mul(0.35));
-            // washed out in daylight
-            const night = float(1).sub(smoothstep(-0.2, 0.25, dot(dir, uSunDir)).mul(0.93));
+            // gone in daylight: it only shows where the sky under it is dark
+            const night = float(1).sub(smoothstep(-0.22, 0.02, dot(dir, uSunDir)));
             sum.addAssign(colour.mul(sheets.mul(streaks).mul(patch).mul(pulse).mul(height).mul(night)).mul(ds));
           });
         });
       });
-      return sum.mul(uAurora).mul(210);
+      // a long look along the oval (from orbit, at the limb) must not pile up into a solid wall, and a wide-open
+      // night exposure must not burn it out: the glow saturates softly and is held back as the exposure rises
+      const raw: N = sum.mul(uAurora).mul(150);
+      const lum = max(max(raw.x, raw.y), raw.z);
+      const soft = float(1).sub(exp(lum.mul(-1.4))).mul(0.55).div(max(lum, 1e-5));
+      return raw.mul(soft).div(max(uExposure, 1).pow(0.6));
     });
     material.colorNode = glow();
     this.mesh = new Mesh(new IcosahedronGeometry(HIGH * 1.03, 5), material);

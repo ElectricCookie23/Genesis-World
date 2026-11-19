@@ -2,6 +2,7 @@
 // around each settlement by its size and technology, a stepped temple where one was raised, and
 // boats working the sea lanes. All of it is instanced models that find the ground in the vertex
 // shader, lit like everything else, with windows that light up at night in the nation's own colour.
+import { packAttributes } from './gpu';
 import {
   BufferAttribute, BufferGeometry, DoubleSide, DynamicDrawUsage, InstancedBufferAttribute, InstancedMesh, MeshBasicNodeMaterial, Quaternion, Vector3,
   type Texture,
@@ -83,6 +84,8 @@ class Shape {
     g.setAttribute('bpart', new BufferAttribute(new Float32Array(this.part), 1));
     g.setAttribute('buv', new BufferAttribute(new Float32Array(this.uv), 2));
     g.setIndex(this.idx);
+    // one buffer for all of it: WebGPU allows only eight vertex buffers per draw
+    packAttributes(g);
     return g;
   }
 }

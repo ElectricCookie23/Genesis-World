@@ -5,7 +5,7 @@ import { uniform } from 'three/tsl';
 /** Scene units per km of elevation. Planet radius is 1. */
 export const EXAG = 0.0056;
 export const CLOUD_RADIUS = 1.03;
-export const ATMO_RADIUS = 1.09;
+export const ATMO_RADIUS = 1.06;
 export const MOON_DISTANCE = 5.5;
 export const MOON_RADIUS = 0.2;
 

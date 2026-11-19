@@ -60,6 +60,8 @@ export class PostFX {
   private lumBusy = false;
   private frame = 0;
   private target = 1;
+  /** The most the exposure may open up: low from orbit (the planet's day side must not be pushed into a milky haze), high near the ground at night. */
+  maxExposure = 3.6;
   /** Mean scene luminance last measured (for diagnostics). */
   measured = 0;
 
@@ -69,6 +71,9 @@ export class PostFX {
     this.pipeline = new RenderPipeline(renderer);
     this.build();
   }
+
+  /** Whether frames are being blended over time (which also averages away per-frame dither). */
+  get temporal(): boolean { return this.options.taa; }
 
   set(options: Partial<PostOptions>): void {
     const next = { ...this.options, ...options };
@@ -84,7 +89,7 @@ export class PostFX {
   /** Depth of field in follow and postcard modes: focus sits at the camera's focus distance. */
   setFocus(on: boolean, distance: number): void {
     uFocus.value = distance;
-    const want = on && this.allowDof && distance < 0.5;
+    const want = on && this.allowDof && distance < 0.06;
     if (want === this.dofEnabled) return;
     this.dofEnabled = want;
     this.build();
@@ -119,7 +124,8 @@ export class PostFX {
       const velocityTex: N = convertToTexture(vec4(ndc.sub(prevNdc), 0, 1));
       color = traa(color, depth, velocityTex, this.camera);
     }
-    if (this.dofEnabled) color = dof(color, this.scenePass.getViewZNode(), uFocus, uFocus.mul(0.6), 0.9);
+    // a wide band stays sharp around the animal being followed; only the far background softens, and not by much
+    if (this.dofEnabled) color = dof(color, this.scenePass.getViewZNode(), uFocus, uFocus.mul(2.5), 0.45);
     this.lumSource = null;
     // ---- exposure, then bloom of what is still brighter than white: the star, lava, lightning, aurora, city cores
     // nothing brighter than this survives: a single bad pixel must not bloom into a blot
@@ -186,14 +192,14 @@ export class PostFX {
           const dec = (h: number) => { const s = h & 0x8000 ? -1 : 1, e = (h >> 10) & 0x1f, f = h & 0x3ff; return e === 0 ? s * 6.103515625e-5 * (f / 1024) : s * Math.pow(2, e - 15) * (1 + f / 1024); };
           for (let i = 0; i < LUM * LUM; i++) { a += half ? dec(px[i * 4]) : px[i * 4]; w += half ? dec(px[i * 4 + 1]) : px[i * 4 + 1]; lin += half ? dec(px[i * 4 + 2]) : px[i * 4 + 2]; }
           const cover = w / (LUM * LUM);
-          if (cover > 0.004 && isFinite(a)) {
+          if (cover > 0.004 && isFinite(a) && isFinite(lin) && lin > 0) {
             // mostly the plain average (so bright cloud and snow are not blown out), tempered by the log average (so a dark scene still lifts)
             const mean = Math.pow(Math.exp(a / w), 0.15) * Math.pow(Math.max(1e-5, lin / w), 0.85);
             this.measured = mean;
             // aim for a mid-grey picture, but do not chase a few lit pixels in a dark frame
-            const wanted = Math.max(0.6, Math.min(3.6, 0.2 / mean));
+            const wanted = Math.max(0.6, Math.min(this.maxExposure, 0.2 / mean));
             this.target = 1 + (wanted - 1) * Math.min(1, cover * 6);
-          } else this.target = 1.6;
+          } else this.target = Math.min(1.6, this.maxExposure);
           this.lumBusy = false;
         }).catch(() => { this.lumBusy = false; });
       }
@@ -201,7 +207,8 @@ export class PostFX {
     this.frame++;
     // eyes adjust faster to brightness than to darkness
     const rate = this.target < uExposure.value ? 2.6 : 0.9;
-    uExposure.value += (this.target - uExposure.value) * (1 - Math.exp(-dt * rate));
+    uExposure.value += (this.target - uExposure.value) * (1 - Math.exp(-Math.max(0, Math.min(1, dt)) * rate));
+    if (!(uExposure.value > 0.05 && uExposure.value < 20)) { uExposure.value = 1; this.target = 1; }
   }
 
   render(dt = 0.016): void {

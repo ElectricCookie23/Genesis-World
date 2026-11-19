@@ -15,9 +15,10 @@ import { makeNoise, fbm } from '../sim/noise';
 type N = any;
 
 const RP = 0.998;
-const HR = 0.02;
-const HM = 0.006;
-const STEPS = 10;
+// thinner than it was: from orbit the air is a fine rim, not a glass shell; the amount of air overhead is unchanged
+const HR = 0.013;
+const HM = 0.0045;
+const STEPS = 12;
 const LIGHT_STEPS = 4;
 
 /** Sibling planets in the sky: direction (in the frame of the stars) with angular radius in w, and colour. */
@@ -80,7 +81,10 @@ export function createAtmosphere(): Mesh {
       sumM.addAssign(att.mul(dM));
     });
     const mu = dot(rd, L);
-    const phaseR = float(3 / (16 * Math.PI)).mul(mu.mul(mu).add(1));
+    // seen from inside, the sky is far brighter than one bounce of light explains: light scattered many times fills
+    // it in from every side. Seen from space that extra light would only be a milky veil over the ground, so it fades out.
+    const inside = smoothstep(ATMO_RADIUS, 1.012, length(ro));
+    const phaseR = float(3 / (16 * Math.PI)).mul(mu.mul(mu).add(1)).add(inside.mul(0.11));
     const g = 0.76;
     const phaseM = float((3 / (8 * Math.PI)) * (1 - g * g)).mul(mu.mul(mu).add(1))
       .div(float(2 + g * g).mul(pow(float(1 + g * g).sub(mu.mul(2 * g)), 1.5)));
@@ -91,7 +95,7 @@ export function createAtmosphere(): Mesh {
     const band = bowAngle.sub(0.733).div(0.03);
     const spectrum: N = vec3(exp(band.sub(0.6).pow(2).mul(-3)), exp(band.pow(2).mul(-3)), exp(band.add(0.6).pow(2).mul(-3)));
     const bow: N = spectrum.mul(uRainbow).mul(0.22).mul(smoothstep(0.0, 0.15, dot(rd, normalize(ro)).add(0.05)));
-    return color.mul(5).mul(vec3(uLook.star)).mul(uAtmo).mul(vec3(uGradeTint)).mul(select(discA.greaterThan(0), 1, 0)).add(bow.mul(vec3(uLook.star)));
+    return color.mul(mix(float(3.8), float(5), inside)).mul(vec3(uLook.star)).mul(uAtmo).mul(vec3(uGradeTint)).mul(select(discA.greaterThan(0), 1, 0)).add(bow.mul(vec3(uLook.star)));
   });
   material.colorNode = scatter();
   const mesh = new Mesh(new IcosahedronGeometry(ATMO_RADIUS * 1.02, 6), material);
@@ -133,16 +137,19 @@ export function createSky(): Mesh {
   const edge = float(1).sub(float(0.00045).mul(uLook.starSize).mul(uLook.starSize));
   // the star's disc is as bright as it is; its wide glare is held back when the exposure opens up at night
   const glare = float(1).div(max(uExposure, 0.5));
-  const sun = vec3(uLook.star).mul(smoothstep(edge, edge.add(0.00025), mu).mul(60).add(pow(max(mu, 0), float(900).div(uLook.starSize)).mul(3).mul(glare)).add(pow(max(mu, 0), 40).mul(0.12).mul(glare)));
+  const sun = vec3(uLook.star).mul(smoothstep(edge, edge.add(0.00025), mu).mul(60).add(pow(max(mu, 0), float(900).div(uLook.starSize)).mul(3).mul(glare)).add(pow(max(mu, 0), 110).mul(0.04).mul(glare)));
   // binary systems: a smaller, bluer companion sun
   const mu2 = dot(dir, uSun2Dir);
   const sun2 = vec3(0.75, 0.86, 1.0).mul(smoothstep(0.99975, 0.9999, mu2).mul(40).add(pow(max(mu2, 0), 1400).mul(2))).mul(uSun2);
   // the other worlds of this system: steady points and one small disc, each its own colour
   let siblings: N = vec3(0, 0, 0);
   for (const sib of uSiblings) {
-    const d = dot(sd, normalize(sib.dir as any));
-    const edge = float(1).sub((sib.dir as any).w.mul((sib.dir as any).w).mul(0.5));
-    siblings = siblings.add(vec3(sib.color).mul(smoothstep(edge, edge.add(0.0000015), d).mul(2.2).add(pow(max(d, 0), 60000).mul(0.9))));
+    // xyz is the direction, w the angular radius: only xyz may be normalised (the whole vector once was, and the
+    // radius leaked into the dot product, which drew each of these as a flat white disc twenty times too big)
+    const away: N = length(sd.sub(normalize((sib.dir as any).xyz)));
+    const radius: N = (sib.dir as any).w;
+    const disc = smoothstep(radius.mul(1.2), radius.mul(0.8), away);
+    siblings = siblings.add(vec3(sib.color).mul(disc.mul(1.6).add(exp(away.mul(away).mul(-90000)).mul(0.9))));
   }
   // the background stays as dark as it is, however far the exposure opens up for a night scene
   const keepDark = float(1).div(max(uExposure, 0.5));
@@ -155,7 +162,7 @@ export function createSky(): Mesh {
 
 /** Low-poly cratered moon, lit by the same sun. */
 export function createMoon(seed: number): Mesh {
-  const geo = new IcosahedronGeometry(MOON_RADIUS, 5).toNonIndexed();
+  const geo = new IcosahedronGeometry(MOON_RADIUS, 5);
   const rng = new RNG(seed);
   const noise = makeNoise(rng);
   const craters: [number, number, number, number][] = [];

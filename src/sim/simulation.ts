@@ -1049,7 +1049,7 @@ export class Simulation {
     const tx = g.pos[target * 3]!, ty = g.pos[target * 3 + 1]!, tz = g.pos[target * 3 + 2]!;
     const add = Math.min(0.2, 0.03 + 0.03 * Math.log10(1 + Math.max(0, mass)));
     for (let step = 0; step < 24 && cur !== target; step++) {
-      if (w.elevation[cur]! > w.seaLevel) w.trail[cur] = Math.min(1, w.trail[cur]! + add);
+      if (w.elevation[cur]! > w.seaLevel) w.trail[cur] = Math.min(1, w.trail[cur]! + add * (1 - 0.85 * w.trail[cur]!));
       let best = cur, bd = g.pos[cur * 3]! * tx + g.pos[cur * 3 + 1]! * ty + g.pos[cur * 3 + 2]! * tz;
       for (let k = 0; k < g.ncount[cur]!; k++) {
         const nb = g.neighbors[cur * 6 + k]!;

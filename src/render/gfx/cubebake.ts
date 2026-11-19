@@ -129,13 +129,15 @@ export class CubeBake {
       if (entry.float) {
         for (let i = 0; i < per; i++) {
           const o = base + i * 3;
-          data[i * 4 + channel] = (values[cells[o]!]! * weights[o]! + values[cells[o + 1]!]! * weights[o + 1]! + values[cells[o + 2]!]! * weights[o + 2]!) * scale + offset;
+          const v = (values[cells[o]!]! * weights[o]! + values[cells[o + 1]!]! * weights[o + 1]! + values[cells[o + 2]!]! * weights[o + 2]!) * scale + offset;
+          // a single bad number here would turn the whole land and sea black on some graphics cards
+          data[i * 4 + channel] = v - v === 0 ? v : 0;
         }
       } else {
         for (let i = 0; i < per; i++) {
           const o = base + i * 3;
           const v = (values[cells[o]!]! * weights[o]! + values[cells[o + 1]!]! * weights[o + 1]! + values[cells[o + 2]!]! * weights[o + 2]!) * scale + offset;
-          data[i * 4 + channel] = v <= 0 ? 0 : v >= 1 ? 255 : v * 255;
+          data[i * 4 + channel] = v >= 1 ? 255 : v > 0 ? v * 255 : 0;
         }
       }
     }

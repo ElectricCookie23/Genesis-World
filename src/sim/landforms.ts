@@ -24,6 +24,7 @@ export function shapeLandforms(world: World, amount: number): LandformResult {
   const { neighbors, ncount, count } = grid;
   const res: LandformResult = { canyon: 0, delta: 0, newLand: 0, reefHeld: 0, atollRim: 0 };
   // ---- rivers: the power of a stream grows with its water and its fall
+  const fed = new Uint8Array(count);
   for (let i = 0; i < count; i++) {
     const d = downhill[i]!;
     const e = elevation[i]!;
@@ -39,11 +40,15 @@ export function shapeLandforms(world: World, amount: number): LandformResult {
       if (cut > 0) { elevation[i] = e - cut; res.canyon++; }
     } else {
       // the river has reached the sea: its mud settles in the shallows and builds them up toward the surface
-      const mud = Math.min(0.02, 0.0012 * Math.sqrt(fl) * amount);
-      const target = seaLevel + 0.015;
-      if (below < target) {
+      // (only water that is already shallow fills up: mud dropped off the edge of the shelf is lost to the deep,
+      // or over millions of years every river would build itself a causeway across the ocean)
+      const depth = seaLevel - below;
+      const mud = Math.min(0.02, 0.0012 * Math.sqrt(fl) * amount) * Math.max(0, 1 - depth / 0.18);
+      const target = seaLevel + 0.008;
+      if (below < target && mud > 0) {
         const was = below;
         elevation[d] = Math.min(target, below + mud);
+        fed[d] = 1;
         res.delta++;
         if (was <= seaLevel && elevation[d]! > seaLevel) res.newLand++;
       }
@@ -51,9 +56,17 @@ export function shapeLandforms(world: World, amount: number): LandformResult {
       if (fl > 12) for (let k = 0; k < ncount[d]!; k++) {
         const nb = neighbors[d * 6 + k]!;
         const en = elevation[nb]!;
-        if (en <= seaLevel && en > seaLevel - 0.25) { elevation[nb] = Math.min(seaLevel - 0.005, en + mud * 0.4); res.delta++; }
+        if (en <= seaLevel && en > seaLevel - 0.12) { elevation[nb] = Math.min(seaLevel - 0.005, en + mud * 0.4); fed[nb] = 1; res.delta++; }
       }
     }
+  }
+  // ---- waves rework the shallows: mud that no river is still feeding is carried off, so only the mouths of
+  // big rivers keep a delta, and the rest of the coast keeps an ordinary shelf
+  const wash = 0.004 * amount;
+  for (let i = 0; i < count; i++) {
+    if (fed[i]) continue;
+    const depth = seaLevel - elevation[i]!;
+    if (depth >= 0 && depth < 0.03) elevation[i] = elevation[i]! - Math.min(wash, (0.03 - depth) * 0.5);
   }
   // ---- volcanic islands on ocean crust sink slowly as the crust under them cools
   for (let i = 0; i < count; i++) {
