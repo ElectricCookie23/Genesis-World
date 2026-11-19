@@ -414,26 +414,67 @@ describe('uneven history (E3)', () => {
   });
 
   it('in at least three of five worlds two nations stand two or more ages apart at the same moment', () => {
-    let wide = 0, withHistory = 0, learned = 0;
-    for (let k = 0; k < FIVE.length; k++) {
-      const sim = atDawn(k);
-      if (!sim) continue;
-      withHistory++;
-      let gap = 0;
-      for (let y = 0; y < 6000; y++) {
-        sim.step(1);
-        if (y % 20) continue;
-        const live = sim.civ.h.nations.filter((n) => n.ended < 0);
-        if (live.length > 1) gap = Math.max(gap, Math.max(...live.map((n) => n.era)) - Math.min(...live.map((n) => n.era)));
-      }
-      if (gap >= 2) wide++;
-      learned += sim.civ.h.nations.reduce((a, n) => a + (n.borrowed ?? 0), 0);
-      // contacts are always other, real nations
-      for (const n of sim.civ.h.nations) for (const c of n.contacts) { expect(c).not.toBe(n.id); expect(sim.civ.h.nations[c]).toBeDefined(); }
-    }
-    expect(withHistory).toBeGreaterThanOrEqual(4);
-    expect(wide).toBeGreaterThanOrEqual(3);
+    const runs = fiveHistories();
+    expect(runs.length).toBeGreaterThanOrEqual(4);
+    expect(runs.filter((r) => r.gap >= 2).length).toBeGreaterThanOrEqual(3);
     // and knowledge did pass between nations somewhere
-    expect(learned).toBeGreaterThan(10);
-  }, 600000);
+    expect(runs.reduce((a, r) => a + r.sim.civ.h.nations.reduce((x, n) => x + (n.borrowed ?? 0), 0), 0)).toBeGreaterThan(10);
+    // contacts are always other, real nations
+    for (const r of runs) for (const n of r.sim.civ.h.nations) for (const c of n.contacts) { expect(c).not.toBe(n.id); expect(r.sim.civ.h.nations[c]).toBeDefined(); }
+  }, 900000);
+});
+
+/** The five worlds, each run for six thousand years of history at a human pace: done once, shared by the checks that need a whole history. */
+interface Run { seed: string; sim: Simulation; began: number; gap: number }
+let histories: Run[] | null = null;
+function fiveHistories(): Run[] {
+  if (histories) return histories;
+  histories = [];
+  for (let k = 0; k < FIVE.length; k++) {
+    const sim = atDawn(k);
+    if (!sim) continue;
+    const began = sim.civ.h.began;
+    let gap = 0;
+    for (let y = 0; y < 6000; y++) {
+      sim.step(1);
+      if (y % 20) continue;
+      const live = sim.civ.h.nations.filter((n) => n.ended < 0);
+      if (live.length > 1) gap = Math.max(gap, Math.max(...live.map((n) => n.era)) - Math.min(...live.map((n) => n.era)));
+    }
+    histories.push({ seed: FIVE[k]!, sim, began, gap });
+  }
+  return histories;
+}
+
+describe('rise and fall (E4)', () => {
+  it('nations break: provinces leave, civil wars divide them, and some fall apart, each with its reasons on record', () => {
+    const runs = fiveHistories();
+    let broke = 0, falls = 0;
+    for (const r of runs) {
+      const ev = r.sim.events.events;
+      const breaks = ev.filter((e) => e.type === 'secession' || e.type === 'civil-war' || e.type === 'nation-collapse');
+      if (breaks.length) broke++;
+      falls += ev.filter((e) => e.type === 'civil-war' || e.type === 'nation-collapse').length;
+      for (const e of breaks) {
+        // a readable cause chain: the nation's own founding at least, and words for why
+        expect(e.causes.length).toBeGreaterThanOrEqual(1);
+        expect(e.description.length).toBeGreaterThan(60);
+        for (const c of e.causes) expect(ev[c]).toBeDefined();
+      }
+      const h = r.sim.civ.h;
+      // every living town of history belongs to a living nation; a fallen nation holds nothing
+      for (const st of r.sim.civ.settlements) if (st.ruined < 0 && st.nation >= 0) expect(h.nations[st.nation]!.ended).toBeLessThan(0);
+      for (const e of ev.filter((x) => x.type === 'nation-collapse')) {
+        const fallen = h.nations[Number(e.data!.nation)]!;
+        expect(fallen.ended).toBeGreaterThan(0);
+        const heirs = h.nations.filter((n) => n.parent === fallen.id && n.founded === fallen.ended);
+        expect(heirs.length).toBeGreaterThanOrEqual(1);
+        for (const heir of heirs) expect(heir.name).not.toBe(fallen.name);
+      }
+      for (const n of h.nations) { expect(n.stability).toBeGreaterThanOrEqual(0); expect(n.stability).toBeLessThanOrEqual(1); expect(n.inequality).toBeLessThanOrEqual(1); }
+    }
+    // most worlds see a nation break within six thousand years, and somewhere one falls or fights itself
+    expect(broke).toBeGreaterThanOrEqual(Math.min(3, runs.length));
+    expect(falls).toBeGreaterThanOrEqual(1);
+  }, 900000);
 });
