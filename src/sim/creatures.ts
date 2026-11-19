@@ -161,7 +161,8 @@ export class Creatures {
   /** How well a body fits a region: [land fit, sea fit]. */
   private fitLand(c: number, land: number): number {
     const p = c * PHEN_COUNT;
-    const move = Math.max(this.phen[p + P.Walk]!, this.phen[p + P.Fly]!);
+    // wings add to getting around on top of legs
+    const move = Math.min(1.15, this.phen[p + P.Walk]! + this.phen[p + P.Fly]! * 0.7);
     return land > 0.02 ? Math.sqrt(this.phen[p + P.LandUse]!) * (0.42 + 0.58 * move) * Math.min(1, land * 3) : 0;
   }
 
@@ -392,8 +393,14 @@ export class Creatures {
           if (!this.alive[d] || this.sp[d] !== this.sp[c] || this.count[d]! > this.count[c]!) continue;
           const dist = geneDistance(this.genome, c * GENE_COUNT, this.genome, d * GENE_COUNT);
           const minority = this.count[d]! < this.count[c]! * 0.03;
-          if (dist < MERGE_DISTANCE || (minority && dist < 0.22) || (lines >= 2 && dist < 0.3)) {
+          if (dist < MERGE_DISTANCE) {
+            // close kin interbreed: genes mix
             this.blend(c, this.count[d]!, this.genome, d * GENE_COUNT);
+            this.kill(d);
+          } else if ((minority && dist < 0.22) || lines >= 2) {
+            // a distinct line that is tiny or surplus is absorbed without changing the bigger line's genes,
+            // so a locally adapted population is not averaged away by its neighbours
+            this.count[c] = this.count[c]! + this.count[d]! * 0.5;
             this.kill(d);
           } else lines++;
         }

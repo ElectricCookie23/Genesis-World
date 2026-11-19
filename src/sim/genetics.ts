@@ -53,13 +53,13 @@ export function mutateInto(src: Float32Array, so: number, dst: Float32Array, d: 
   const n = 3 + rng.int(5);
   for (let k = 0; k < n; k++) {
     const g = rng.int(GENE_COUNT);
-    const sigma = (SLOW.has(g) ? 0.012 : 0.045) * scale;
+    const sigma = (SLOW.has(g) ? 0.022 : 0.045) * scale;
     dst[d + g] = Math.max(0, Math.min(1, dst[d + g]! + rng.gauss() * sigma));
   }
   // 1% of births carry one large jump in a single gene: sudden novelty
   if (rng.chance(0.01 * Math.min(4, scale))) {
     const g = rng.int(GENE_COUNT);
-    dst[d + g] = Math.max(0, Math.min(1, dst[d + g]! + rng.gauss() * (SLOW.has(g) ? 0.08 : 0.3)));
+    dst[d + g] = Math.max(0, Math.min(1, dst[d + g]! + rng.gauss() * (SLOW.has(g) ? 0.14 : 0.3)));
     return true;
   }
   return false;
@@ -119,7 +119,7 @@ export function computePhenotype(g: Float32Array, o: number, out: Float32Array, 
   const upkeep = 1
     + brain * 1.1 + brain * brain * 1.6 + g[o + G.Armor]! * 0.5 + g[o + G.Horn]! * 0.25 + g[o + G.Ornament]! * 0.3 + g[o + G.Glow]! * 0.2
     + g[o + G.Venom]! * 0.3 + g[o + G.Toxicity]! * 0.3 + g[o + G.ToxinResist]! * 0.2 + g[o + G.Insulation]! * 0.15
-    + eyes * 0.3 + echo * 0.3 + elec * 0.2 + g[o + G.Smell]! * 0.1 + g[o + G.Hearing]! * 0.1 + fly * 0.6 + g[o + G.ColorChange]! * 0.2
+    + eyes * 0.3 + echo * 0.3 + elec * 0.2 + g[o + G.Smell]! * 0.1 + g[o + G.Hearing]! * 0.1 + fly * 0.3 + g[o + G.ColorChange]! * 0.2
     + g[o + G.Care]! * 0.25;
   // how much it can eat depends on body and metabolism; how much it must eat also depends on upkeep
   const forage = Math.pow(mass, 0.75) * metab * (warm ? 1.9 : 1);
@@ -160,10 +160,13 @@ export function computePhenotype(g: Float32Array, o: number, out: Float32Array, 
   out[p + P.Mass75] = Math.pow(mass, 0.75);
   out[p + P.LogPackMass] = Math.log(mass * out[p + P.Pack]!);
   // feeding layer: small bodies crop the ground layer, tall or flying ones reach the canopy
-  const x = Math.min(2, (size * 0.95 + g[o + G.Neck]! * 0.55 + fly * 0.5) * 2);
+  const x = Math.min(2, (size * 0.95 + g[o + G.Neck]! * 0.55) * 2);
   let f0 = Math.exp(-(x * x) / 0.55), f1 = Math.exp(-((x - 1) * (x - 1)) / 0.55), f2 = Math.exp(-((x - 2) * (x - 2)) / 0.55);
   const fsum = f0 + f1 + f2;
   f0 /= fsum; f1 /= fsum; f2 /= fsum;
+  // a flier can feed at any height: wings widen the reach rather than move it
+  const wide = Math.min(1, fly * 1.3);
+  f0 += (1 / 3 - f0) * wide; f1 += (1 / 3 - f1) * wide; f2 += (1 / 3 - f2) * wide;
   out[p + P.Feed0] = f0;
   out[p + P.Feed1] = f1;
   out[p + P.Feed2] = f2;

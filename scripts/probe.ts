@@ -1,7 +1,7 @@
 // Inject variants next to existing cohorts and compare how well they feed and grow in one step.
 import { Simulation } from '../src/sim/simulation';
 import { G, GENE_COUNT, P, PHEN_COUNT } from '../src/sim/genetics';
-const sim = new Simulation('amber-reef-101', 36);
+const sim = new Simulation(process.argv[3] ?? 'amber-reef-101', Number(process.argv[4] ?? 36));
 const until = Number(process.argv[2] ?? 150) * 1e6;
 while (sim.simYear < until) sim.step(15000);
 const cr = sim.creatures, reg = sim.regions;
@@ -12,6 +12,8 @@ const variants: Record<string, (g: Float32Array) => void> = {
   'water-0.15': (g) => { g[G.Water] -= 0.15; },
   'water-0.3,lobe': (g) => { g[G.Water] -= 0.3; g[G.LimbType] = 0.46; g[G.LimbPairs] = 0.4; },
   'water-0.6,legs': (g) => { g[G.Water] -= 0.6; g[G.LimbType] = 0.6; g[G.LimbPairs] = 0.5; },
+  'limb->lobe only': (g) => { g[G.LimbType] = 0.46; g[G.LimbPairs] = Math.max(g[G.LimbPairs]!, 0.3); },
+  'water-0.3 only': (g) => { g[G.Water] -= 0.3; },
 };
 // pick coastal cohorts with decent numbers
 const picks: number[] = [];
