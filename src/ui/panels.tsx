@@ -714,6 +714,7 @@ export function Peoples() {
               <i class={css.dot} />
               <div class={css.what} style={{ color: '#ece7db' }}>{st.name}</div>
               <div class={css.when} style={{ color: '#ece7db' }}>A {kind(st.tech)} of {bigNumber(st.pop * 1000)} {sp ? sp.name : 'people'}, founded {formatYear(st.founded).toLowerCase()}.</div>
+              {st.relic && <div class={css.when} style={{ color: '#d8b98a' }}>Its {st.relic} were built with a forgotten technique: no one here can make more.</div>}
               {belief && <div class={css.when} style={{ color: '#ece7db' }}>Its faith remembers: {belief.title.toLowerCase()}.</div>}
               <button class={css.link} onClick={() => actions.flyToCell(st.cell, 0.25)}>fly there</button>
               {st.eventId >= 0 && <button class={css.link} onClick={() => update({ whyEvent: st.eventId })}>its story</button>}

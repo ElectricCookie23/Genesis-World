@@ -478,3 +478,51 @@ describe('rise and fall (E4)', () => {
     expect(falls).toBeGreaterThanOrEqual(1);
   }, 900000);
 });
+
+import { forget } from '../src/sim/history/tech';
+
+describe('dark ages (E5)', () => {
+  it('the newest knowledge is lost first, and nothing still known rests on something forgotten', () => {
+    const land = new Set<Land>(['ore', 'coast', 'river', 'forest', 'beasts', 'sand', 'coal']);
+    const k = newKnowledge(), rng = new RNG(8);
+    for (let n = 0; n < 70; n++) { const i = chooseNext(k, land, {}, rng); k.way[i] = wayFor(i, land); k.year[i] = n; }
+    const before = levelOf(k, land);
+    const gone = forget(k, 12, 500, 77);
+    expect(gone.length).toBe(12);
+    expect(levelOf(k, land)).toBeLessThan(before);
+    for (const i of gone) { expect(k.way[i]).toBe(-1); expect(k.lost[i]).toBe(500); expect(k.lostEvent[i]).toBe(77); }
+    const lowestGone = Math.min(...gone.map((i) => WEB[i]!.level));
+    for (let i = 0; i < WEB.length; i++) {
+      if (k.way[i]! < 0) continue;
+      expect(WEB[i]!.level).toBeLessThanOrEqual(lowestGone);
+      for (const need of WEB[i]!.needs) { const j = SLOT_INDEX.get(need)!; if (wayFor(j, land) >= 0) expect(k.way[j]!).toBeGreaterThanOrEqual(0); }
+    }
+    // what was lost is open to be found again
+    expect(open(k, land).some((i) => gone.includes(i))).toBe(true);
+    expect(forget(newKnowledge(), 5, 1).length).toBe(0);
+  });
+
+  it('in a long run knowledge is lost, leaves its works behind, and is found again', () => {
+    const runs = fiveHistories();
+    let lost = 0, regained = 0;
+    for (const r of runs) {
+      const ev = r.sim.events.events;
+      for (const e of ev.filter((x) => x.type === 'knowledge-lost')) {
+        lost++;
+        expect(e.description).toMatch(/no longer knows/);
+        expect(e.causes.length).toBeGreaterThan(0);
+      }
+      for (const e of ev.filter((x) => x.type === 'knowledge-regained')) {
+        regained++;
+        expect(Number(e.data!.years)).toBeGreaterThan(0);
+        // the finding again is tied to the loss in the cause graph
+        expect(e.causes.some((c) => ev[c]!.type === 'knowledge-lost')).toBe(true);
+        expect(ev[e.causes.find((c) => ev[c]!.type === 'knowledge-lost')!]!.simYear).toBeLessThan(e.simYear);
+      }
+      // a relic is always something its nation does not now know, or has only just relearned
+      for (const st of r.sim.civ.settlements) if (st.ruined < 0 && st.relic >= 0 && st.nation >= 0) expect(st.relic).toBeLessThan(WEB.length);
+    }
+    expect(lost).toBeGreaterThanOrEqual(1);
+    expect(regained).toBeGreaterThanOrEqual(1);
+  }, 900000);
+});
