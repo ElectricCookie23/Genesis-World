@@ -3,8 +3,8 @@ import {
   AdditiveBlending, BackSide, BufferAttribute, IcosahedronGeometry, Mesh, MeshBasicNodeMaterial, SphereGeometry, Vector3, Vector4,
 } from 'three/webgpu';
 import {
-  Fn, Loop, attribute, cameraPosition, cos, dot, exp, float, floor, fract, length, max, min, mix, mx_fractal_noise_float, normalWorld, normalize,
-  positionLocal, positionWorld, pow, select, sin, smoothstep, sqrt, vec3, cameraFar, cameraNear, perspectiveDepthToViewZ, positionView, viewportDepthTexture, uniform,
+  Fn, Loop, attribute, cameraPosition, cos, cross, dot, exp, float, floor, fract, length, max, min, mix, mx_fractal_noise_float, normalWorld, normalize,
+  positionLocal, positionWorld, pow, select, sin, smoothstep, sqrt, step, vec3, cameraFar, cameraNear, perspectiveDepthToViewZ, positionView, viewportDepthTexture, uniform,
 } from 'three/tsl';
 import { ATMO_RADIUS, MOON_RADIUS, uExposure, uFog, uRainbow, uAtmo, uGradeTint, uHazeTint, uSkyAngle, uSun2, uSun2Dir, uSunDir, uTime } from './common';
 import { RNG } from '../sim/rng';
@@ -81,10 +81,7 @@ export function createAtmosphere(): Mesh {
       sumM.addAssign(att.mul(dM));
     });
     const mu = dot(rd, L);
-    // seen from inside, the sky is far brighter than one bounce of light explains: light scattered many times fills
-    // it in from every side. Seen from space that extra light would only be a milky veil over the ground, so it fades out.
-    const inside = smoothstep(ATMO_RADIUS, 1.012, length(ro));
-    const phaseR = float(3 / (16 * Math.PI)).mul(mu.mul(mu).add(1)).add(inside.mul(0.11));
+    const phaseR = float(3 / (16 * Math.PI)).mul(mu.mul(mu).add(1));
     const g = 0.76;
     const phaseM = float((3 / (8 * Math.PI)) * (1 - g * g)).mul(mu.mul(mu).add(1))
       .div(float(2 + g * g).mul(pow(float(1 + g * g).sub(mu.mul(2 * g)), 1.5)));
@@ -93,9 +90,16 @@ export function createAtmosphere(): Mesh {
     const away = dot(rd, L.negate());
     const bowAngle = away.clamp(-1, 1).acos();
     const band = bowAngle.sub(0.733).div(0.03);
-    const spectrum: N = vec3(exp(band.sub(0.6).pow(2).mul(-3)), exp(band.pow(2).mul(-3)), exp(band.add(0.6).pow(2).mul(-3)));
+    const spectrum: N = vec3(exp(band.sub(0.6).pow2().mul(-3)), exp(band.pow2().mul(-3)), exp(band.add(0.6).pow2().mul(-3)));
     const bow: N = spectrum.mul(uRainbow).mul(0.22).mul(smoothstep(0.0, 0.15, dot(rd, normalize(ro)).add(0.05)));
-    return color.mul(mix(float(3.8), float(5), inside)).mul(vec3(uLook.star)).mul(uAtmo).mul(vec3(uGradeTint)).mul(select(discA.greaterThan(0), 1, 0)).add(bow.mul(vec3(uLook.star)));
+    // From inside the air the sky has to hold its own against sunlit ground. Single scattering alone left it about
+    // a tenth as bright, which the exposure for the ground then showed as a night sky at noon (seen once the ground
+    // itself was lit correctly on a real GPU). The lift applies in full to open sky, and gently to the haze in front
+    // of solid things, and fades out as the camera climbs out of the air so the view from orbit is unchanged.
+    const inside = float(1).sub(smoothstep(1.012, ATMO_RADIUS, sqrt(rr)));
+    const openSky = select(hitPlanet, float(0), smoothstep(tFarA.mul(0.9), tFarA.mul(0.99), tSolid));
+    const lift = mix(float(1), mix(float(1.35), float(3.0), openSky), inside);
+    return color.mul(5).mul(lift).mul(vec3(uLook.star)).mul(uAtmo).mul(vec3(uGradeTint)).mul(select(discA.greaterThan(0), 1, 0)).add(bow.mul(vec3(uLook.star)));
   });
   material.colorNode = scatter();
   const mesh = new Mesh(new IcosahedronGeometry(ATMO_RADIUS * 1.02, 6), material);
@@ -126,11 +130,11 @@ export function createSky(): Mesh {
   const dir = normalize(positionLocal);
   const c = cos(uSkyAngle), s = sin(uSkyAngle);
   const sd = vec3(dir.x.mul(c).sub(dir.z.mul(s)), dir.y, dir.x.mul(s).add(dir.z.mul(c)));
-  const band = exp(pow(dot(sd, normalize(vec3(0.3, 0.9, 0.25))), 2).mul(-9));
+  const band = exp(dot(sd, normalize(vec3(0.3, 0.9, 0.25))).pow2().mul(-9));
   const stars = starLayer(sd, 70, band.mul(0.1).add(0.07)).add(starLayer(sd, 160, band.mul(0.22).add(0.1)).mul(0.5));
   const n1 = mx_fractal_noise_float(sd.mul(1.6), 4, 2.0, 0.55).mul(0.5).add(0.5);
   const n2 = mx_fractal_noise_float(sd.mul(2.3).add(vec3(11.0, 3.0, 7.0)), 4, 2.0, 0.55).mul(0.5).add(0.5);
-  const nebula = vec3(0.16, 0.07, 0.3).mul(pow(n1, 3)).add(vec3(0.03, 0.17, 0.22).mul(pow(n2, 3))).mul(0.16)
+  const nebula = vec3(0.16, 0.07, 0.3).mul(pow(max(n1, 0), 3)).add(vec3(0.03, 0.17, 0.22).mul(pow(max(n2, 0), 3))).mul(0.16)
     .add(vec3(0.55, 0.5, 0.62).mul(band).mul(0.022).mul(n1.add(0.4)));
   const mu = dot(dir, uSunDir);
   // the star: its colour and apparent size depend on what kind of star it is
@@ -144,16 +148,23 @@ export function createSky(): Mesh {
   // the other worlds of this system: steady points and one small disc, each its own colour
   let siblings: N = vec3(0, 0, 0);
   for (const sib of uSiblings) {
-    // xyz is the direction, w the angular radius: only xyz may be normalised (the whole vector once was, and the
-    // radius leaked into the dot product, which drew each of these as a flat white disc twenty times too big)
-    const away: N = length(sd.sub(normalize((sib.dir as any).xyz)));
-    const radius: N = (sib.dir as any).w;
-    const disc = smoothstep(radius.mul(1.2), radius.mul(0.8), away);
-    siblings = siblings.add(vec3(sib.color).mul(disc.mul(1.6).add(exp(away.mul(away).mul(-90000)).mul(0.9))));
+    // Measured by the sine of the angle from the planet's direction (the length of a cross product), which keeps
+    // its precision for tiny angles. The cosine does not: it sits within a few float steps of 1 across the whole
+    // disc, so the old test against it, and a power of 60000 on top, drew blown-out discs a degree wide.
+    const n: N = normalize((sib.dir as any).xyz);
+    const w: N = (sib.dir as any).w;
+    const off = length(cross(sd, n));
+    const near = step(0, dot(sd, n));
+    const disc = float(1).sub(smoothstep(w.mul(0.85), w.mul(1.15), off));
+    const glow = exp(off.div(w.mul(1.5).add(0.0012)).pow2().negate());
+    siblings = siblings.add(vec3(sib.color).mul(disc.mul(1.6).add(glow.mul(0.8))).mul(near));
   }
   // the background stays as dark as it is, however far the exposure opens up for a night scene
   const keepDark = float(1).div(max(uExposure, 0.5));
-  material.colorNode = stars.mul(pow(keepDark, 0.6)).add(nebula.mul(keepDark)).add(sun).add(sun2).add(siblings.mul(pow(keepDark, 0.6)));
+  // by day, from inside the air, the sky outshines the stars
+  const camR = length(cameraPosition);
+  const veil = float(1).sub(float(1).sub(smoothstep(1.012, ATMO_RADIUS, camR)).mul(smoothstep(-0.12, 0.1, dot(cameraPosition.div(camR), uSunDir))).mul(0.97));
+  material.colorNode = stars.mul(pow(keepDark, 0.6)).add(nebula.mul(keepDark)).add(siblings.mul(pow(keepDark, 0.6))).mul(veil).add(sun).add(sun2);
   const mesh = new Mesh(new SphereGeometry(400, 48, 32), material);
   mesh.frustumCulled = false;
   mesh.renderOrder = -10;

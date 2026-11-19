@@ -2,8 +2,8 @@
 // Every vertex carries what the shader needs: a part id (bark, leaf cluster, needles, frond, blade,
 // glow bulb, cap, succulent flesh, petal), a card uv for cut-out leaf shapes, baked ambient
 // occlusion, and wind weights for trunk bend, branch sway and leaf flutter.
-import { packAttributes } from './gpu';
-import { BufferAttribute, BufferGeometry } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, type InterleavedBufferAttribute } from 'three/webgpu';
+import { packAttributes } from './packed';
 
 export const PART = { bark: 0, leaf: 1, needle: 2, frond: 3, blade: 4, bulb: 5, cap: 6, flesh: 7, petal: 8 } as const;
 
@@ -156,12 +156,9 @@ class Builder {
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(new Float32Array(this.pos), 3));
     g.setAttribute('normal', new BufferAttribute(new Float32Array(this.nrm), 3));
-    g.setAttribute('color', new BufferAttribute(new Float32Array(this.col), 3));
-    g.setAttribute('card', new BufferAttribute(new Float32Array(this.card), 4));
-    g.setAttribute('wind', new BufferAttribute(new Float32Array(this.wind), 3));
+    // one shared buffer: WebGPU allows 8 vertex buffers per draw and the instance data needs room too
+    packAttributes(g, [{ name: 'color', size: 3, data: this.col }, { name: 'card', size: 4, data: this.card }, { name: 'wind', size: 3, data: this.wind }], this.pos.length / 3);
     g.setIndex(this.idx);
-    // one buffer for all of it: WebGPU allows only eight vertex buffers per draw
-    packAttributes(g);
     return g;
   }
 }
@@ -229,7 +226,9 @@ export function buildPlant(form: Form, seed = 1): BufferGeometry {
       break;
     case 'umbrella':
       b.crown = [0, 0.95, 0]; b.crownR = 0.55;
-      tree(b, { height: 0.7, trunkR: 0.045, lean: 0.16, levels: 2, children: [4, 3], angle: 1.1, ratio: 0.7, firstBranch: 0.72, gravity: 0.5, leafPart: PART.leaf, leafSize: 0.22, leaves: 5, bark: DARK_BARK, flatCrown: 0.9, twist: 1.6 });
+      // the crown is a shallow dome, not a single flat layer: leaf cards lying dead level showed as paper discs from
+      // above and as rows of dashes from the side (and in the imposter baked from the side)
+      tree(b, { height: 0.7, trunkR: 0.045, lean: 0.16, levels: 2, children: [4, 3], angle: 1.1, ratio: 0.7, firstBranch: 0.72, gravity: 0.5, leafPart: PART.leaf, leafSize: 0.22, leaves: 7, bark: DARK_BARK, flatCrown: 0.6, twist: 1.6 });
       break;
     case 'conifer': {
       b.crown = [0, 0.6, 0]; b.crownR = 0.6;
@@ -389,4 +388,13 @@ export function buildPlant(form: Form, seed = 1): BufferGeometry {
     }
   }
   return b.build();
+}
+
+export interface PlantInstanceData { iDir: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; iTint2: InterleavedBufferAttribute }
+
+/** Per-plant data for the real models (where it stands, how it is turned, size and wind, two tints), all in one shared buffer. */
+export function addPlantInstanceData(g: BufferGeometry, cap: number): PlantInstanceData {
+  return packAttributes(g, [
+    { name: 'iDir', size: 3 }, { name: 'iQuat', size: 4 }, { name: 'iData', size: 4 }, { name: 'iTint', size: 3 }, { name: 'iTint2', size: 3 },
+  ], cap, { instanced: true, dynamic: true }) as unknown as PlantInstanceData;
 }

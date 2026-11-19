@@ -3,8 +3,9 @@
 // of them baked from three angles at load); underfoot there is a dense ring of grass and ground
 // plants. Which form grows where comes from the genes of the local plant species.
 import {
-  BufferGeometry, Color, DataTexture, DoubleSide, DynamicDrawUsage, InstancedBufferAttribute, InstancedMesh, LinearFilter, Mesh, MeshBasicNodeMaterial,
-  OrthographicCamera, PlaneGeometry, Quaternion, RGBAFormat, RenderTarget, Scene, UnsignedByteType, Vector3, type Texture, type WebGPURenderer,
+  BufferGeometry, Color, DataTexture, DoubleSide, DynamicDrawUsage, InstancedBufferAttribute, LinearFilter, Mesh, MeshBasicNodeMaterial,
+  OrthographicCamera, PlaneGeometry, Quaternion, RGBAFormat, RenderTarget, Scene, UnsignedByteType, Vector3, type InterleavedBufferAttribute, type Texture,
+  type WebGPURenderer,
 } from 'three/webgpu';
 import {
   abs, atan, attribute, cameraPosition, cos, cross, dot, float, fract, length, max, mix, normalGeometry, normalize, positionGeometry, positionWorld, pow,
@@ -15,10 +16,11 @@ import type { CellSnapshot, PlantInfo } from '../../shared/protocol';
 import { PG } from '../../sim/genetics';
 import { EXAG, uDitherFrame, uMoonDir, uSunDir, uTime } from '../common';
 import { faceDirection } from './cubebake';
-import { Pass, makeTarget, packAttributes } from './gpu';
+import { Pass, makeTarget } from './gpu';
 import { uLook } from './look';
 import type { PlanetData } from './planetdata';
-import { FORMS, PART, buildPlant, type Form } from './plantmesh';
+import { Copies } from './packed';
+import { FORMS, PART, addPlantInstanceData, buildPlant, type Form } from './plantmesh';
 import { groundRadiusNode } from './terrain';
 import { eclipseLight } from './eclipse';
 
@@ -79,10 +81,10 @@ function plantLight(albedo: N, Nrm: N, P: N, thin: N, ao: N, shadow: N): N {
 
 const ign = (): N => { const sc: N = screenCoordinate; return sc.x.add(uDitherFrame).mul(0.06711056).add(sc.y.add(uDitherFrame).mul(0.00583715)).fract().mul(52.9829189).fract(); };
 
-interface FullSlot { mesh: InstancedMesh; iDir: InstancedBufferAttribute; iQuat: InstancedBufferAttribute; iData: InstancedBufferAttribute; iTint: InstancedBufferAttribute; iTint2: InstancedBufferAttribute; cap: number; n: number; }
+interface FullSlot { mesh: Copies; iDir: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; iTint2: InterleavedBufferAttribute; cap: number; n: number; }
 
 export class Flora {
-  readonly meshes: (InstancedMesh | Mesh)[] = [];
+  readonly meshes: (Copies | Mesh)[] = [];
   plants = new Map<number, PlantInfo>();
   /** Budget for far plants (imposters). Near models get a fortieth of it, grass a tenth. */
   maxInstances: number;
@@ -99,8 +101,8 @@ export class Flora {
   readonly uGrassR = uniform(0.009);
   private full = new Map<Form, FullSlot>();
   private geos = new Map<Form, BufferGeometry>();
-  private far!: { mesh: InstancedMesh; iDir: InstancedBufferAttribute; iData: InstancedBufferAttribute; iTint: InstancedBufferAttribute; iTint2: InstancedBufferAttribute; cap: number };
-  private grass!: { mesh: InstancedMesh; iDir: InstancedBufferAttribute; iData: InstancedBufferAttribute; iTint: InstancedBufferAttribute; cap: number };
+  private far!: { mesh: Copies; iDir: InstancedBufferAttribute; iData: InstancedBufferAttribute; iTint: InstancedBufferAttribute; iTint2: InstancedBufferAttribute; cap: number };
+  private grass!: { mesh: Copies; iDir: InstancedBufferAttribute; iData: InstancedBufferAttribute; iTint: InstancedBufferAttribute; cap: number };
   private atlasNode: N;
   private baked = false;
   private baking = false;
@@ -125,13 +127,8 @@ export class Flora {
       this.geos.set(form, geo);
       const cap = Math.max(48, Math.floor(fullCap / (form === 'tuft' || form === 'fern' || form === 'shrub' ? 2.5 : 4)));
       const g = geo.clone();
-      const iDir = new InstancedBufferAttribute(new Float32Array(cap * 3), 3);
-      const iQuat = new InstancedBufferAttribute(new Float32Array(cap * 4), 4);
-      const iData = new InstancedBufferAttribute(new Float32Array(cap * 4), 4);
-      const iTint = new InstancedBufferAttribute(new Float32Array(cap * 3), 3);
-      const iTint2 = new InstancedBufferAttribute(new Float32Array(cap * 3), 3);
-      for (const a of [iDir, iQuat, iData, iTint, iTint2]) a.setUsage(DynamicDrawUsage);
-      g.setAttribute('iDir', iDir); g.setAttribute('iQuat', iQuat); g.setAttribute('iData', iData); g.setAttribute('iTint', iTint); g.setAttribute('iTint2', iTint2);
+      // per-plant data in one shared buffer (WebGPU allows 8 vertex buffers per draw)
+      const { iDir, iQuat, iData, iTint, iTint2 } = addPlantInstanceData(g, cap);
       const material = new MeshBasicNodeMaterial({ side: DoubleSide });
       material.alphaTest = 0.5;
       const aDir: N = attribute('iDir', 'vec3'), aQuat: N = attribute('iQuat', 'vec4'), aData: N = attribute('iData', 'vec4'); // size, glow, wind, seed
@@ -178,7 +175,7 @@ export class Flora {
       const dCam = length(cameraPosition.sub(vBase));
       const keep = float(1).sub(smoothstep(this.uLod.mul(0.94), this.uLod.mul(1.06), dCam));
       material.opacityNode = cutout(vCard).mul(step(ign(), keep.add(0.001)));
-      const mesh = new InstancedMesh(g, material, cap);
+      const mesh = new Copies(g, material, cap);
       mesh.count = 0;
       mesh.frustumCulled = false;
       this.meshes.push(mesh);
@@ -189,7 +186,6 @@ export class Flora {
     {
       const cap = Math.max(256, maxInstances);
       const g = new PlaneGeometry(1, 1);
-      packAttributes(g);
       const iDir = new InstancedBufferAttribute(new Float32Array(cap * 3), 3);
       const iData = new InstancedBufferAttribute(new Float32Array(cap * 4), 4); // size, form index, glow, seed
       const iTint = new InstancedBufferAttribute(new Float32Array(cap * 3), 3);
@@ -234,7 +230,7 @@ export class Flora {
       const dCam = length(cameraPosition.sub(vBase));
       const keep = smoothstep(this.uLod.mul(0.94), this.uLod.mul(1.06), dCam);
       material.opacityNode = tex.a.mul(step(float(1).sub(keep), ign()));
-      const mesh = new InstancedMesh(g, material, cap);
+      const mesh = new Copies(g, material, cap);
       mesh.count = 0;
       mesh.frustumCulled = false;
       this.meshes.push(mesh);
@@ -274,7 +270,7 @@ export class Flora {
       const vN: N = varying(normalize(aDir.add(ax.mul(normalGeometry.x)).add(az.mul(normalGeometry.z))));
       const albedo: N = vTint.mul(vH.mul(0.7).add(0.55));
       material.colorNode = plantLight(albedo, vN, positionWorld, float(1), vH.mul(0.6).add(0.4), this.cloudShadow(vBase));
-      const mesh = new InstancedMesh(g, material, cap);
+      const mesh = new Copies(g, material, cap);
       mesh.count = 0;
       mesh.frustumCulled = false;
       this.meshes.push(mesh);
@@ -312,18 +308,37 @@ export class Flora {
       material.opacityNode = cutout(card);
       const mesh = new Mesh(this.geos.get('broadleaf')!, material);
       scene.add(mesh);
-      // which way up does a read-back come? (differs between backends)
-      const probe = makeTarget(1, 4);
-      new Pass(vec4(uv().y, 0, 0, 1)).render(renderer, probe);
-      const pr = (await renderer.readRenderTargetPixelsAsync(probe, 0, 0, 1, 4)) as unknown as ArrayLike<number>;
-      const flipped = pr[0]! > pr[12]!;
-      probe.dispose();
       const W = TILE * FORMS.length, H = TILE * VIEWS;
       const atlas = new Uint8Array(W * H * 4);
       const prevTarget = renderer.getRenderTarget();
       const prevColor = (renderer as any).getClearColor(new Color()) as Color;
       const prevAlpha = (renderer as any).getClearAlpha() as number;
       (renderer as any).setClearColor(0x000000, 0);
+      // Which way up does a picture of the scene come back? Asked of the same kind of render as the tiles (a camera
+      // looking at geometry): a white card fills the upper half of the view and we see which rows it lands in. The
+      // earlier test used a full-screen pass, which does not agree with a camera render on WebGPU, so every imposter
+      // there was baked upside down (trunks above the crowns).
+      let flipped = false;
+      {
+        const probeScene = new Scene();
+        const white = new MeshBasicNodeMaterial({ side: DoubleSide });
+        white.colorNode = vec3(1, 1, 1);
+        const cardMesh = new Mesh(new PlaneGeometry(BAKE_HALF * 4, BAKE_HALF), white);
+        cardMesh.position.set(0, BAKE_CENTRE + BAKE_HALF / 2, 0);
+        probeScene.add(cardMesh);
+        cam.position.set(0, BAKE_CENTRE, 4);
+        cam.up.set(0, 1, 0);
+        cam.lookAt(0, BAKE_CENTRE, 0);
+        cam.updateMatrixWorld();
+        const probe = new RenderTarget(4, 4, { type: UnsignedByteType, format: RGBAFormat, depthBuffer: true });
+        renderer.setRenderTarget(probe);
+        renderer.render(probeScene, cam);
+        renderer.setRenderTarget(prevTarget);
+        const pr = (await renderer.readRenderTargetPixelsAsync(probe, 0, 0, 4, 4)) as unknown as ArrayLike<number>;
+        // the tiles are stored bottom row first, so they need turning over when the top of the view comes back first
+        flipped = pr[0]! > pr[48]!;
+        probe.dispose(); cardMesh.geometry.dispose(); white.dispose();
+      }
       // draw every tile first, then read them all back together
       const targets: RenderTarget[] = [];
       for (let f = 0; f < FORMS.length; f++) {
@@ -489,7 +504,7 @@ export class Flora {
           pos[ia * 3 + 2]! * w + pos[ib * 3 + 2]! * u + pos[ic * 3 + 2]! * v,
         ).normalize();
         const small = form === 'tuft' || form === 'fern' || form === 'flower';
-        const size = (small ? 0.0011 : form === 'shrub' ? 0.0015 : 0.0016 + 0.003 * hv) * sizeBoost * (0.8 + 0.4 * hash(t * 7 + k * 31));
+        const size = (small ? 0.0011 : form === 'shrub' ? 0.0015 : 0.0021 + 0.0042 * hv) * sizeBoost * (0.8 + 0.4 * hash(t * 7 + k * 31));
         // colour: this world's pigments, with the leaf-hue gene running between the two
         const tHue = Math.max(0, Math.min(1, (genes ? genes[PG.LeafHue]! : 0.5) + (hash(t + k * 5) - 0.5) * 0.18));
         const light = (small ? 1.35 : 1) * (0.8 + 0.5 * hash(t * 11 + k));
@@ -539,7 +554,7 @@ export class Flora {
     }
     for (const s of this.full.values()) {
       s.mesh.count = s.n;
-      s.iDir.needsUpdate = s.iQuat.needsUpdate = s.iData.needsUpdate = s.iTint.needsUpdate = s.iTint2.needsUpdate = true;
+      s.iDir.needsUpdate = true; // one shared buffer: this uploads all of the instance data
     }
     far.mesh.count = farN;
     far.iDir.needsUpdate = far.iData.needsUpdate = far.iTint.needsUpdate = far.iTint2.needsUpdate = true;

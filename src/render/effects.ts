@@ -15,7 +15,7 @@ export function createDustDisc(): Mesh {
   const swirl = a.add(r.mul(2.2)).add(uTime.mul(0.35)).add(uDiscCollapse.mul(6));
   const q = vec3(swirl.cos().mul(r), swirl.sin().mul(r), uTime.mul(0.05));
   const n = mx_fractal_noise_float(q.mul(1.8), 5, 2.2, 0.55).mul(0.5).add(0.5);
-  const clumps = pow(mx_fractal_noise_float(q.mul(9), 3, 2.0, 0.5).mul(0.5).add(0.5), 5).mul(6);
+  const clumps = pow(mx_fractal_noise_float(q.mul(9), 3, 2.0, 0.5).mul(0.5).add(0.5).max(0), 5).mul(6);
   const outer = float(4.6).sub(uDiscCollapse.mul(3.9));
   const falloff = smoothstep(outer, outer.mul(0.35), r).mul(smoothstep(0.0, 0.5, r));
   const core = exp(r.mul(-2.6)).mul(3.5);
@@ -32,7 +32,7 @@ export function createDustDisc(): Mesh {
 
 // ---------------------------------------------------------------- particles
 import { DynamicDrawUsage, InstancedBufferAttribute, Sprite, SpriteNodeMaterial, Vector3 as V3 } from 'three/webgpu';
-import { instancedBufferAttribute, normalize } from 'three/tsl';
+import { cameraPosition, instancedBufferAttribute, normalize, vec2 } from 'three/tsl';
 import type { Grid } from '../sim/world';
 import type { CellSnapshot } from '../shared/protocol';
 import { Biome } from '../sim/world';
@@ -71,7 +71,12 @@ export class ParticleSystem {
     const ripple = d.w.greaterThan(50).select(1, 0);
     material.positionNode = s.add(v.mul(age)).add(normalize(s).mul(d.w.mul(float(1).sub(ripple))).mul(age).mul(age));
     const alive = smoothstep(0.0, 0.08, k).mul(smoothstep(1.0, 0.55, k)).mul(age.greaterThan(0).and(age.lessThan(d.y)).select(1, 0));
-    material.scaleNode = d.z.mul(k.mul(1.6).add(0.5)).mul(alive.greaterThan(0).select(1, 0));
+    // Rings (wakes on the water, ripples of sound) lie flat on the ground. A sprite always faces the camera, so seen
+    // from low down a ring stood up like a hoop in the sky; squashing it by how steeply we look at the ground lays
+    // it down again.
+    const steep = (normalize(s) as any).dot(normalize(cameraPosition.sub(s))).abs().max(0.05);
+    const base = d.z.mul(k.mul(1.6).add(0.5)).mul(alive.greaterThan(0).select(1, 0));
+    material.scaleNode = vec2(base, base.mul(mix(float(1), steep, ripple)));
     // smoke, steam and dust are only seen by the light that falls on them; fire and embers shine by themselves
     const dayLit = smoothstep(-0.12, 0.22, (normalize(s) as any).dot(uSunDir)).mul(0.93).add(0.05);
     const selfLit = smoothstep(1.1, 1.4, c.x.max(c.y).max(c.z));

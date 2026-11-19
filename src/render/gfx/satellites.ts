@@ -1,6 +1,7 @@
 // Satellites: once a civilization reaches orbit, a sparse ring of small machines circles the planet.
 // They are single points of light, lit by the star, dark in the planet's shadow.
-import { AdditiveBlending, InstancedBufferAttribute, InstancedMesh, MeshBasicNodeMaterial, PlaneGeometry } from 'three/webgpu';
+import { AdditiveBlending, InstancedBufferAttribute, MeshBasicNodeMaterial, PlaneGeometry } from 'three/webgpu';
+import { Copies } from './packed';
 import { attribute, cameraPosition, cos, cross, dot, float, length, max, normalize, positionGeometry, sin, smoothstep, sqrt, uniform, uv, vec3 } from 'three/tsl';
 import { uSunDir, uTime } from '../common';
 import { uLook } from './look';
@@ -9,7 +10,7 @@ import { uLook } from './look';
 type N = any;
 
 export class Satellites {
-  readonly mesh: InstancedMesh;
+  readonly mesh: Copies;
   /** 0 = none yet, 1 = a full constellation. */
   readonly amount = uniform(0);
 
@@ -48,7 +49,7 @@ export class Satellites {
     const glint = sin(uTime.mul(ph.w.mul(3).add(1)).add(ph.x.mul(9))).mul(0.5).add(0.5).pow(6).mul(2.5).add(0.5);
     const r = length(uv().sub(0.5));
     material.colorNode = vec3(uLook.star).mul(lit).mul(glint).mul(float(1).sub(smoothstep(0.1, 0.5, r))).mul(shown).mul(1.4);
-    this.mesh = new InstancedMesh(g, material, count);
+    this.mesh = new Copies(g, material, count);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 6;
     this.mesh.visible = false;

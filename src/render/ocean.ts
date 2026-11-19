@@ -40,7 +40,7 @@ export class OceanMesh {
     const material = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: DoubleSide });
     const dirL = normalize(positionLocal);
     // The moon raises two tidal bulges; the sea also drains away during the opening sequence.
-    const tide = pow(dot(dirL, uMoonDir), 2).sub(1 / 3).mul(uTideKm);
+    const tide = dot(dirL, uMoonDir).pow2().sub(1 / 3).mul(uTideKm);
     const fillKm = float(1).sub(uOceanFill).mul(-7.5);
     const levelKm = uSeaKm.add(tide).add(fillKm);
     material.positionNode = dirL.mul(float(1).add(levelKm.mul(EXAG)));

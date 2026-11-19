@@ -1,7 +1,6 @@
 // Render-to-texture helpers. Passes are full-screen quads with node materials, so the same code
 // runs on the WebGL2 and WebGPU backends.
 import {
-  type BufferGeometry, InstancedInterleavedBuffer, InterleavedBuffer, InterleavedBufferAttribute,
   ClampToEdgeWrapping, HalfFloatType, LinearFilter, LinearMipmapLinearFilter, NearestFilter, NodeMaterial, QuadMesh, RGBAFormat, RenderTarget, RepeatWrapping,
   type Texture, type TextureDataType, type WebGPURenderer,
 } from 'three/webgpu';
@@ -76,32 +75,5 @@ export class PingPong {
   }
   get texture(): Texture {
     return this.read.texture;
-  }
-}
-
-/**
- * WebGPU allows only eight vertex buffers per draw, and every separate attribute is a buffer of its own.
- * This packs the named attributes of a geometry (all of its per-vertex ones by default) into a single
- * interleaved buffer, so a mesh with many attributes still fits. Pass `instanced` to pack per-instance
- * attributes that never change after creation.
- */
-export function packAttributes(g: BufferGeometry, names?: string[], instanced = false): void {
-  const list = (names ?? Object.keys(g.attributes)).filter((n) => {
-    const a = g.getAttribute(n) as any;
-    return a && !a.isInterleavedBufferAttribute && (instanced ? a.isInstancedBufferAttribute : !a.isInstancedBufferAttribute) && a.array instanceof Float32Array;
-  });
-  if (list.length < 2) return;
-  const count = g.getAttribute(list[0]!).count;
-  let stride = 0;
-  for (const n of list) { const a = g.getAttribute(n); if (a.count !== count) return; stride += a.itemSize; }
-  const data = new Float32Array(count * stride);
-  const buffer = instanced ? new InstancedInterleavedBuffer(data, stride, 1) : new InterleavedBuffer(data, stride);
-  let offset = 0;
-  for (const n of list) {
-    const a = g.getAttribute(n);
-    const src = a.array as Float32Array, size = a.itemSize;
-    for (let i = 0; i < count; i++) for (let k = 0; k < size; k++) data[i * stride + offset + k] = src[i * size + k]!;
-    g.setAttribute(n, new InterleavedBufferAttribute(buffer, size, offset));
-    offset += size;
   }
 }

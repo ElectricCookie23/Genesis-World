@@ -138,21 +138,33 @@ async function boot(): Promise<void> {
   let adaptive = 0;
   const applyQuality = () => {
     const q = PRESETS[state.quality];
-    // step-downs, cheapest loss first: resolution (anti-aliasing hides it), then cloud detail and instance counts,
-    // then ambient occlusion and the lens fringe, then bloom, and anti-aliasing only as the last resort
+    // Step-downs in the order that costs the picture least. Measured on a real GPU (docs/GPU_REVIEW.md): the cloud
+    // march is over half the frame above Low, and at a pixel ratio of 2 everything else alone misses the target, so
+    // the first steps thin the march and take half a step of resolution, and anti-aliasing is the last thing to go.
+    //   1 fewer cloud and aurora steps   2 resolution down half a step   3 fewer steps still, half the plants and animals
+    //   4 no bloom or ambient occlusion   5 no anti-aliasing, resolution down again
+    const march = adaptive >= 3 ? 0.45 : adaptive >= 1 ? 0.65 : 1;
     const cut = adaptive >= 3 ? 0.5 : 1;
-    const drop = [0, 0.25, 0.5, 0.5, 0.5, 0.5, 0.75][Math.min(6, adaptive)]!;
-    scene.setPixelRatio(Math.max(adaptive >= 6 ? 0.75 : 1, q.ratio - drop));
-    scene.presetLive(state.quality, cut, false);
-    scene.post.set({ ao: q.ao && adaptive < 4, fringe: q.fringe && adaptive < 4, bloom: q.bloom && adaptive < 5, taa: q.taa && adaptive < 6 });
+    // start from what the screen can show: a preset that asks for more than the display has must still step down
+    const ratio = Math.min(window.devicePixelRatio || 1, q.ratio);
+    scene.setPixelRatio(Math.max(0.75, ratio - (adaptive >= 2 ? 0.5 : 0) - (adaptive >= 5 ? 0.5 : 0)));
+    scene.presetLive(state.quality, cut, false, march);
+    // the lens fringe goes with anti-aliasing: on hard, aliased edges it reads as red and blue outlines
+    scene.post.set({ bloom: q.bloom && adaptive < 4, taa: q.taa && adaptive < 5, ao: q.ao && adaptive < 4, fringe: q.fringe && adaptive < 5 });
     scene.post.allowDof = state.quality !== 'low' && adaptive < 4;
     // blurred glass panels are costly on weak GPUs: use plain dark panels below the high preset
-    document.documentElement.classList.toggle('lite', state.quality === 'low' || state.quality === 'medium' || adaptive >= 3);
+    document.documentElement.classList.toggle('lite', state.quality === 'low' || state.quality === 'medium' || adaptive >= 4);
   };
+  // The step this machine settled on is remembered for each preset, so the next visit starts there instead of
+  // running slowly for several seconds while it finds the same answer again.
+  const stepKey = () => `genesis:steps:${state.quality}`;
+  const rememberSteps = () => store.set(stepKey(), String(adaptive));
   actions.setQuality = (q) => {
+    // choosing a preset by hand asks for all of it: start again from the top
     adaptive = 0;
     update({ quality: q });
     store.set('genesis:quality', q);
+    rememberSteps();
     applyQuality();
     // texture sizes were fixed when the planet was built: say so if the new preset wants different ones
     if (q !== scene.builtWith) { update({ notice: 'Some of this preset (texture detail, wave and cloud resolution) takes effect after a reload.' }); window.setTimeout(() => update({ notice: '' }), 6000); }
@@ -175,6 +187,8 @@ async function boot(): Promise<void> {
     musicVolume: Number(store.get('genesis:music') ?? 0.6),
     reducedMotion: store.get('genesis:motion') ? store.get('genesis:motion') === '1' : reducedMotion,
   });
+  adaptive = Math.max(0, Math.min(5, Math.round(Number(store.get(stepKey()) ?? 0)) || 0));
+  if (params.has('noadapt')) adaptive = 0;
   update({ soundVolume: Number(store.get('genesis:sound') ?? 0.7) });
   music.sfx = state.soundVolume;
   music.setVolume(state.musicVolume);
@@ -509,9 +523,7 @@ async function boot(): Promise<void> {
   let toastUntil = 0;
   const pumpToasts = (now: number) => {
     if (state.milestone && now > toastUntil) update({ milestone: null });
-    // after a jump through time a whole era of milestones arrives at once: only the latest is news, the rest
-    // are already in the chronicle. A title is also dropped if the world has since moved a long way past it.
-    if (toasts.length > 2) toasts.splice(0, toasts.length - 1);
+    // a title is dropped if the world has since moved a long way past it (the rest are in the chronicle anyway)
     const year = state.stats?.simYear ?? 0, yps = state.stats?.yearsPerSecond ?? 0;
     while (toasts.length && year - toasts[0]!.simYear > Math.max(2e5, yps * 20)) toasts.shift();
     if (!state.milestone && toasts.length && !state.opening) {
@@ -571,6 +583,10 @@ async function boot(): Promise<void> {
       else if (ev.type === 'super-eruption') scene.flash(0.35);
       else if (ev.type === 'mass-extinction') hushUntil = performance.now() + 45000;
     }
+    // After a fast-forward, or at the fastest speeds, hundreds of thousands of years of milestones arrive at once.
+    // Shown one after another for seven seconds each they covered the planet for minutes, so only the latest few
+    // are announced; the rest are still in the chronicle.
+    if (toasts.length > 3) toasts.splice(0, toasts.length - 3);
     update({});
   };
 
@@ -779,7 +795,7 @@ async function boot(): Promise<void> {
   window.addEventListener('resize', () => scene.resize());
 
   let lastFocus = 0;
-  let slowFor = 0;
+  let slowFor = 0, fastFor = 0, steppedUpAt = 0, retryAfter = 0, retryWait = 300000;
   let postcardBase = 0;
   const focusVec = new Vector3();
   let last = performance.now();
@@ -812,12 +828,25 @@ async function boot(): Promise<void> {
         if ((state.overlay === 'diversity' || state.overlay === 'oxygen') && now - lastLayer > 4000) { lastLayer = now; send({ type: 'requestLayer', kind: state.overlay }); }
         if (rain > 0.2 && near > 0.2 && Math.random() < 0.12) music.thunder();
       }
-      // adaptive quality: two seconds under target steps down resolution first, effects after (see applyQuality)
+      // adaptive quality: two seconds under target takes the next step down (the order is in applyQuality)
+      // With room to spare for a good while it tries one step back up; if that fails it waits much longer before
+      // trying again, so a machine on the edge is not made to stutter every few minutes.
       const target = mobile ? 26 : 50;
-      if (!state.opening && !params.has('noadapt') && scene.fpsAvg < target && document.visibilityState === 'visible') {
-        slowFor += dt;
-        if (slowFor > 2 && adaptive < 6) { adaptive++; slowFor = 0; applyQuality(); }
-      } else slowFor = 0;
+      // (`&noadapt` in the address keeps the preset as chosen: software rendering in checks is always "too slow")
+      const watching = !state.opening && !params.has('noadapt') && document.visibilityState === 'visible';
+      if (watching && scene.fpsAvg < target) {
+        slowFor += dt; fastFor = 0;
+        if (slowFor > 2 && adaptive < 5) {
+          adaptive++; slowFor = 0; applyQuality(); rememberSteps();
+          if (steppedUpAt > 0 && now - steppedUpAt < 20000) { retryWait = Math.min(retryWait * 4, 3600000); retryAfter = now + retryWait; }
+        }
+      } else {
+        slowFor = 0;
+        if (watching && adaptive > 0 && scene.fpsAvg > target * 1.14 && now > retryAfter) {
+          fastFor += dt;
+          if (fastFor > 15) { adaptive--; fastFor = 0; steppedUpAt = now; retryAfter = now + 20000; applyQuality(); rememberSteps(); }
+        } else fastFor = 0;
+      }
       scene.cam.autoOrbit = state.reducedMotion ? 0 : state.postcard ? 0.035 : 0.012;
       // postcard mode: a slow cinematic drift in and out, with depth of field up close
       scene.cinematic = state.postcard;
