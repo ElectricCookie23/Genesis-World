@@ -202,7 +202,8 @@ export class Civilization {
       let pop = 0, big = towns[0]!;
       for (const st of towns) { pop += st.pop; if (st.pop > big.pop) big = st; }
       n.pop = pop; n.towns = towns.length;
-      if (n.capital !== big.id && (this.settlements[n.capital]?.ruined ?? 0) >= 0) n.capital = big.id;
+      const seat = this.settlements[n.capital];
+      if (!seat || seat.ruined >= 0 || seat.nation !== n.id) n.capital = big.id;
       // ---- the ruler grows old
       const ruler = h.people[n.ruler];
       if (ruler && ruler.died < 0 && y > SUMMARY_YEARS) this.reignsPass(sim, rng, n, y, year);
@@ -217,8 +218,8 @@ export class Civilization {
       const quick = 1 + 6 * sat((n.tech - 0.7) / 0.3) ** 2;
       const rate = 6.5e-5 * (0.45 + Math.log10(1 + pop) / 3) * (0.6 + sp.ref[G.Intelligence]!) * (1 + reach) * quick * (0.6 + 0.4 * n.stability);
       this.research(sim, rng, n, towns, rate * y, year, y);
-      // ---- how well it holds together (rise and fall proper is expansion system E4)
-      n.stability = sat(n.stability + (0.72 - n.stability) * Math.min(1, 0.02 * y) + (rng.next() - 0.5) * 0.02 * Math.sqrt(y));
+      // ---- how well it holds together, and what happens when it does not (system E4)
+      if (this.fate(sim, rng, n, towns, y, year)) continue;
       // ---- a new era
       const era = eraOf(n.tech);
       if (era > n.era) {
@@ -299,7 +300,7 @@ export class Civilization {
         if (o.nation === st.nation && o.species === st.species) continue;
         if (o.species === st.species && (o.belief === st.belief || o.belief < 0 || st.belief < 0) && !rng.chance(0.35)) continue;
         st.pop *= 0.7; o.pop *= 0.65; st.tech = Math.max(0.03, st.tech - 0.02); o.tech = Math.max(0.03, o.tech - 0.02);
-        n.stability = sat(n.stability - 0.05);
+        n.fatigue = sat(n.fatigue + 0.22);
         // conquest carries knowledge with it, or burns it (system E3)
         const foe = o.nation >= 0 ? this.h.nations[o.nation] : undefined;
         if (foe && foe.ended < 0 && foe.id !== n.id) {
@@ -310,7 +311,21 @@ export class Civilization {
             else { let top = -1; for (let i = 0; i < WEB.length; i++) if (weak.know.way[i]! >= 0 && (top < 0 || WEB[i]!.level > WEB[top]!.level)) top = i; if (top >= 0) weak.know.way[top] = -1; }
           }
         }
+        const warAt = sim.events.events.length;
         sim.civEvent('war', st.species, st.cell, st.id, o.id);
+        const warEvent = sim.events.events.length > warAt ? warAt : -1;
+        this.woe(n, 'war', warEvent, year, 0.07);
+        if (foe && foe.ended < 0 && foe.id !== n.id) {
+          foe.fatigue = sat(foe.fatigue + 0.22);
+          this.woe(foe, 'war', warEvent, year, 0.09);
+          // the stronger side sometimes keeps what it took: this is how countries grow past what they can hold
+          const warlike = this.h.cultures[n.culture]!.war;
+          if (o.species === st.species && n.pop > foe.pop * 0.5 && n.tech >= foe.tech - 0.06 && rng.chance(0.25 + 0.35 * warlike)) {
+            o.nation = n.id; o.pop *= 0.85;
+            sim.cellLog.note(o.cell, year, Log.Owner, n.id);
+            sim.emit({ type: 'conquest', year, cellId: o.cell, title: `${n.name} takes ${o.name}`, description: `${o.name} has a new flag over its gate. It belonged to ${foe.name} until this year.`, causes: [warEvent, n.eventId].filter((x) => x >= 0), importance: foe.capital === o.id ? 1 : 0, speciesIds: [st.species], data: { nation: n.id, from: foe.id } });
+          }
+        }
         // with the atom in hand, a war can end the age
         if (this.spaceAgeYear >= 0 && rng.chance(0.04)) sim.civEvent('nuclear', st.species, st.cell, st.id);
         break;
@@ -319,7 +334,9 @@ export class Civilization {
     // sickness travels the roads between crowded towns
     if (st.tech > 0.5 && st.pop > 20 && rng.chance(Math.min(0.5, 0.0001 * y))) {
       st.pop *= 0.5;
+      const plagueAt = sim.events.events.length;
       sim.civEvent('city-plague', st.species, st.cell, st.id);
+      this.woe(n, 'plague', sim.events.events.length > plagueAt ? plagueAt : -1, year, 0.14);
       for (let j = 0; j < reg.grid.ncount[st.region]!; j++) {
         const oid = this.occupied.get(reg.grid.neighbors[st.region * 6 + j]!);
         if (oid !== undefined) this.settlements[oid]!.pop *= 0.7;
@@ -416,6 +433,120 @@ export class Civilization {
     return d;
   }
 
+  /** A blow to a nation: remembered for a few generations, and blamed if the nation then breaks. */
+  private woe(n: Nation, kind: string, eventId: number, year: number, cost: number): void {
+    n.woes.push({ kind, eventId, year });
+    if (n.woes.length > 8) n.woes.shift();
+    n.stability = sat(n.stability - cost);
+  }
+
+  /**
+   * Rise and fall (system E4). A nation's stability follows what its people live through: hunger, wealth
+   * gathered in few hands, how long its ruling house has held, weariness of war, disasters and plagues,
+   * quarrels of faith, and how much land it is trying to hold. When stability fails the nation loses a
+   * province, splits in a civil war, or falls apart into successor states. Returns true if the nation has
+   * ceased to exist this tick.
+   */
+  private fate(sim: Simulation, rng: RNG, n: Nation, towns: Settlement[], y: number, year: number): boolean {
+    const h = this.h, gp = sim.grid.pos;
+    const cap = this.settlements[n.capital]!;
+    const spacing = Math.sqrt((4 * Math.PI) / sim.regions.count);
+    const angle = (a: Settlement, b: Settlement): number => Math.acos(Math.max(-1, Math.min(1, gp[a.cell * 3]! * gp[b.cell * 3]! + gp[a.cell * 3 + 1]! * gp[b.cell * 3 + 1]! + gp[a.cell * 3 + 2]! * gp[b.cell * 3 + 2]!)));
+    // ---- what bears on it
+    let crowd = 0, far = 0;
+    const faiths = new Map<number, number>();
+    for (const st of towns) {
+      crowd += Math.min(2, st.pop / Math.max(0.5, this.capacity(sim, st)));
+      faiths.set(st.belief, (faiths.get(st.belief) ?? 0) + 1);
+      if (angle(cap, st) > REACH[n.era]! * spacing) far++;
+    }
+    const hunger = sat((crowd / towns.length - 0.97) * 5);
+    const split = towns.length > 1 ? 1 - Math.max(...faiths.values()) / towns.length : 0;
+    const overreach = far / towns.length;
+    const size = Math.log2(1 + towns.length) / 7;
+    n.inequality = sat(n.inequality + y * 0.00045 * (0.4 + n.tech) * (1 - n.inequality));
+    n.fatigue *= Math.exp(-y / 40);
+    const house = h.dynasties[n.dynasty], ruler = h.people[n.ruler];
+    const legit = house ? sat(house.reigns / 8) : 0;
+    while (n.woes.length && year - n.woes[0]!.year > 150) n.woes.shift();
+    const target = 0.82 - 0.3 * hunger - 0.36 * n.inequality - 0.28 * n.fatigue - 0.2 * split - 0.3 * overreach - 0.3 * size + 0.12 * legit
+      + (ruler ? (ruler.wise - 0.5) * 0.1 - (ruler.cruel - 0.5) * 0.08 : 0);
+    n.stability = sat(n.stability + (target - n.stability) * (1 - Math.exp(-y / 25)) + (rng.next() - 0.5) * 0.03 * Math.sqrt(y));
+    if (towns.length > n.peakTowns) { n.peakTowns = towns.length; n.peakYear = year; }
+    if (towns.length < 3 || n.stability >= 0.3) return false;
+    // ---- why, in words and in the cause graph
+    const blame: [number, string][] = [
+      [hunger * 0.3, 'its granaries were empty'], [n.inequality * 0.36, 'a few families owned almost everything'], [n.fatigue * 0.28, 'its people were sick of war'],
+      [split * 0.2, 'its towns no longer shared a faith'], [overreach * 0.3, 'its roads were too long to hold'], [size * 0.3, 'it had grown too large to govern'],
+      [(1 - legit) * 0.12, 'its ruling house was new and unloved'],
+    ];
+    for (const w of n.woes) blame.push([0.12, w.kind === 'war' ? 'it had lost too many to war' : w.kind === 'plague' ? 'plague had emptied its streets' : w.kind === 'disaster' ? 'the land itself had turned on it' : 'the succession was disputed']);
+    const seen = new Set<string>();
+    const reasons = blame.sort((a, b) => b[0] - a[0]).filter(([m, text]) => m > 0.04 && !seen.has(text) && !!seen.add(text)).slice(0, 3).map(([, text]) => text);
+    const because = reasons.length > 1 ? `${reasons.slice(0, -1).join(', ')} and ${reasons[reasons.length - 1]}` : reasons[0] ?? 'no one would fight for it';
+    const causes = [...new Set(n.woes.map((w) => w.eventId).filter((x) => x >= 0))];
+    const others = towns.filter((st) => st.id !== cap.id).sort((a, b) => angle(cap, b) - angle(cap, a));
+    // ---- collapse: the whole nation comes apart into successor states and its capital goes dark
+    if (n.stability < 0.12 && towns.length >= 5 && rng.chance(1 - Math.exp(-y / 25))) {
+      const ev = sim.emit({
+        type: 'nation-collapse', year, cellId: cap.cell, title: `The fall of ${n.name}`,
+        description: `${n.name} is gone. At its height it held ${n.peakTowns} towns; ${because}. ${cap.name} is half empty, and every province looks to itself.`,
+        causes: [n.eventId, ...causes].filter((x) => x >= 0), importance: 2, speciesIds: [n.species], data: { nation: n.id, towns: towns.length },
+      });
+      cap.pop *= 0.45;
+      // the largest towns that stand well apart each become the seat of a successor
+      const seats: Settlement[] = [];
+      for (const st of [...towns].sort((a, b) => b.pop - a.pop)) { if (seats.length < 6 && seats.every((s) => angle(s, st) > 1.6 * spacing)) seats.push(st); }
+      const heirs = seats.map((seat) => this.newNation(sim, rng, seat, year, n, 'successor', [ev.id]));
+      for (const st of towns) {
+        let best = 0, bd = Infinity;
+        for (let k = 0; k < seats.length; k++) { const d = angle(seats[k]!, st); if (d < bd) { bd = d; best = k; } }
+        st.nation = heirs[best]!.id; st.pop *= 0.85;
+        sim.cellLog.note(st.cell, year, Log.Owner, heirs[best]!.id);
+      }
+      for (const heir of heirs) { heir.stability = 0.55; heir.inequality = n.inequality * 0.4; }
+      this.closeNation(n, year, 'fell apart');
+      return true;
+    }
+    // ---- civil war: a rival court in the second city, and the country divides between them
+    if (n.stability < 0.2 && towns.length >= 4 && rng.chance(1 - Math.exp(-y / 40))) {
+      const rival = [...others].sort((a, b) => b.pop - a.pop).find((st) => angle(cap, st) > 1.2 * spacing) ?? others[0]!;
+      const ev = sim.emit({
+        type: 'civil-war', year, cellId: rival.cell, title: `Civil war in ${n.name}`,
+        description: `${rival.name} has raised its own ruler against ${cap.name}: ${because}. Towns choose a side, or have one chosen for them.`,
+        causes: [n.eventId, ...causes].filter((x) => x >= 0), importance: 2, speciesIds: [n.species], data: { nation: n.id },
+      });
+      const other = this.newNation(sim, rng, rival, year, n, 'breakaway', [ev.id]);
+      for (const st of others) {
+        st.pop *= 0.8;
+        if (st.id !== rival.id && angle(rival, st) < angle(cap, st)) { st.nation = other.id; sim.cellLog.note(st.cell, year, Log.Owner, other.id); }
+      }
+      cap.pop *= 0.8;
+      n.fatigue = sat(n.fatigue + 0.4); other.fatigue = 0.4;
+      n.stability = 0.5; other.stability = 0.5; n.inequality *= 0.6;
+      this.woe(n, 'war', ev.id, year, 0);
+      return false;
+    }
+    // ---- secession: the furthest province goes its own way
+    if (rng.chance(1 - Math.exp(-y / 60))) {
+      const seed = others[0]!;
+      const ev = sim.emit({
+        type: 'secession', year, cellId: seed.cell, title: `${seed.name} breaks away from ${n.name}`,
+        description: `The far province around ${seed.name} has stopped sending its taxes and its sons: ${because}.`,
+        causes: [n.eventId, ...causes].filter((x) => x >= 0), importance: 1, speciesIds: [n.species], data: { nation: n.id },
+      });
+      const other = this.newNation(sim, rng, seed, year, n, 'breakaway', [ev.id]);
+      let taken = 1;
+      for (const st of others) {
+        if (st.id === seed.id || taken >= towns.length / 2) continue;
+        if (angle(seed, st) < 2.2 * spacing && angle(seed, st) < angle(cap, st)) { st.nation = other.id; sim.cellLog.note(st.cell, year, Log.Owner, other.id); taken++; }
+      }
+      n.stability = sat(n.stability + 0.2); n.inequality *= 0.85;
+      return false;
+    }
+    return false;
+  }
+
   /** What a nation's land offers, from the places its towns stand on. */
   private survey(sim: Simulation, n: Nation, towns: Settlement[]): Land[] {
     const w = sim.world, reg = sim.regions, g = reg.grid;
@@ -493,19 +624,22 @@ export class Civilization {
     n.know.saved += gain / each;
     // ---- learning from neighbours (system E3): what a nation in contact already knows is far cheaper to take up than
     // to discover, so neighbours and trading partners keep pace while a people alone on an island falls ages behind
-    for (const id of n.contacts) {
-      const other = h.nations[id];
-      if (!other || other.ended >= 0 || other.tech <= n.tech + 0.004) continue;
-      // about one thing learned per contact every century and a half (a lifetime or two in the Age of Signals), sooner for
-      // a trading people: enough to keep neighbours within sight of each other, not enough to keep them level
+    {
+      // one teacher at a time: the most knowledgeable nation it is in touch with
+      let other: Nation | undefined;
+      for (const id of n.contacts) { const o = h.nations[id]; if (o && o.ended < 0 && o.tech > n.tech + 0.004 && (!other || o.tech > other.tech)) other = o; }
+      // about one thing learned every century and a half (a lifetime or two in the Age of Signals), sooner for a trading
+      // people: enough to keep neighbours within sight of each other, not enough to keep them level
       const culture = h.cultures[n.culture]!;
-      const every = n.era >= 7 && other.era >= 7 ? 70 : 150;
-      if (!rng.chance(1 - Math.exp(-y * (0.6 + 0.8 * culture.trade) / every))) continue;
-      const i = borrowable(n.know, other.know, land);
-      if (i < 0) continue;
-      n.know.way[i] = wayFor(i, land); n.know.year[i] = year;
-      n.know.saved = Math.max(-1, n.know.saved - 0.3 * WEB[i]!.ways[n.know.way[i]!]!.cost);
-      n.borrowed = (n.borrowed ?? 0) + 1;
+      const every = other && n.era >= 7 && other.era >= 7 ? 70 : 150;
+      if (other && rng.chance(1 - Math.exp(-y * (0.6 + 0.8 * culture.trade) / every))) {
+        const i = borrowable(n.know, other.know, land);
+        if (i >= 0) {
+          n.know.way[i] = wayFor(i, land); n.know.year[i] = year;
+          n.know.saved = Math.max(-1, n.know.saved - 0.3 * WEB[i]!.ways[n.know.way[i]!]!.cost);
+          n.borrowed = (n.borrowed ?? 0) + 1;
+        }
+      }
     }
     for (let made = 0; made < 8; made++) {
       const i = chooseNext(n.know, land, this.leaning(n), rng);
@@ -554,7 +688,7 @@ export class Civilization {
     const heir = 0.84 + 0.14 * n.stability;
     if (rng.chance(1 - Math.pow(heir, reigns))) {
       const old = house.reigns + Math.floor(rng.next() * reigns);
-      n.stability = sat(n.stability - 0.12);
+      this.woe(n, 'succession', -1, year, 0.16);
       if (old >= 12) {
         const cap = this.settlements[n.capital]!;
         sim.emit({ type: 'dynasty', year, cellId: cap.cell, title: `A new house in ${n.name}`, description: `The ${house.name} is over after ${old} reigns. ${ruler.name} holds ${cap.name} now.`, causes: [n.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [n.species], data: { nation: n.id } });
@@ -582,7 +716,6 @@ export class Civilization {
     const next = this.person(rng, n, 'ruler', year, span * (0.3 + rng.next() * 0.25), -1, -1);
     const line = this.dynasty(n, next, year);
     n.ruler = next.id; n.dynasty = line.id;
-    n.stability = sat(n.stability - 0.12);
     const cap = this.settlements[n.capital]!;
     const ev = sim.emit({
       type: 'dynasty', year, cellId: cap.cell, title: `A new house in ${n.name}`,
@@ -590,6 +723,7 @@ export class Civilization {
       causes: [n.eventId].filter((x) => x >= 0), importance: house && house.reigns >= 12 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, person: next.id },
     });
     next.events.push(ev.id); old.events.push(ev.id);
+    this.woe(n, 'succession', ev.id, year, 0.16);
   }
 
   /** A camp has planted fields. It joins a neighbouring nation of its own people, or founds one. */
@@ -617,7 +751,7 @@ export class Civilization {
   }
 
   /** A town becomes the first of a new country: on its own (the first farmers of a land) or by going beyond the reach of the one it came from. */
-  private newNation(sim: Simulation, rng: RNG, st: Settlement, year: number, from: Nation | null): Nation {
+  private newNation(sim: Simulation, rng: RNG, st: Settlement, year: number, from: Nation | null, why: 'far' | 'breakaway' | 'successor' = 'far', because: number[] = []): Nation {
     const h = this.h;
     const culture = this.cultureFor(sim, st.species, year);
     const lang = h.languages[culture.language]!;
@@ -627,7 +761,7 @@ export class Civilization {
     const n: Nation = {
       id: h.nations.length, name, culture: culture.id, species: st.species, capital: st.id, founded: year, ended: -1, parent: from ? from.id : -1, government: 'chiefdom',
       ruler: -1, dynasty: -1, stability: 0.7, tech: st.tech, era: eraOf(st.tech), hue: (culture.hue + ((hash32(this.seedNum, h.nations.length, 7) % 1000) / 1000) * 0.3 + 0.85) % 1, eventId: -1, pop: st.pop, towns: 1,
-      know: newKnowledge(), land: [], surveyed: -1e9, contacts: [],
+      know: newKnowledge(), land: [], surveyed: -1e9, contacts: [], inequality: from ? from.inequality * 0.5 : 0.05, fatigue: 0, woes: [], peakYear: year, peakTowns: 1,
     };
     // settlers carry what the old country knew; what their new land cannot support they will have to relearn another way
     if (from) { n.know.way.set(from.know.way); n.know.year.set(from.know.year); n.land = from.land.slice(); n.tech = Math.max(st.tech, levelOf(n.know, new Set(n.land))); n.era = eraOf(n.tech); }
@@ -645,10 +779,14 @@ export class Civilization {
       type: 'nation', year, cellId: st.cell, title: dawn ? 'The dawn of history' : `${n.name} is founded`,
       description: dawn
         ? `At ${st.name} the people of ${sp.name} have planted fields and stayed to guard them. They call their country ${n.name} and follow ${first.name}. From here on their years are worth counting one by one.`
-        : from
-          ? `${st.name} lies too far from ${this.settlements[from.capital]!.name} for any order to reach it. Its settlers follow ${first.name} now and call their country ${n.name}.`
-          : `The farmers around ${st.name} now answer to ${first.name}. They call their country ${n.name}.`,
-      causes: [st.eventId, from ? from.eventId : -1].filter((x) => x >= 0), importance: dawn ? 3 : 1, speciesIds: [st.species], data: { nation: n.id, person: first.id },
+        : from && why === 'breakaway'
+          ? `${st.name} and the towns around it will take no more orders from ${this.settlements[from.capital]?.name ?? from.name}. They follow ${first.name} now and call their country ${n.name}.`
+          : from && why === 'successor'
+            ? `Out of what was ${from.name}, ${first.name} holds ${st.name} and the land around it, and calls it ${n.name}.`
+            : from
+              ? `${st.name} lies too far from ${this.settlements[from.capital]!.name} for any order to reach it. Its settlers follow ${first.name} now and call their country ${n.name}.`
+              : `The farmers around ${st.name} now answer to ${first.name}. They call their country ${n.name}.`,
+      causes: [st.eventId, from ? from.eventId : -1, ...because].filter((x) => x >= 0), importance: dawn ? 3 : 1, speciesIds: [st.species], data: { nation: n.id, person: first.id },
     });
     n.eventId = ev.id;
     first.events.push(ev.id);
@@ -657,13 +795,18 @@ export class Civilization {
     return n;
   }
 
-  private endNation(sim: Simulation, n: Nation, year: number): void {
+  /** The records of a nation that has ceased to exist are closed. */
+  private closeNation(n: Nation, year: number, fate: string): void {
     const h = this.h;
     n.ended = year; n.pop = 0; n.towns = 0;
     const ruler = h.people[n.ruler];
-    if (ruler && ruler.died < 0) { ruler.died = year; ruler.reignTo = year; ruler.fate = 'died with the country'; }
+    if (ruler && ruler.died < 0) { ruler.died = year; ruler.reignTo = year; ruler.fate = fate === 'fell apart' ? 'was the last to rule it' : 'died with the country'; }
     const house = h.dynasties[n.dynasty];
     if (house && house.ended < 0) house.ended = year;
+  }
+
+  private endNation(sim: Simulation, n: Nation, year: number): void {
+    this.closeNation(n, year, 'emptied');
     sim.emit({
       type: 'nation-fall', year, cellId: this.settlements[n.capital]?.cell ?? -1, title: `${n.name} is no more`,
       description: `The last town of ${n.name} stands empty. It lasted ${Math.round(year - n.founded).toLocaleString('en-US')} years.`,
@@ -809,6 +952,8 @@ export class Civilization {
       if (id === undefined) continue;
       const st = this.settlements[id]!;
       st.pop *= 1 - Math.min(0.9, kill[k]!);
+      const nation = st.nation >= 0 ? this.h.nations[st.nation] : undefined;
+      if (nation && nation.ended < 0) this.woe(nation, 'disaster', eventId, sim.simYear, 0.06 + 0.2 * Math.min(0.9, kill[k]!) / Math.max(1, nation.towns));
       if (st.belief < 0 && st.tech < 0.7) {
         st.belief = eventId;
         sim.civEvent('belief', st.species, st.cell, st.id, eventId);

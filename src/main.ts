@@ -587,6 +587,9 @@ async function boot(): Promise<void> {
       // documentary director: cut to wherever something notable just happened
       if ((state.director || state.postcard) && ev.importance >= 2 && ev.cellId >= 0 && scene.following === null) actions.flyToCell(ev.cellId, 0.9);
       if ((ev.type === 'war' || ev.type === 'plague') && ev.cellId >= 0) scene.civUnrest(ev.cellId, ev.type);
+      // a fallen capital goes dark; a civil war flickers like any other
+      if (ev.type === 'nation-collapse' && ev.cellId >= 0) scene.civUnrest(ev.cellId, 'plague');
+      if (ev.type === 'civil-war' && ev.cellId >= 0) scene.civUnrest(ev.cellId, 'war');
       if (ev.type === 'hatching' && ev.cellId >= 0) scene.hatchAt(ev.cellId);
       // departure: the light rises from the greatest city
       if (ev.title === 'Departure') { const home = [...state.settlements].filter((x) => x.ruined < 0).sort((p1, p2) => p2.tech - p1.tech)[0]; if (home) scene.launchAt(home.cell); }

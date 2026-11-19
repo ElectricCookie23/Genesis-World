@@ -107,6 +107,15 @@ export interface Nation {
   contacts: number[];
   /** How many things it has learned from others rather than discovered. */
   borrowed?: number;
+  /** How far wealth has gathered in few hands, 0..1 (system E4): it creeps up in good times and is reset by upheaval. */
+  inequality: number;
+  /** Weariness of war, 0..1: each war adds to it and peace wears it away. */
+  fatigue: number;
+  /** Recent blows to the nation (wars, plagues, disasters, a fallen house), newest last: what a collapse is blamed on. */
+  woes: { kind: string; eventId: number; year: number }[];
+  /** The year it was at its greatest extent, and how many towns it then held. */
+  peakYear: number;
+  peakTowns: number;
 }
 
 /** Everything the history engine keeps, in one saveable object. */
