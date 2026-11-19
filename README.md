@@ -1,6 +1,6 @@
 # Genesis
 
-**Live site:** https://electriccookie23.github.io/Genesis-World/ (works once GitHub Pages is switched on for this repo; see DECISIONS.md #2)
+**Live site:** https://electriccookie23.github.io/Genesis-World/
 
 Genesis is a 3D web experience of a small planet where geology, climate, life and eventually civilization evolve on their own in real time. It is a living simulation you watch and poke at, not a game with goals.
 

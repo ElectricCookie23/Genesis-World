@@ -46,7 +46,7 @@ Everything reads the planet from cube-map textures baked from the simulation's c
 - Nothing has been seen on a real GPU. Frame rate, shader compile time and final look are unverified. The owner checks the deployed site; expect tuning of colours, exposure, cloud density, city light brightness and preset costs after that.
 - Not built: screen-space reflections on water, parallax occlusion mapping, footprints, lens flare, ground fog, canopy texture on far terrain, glow cast on the ground by glowing plants, a WebGPU compute path (WebGL2-style passes run on both backends instead).
 - The eight "after" screenshots are in `docs/screenshots/after/` (software rendering, 800x500). Three of them need retaking, see "Paused here".
-- GitHub Pages is still off: the repo must be public and Settings, Pages, Source set to "GitHub Actions" by the owner.
+- GitHub Pages is on (repo public, source GitHub Actions): every push to main deploys to https://electriccookie23.github.io/Genesis-World/ after the tests pass (about six minutes).
 
 ## How to check visuals here
 - `npm run dev`, open `/?seed=amber-reef-101&skip&fresh`. Dev switches: `&dsize=128&esize=128&eiter=60` shrink the bake for speed; `&webgl` forces WebGL2.
