@@ -130,6 +130,8 @@ export interface SettlementInfo {
   farms?: boolean;
   /** Nation it belongs to, or -1 while it is a camp outside history. */
   nation?: number;
+  /** Something here was built with a technique its people have forgotten: the plain name of it (system E5). */
+  relic?: string;
 }
 
 /** A nation as the simulation keeps it. */

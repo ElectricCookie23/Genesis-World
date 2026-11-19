@@ -16,7 +16,7 @@ import { eraOf, eraSlot, eraTitle, earthNote } from './history/eras';
 import { hash32 } from './history/hash';
 import { capital, compound, makeLanguage, personName, placeMeanings, word, type Language } from './history/language';
 import { emptyHistory, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role } from './history/model';
-import { SLOT_INDEX, WEB, borrowable, chooseNext, levelOf, newKnowledge, wayFor, type Land, type Leaning } from './history/tech';
+import { SLOT_INDEX, WEB, borrowable, chooseNext, copyKnowledge, forget, levelOf, newKnowledge, wayFor, type Land, type Leaning } from './history/tech';
 
 export interface Settlement {
   id: number;
@@ -42,6 +42,8 @@ export interface Settlement {
   /** What its name means, so the name can be spoken as the language was in any year. */
   head: string;
   modifier: string;
+  /** A slot of the tech web: something here was built with a technique its people have since forgotten (system E5), or -1. */
+  relic: number;
 }
 
 export const INTELLIGENCE_THRESHOLD = 0.5;
@@ -218,6 +220,11 @@ export class Civilization {
       const quick = 1 + 6 * sat((n.tech - 0.7) / 0.3) ** 2;
       const rate = 6.5e-5 * (0.45 + Math.log10(1 + pop) / 3) * (0.6 + sp.ref[G.Intelligence]!) * (1 + reach) * quick * (0.6 + 0.4 * n.stability);
       this.research(sim, rng, n, towns, rate * y, year, y);
+      // ---- a library burns (system E5): likelier in troubled times, and only once there is writing to burn
+      if (n.know.way[SLOT_INDEX.get('write')!]! >= 0 && rng.chance(1 - Math.exp(-y * (0.4 + 1.6 * (1 - n.stability) + n.fatigue) / 2600))) {
+        const capTown = this.settlements[n.capital]!;
+        this.loseKnowledge(sim, n, towns, 2 + rng.int(3), year, `The library of ${capTown.name} has burned${n.fatigue > 0.2 ? ' in the fighting' : ''}.`, n.woes.length ? n.woes[n.woes.length - 1]!.eventId : -1);
+      }
       // ---- how well it holds together, and what happens when it does not (system E4)
       if (this.fate(sim, rng, n, towns, y, year)) continue;
       // ---- a new era
@@ -279,6 +286,8 @@ export class Civilization {
     const before = st.tech;
     const target = n.tech * (isCapital ? 1 : 0.86);
     if (target > st.tech) st.tech += (target - st.tech) * (1 - Math.exp(-y / 45));
+    // in a dark age the towns slip back, more slowly than they rose: what was built outlasts the knowing how
+    else if (target < st.tech - 0.02) st.tech += (target - st.tech) * (1 - Math.exp(-y / 160));
     if (!st.painted && st.tech > 0.06) st.painted = true;
     if (!st.temple && st.tech > 0.3 && sim.godEvents.length >= 3) { st.temple = true; sim.civEvent('temple', st.species, st.cell, st.id); }
     if (st.tech >= 0.3 && before < 0.3) sim.civEvent('village', st.species, st.cell, st.id);
@@ -337,6 +346,8 @@ export class Civilization {
       const plagueAt = sim.events.events.length;
       sim.civEvent('city-plague', st.species, st.cell, st.id);
       this.woe(n, 'plague', sim.events.events.length > plagueAt ? plagueAt : -1, year, 0.14);
+      // when the few who knew a craft die together, the craft dies with them
+      if (isCapital && rng.chance(0.35)) this.loseKnowledge(sim, n, [st], 1 + rng.int(2), year, `The plague in ${st.name} took the last who knew how.`, sim.events.events.length > plagueAt ? plagueAt : -1);
       for (let j = 0; j < reg.grid.ncount[st.region]!; j++) {
         const oid = this.occupied.get(reg.grid.neighbors[st.region * 6 + j]!);
         if (oid !== undefined) this.settlements[oid]!.pop *= 0.7;
@@ -433,6 +444,35 @@ export class Civilization {
     return d;
   }
 
+  /**
+   * Knowledge is lost (system E5). The newest things a nation knows go first. What had been built with them
+   * still stands in its towns for a while, as works no one alive can repair or copy.
+   */
+  private loseKnowledge(sim: Simulation, n: Nation, towns: Settlement[], count: number, year: number, how: string, cause: number): void {
+    const known = n.know.way.reduce((a, w) => a + (w >= 0 ? 1 : 0), 0);
+    if (known < 4 || count < 1) return;
+    const land = new Set(n.land);
+    // (the names must be read before the ways are cleared)
+    const names: string[] = [];
+    const order: number[] = [];
+    for (let i = 0; i < WEB.length; i++) if (n.know.way[i]! >= 0) order.push(i);
+    order.sort((a, b) => WEB[b]!.level - WEB[a]!.level);
+    for (const i of order.slice(0, Math.round(count))) names.push(WEB[i]!.ways[n.know.way[i]!]!.name);
+    const cap = this.settlements[n.capital]!;
+    const ev = sim.emit({
+      type: 'knowledge-lost', year, cellId: cap.cell, title: `Lost knowledge in ${n.name}`,
+      description: `${how} ${n.name} no longer knows ${names.length === 1 ? `the secret of ${names[0]}` : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`}. What was made that way still stands, and no one alive can make more.`,
+      causes: [cause, n.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [n.species], data: { nation: n.id, lost: names.length },
+    });
+    const gone = forget(n.know, count, year, ev.id);
+    // the largest towns keep the works: relics of a forgotten technique
+    const big = [...towns].sort((a, b) => b.pop - a.pop);
+    gone.forEach((slotIndex, k) => { const st = big[k % big.length]; if (st && st.relic < 0) st.relic = slotIndex; });
+    n.know.saved = 0;
+    n.tech = Math.min(1.2, levelOf(n.know, land));
+    n.era = Math.min(n.era, eraOf(n.tech));
+  }
+
   /** A blow to a nation: remembered for a few generations, and blamed if the nation then breaks. */
   private woe(n: Nation, kind: string, eventId: number, year: number, cost: number): void {
     n.woes.push({ kind, eventId, year });
@@ -504,7 +544,13 @@ export class Civilization {
         st.nation = heirs[best]!.id; st.pop *= 0.85;
         sim.cellLog.note(st.cell, year, Log.Owner, heirs[best]!.id);
       }
-      for (const heir of heirs) { heir.stability = 0.55; heir.inequality = n.inequality * 0.4; }
+      for (const heir of heirs) {
+        heir.stability = 0.55; heir.inequality = n.inequality * 0.4;
+        // the schools and workshops of the old country served all of it: each piece keeps less than the whole knew
+        const mine = towns.filter((st) => st.nation === heir.id);
+        const known = heir.know.way.reduce((a, w) => a + (w >= 0 ? 1 : 0), 0);
+        this.loseKnowledge(sim, heir, mine, known * (0.08 + 0.2 * rng.next()), year, `When ${n.name} fell its craftsmen scattered.`, ev.id);
+      }
       this.closeNation(n, year, 'fell apart');
       return true;
     }
@@ -645,9 +691,24 @@ export class Civilization {
       const i = chooseNext(n.know, land, this.leaning(n), rng);
       if (i < 0) { n.know.saved = Math.min(n.know.saved, 2); break; }
       const k = wayFor(i, land), slot = WEB[i]!, way = slot.ways[k]!;
-      if (n.know.saved < way.cost) break;
-      n.know.saved -= way.cost;
+      // what was once known comes back sooner: the old works still stand to be studied, and more so where one stands in its own towns
+      const relicHere = n.know.lost[i]! > 0 && towns.some((st) => st.relic === i);
+      const cost = way.cost * (n.know.lost[i]! > 0 ? (relicHere ? 0.3 : 0.55) : 1);
+      if (n.know.saved < cost) break;
+      n.know.saved -= cost;
       n.know.way[i] = k; n.know.year[i] = year;
+      if (n.know.lost[i]! > 0) {
+        const gone = Math.round(year - n.know.lost[i]!);
+        const capTown = this.settlements[n.capital]!;
+        sim.emit({
+          type: 'knowledge-regained', year, cellId: capTown.cell, title: `${capital(way.name)} found again`,
+          description: `${n.name} can make ${way.name} once more, ${gone.toLocaleString('en-US')} years after the knowledge was lost${relicHere ? `. They learned it from what the old builders left standing in ${towns.find((st) => st.relic === i)!.name}` : ''}.`,
+          causes: [n.know.lostEvent[i]!, n.eventId].filter((x) => x >= 0), importance: slot.key || gone > 300 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, slot: slot.id, years: gone },
+        });
+        n.know.lost[i] = 0;
+        for (const st of towns) if (st.relic === i) st.relic = -1;
+        continue;
+      }
       const first = !h.firsts[i];
       if (first) h.firsts[i] = 1;
       // the chronicle tells of turning points, the first time anyone reaches them; every discovery is kept in the nation's own record
@@ -665,7 +726,7 @@ export class Civilization {
         if (inventor) inventor.events.push(ev.id);
       }
     }
-    n.tech = Math.max(n.tech, Math.min(1.2, levelOf(n.know, land)));
+    n.tech = Math.min(1.2, levelOf(n.know, land));
   }
 
   /**
@@ -764,7 +825,7 @@ export class Civilization {
       know: newKnowledge(), land: [], surveyed: -1e9, contacts: [], inequality: from ? from.inequality * 0.5 : 0.05, fatigue: 0, woes: [], peakYear: year, peakTowns: 1,
     };
     // settlers carry what the old country knew; what their new land cannot support they will have to relearn another way
-    if (from) { n.know.way.set(from.know.way); n.know.year.set(from.know.year); n.land = from.land.slice(); n.tech = Math.max(st.tech, levelOf(n.know, new Set(n.land))); n.era = eraOf(n.tech); }
+    if (from) { copyKnowledge(from.know, n.know); n.land = from.land.slice(); n.tech = Math.max(st.tech, levelOf(n.know, new Set(n.land))); n.era = eraOf(n.tech); }
     h.nations.push(n);
     const span = this.lifespan(sim, st.species);
     const first = this.person(rng, n, 'founder', year, span * (0.3 + rng.next() * 0.25), -1, -1);
@@ -933,7 +994,7 @@ export class Civilization {
     for (let salt = 1; salt < 6 && this.settlements.some((x) => x.name === name); salt++) { meanings = placeMeanings(hash32(this.seedNum, id, salt)); name = compound(lang, meanings.head, meanings.modifier, year); }
     const st: Settlement = {
       id, name, cell, region, species, pop: 0.2, tech: 0.03, founded: year, belief: -1, eventId: -1, ruined: -1, painted: false, temple: false, farms: false, stars: false,
-      nation: -1, head: meanings.head, modifier: meanings.modifier ?? '',
+      nation: -1, head: meanings.head, modifier: meanings.modifier ?? '', relic: -1,
     };
     this.settlements.push(st);
     this.occupied.set(region, st.id);

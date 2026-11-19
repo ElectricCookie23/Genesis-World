@@ -177,10 +177,31 @@ export interface Knowledge {
   year: Float64Array;
   /** Research saved up toward the next discovery. */
   saved: number;
+  /** For each slot, the year it was last lost (0 if it never was) and the event of that loss (-1 if none): system E5. */
+  lost: Float64Array;
+  lostEvent: Int32Array;
 }
 
 export function newKnowledge(): Knowledge {
-  return { way: new Int8Array(WEB.length).fill(-1), year: new Float64Array(WEB.length), saved: 0 };
+  return { way: new Int8Array(WEB.length).fill(-1), year: new Float64Array(WEB.length), saved: 0, lost: new Float64Array(WEB.length), lostEvent: new Int32Array(WEB.length).fill(-1) };
+}
+
+/** Copy what one nation knows (and remembers having lost) into another's record. */
+export function copyKnowledge(from: Knowledge, to: Knowledge): void {
+  to.way.set(from.way); to.year.set(from.year); to.lost.set(from.lost); to.lostEvent.set(from.lostEvent);
+}
+
+/**
+ * Knowledge is lost (system E5): the newest things go first, so nothing that is still known ever rests
+ * on something forgotten. Returns the slots that were lost, newest first.
+ */
+export function forget(k: Knowledge, count: number, year: number, eventId = -1): number[] {
+  const known: number[] = [];
+  for (let i = 0; i < WEB.length; i++) if (k.way[i]! >= 0) known.push(i);
+  known.sort((a, b) => WEB[b]!.level - WEB[a]!.level);
+  const gone = known.slice(0, Math.max(0, Math.min(known.length, Math.round(count))));
+  for (const i of gone) { k.way[i] = -1; k.lost[i] = year; k.lostEvent[i] = eventId; }
+  return gone;
 }
 
 /** The best way of meeting a need that this land allows, or -1 if the land allows none. */
