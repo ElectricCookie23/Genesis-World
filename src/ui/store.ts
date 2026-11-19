@@ -1,10 +1,10 @@
 // Tiny observable store shared by the Preact UI and the app.
 import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
-import type { PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
+import type { NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 import type { Nation } from '../render/gfx/nations';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
 
 /** One person in an individual's family tree; key is set when that relative is drawn in the world and can be selected. */
@@ -51,11 +51,19 @@ export interface UIState {
   settlements: SettlementInfo[];
   /** Nations derived from the settlements (name, colours, emblem), for the Night Map and the Peoples panel. */
   nations: Nation[];
+  /** Nations as the simulation keeps them: rulers, houses, eras. */
+  realms: NationInfo[];
+  /** The nation whose knowledge and rulers are being looked at, when it has arrived. */
+  nationDetail: NationDetail | null;
   timeline: TimelinePoint[];
   /** Set while two futures run side by side. */
   other: OtherFuture | null;
   overlay: Overlay;
   colorblind: boolean;
+  /** Show "comparable to Earth around ..." beside the names of ages. */
+  earthNotes: boolean;
+  /** An age has just begun somewhere for the first time: shown as a banner for a few seconds. */
+  eraBanner: { title: string; nation: string; own: string; earth: string; year: number } | null;
   /** When on, god tools are locked and the world runs untouched. */
   handsOff: boolean;
   /** Documentary director: the camera flies to whatever just happened. */
@@ -103,10 +111,14 @@ export const state: UIState = {
   slots: [],
   settlements: [],
   nations: [],
+  realms: [],
+  nationDetail: null,
   timeline: [],
   other: null,
   overlay: 'none',
   colorblind: false,
+  earthNotes: false,
+  eraBanner: null,
   handsOff: false,
   director: false,
   history: [],
@@ -169,6 +181,9 @@ export const actions = {
   drawSection: (_canvas: HTMLCanvasElement) => {},
   familyOf: (_key: number): string[] => [],
   familyTree: (_key: number): FamilyTree | null => null,
+  /** Open the knowledge and rulers of a nation (by the simulation's nation id). */
+  openNation: (_id: number) => {},
+  setEarthNotes: (_on: boolean) => {},
   selectCreatureKey: (_key: number) => {},
   /** Swap places with the other future, or stop running it. */
   crossOver: () => {},

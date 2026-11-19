@@ -29,6 +29,8 @@ export interface NewEvent {
   speciesIds?: number[];
   importance?: number;
   data?: Record<string, number | string>;
+  /** The year it happened, when that is not the simulation's current year. */
+  year?: number;
 }
 
 export class EventLog {
@@ -45,7 +47,7 @@ export class EventLog {
     const ev: SimEvent = {
       id,
       type: e.type,
-      simYear,
+      simYear: e.year ?? simYear,
       cellId: e.cellId ?? -1,
       title: e.title,
       description: e.description,

@@ -200,19 +200,19 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | Part | Status | Notes |
 |---|---|---|
 | Text generation: languages and template grammar | done | `sim/history/language.ts` (sounds from the speakers' bodies, words built from a family seed, sound changes, daughter languages, place and personal names), `sim/history/grammar.ts` (templates), `sim/history/hash.ts` |
-| Civilization model: nations, cultures, religions, languages as entities in the worker | not started | |
-| Notable people stored for good; citizens generated on demand | not started | |
-| Per-cell history log | not started | |
-| Snapshots at every major era | not started | |
-| Era clock per civilization, on human-scale time | not started | |
+| Civilization model: nations, cultures, religions, languages as entities in the worker | done (religions follow in E24) | `sim/civilization.ts` and `sim/history/model.ts`. A culture and its language are made when a species crosses the threshold. A camp that plants fields founds a nation or joins the one next door; a nation holds only what its era lets it reach, so distant settlers found their own. Nations carry a ruler, a house, stability, a level of knowledge and an era. Sent to the page as `NationInfo`; the renderer groups towns by them and the Peoples panel shows era, ruler and house. Test: "the history engine". |
+| Notable people stored for good; citizens generated on demand | done | rulers and founders are stored with temperament, parentage, reign and fate (`Person`, `Dynasty`); `sim/history/citizens.ts` rebuilds any ordinary citizen from seed, settlement and index (name, birth year, trade, household). Tests: "ordinary people", "the history engine". |
+| Per-cell history log | done | `sim/history/celllog.ts`: biome, owner, settlements founded and abandoned, size class, era and notable events per cell, threaded through shared arrays; `stateAt(cell, year)` rebuilds a place for any year. Test: "the record of a place". |
+| Snapshots at every major era | done | the worker keeps a whole copy of the world at the start of each era alongside the rewind points; they appear on the timeline and are never thinned out (fewer where memory is short). |
+| Era clock per civilization, on human-scale time | done | history advances in yearly ticks from the first fields (`Civilization.advance`), coarser under a fast-forward. Ten eras by level of knowledge (`sim/history/eras.ts`), each nation in its own. A new "History" speed (25 years a second); the simulation holds time there while a history unfolds unless a faster speed is chosen on purpose. Events carry their own year. |
 
 
 ### Section 1. The History Engine
 
 | # | System | Status | Notes |
 |---|---|---|---|
-| E1 | The Tech Web | not started | |
-| E2 | Era Progression | not started | |
+| E1 | The Tech Web | done | `sim/history/tech.ts`: 108 needs met by about 150 inventions; a need can have two or three ways depending on the land (ore, coast, river, forest, tamed beasts, sand, coal), so a people without ore meets the same needs with glass, bone and fired clay. Research is saved up from people, minds, stability and reach, and spent on what is open; which need comes next depends on the culture's and ruler's leanings and on luck. Every invention has a name in the nation's own language. First discoveries of turning points go in the chronicle with their inventor; every discovery keeps its year. Panel: Peoples, then "knowledge" on a nation. Tests: "the tech web (E1)" |
+| E2 | Era Progression | done | ten ages by level of knowledge, each nation in its own (`sim/history/eras.ts`). An age is named for how that nation got there (Age of Copper, or of Glass, or of Fired Clay; Age of Steam, or of Falling Water, or of Mirrors) and also has a name in the nation's own tongue. The first time anyone enters an age is a chronicle event with a banner; a setting adds "comparable to Earth around ...". What changes with the age: buildings (forms by level of knowledge), light colour (fire, lamp oil, gas, then electric light in the nation's colour: `lightColour`), the people's music (pace, length and a second voice), roads and sea lanes on the night side. Clothing is not drawn (people are not drawn yet: section 5). Tests: "era progression (E2)" |
 | E3 | Uneven History | not started | |
 | E4 | Rise and Fall | not started | |
 | E5 | Dark Ages | not started | |

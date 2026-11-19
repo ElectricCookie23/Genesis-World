@@ -63,5 +63,7 @@ export function loadSimulation(sim: Simulation, save: SaveState): void {
   if (save.version !== SAVE_VERSION) throw new Error('This save is from a different version of Genesis.');
   if (save.seed !== sim.seed) throw new Error('Save and world seeds differ.');
   restore(sim, structuredClone(save.data));
+  // region summaries are derived, not saved: without this a loaded world ran on year-zero summaries until its next ecology step
+  sim.refreshDerived();
   sim.terrainDirty = true;
 }

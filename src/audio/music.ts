@@ -118,12 +118,32 @@ export class Music {
     const scale = ['D4', 'E4', 'G4', 'A4', 'B4', 'D5', 'E5'];
     let s = (seed >>> 0) || 7;
     const motif = Array.from({ length: 6 }, () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return scale[s % scale.length]!; });
+    let last = 0;
     this.civTimer = window.setInterval(() => {
-      if (this.mood.hush) return;
+      // the people's music changes with their age: slow and bare at first, then longer phrases, a second voice from
+      // the Age of Presses, and quick, close-set figures once there are engines and signals
+      const era = this.civEra;
+      const wait = [19, 19, 18, 17, 15, 14, 13, 12, 11, 11][era] ?? 11;
+      const now = performance.now();
+      if (this.mood.hush || now - last < wait * 1000) return;
+      last = now;
       const t = this.tone.now();
-      motif.forEach((n, i) => { try { this.voice.triggerAttackRelease(n, 0.35, t + i * 0.42, 0.22); } catch { /* ignore */ } });
-    }, 19000);
+      const step = [0.5, 0.48, 0.44, 0.4, 0.34, 0.3, 0.26, 0.22, 0.18, 0.16][era] ?? 0.16;
+      const notes = Math.min(12, 6 + era);
+      for (let i = 0; i < notes; i++) {
+        const k = scale.indexOf(motif[i % motif.length]!);
+        // later ages turn the old tune around on its second pass
+        const n = scale[(i >= motif.length ? scale.length - 1 - k : k)]!;
+        try {
+          this.voice.triggerAttackRelease(n, step * 0.85, t + i * step, 0.22);
+          if (era >= 5 && i % 2 === 0) this.voice.triggerAttackRelease(scale[(k + 2) % scale.length]!, step * 0.85, t + i * step, 0.1);
+        } catch { /* ignore */ }
+      }
+    }, 1000);
   }
+
+  /** The highest age any nation has reached: it sets the pace and fullness of the people's music. */
+  civEra = 0;
 
   /** A creature's call: big bodies rumble, small ones chirp. size is the size gene 0..1. */
   call(size: number): void {

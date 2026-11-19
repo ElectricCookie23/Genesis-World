@@ -1,7 +1,7 @@
 import { SPEEDS } from '../shared/protocol';
 import { actions, togglePanel, useStore } from './store';
 import { bigNumber, formatYear } from './format';
-import { Chronicle, CreatureCard, CrossSection, Designer, FlatMap, GodTools, Graphs, Guide, Futures, Help, NationLabels, Num, Peoples, Settings, SpeciesCard, TimelineStrip, Tree, Why } from './panels';
+import { Chronicle, CreatureCard, CrossSection, Designer, FlatMap, GodTools, Graphs, Guide, Futures, Help, NationLabels, NationPanel, Num, Peoples, Settings, SpeciesCard, TimelineStrip, Tree, Why } from './panels';
 import css from './ui.module.css';
 
 const STAGE: Record<string, string> = { barren: 'lifeless', microbes: 'microbes', algae: 'algae seas', animals: 'living world' };
@@ -48,6 +48,7 @@ export function App() {
           {s.panel === 'section' && <CrossSection />}
           {s.panel === 'guide' && <Guide />}
           {s.panel === 'peoples' && <Peoples />}
+          {s.panel === 'nation' && <NationPanel />}
           {s.panel === 'graphs' && <Graphs />}
           {s.whyEvent >= 0 && <Why />}
           {s.selectedSpecies >= 0 && s.whyEvent < 0 && <SpeciesCard />}
@@ -76,6 +77,13 @@ export function App() {
         </div>
       )}
       {s.notice && <div class={`${css.panel} ${css.notice}`}>{s.notice}</div>}
+      {s.eraBanner && !s.milestone && !s.opening && (
+        <div key={`${s.eraBanner.title}${s.eraBanner.year}`} style={{ position: 'fixed', left: '50%', top: '13%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'none', maxWidth: '92vw', textShadow: '0 2px 18px #000c' }}>
+          <div style={{ font: '500 11px/1 system-ui, sans-serif', letterSpacing: '0.32em', opacity: 0.7 }}>{s.eraBanner.nation.toUpperCase()}</div>
+          <div style={{ font: "500 clamp(26px, 4.4vw, 46px)/1.15 'Cormorant Garamond', serif", margin: '8px 0 6px', borderTop: '1px solid #fff5', borderBottom: '1px solid #fff5', padding: '8px 22px' }}>{s.eraBanner.title}</div>
+          <div style={{ font: "italic 400 16px/1.3 'Cormorant Garamond', serif", opacity: 0.85 }}>{s.eraBanner.own}{s.earthNotes ? `, ${s.eraBanner.earth}` : ''}</div>
+        </div>
+      )}
       {s.milestone && (
         <div class={css.toast} key={s.milestone.id}>
           <div class={css.k}>{formatYear(s.milestone.simYear).toUpperCase()}</div>

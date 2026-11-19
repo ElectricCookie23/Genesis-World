@@ -3,7 +3,7 @@
 // and turned into what the renderer needs: territory and borders, roads and sea lanes, and a map of
 // city light. Nothing here feeds back into the simulation.
 import type { Grid } from '../../sim/world';
-import type { CellSnapshot, SettlementInfo, SpeciesInfo } from '../../shared/protocol';
+import type { CellSnapshot, NationInfo, SettlementInfo, SpeciesInfo } from '../../shared/protocol';
 import { G } from '../../sim/genetics';
 
 export type RGB = [number, number, number];
@@ -44,6 +44,23 @@ function hsv(h: number, s: number, v: number): RGB {
 }
 
 const FIRE: RGB = [1.0, 0.5, 0.14];
+const LAMP: RGB = [1.0, 0.66, 0.3];
+const GAS: RGB = [0.95, 0.93, 0.62];
+
+/**
+ * The colour of a people's lights at a level of knowledge (system E2): open fire, then oil lamps from
+ * the Age of Sails, pale gas light in the Age of Engines, and electric light in the nation's own colour
+ * from the Age of Signals on.
+ */
+export function lightColour(tech: number, signature: RGB): RGB {
+  const stops: [number, RGB][] = [[0.45, FIRE], [0.66, LAMP], [0.9, GAS], [1.04, signature]];
+  if (tech <= stops[0]![0]) return [...FIRE] as RGB;
+  for (let i = 1; i < stops.length; i++) {
+    const [t1, c1] = stops[i]!, [t0, c0] = stops[i - 1]!;
+    if (tech <= t1) { const t = (tech - t0) / (t1 - t0), k = t * t * (3 - 2 * t); return [c0[0] + (c1[0] - c0[0]) * k, c0[1] + (c1[1] - c0[1]) * k, c0[2] + (c1[2] - c0[2]) * k]; }
+  }
+  return [...signature] as RGB;
+}
 
 function nationName(capital: string, seed: number, tech: number, faith: boolean): string {
   const root = capital.replace(/[aeiou]+$/i, '') || capital;
@@ -62,17 +79,23 @@ export function settlementSize(pop: number): number {
  * Group living settlements into nations. The oldest settlement in a neighbourhood is the capital;
  * later ones of the same people nearby belong to it (a shared faith reaches further).
  */
-export function deriveNations(settlements: SettlementInfo[], grid: Grid, species: Map<number, SpeciesInfo>): Nation[] {
-  const alive = settlements.filter((s) => s.ruined < 0).sort((a, b) => a.founded - b.founded || a.id - b.id);
+export function deriveNations(settlements: SettlementInfo[], grid: Grid, species: Map<number, SpeciesInfo>, known: NationInfo[] = []): Nation[] {
+  // Where the simulation has founded nations, those are the nations: their towns are grouped as the simulation
+  // has them, under its names and colours. Camps still outside history are grouped by nearness as before.
+  const info = new Map(known.map((n) => [n.id, n]));
+  const rank = (s: SettlementInfo): number => { const n = s.nation !== undefined && s.nation >= 0 ? info.get(s.nation) : undefined; return n ? (n.capital === s.id ? 2e9 : 1e9) + n.pop : 0; };
+  const alive = settlements.filter((s) => s.ruined < 0).sort((a, b) => rank(b) - rank(a) || a.founded - b.founded || a.id - b.id);
   const nations: Nation[] = [];
   const { pos } = grid;
   const caps: SettlementInfo[] = [];
   for (const s of alive) {
     const sx = pos[s.cell * 3]!, sy = pos[s.cell * 3 + 1]!, sz = pos[s.cell * 3 + 2]!;
     let best = -1, bd = Infinity;
-    for (let k = 0; k < caps.length; k++) {
+    const mine = s.nation !== undefined && s.nation >= 0 ? s.nation : -1;
+    if (mine >= 0) best = caps.findIndex((c) => c.nation === mine);
+    for (let k = 0; k < caps.length && mine < 0; k++) {
       const c = caps[k]!;
-      if (c.species !== s.species) continue;
+      if (c.species !== s.species || (c.nation ?? -1) >= 0) continue;
       const d = Math.acos(Math.max(-1, Math.min(1, sx * pos[c.cell * 3]! + sy * pos[c.cell * 3 + 1]! + sz * pos[c.cell * 3 + 2]!)));
       const reach = 0.3 + (c.belief >= 0 && c.belief === s.belief ? 0.14 : 0) - (c.belief >= 0 && s.belief >= 0 && c.belief !== s.belief ? 0.12 : 0);
       if (d < reach && d < bd) { bd = d; best = k; }
@@ -90,7 +113,8 @@ export function deriveNations(settlements: SettlementInfo[], grid: Grid, species
     const sp = species.get(s.species);
     // the signature colour starts from the people's own biology (the hue of their glow or skin) and is spread per nation
     const bio = sp ? (sp.genes[G.Glow]! > 0.3 ? sp.genes[G.GlowHue]! : sp.genes[G.Hue]!) : hash(s.species);
-    const hue = (bio + nations.filter((n) => n.species === s.species).length * 0.381966 + hash(s.id * 13 + 5) * 0.08) % 1;
+    const own = mine >= 0 ? info.get(mine) : undefined;
+    const hue = own ? own.hue : (bio + nations.filter((n) => n.species === s.species).length * 0.381966 + hash(s.id * 13 + 5) * 0.08) % 1;
     const emblemSeed = s.id * 97 + s.species * 13;
     nations.push({
       id: nations.length, capital: s.id, name: '', species: s.species, members: [s.id],
@@ -105,11 +129,9 @@ export function deriveNations(settlements: SettlementInfo[], grid: Grid, species
     for (const m of n.members) { const s = byId.get(m)!; pop += s.pop; tech = Math.max(tech, s.tech); }
     n.pop = pop; n.tech = tech;
     const cap = byId.get(n.capital)!;
-    n.name = nationName(cap.name, cap.id * 7 + n.species, tech, cap.belief >= 0);
-    // fire and oil lamps first; electric light in the nation's own colour comes with technology
-    const t = Math.max(0, Math.min(1, (tech - 0.42) / 0.3));
-    const k = t * t * (3 - 2 * t);
-    n.color = [FIRE[0] + (n.signature[0] - FIRE[0]) * k, FIRE[1] + (n.signature[1] - FIRE[1]) * k, FIRE[2] + (n.signature[2] - FIRE[2]) * k];
+    const own = cap.nation !== undefined && cap.nation >= 0 ? info.get(cap.nation) : undefined;
+    n.name = own ? own.name : nationName(cap.name, cap.id * 7 + n.species, tech, cap.belief >= 0);
+    n.color = lightColour(tech, n.signature);
   }
   return nations;
 }

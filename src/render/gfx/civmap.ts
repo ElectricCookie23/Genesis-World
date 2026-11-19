@@ -3,7 +3,7 @@
 import type { CubeTexture } from 'three/webgpu';
 import { uniform } from 'three/tsl';
 import type { Grid } from '../../sim/world';
-import type { CellSnapshot, SettlementInfo, SpeciesInfo } from '../../shared/protocol';
+import type { CellSnapshot, NationInfo, SettlementInfo, SpeciesInfo } from '../../shared/protocol';
 import type { CubeBake } from './cubebake';
 import { LineField } from './linefield';
 import { buildLayers, buildNetworks, deriveNations, type CivLayers, type Nation, type Unrest } from './nations';
@@ -41,10 +41,13 @@ export class CivMap {
     bake.commit(this.b);
   }
 
-  setSettlements(list: SettlementInfo[]): void {
+  setSettlements(list: SettlementInfo[], known?: NationInfo[]): void {
     this.settlements = list;
+    if (known) this.known = known;
     this.dirty = true;
   }
+  /** Nations as the simulation has them (empty before history begins). */
+  private known: NationInfo[] = [];
 
   /** A war or a plague at a settlement: its lights flicker or go dark for a while. */
   disturb(cell: number, kind: 'war' | 'plague'): void {
@@ -68,7 +71,7 @@ export class CivMap {
     if (!cells || (!force && now - this.lastBuild < (fading ? 1500 : 2500)) || (!this.dirty && !fading && !force)) return false;
     this.lastBuild = now;
     this.dirty = false;
-    this.nations = deriveNations(this.settlements, this.grid, species);
+    this.nations = deriveNations(this.settlements, this.grid, species, this.known);
     this.layers = buildLayers(this.grid, cells, this.settlements, this.nations, this.unrest, this.layers);
     const L = this.layers, b = this.bake;
     b.fill(this.a, 0, L.r); b.fill(this.a, 1, L.g); b.fill(this.a, 2, L.b); b.fill(this.a, 3, L.glow);

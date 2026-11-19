@@ -223,6 +223,7 @@ async function boot(): Promise<void> {
   const fossilCells = () => [...state.species.values()].filter((x) => x.extinctYear >= 0 && x.peakPop > 2e4).map((x) => x.homeCell);
   scene.onNations = (nations) => update({ nations });
   actions.project = (x, y, z) => scene.projectDir(x, y, z);
+  actions.openNation = (id) => { update({ panel: 'nation', nationDetail: state.nationDetail?.id === id ? state.nationDetail : null }); send({ type: 'requestNation', id }); };
   actions.setOverlay = (o) => {
     update({ overlay: o });
     scene.setNightMap(o === 'nations');
@@ -353,7 +354,8 @@ async function boot(): Promise<void> {
     ctx.fillText('west', 8, 16); ctx.fillText('east', W - 38, 16); ctx.fillText('sea level', 8, yOf(cells.seaLevel) - 4);
   };
   actions.rewind = (index) => send({ type: 'rewind', index });
-  update({ colorblind: store.get('genesis:cb') === '1' });
+  update({ colorblind: store.get('genesis:cb') === '1', earthNotes: store.get('genesis:earth') === '1' });
+  actions.setEarthNotes = (on) => { update({ earthNotes: on }); store.set('genesis:earth', on ? '1' : '0'); };
 
   // flat map: an equirectangular picture of the planet as it is painted right now
   let mapCells: Int32Array | null = null;
@@ -538,7 +540,7 @@ async function boot(): Promise<void> {
     store.set(openedKey, '1');
     scene.ownsFlash = true;
     update({ opening: false, skipVisible: false });
-    setSpeed(3);
+    setSpeed(4);
     window.setTimeout(() => update({ chronicleLine: '' }), 7000);
     // three short hints on a first visit
     if (state.hintStep < 3) {
@@ -552,6 +554,8 @@ async function boot(): Promise<void> {
   };
 
   let lastHud = 0;
+  let heldNoted = false;
+  let bannerTimer = 0;
   const resetHistory = () => {
     state.events = [];
     state.chronicle = [];
@@ -573,6 +577,13 @@ async function boot(): Promise<void> {
       if (ev.importance >= 1 && ev.id > 0) state.chronicle.push(ev.id);
       if (!live) continue;
       if (ev.importance >= 3) toasts.push(ev);
+      // a new age somewhere in the world: a banner, for a few seconds
+      if (ev.type === 'era' && ev.importance >= 2 && ev.data) {
+        const d = ev.data;
+        update({ eraBanner: { title: ev.title, nation: String(d.name ?? ''), own: String(d.own ?? ''), earth: String(d.earth ?? ''), year: ev.simYear } });
+        window.clearTimeout(bannerTimer);
+        bannerTimer = window.setTimeout(() => update({ eraBanner: null }), 9000);
+      }
       // documentary director: cut to wherever something notable just happened
       if ((state.director || state.postcard) && ev.importance >= 2 && ev.cellId >= 0 && scene.following === null) actions.flyToCell(ev.cellId, 0.9);
       if ((ev.type === 'war' || ev.type === 'plague') && ev.cellId >= 0) scene.civUnrest(ev.cellId, ev.type);
@@ -629,6 +640,11 @@ async function boot(): Promise<void> {
         break;
       case 'stats':
         scene.applyStats(msg.stats);
+        if (msg.stats.historyHeld && !heldNoted) {
+          heldNoted = true;
+          update({ notice: 'History has begun. Time now runs at 25 years a second so it can be followed. Pick a faster speed to skip ahead.' });
+          window.setTimeout(() => update({ notice: '' }), 9000);
+        } else if (!msg.stats.history) heldNoted = false;
         // the HUD refreshes four times a second; the scene gets every update
         if (performance.now() - lastHud > 250) { lastHud = performance.now(); update({ stats: msg.stats, fps: scene.fpsAvg }); } else state.stats = msg.stats;
         {
@@ -640,6 +656,7 @@ async function boot(): Promise<void> {
           }
         }
         music.setCivMusic(msg.stats.civMusic && msg.stats.settlements > 0, seed.length * 7919 + seed.charCodeAt(0));
+        music.civEra = msg.stats.topEra ?? 0;
         music.setMood({ stage: msg.stats.stage, era: msg.stats.era, life: Math.min(1, msg.stats.livingSpecies / 30), hush: performance.now() < hushUntil });
         break;
       case 'events':
@@ -652,8 +669,8 @@ async function boot(): Promise<void> {
         update({});
         break;
       case 'settlements':
-        scene.setSettlements(msg.settlements);
-        update({ settlements: msg.settlements });
+        scene.setSettlements(msg.settlements, msg.nations);
+        update({ settlements: msg.settlements, realms: msg.nations ?? state.realms });
         break;
       case 'timeline':
         update({ timeline: msg.points });
@@ -664,6 +681,9 @@ async function boot(): Promise<void> {
       case 'plants':
         for (const pl of msg.plants) state.plants.set(pl.id, pl);
         scene.setPlants(state.plants);
+        break;
+      case 'nation':
+        update({ nationDetail: msg.detail });
         break;
       case 'layer':
         if (state.overlay === msg.kind) scene.setLayerOverlay(msg.values, msg.kind === 'oxygen' ? [0.25, 0.85, 1.0] : [0.2, 1.0, 0.55]);
@@ -771,7 +791,7 @@ async function boot(): Promise<void> {
     if (e.target instanceof HTMLInputElement || e.metaKey || e.ctrlKey) return;
     const k = e.key.toLowerCase();
     if (e.code === 'Space') { e.preventDefault(); actions.togglePause(); }
-    else if (e.key >= '1' && e.key <= '6') setSpeed(Number(e.key) - 1);
+    else if (e.key >= '1' && e.key <= '7') setSpeed(Number(e.key) - 1);
     else if (k === 'h') update({ uiHidden: !state.uiHidden });
     else if (k === 'c') togglePanel('chronicle');
     else if (k === 't') togglePanel('tree');

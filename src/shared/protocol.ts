@@ -5,11 +5,15 @@ export const SPEEDS = [
   { key: 'pause', label: 'Pause', yearsPerSecond: 0 },
   { key: '1x', label: '1x', yearsPerSecond: 1 / 365 },
   { key: '10x', label: '10x', yearsPerSecond: 1 },
+  // the pace of history: a reign passes in about a second, an era in a minute or two
+  { key: 'history', label: 'History', yearsPerSecond: 25 },
   { key: '100x', label: '100x', yearsPerSecond: 30_000 },
   { key: '1000x', label: '1000x', yearsPerSecond: 100_000 },
   { key: 'epoch', label: 'Epoch', yearsPerSecond: 300_000 },
 ] as const;
-export type SpeedIndex = 0 | 1 | 2 | 3 | 4 | 5;
+export type SpeedIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+/** Index of the speed history is watched at. */
+export const HISTORY_SPEED = 3;
 
 /** Per-cell fields posted to the renderer. Buffers are transferred, not copied. */
 export interface CellSnapshot {
@@ -51,6 +55,14 @@ export interface WorldStats {
   tilt: number;
   moonAngle: number;
   speedIndex: number;
+  /** A history is unfolding (at least one nation exists). */
+  history?: boolean;
+  /** Time is being held at the pace of history instead of the chosen speed. */
+  historyHeld?: boolean;
+  /** Year history began, or -1. */
+  historyBegan?: number;
+  /** Highest era any nation has reached. */
+  topEra?: number;
   /** Actual years per second being simulated (may be reduced around big events). */
   yearsPerSecond: number;
   tickMs: number;
@@ -116,6 +128,41 @@ export interface SettlementInfo {
   /** Has raised a temple (after the sky has meddled often enough). */
   temple?: boolean;
   farms?: boolean;
+  /** Nation it belongs to, or -1 while it is a camp outside history. */
+  nation?: number;
+}
+
+/** A nation as the simulation keeps it. */
+export interface NationInfo {
+  id: number; name: string; species: number; capital: number; founded: number; ended: number; parent: number;
+  government: string; stability: number; tech: number; era: number; eraName: string; hue: number;
+  /** The age in the nation's own tongue, and what it compares to on Earth. */
+  eraOwn: string; earth: string;
+  /** People, in thousands, and number of towns. */
+  pop: number; towns: number;
+  culture: string; language: string;
+  ruler: string; rulerSince: number; house: string; houseReigns: number;
+  eventId: number;
+}
+
+/** One need of the tech web as one nation stands toward it. */
+export interface TechCell {
+  slot: string; field: string; level: number; era: number;
+  /** 0 not yet discovered, 1 discovered, 2 its land allows no way to it. */
+  state: number;
+  /** The invention that meets the need (the way this nation found, or would find), in plain words and in its own language. */
+  name: string; own: string;
+  /** Year of discovery, when discovered. */
+  year: number;
+  key: boolean;
+}
+
+/** Everything about one nation that is too big to send all the time. */
+export interface NationDetail {
+  id: number; name: string; land: string[];
+  tech: TechCell[];
+  /** Its rulers on record, oldest first. */
+  rulers: { name: string; from: number; to: number; fate: string; house: string }[];
 }
 
 /** A point in history the user can rewind to. */
@@ -144,6 +191,7 @@ export type ToWorker =
   | { type: 'fork' }
   | { type: 'load'; save: unknown; diverge?: boolean }
   | { type: 'requestLayer'; kind: 'diversity' | 'oxygen' }
+  | { type: 'requestNation'; id: number }
   | { type: 'rewindLimit'; count: number }
   /** Jump ahead by running the sim flat out (used by automated checks). */
   | { type: 'warp'; years: number };
@@ -158,7 +206,8 @@ export type FromWorker =
   | { type: 'herds'; herds: HerdSnapshot }
   | { type: 'saved'; slot: string; save: unknown }
   | { type: 'layer'; kind: 'diversity' | 'oxygen'; values: Float32Array }
-  | { type: 'settlements'; settlements: SettlementInfo[] }
+  | { type: 'nation'; detail: NationDetail }
+  | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[] }
   | { type: 'timeline'; points: TimelinePoint[] }
   | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }
   | { type: 'error'; message: string };

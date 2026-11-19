@@ -10,7 +10,7 @@ const span = Number(my) * 1e6;
 const t0 = Date.now();
 for (let t = 0, k = 0; t < span; t += 15000, k++) {
   sim.step(15000);
-  if (k % 1000 === 999) console.log(`${(sim.simYear / 1e6).toFixed(0)} My, ${sim.creatures.livingSpecies} species, ${sim.civ.living} settlements, ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+  if (k % 1000 === 999) console.log(`${(sim.simYear / 1e6).toFixed(0)} My, ${sim.creatures.livingSpecies} species, ${sim.civ.living} settlements (${sim.civ.settlements.length} ever), nations ${sim.civ.h.nations.filter((n) => n.ended < 0).length}/${sim.civ.h.nations.length}, people ${sim.civ.h.people.length}, events ${sim.events.events.length}, log ${sim.cellLog.count}, heap ${Math.round(process.memoryUsage().heapUsed / 1e6)} MB, ${((Date.now() - t0) / 1000).toFixed(0)} s`);
 }
 
 /** JSON cannot hold typed arrays, maps or sets: tag them so the page can rebuild them. */
