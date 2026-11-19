@@ -2,7 +2,7 @@
 // and placed near the camera from the real populations around it.
 import {
   BoxGeometry, BufferAttribute, BufferGeometry, Color, ConeGeometry, DynamicDrawUsage, IcosahedronGeometry, InstancedBufferAttribute,
-  InstancedMesh, Matrix4, MeshBasicNodeMaterial, OctahedronGeometry, Quaternion, Vector3, type PerspectiveCamera,
+  InstancedMesh, Matrix4, MeshBasicNodeMaterial, OctahedronGeometry, Quaternion, Vector3, type PerspectiveCamera, type Texture,
 } from 'three/webgpu';
 import {
   abs, attribute, cameraPosition, cos, cross, dot, float, instancedBufferAttribute, max, normalLocal, normalize, positionGeometry, positionWorld, pow,
@@ -17,10 +17,11 @@ import type { CellSnapshot, HerdSnapshot, SpeciesInfo } from '../shared/protocol
 import { EXAG, uSeaKm, uTime } from './common';
 import { dayAmount, surfaceLight } from './lighting';
 import type { GroundSampler } from './gfx/ground';
+import { buildCreatureModel } from './gfx/creaturemesh';
+import { makeCreatureMaterial } from './gfx/creatureskin';
+import type { PlanetData } from './gfx/planetdata';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-
-interface Part { geo: BufferGeometry; kind: number; weight: (x: number, y: number, z: number) => number; phase: number; tint: number; glow?: boolean; }
 
 function hash(n: number): number {
   let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
@@ -28,173 +29,6 @@ function hash(n: number): number {
   x = Math.imul(x, 0xc2b2ae35);
   x ^= x >>> 16;
   return (x >>> 0) / 4294967296;
-}
-
-const noWeight = () => 0;
-
-/** Build a creature mesh from a genome. Local frame: +X forward, +Y up, body length about 1. */
-export function buildCreatureGeometry(g: Float32Array): BufferGeometry {
-  const parts: Part[] = [];
-  const kind = limbKind(g[G.LimbType]!);
-  const hasLimbs = g[G.LimbPairs]! > 0.12;
-  const ratio = 1.6 + 2.8 * g[G.BodyRatio]!;
-  const L = 1;
-  const H = (L / ratio) * (1 + 0.25 * g[G.Insulation]!);
-  const W = H * (0.85 + 0.3 * g[G.Armor]!);
-  const walker = hasLimbs && (kind === Limb.Legs || kind === Limb.Wings);
-  const legLen = walker ? H * (0.45 + 1.5 * g[G.LimbLength]!) : 0;
-  const bodyY = legLen + H * 0.5;
-  const segs = Math.max(1, Math.min(6, 1 + Math.round(g[G.Segments]! * 5)));
-  // torso: a chain of faceted blobs, fattest in the middle
-  for (let s = 0; s < segs; s++) {
-    const u = segs === 1 ? 0.5 : s / (segs - 1);
-    const taper = 0.72 + 0.28 * Math.sin(u * Math.PI);
-    const geo = new IcosahedronGeometry(0.5, 0).scale((L / segs) * 1.25, H * taper, W * taper).translate(-L / 2 + (u * 0.84 + 0.08) * L, bodyY, 0);
-    parts.push({ geo, kind: 0, weight: noWeight, phase: 0, tint: 0 });
-  }
-  if (g[G.Armor]! > 0.45) {
-    const shell = new IcosahedronGeometry(0.5, 1).scale(L * 0.82, H * 1.25, W * 1.2).translate(-0.04, bodyY + H * 0.12, 0);
-    parts.push({ geo: shell, kind: 0, weight: noWeight, phase: 0, tint: 3 });
-  }
-  // neck and head
-  const neck = H * 2.4 * g[G.Neck]!;
-  const hs = H * (0.5 + 0.6 * g[G.Head]!);
-  const nx = L / 2 + neck * 0.55, ny = bodyY + H * 0.15 + neck * 0.8;
-  if (neck > H * 0.3) {
-    const nGeo = new BoxGeometry(neck * 1.05, H * 0.34, W * 0.34).rotateZ(0.97).translate(L / 2 - 0.04 + neck * 0.27, bodyY + H * 0.12 + neck * 0.4, 0);
-    parts.push({ geo: nGeo, kind: 0, weight: noWeight, phase: 0, tint: 0 });
-  }
-  const snout = 1 + 0.5 * g[G.Diet]!;
-  parts.push({ geo: new IcosahedronGeometry(0.5, 0).scale(hs * 1.25 * snout, hs, hs * 0.95).translate(nx + hs * 0.35, ny, 0), kind: 4, weight: () => 1, phase: 0, tint: 0 });
-  // eyes
-  const eyes = Math.round(g[G.EyeCount]! * 6);
-  const es = hs * (0.14 + 0.2 * g[G.EyeSize]!);
-  for (let e = 0; e < eyes; e++) {
-    const side = e % 2 === 0 ? 1 : -1;
-    const row = Math.floor(e / 2);
-    const ex = nx + hs * (0.62 - row * 0.3) * snout, ey = ny + hs * (0.16 + row * 0.12), ez = side * hs * (0.36 + row * 0.06);
-    parts.push({ geo: new OctahedronGeometry(es, 0).translate(ex, ey, ez), kind: 4, weight: () => 1, phase: 0, tint: 4, glow: g[G.Nocturnal]! > 0.6 });
-  }
-  // horns
-  if (g[G.Horn]! > 0.22) {
-    const hl = hs * 2.2 * g[G.Horn]!;
-    for (const side of [1, -1]) {
-      parts.push({ geo: new ConeGeometry(hs * 0.14, hl, 4).rotateZ(-0.5).translate(nx + hs * 0.2 + hl * 0.2, ny + hs * 0.45 + hl * 0.4, side * hs * 0.26), kind: 4, weight: () => 1, phase: 0, tint: 5 });
-    }
-  }
-  // tail
-  const tail = L * 1.15 * g[G.Tail]!;
-  if (tail > 0.08) {
-    const tGeo = new ConeGeometry(H * 0.3, tail, 5).rotateZ(Math.PI / 2).translate(-L / 2 - tail / 2 + 0.06, bodyY, 0);
-    parts.push({ geo: tGeo, kind: 2, weight: (x) => Math.min(1, Math.max(0, (-L / 2 - x) / tail)), phase: 0, tint: 1 });
-    if (kind === Limb.Fins || !hasLimbs) {
-      const fluke = new ConeGeometry(H * 0.55, H * 0.7, 3).rotateZ(Math.PI / 2).scale(1, 1.4, 0.15).translate(-L / 2 - tail, bodyY, 0);
-      parts.push({ geo: fluke, kind: 2, weight: () => 1, phase: 0, tint: 1 });
-    }
-  }
-  const pairs = hasLimbs ? Math.max(1, Math.round(g[G.LimbPairs]! * 4)) : 0;
-  if (walker) {
-    const legPairs = kind === Limb.Wings ? 1 : pairs;
-    for (let p = 0; p < legPairs; p++) {
-      const lx = legPairs === 1 ? 0.05 : -L * 0.34 + (p / (legPairs - 1)) * L * 0.68;
-      for (const side of [1, -1]) {
-        const thick = H * 0.2;
-        const geo = new BoxGeometry(thick, legLen, thick).translate(lx, legLen / 2, side * W * 0.42);
-        parts.push({ geo, kind: 1, weight: (_x, y) => Math.max(0, 1 - y / Math.max(1e-3, legLen)), phase: (p + (side > 0 ? 0 : 1)) % 2, tint: 1 });
-      }
-    }
-  }
-  if (hasLimbs && kind === Limb.Fins) {
-    for (let p = 0; p < Math.min(3, pairs); p++) {
-      const fx = L * 0.25 - p * L * 0.3;
-      for (const side of [1, -1]) {
-        const len = H * (0.6 + 1.2 * g[G.LimbLength]!);
-        const geo = new ConeGeometry(H * 0.32, len, 3).scale(1, 1, 0.2).rotateX((side * Math.PI) / 2).rotateY(-side * 0.5).translate(fx, bodyY - H * 0.2, side * (W * 0.45 + len * 0.45));
-        parts.push({ geo, kind: 2, weight: (_x, _y, z) => Math.min(1, Math.abs(z) / (W * 0.5 + len)), phase: p, tint: 1 });
-      }
-    }
-  }
-  if (hasLimbs && kind === Limb.Wings) {
-    const span = L * (0.8 + 1.3 * g[G.LimbLength]!);
-    for (const side of [1, -1]) {
-      const geo = new ConeGeometry(L * 0.38, span, 3).scale(1, 1, 0.06).rotateX((side * Math.PI) / 2).translate(0.05, bodyY + H * 0.3, side * (W * 0.4 + span * 0.5));
-      parts.push({ geo, kind: 3, weight: (_x, _y, z) => Math.min(1, Math.max(0, (Math.abs(z) - W * 0.4) / span)), phase: 0, tint: 1 });
-    }
-  }
-  // gliding membrane between the limbs of would-be fliers
-  if (hasLimbs && kind === Limb.Legs && g[G.LimbType]! > 0.66) {
-    const geo = new BoxGeometry(L * 0.6, H * 0.04, W * 2.2).translate(0, bodyY - H * 0.1, 0);
-    parts.push({ geo, kind: 0, weight: noWeight, phase: 0, tint: 1 });
-  }
-  // gas-bladder drifters: slow winged bodies carry a great pale float above them
-  if (hasLimbs && kind === Limb.Wings && g[G.Metabolism]! < 0.3 && g[G.Size]! > 0.45) {
-    parts.push({ geo: new IcosahedronGeometry(0.5, 1).scale(L * 1.1, H * 2.2, W * 2.2).translate(0, bodyY + H * 1.7, 0), kind: 0, weight: noWeight, phase: 0, tint: 2 });
-  }
-  // living islands and walking forests: giants that carry a grove on their backs
-  if (g[G.Size]! > 0.85 && (g[G.Water]! > 0.7 ? g[G.Armor]! > 0.25 : g[G.ColorChange]! > 0.6)) {
-    for (let t = 0; t < 5; t++) {
-      const tx = -L * 0.3 + t * L * 0.15, tz = (t % 2 ? 1 : -1) * W * 0.18;
-      parts.push({ geo: new ConeGeometry(H * 0.22, H * 0.9, 5).translate(tx, bodyY + H * 0.85, tz), kind: 0, weight: noWeight, phase: 0, tint: 6 });
-    }
-  }
-  if (g[G.Ornament]! > 0.4) {
-    const ch = H * 1.6 * g[G.Ornament]!;
-    const crest = new ConeGeometry(L * 0.3, ch, 3).scale(1, 1, 0.08).translate(-0.05, bodyY + H * 0.45 + ch * 0.45, 0);
-    parts.push({ geo: crest, kind: 0, weight: noWeight, phase: 0, tint: 2 });
-  }
-  // bake colours and animation data
-  let count = 0;
-  const flat = parts.map((p) => ({ ...p, geo: p.geo.index ? p.geo.toNonIndexed() : p.geo }));
-  for (const p of flat) count += p.geo.attributes.position!.count;
-  const pos = new Float32Array(count * 3), col = new Float32Array(count * 3), anim = new Float32Array(count * 4), glow = new Float32Array(count * 3);
-  const insulated = g[G.Insulation]! > 0.5;
-  const base = new Color().setHSL(g[G.Hue]!, insulated ? 0.4 : 0.68, insulated ? 0.46 : 0.38);
-  const second = new Color().setHSL(g[G.Hue2]!, 0.7, 0.3);
-  const belly = base.clone().lerp(new Color(0.9, 0.86, 0.75), 0.4);
-  const shellC = base.clone().multiplyScalar(0.55);
-  const eyeC = new Color(0.03, 0.03, 0.04);
-  const hornC = new Color(0.85, 0.8, 0.68);
-  const glowC = new Color().setHSL(g[G.GlowHue]!, 0.9, 0.55);
-  const glows = g[G.Glow]! > 0.5 || (g[G.Electric]! > 0.6 && g[G.Water]! > 0.6);
-  const pattern = Math.min(3, Math.floor(g[G.PatternType]! * 4));
-  const pScale = 4 + 18 * g[G.PatternScale]!;
-  const c = new Color();
-  let o = 0;
-  for (const p of flat) {
-    const a = p.geo.attributes.position!;
-    for (let i = 0; i < a.count; i += 3) {
-      // one colour per face keeps the faceted look
-      const cx = (a.getX(i) + a.getX(i + 1) + a.getX(i + 2)) / 3, cy = (a.getY(i) + a.getY(i + 1) + a.getY(i + 2)) / 3, cz = (a.getZ(i) + a.getZ(i + 1) + a.getZ(i + 2)) / 3;
-      let marked = false;
-      if (p.tint === 0 || p.tint === 1) {
-        if (pattern === 1) marked = Math.sin(cx * pScale) > 0.25;
-        else if (pattern === 2) marked = hash(Math.round(cx * pScale) * 73 + Math.round(cy * pScale) * 19 + Math.round(cz * pScale) * 7) > 0.7;
-        c.copy(marked ? second : base);
-        if (pattern === 3) c.lerp(second, Math.min(1, Math.max(0, (cy - legLen) / Math.max(1e-3, H))));
-        else if (cy < bodyY - H * 0.15 && !marked) c.lerp(belly, 0.6);
-        if (p.tint === 1) c.multiplyScalar(0.82);
-      } else if (p.tint === 2) c.copy(second).multiplyScalar(1.3);
-      else if (p.tint === 3) c.copy(shellC);
-      else if (p.tint === 4) c.copy(eyeC);
-      else if (p.tint === 6) c.setRGB(0.12, 0.42, 0.16);
-      else c.copy(hornC);
-      const lit = (glows && (marked || p.tint === 2)) || p.glow;
-      for (let k = 0; k < 3; k++, o++) {
-        const x = a.getX(i + k), y = a.getY(i + k), z = a.getZ(i + k);
-        pos[o * 3] = x; pos[o * 3 + 1] = y; pos[o * 3 + 2] = z;
-        col[o * 3] = c.r; col[o * 3 + 1] = c.g; col[o * 3 + 2] = c.b;
-        anim[o * 4] = p.kind; anim[o * 4 + 1] = p.weight(x, y, z); anim[o * 4 + 2] = p.phase; anim[o * 4 + 3] = z >= 0 ? 1 : -1;
-        if (lit) { glow[o * 3] = glowC.r; glow[o * 3 + 1] = glowC.g; glow[o * 3 + 2] = glowC.b; }
-      }
-    }
-  }
-  const geo = new BufferGeometry();
-  geo.setAttribute('position', new BufferAttribute(pos, 3));
-  geo.setAttribute('color', new BufferAttribute(col, 3));
-  geo.setAttribute('anim', new BufferAttribute(anim, 4));
-  geo.setAttribute('emissive', new BufferAttribute(glow, 3));
-  geo.computeVertexNormals();
-  return geo;
 }
 
 const CAP = 384;
@@ -234,48 +68,6 @@ export interface Individual {
   echo: boolean;
 }
 
-let sharedMaterial: MeshBasicNodeMaterial | null = null;
-
-/** One material for every species: instance data comes from named instanced attributes on each geometry. */
-function makeMaterial(): MeshBasicNodeMaterial {
-  if (sharedMaterial) return sharedMaterial;
-  const material = new MeshBasicNodeMaterial();
-  const ip: any = attribute('iPos', 'vec3');
-  const iq: any = attribute('iQuat', 'vec4');
-  const id: any = attribute('iData', 'vec4'); // scale, phase, moving, gait rate
-  const anim: any = attribute('anim', 'vec4');
-  const p: any = positionGeometry;
-  const t = uTime.mul(id.w).add(id.y);
-  const isLeg = step(0.5, anim.x).mul(step(anim.x, 1.5));
-  const isTail = step(1.5, anim.x).mul(step(anim.x, 2.5));
-  const isWing = step(2.5, anim.x).mul(step(anim.x, 3.5));
-  const isHead = step(3.5, anim.x);
-  const legT = t.add(anim.z.mul(Math.PI));
-  // legs swing and lift; tails and fins undulate; wings flap; heads bob
-  const dx = sin(legT).mul(anim.y).mul(0.2).mul(id.z).mul(isLeg);
-  const dy = max(cos(legT), 0).mul(anim.y).mul(0.09).mul(id.z).mul(isLeg)
-    .add(sin(t.mul(1.6)).mul(anim.y).mul(0.42).mul(isWing))
-    .add(sin(t.mul(0.5)).mul(0.02).mul(isHead));
-  const dz = sin(t.mul(0.9).sub(p.x.mul(4)).add(anim.z)).mul(anim.y).mul(0.14).mul(id.z.mul(0.7).add(0.3)).mul(isTail).mul(anim.w.mul(isWing.oneMinus()).mul(0).add(1));
-  const local = vec3(p.x.add(dx), p.y.add(dy).mul(sin(uTime.mul(2).add(id.y)).mul(0.015).add(1)), p.z.add(dz)).mul(id.x);
-  const rotate = (v: any) => v.add(cross(iq.xyz, cross(iq.xyz, v).add(v.mul(iq.w))).mul(2));
-  material.positionNode = rotate(local).add(ip);
-  const nW = varying(normalize(rotate(normalLocal)));
-  // one in a great many is born golden
-  const gold: any = attribute('iTint', 'float');
-  const albedo: any = (attribute('color', 'vec3') as any).mul(gold.oneMinus()).add((vec3 as any)(1.0, 0.72, 0.18).mul(gold));
-  const light: any = surfaceLight(nW, positionWorld);
-  const V = normalize(cameraPosition.sub(positionWorld));
-  const day: any = dayAmount(positionWorld);
-  const rim: any = pow(float(1).sub(max(dot(nW, V), 0)), 3).mul(0.22).mul(day);
-  const emissive: any = attribute('emissive', 'vec3');
-  material.colorNode = albedo.mul(light).mul(0.82).add((vec3 as any)(rim, rim, rim)).add(emissive.mul(float(1.15).sub(day)).mul(2.4));
-  void abs;
-  void instancedBufferAttribute;
-  sharedMaterial = material;
-  return material;
-}
-
 export class CreatureLayer {
   private slots = new Map<number, Slot>();
   private species = new Map<number, SpeciesInfo>();
@@ -292,7 +84,10 @@ export class CreatureLayer {
   private moundData: { ind: Individual; size: number }[] = [];
 
 
-  constructor(private grid: Grid, budget: number, private ground: GroundSampler) {
+  private material: MeshBasicNodeMaterial;
+
+  constructor(private grid: Grid, budget: number, private ground: GroundSampler, data: PlanetData, erosionTex: Texture, cloudShadow: (p: any) => any) {
+    this.material = makeCreatureMaterial(data, erosionTex, cloudShadow);
     this.budget = budget;
     this.regions = buildRegions(grid);
   }
@@ -323,12 +118,19 @@ export class CreatureLayer {
       genes[G.LimbPairs] = 0; genes[G.Neck] = 0; genes[G.Horn] = 0; genes[G.Armor] = 0; genes[G.Ornament] = 0; genes[G.Tail] = 0.15;
       genes[G.Segments] = 1; genes[G.BodyRatio] = 0.8; genes[G.EyeCount] = 0.2; genes[G.Hue] = (genes[G.Hue]! + 0.12) % 1; genes[G.PatternType] = 0.3;
     }
-    const geo = buildCreatureGeometry(genes);
+    const model = buildCreatureModel(genes);
+    const geo = model.geometry;
     geo.setAttribute('iPos', iPos);
     geo.setAttribute('iQuat', iQuat);
     geo.setAttribute('iData', iData);
     geo.setAttribute('iTint', iTint);
-    const mesh = new InstancedMesh(geo, makeMaterial(), CAP);
+    // the species' skin settings ride along as instance data so that every species can share one material
+    for (const [name, value] of [['iSkinA', model.skinA], ['iSkinB', model.skinB], ['iSkinC', model.skinC]] as [string, number[]][]) {
+      const arr = new Float32Array(CAP * 4);
+      for (let i = 0; i < CAP; i++) arr.set(value, i * 4);
+      geo.setAttribute(name, new InstancedBufferAttribute(arr, 4));
+    }
+    const mesh = new InstancedMesh(geo, this.material, CAP);
     const m = new Matrix4();
     for (let i = 0; i < CAP; i++) mesh.setMatrixAt(i, m);
     mesh.count = 0;
@@ -412,10 +214,10 @@ export class CreatureLayer {
     const rng = new RNG(12345);
     const species = new Map<number, SpeciesInfo>();
     const archetypes: Partial<Record<number, number>>[] = [
-      { [G.Size]: 0.5, [G.LimbType]: 0.6, [G.LimbPairs]: 0.5, [G.LimbLength]: 0.6, [G.Neck]: 0.2, [G.Tail]: 0.4, [G.Water]: 0.05, [G.Diet]: 0.1, [G.Sociality]: 0.9, [G.EyeCount]: 0.34 },
+      { [G.Size]: 0.5, [G.LimbType]: 0.6, [G.LimbPairs]: 0.5, [G.LimbLength]: 0.6, [G.Neck]: 0.2, [G.Tail]: 0.4, [G.Water]: 0.05, [G.Diet]: 0.1, [G.Sociality]: 0.9, [G.EyeCount]: 0.34, [G.Insulation]: 0.9, [G.PatternType]: 0.6 },
       { [G.Size]: 0.75, [G.LimbType]: 0.6, [G.LimbPairs]: 0.5, [G.LimbLength]: 0.8, [G.Neck]: 0.95, [G.Tail]: 0.5, [G.Water]: 0.05, [G.Diet]: 0.05, [G.Sociality]: 0.5, [G.EyeCount]: 0.34 },
       { [G.Size]: 0.45, [G.LimbType]: 0.6, [G.LimbPairs]: 0.5, [G.LimbLength]: 0.5, [G.Tail]: 0.7, [G.Water]: 0.05, [G.Diet]: 0.95, [G.Sociality]: 0.7, [G.Horn]: 0.1, [G.EyeCount]: 0.34, [G.PatternType]: 0.4 },
-      { [G.Size]: 0.3, [G.LimbType]: 0.9, [G.LimbPairs]: 0.3, [G.LimbLength]: 0.7, [G.Tail]: 0.4, [G.Water]: 0.05, [G.Diet]: 0.4, [G.Sociality]: 0.8, [G.EyeCount]: 0.34 },
+      { [G.Size]: 0.3, [G.LimbType]: 0.9, [G.LimbPairs]: 0.3, [G.LimbLength]: 0.7, [G.Tail]: 0.4, [G.Water]: 0.05, [G.Diet]: 0.4, [G.Sociality]: 0.8, [G.EyeCount]: 0.34, [G.Insulation]: 0.8 },
       { [G.Size]: 0.6, [G.LimbType]: 0.4, [G.LimbPairs]: 0.4, [G.LimbLength]: 0.5, [G.Tail]: 0.8, [G.Water]: 1, [G.Diet]: 0.3, [G.Sociality]: 0.9, [G.EyeCount]: 0.34 },
       { [G.Size]: 0.55, [G.LimbType]: 0.6, [G.LimbPairs]: 0.9, [G.LimbLength]: 0.2, [G.Armor]: 0.9, [G.Horn]: 0.7, [G.Tail]: 0.3, [G.Water]: 0.05, [G.Diet]: 0.1, [G.Segments]: 0.6, [G.EyeCount]: 0.7 },
       { [G.Size]: 0.2, [G.LimbType]: 0.6, [G.LimbPairs]: 0.9, [G.LimbLength]: 0.4, [G.Segments]: 1, [G.Glow]: 0.9, [G.PatternType]: 0.6, [G.Water]: 0.05, [G.Nocturnal]: 0.9, [G.EyeCount]: 1, [G.Ornament]: 0.8 },

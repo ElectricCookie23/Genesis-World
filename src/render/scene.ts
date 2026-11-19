@@ -227,7 +227,7 @@ export class GenesisScene {
     this.rivers.mesh.visible = false;
     this.aurora = new AuroraVolume(this.clouds.noise);
     this.scene.add(this.aurora.mesh);
-    this.creatures = new CreatureLayer(grid, this.creatureBudget, this.ground!);
+    this.creatures = new CreatureLayer(grid, this.creatureBudget, this.ground!, this.data, this.erosion.texture, this.clouds.shadow);
     this.creatures.onMesh = (m) => this.scene.add(m);
     void hashSeed(seed);
   }
