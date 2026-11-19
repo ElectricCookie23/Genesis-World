@@ -13,6 +13,42 @@ This is the second version. The first was cut short by a flat battery; this one 
 - Roughly 60 of about 230 captures were looked at. Each finding names the files it rests on; the rest are listed at the end.
 - For part of the second run the machine's owner was also using the same browser window, so the Genesis tab may have been in the background at times. The frame-rate table was finished before that; the creature captures after it were checked to be in a visible tab.
 
+## Third pass: under water, more forests, zoom, a village (2026-11-20)
+
+Live site at `a42b083` plus docs-only commits; bundle `assets/index-BsLmvyFQ.js`. High preset, 200 My warp, mains power. Files start `retest3-`; 14 of about 55 were looked at. This fills the "not re-tested" gaps of the section below. Console over the whole WebGPU run: `x2 Failed to load resource: the server responded with a status of 404 ()`, `x8 Max polyphony exceeded. Note dropped.`, nothing else.
+
+**Under water** (WebGPU, `scene.underwater = true`, `setImmediate(-0.48, -0.62, 0.0012)`, camera 1.45 m-units below the surface; diagnostic dump `retest3-webgpu-8-underwater-diagnose.json`)
+
+1. **Looking up now works.** A rippling bright surface seen from below, blue-green water, and branching coral-like plants with pale tips. `retest3-webgpu-8b-underwater-up.jpg` (tilt +0.4). Before the fixes this view was a blank seabed.
+2. **Looking down is still flat**: one uniform grey-green ripple texture filling the frame, no caustics, no depth fog, no light shafts. `retest3-webgpu-8-underwater.jpg` (tilt -0.25).
+3. **Reef plants are plain tubes**: straight untextured cylinders in a V-branching pattern with square white caps on the tips; one tube crosses the corner of the downward view as a bare faceted stick.
+4. No animals seen under water in either frame.
+
+**Forests** (WebGPU; five forests with different dominant plants were visited)
+
+1. **Broadleaf forest, new and it holds together.** Dark branching trunks with rosette leaves forming a canopy; reads as a wood from inside. Leaves are still flat discs with no thickness, and all one flat violet. `retest3-webgpu-forest3-mid.jpg`, `setImmediate(2.86, 0.18, 0.06)`, tilt -0.35; `-forest1-ground.jpg`, `(-3.14, -0.2, 0.02)`.
+2. **Trunks are untextured and far too thick and straight** for the crowns, with square-cut branch stubs sticking out (`-forest3-mid.jpg`).
+3. **Conifer imposters are upright and match**, confirmed again at three more sites; still stair-stepped (`-forest0-mid.jpg`, `-forest4-mid.jpg`).
+4. **Ground under the trees is bare rock-brown** with sparse grass tufts: no litter, undergrowth or shadow, so trees look placed on a model railway (`-forest1-ground.jpg`).
+5. **Daytime sky is dark violet** in every forest frame, with stars visible at 5 km (`-forest4-mid.jpg`, elevation 4.98) and not at 1.7 km. Same finding as before: the sky darkens with altitude far too fast.
+6. A soft white fog patch sits over part of the tree line in two frames (`-forest0-mid.jpg`, `-zoom-0.jpg`); it reads as a smudge on the lens rather than mist.
+
+**Zooming in (popping).** A steady zoom from `dist 0.049` to `0.012` at forest 0, one frame every 250 ms. Near models rose from 7 to 24 while imposters fell from 115 to 63 and grass from 1,853 to 1,179. In the frames looked at, the same trees are blocky imposters at 0.049 and sharp flat-card models at 0.017, a clear change in look, but the positions and colours agree. Whether individual trees snap on a given frame was not judged from stills. `retest3-webgpu-zoom-0.jpg`, `-zoom-3.jpg`.
+
+**Coast from 0.3** (`setImmediate(1.68, -1.08, 0.3)`): the sea has a visible fine diamond-grid pattern across its whole surface, and a broad white sun glare top-left. The frame is otherwise sharp. `retest3-webgpu-5-coast.jpg`.
+
+**An early village on WebGL2** ("Zeavohu", population 38, `tech` 0.41, `setImmediate(-0.137, -0.201, 0.02)`, 2 nations in that world)
+
+1. **Era-appropriate this time**: about thirty small huts with pitched yellow-green roofs scattered under umbrella trees on a beach. So building style does follow `tech`; the tower blocks reported below belong to towns at tech 1.0 and over, which is still far too modern-looking for 500 farmers. `retest3-webgl-town-ground.jpg`.
+2. **Umbrella trees seen at last**: flat-topped layered crowns on tall trunks. The near one has a dark curved trunk; the ones behind have pale straight trunks and blockier crowns, so the near/far mismatch remains for this form.
+3. **Huts are scattered at random** with no paths, hearths, plots or boats; **two sit in the surf**, half under water.
+4. **At night the whole hillside glows warm white** as one large patch with a bright line across it; huts are dark boxes on it and show no lit windows. Less harsh than the pink blow-out at the large WebGPU town, but still a floodlit ground rather than points of firelight. `retest3-webgl-town-night-ground.jpg`, sun +2.8.
+5. Under water on WebGL2 was captured (`retest3-webgl-8-underwater.jpg`, `-8b-underwater-up.jpg`) but not looked at.
+
+**Reproducibility.** The WebGPU world in this pass matched the previous one exactly (same largest town, "Zohan", population 503), so worlds on one backend now repeat. The WebGL2 world from the same seed was different (2 nations instead of 15).
+
+**Still not covered:** roads and boats (none identified in any capture), trails, popping judged in motion, Medium and Ultra on WebGL2, Firefox and Safari.
+
 ## Re-test of commit 29ea8ad (2026-11-19)
 
 Same machine, browser and window as below; cache disabled; the site served `assets/index-C5rnxzCy.js` for the whole run (the deploy for `29ea8ad` was the latest green run when testing began; no redeploy was noticed). The laptop was charging, 55% rising to 62%, so not on the battery-saver cap. Files start `retest2-`; 20 of about 60 were looked at. Worlds differ run to run, so each backend's captures come from its own world.
