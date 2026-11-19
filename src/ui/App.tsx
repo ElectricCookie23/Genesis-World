@@ -24,7 +24,7 @@ export function App() {
           <div class={`${css.panel} ${css.top}`}>
             <div class={css.title}>GENESIS</div>
             <div class={css.year}>{st ? formatYear(st.simYear) : ''}</div>
-            <div class={css.sub}>{st ? [STAGE[st.stage] ?? '', ERA[st.era] ?? ''].filter(Boolean).join(' · ') : ''}</div>
+            <div class={css.sub}>{st ? [st.settlements > 0 ? (st.maxTech >= 0.6 ? 'age of cities' : st.maxTech >= 0.3 ? 'age of villages' : 'first fires') : STAGE[st.stage] ?? '', ERA[st.era] ?? ''].filter(Boolean).join(' · ') : ''}</div>
           </div>
           {st && (
             <div class={`${css.panel} ${css.stats}`}>
@@ -33,6 +33,7 @@ export function App() {
               <span>ice</span><b><Num value={st.iceFraction * 100} format={(n) => `${n.toFixed(0)}%`} /></b>
               <span>species</span><b><Num value={st.livingSpecies} format={(n) => n.toFixed(0)} /></b>
               <span>animals</span><b><Num value={st.population} format={bigNumber} /></b>
+              {st.settlements > 0 && <><span>settlements</span><b><Num value={st.settlements} format={(n) => n.toFixed(0)} /></b></>}
               <span>{s.backend}</span><b>{s.fps.toFixed(0)} fps</b>
             </div>
           )}
