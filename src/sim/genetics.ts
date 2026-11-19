@@ -116,8 +116,10 @@ export function computePhenotype(g: Float32Array, o: number, out: Float32Array, 
   const baseSpeed = Math.pow(metres, 0.3) * (0.45 + 0.55 * limbLen) * metab;
   const speed = baseSpeed * Math.max(swim * water, walk * (1 - water), fly * 1.6) * (1 - g[o + G.Armor]! * 0.45);
   // every trait costs energy, so nothing can be maxed for free
+  // a big brain is costly to grow and feed, but a social animal shares that cost (many carers, shared food), so
+  // in company a mind can keep growing where a loner's would stall
   const upkeep = 1
-    + brain * 0.5 + brain * brain * 1.2 + g[o + G.Armor]! * 0.5 + g[o + G.Horn]! * 0.25 + g[o + G.Ornament]! * 0.3 + g[o + G.Glow]! * 0.2
+    + brain * 0.5 + brain * brain * 1.2 * (1 - 0.5 * g[o + G.Sociality]!) + g[o + G.Armor]! * 0.5 + g[o + G.Horn]! * 0.25 + g[o + G.Ornament]! * 0.3 + g[o + G.Glow]! * 0.2
     + g[o + G.Venom]! * 0.3 + g[o + G.Toxicity]! * 0.3 + g[o + G.ToxinResist]! * 0.2 + g[o + G.Insulation]! * 0.15
     + eyes * 0.3 + echo * 0.3 + elec * 0.2 + g[o + G.Smell]! * 0.1 + g[o + G.Hearing]! * 0.1 + fly * 0.3 + g[o + G.ColorChange]! * 0.2
     + g[o + G.Care]! * 0.25;

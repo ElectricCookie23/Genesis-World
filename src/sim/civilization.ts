@@ -28,7 +28,7 @@ export interface Settlement {
 
 export const INTELLIGENCE_THRESHOLD = 0.5;
 /** A lineage must stay clever this long (years) before it starts keeping what it learns. */
-export const MIND_YEARS = 60e6;
+export const MIND_YEARS = 15e6;
 
 export class Civilization {
   settlements: Settlement[] = [];
@@ -49,6 +49,8 @@ export class Civilization {
     // a lineage crosses the threshold: clever, social, and numerous enough to keep what it learns
     for (const s of cr.species) {
       if (s.extinctYear >= 0 || this.sapient.includes(s.id) || !s.name) continue;
+      // a world has room for few peoples: once two kinds of mind hold it, a third does not arise beside them
+      if (this.sapient.filter((id) => cr.species[id]!.extinctYear < 0).length >= 2) continue;
       const clever = s.ref[G.Intelligence]! > INTELLIGENCE_THRESHOLD && s.ref[G.Sociality]! > 0.35 && s.pop > 2000 && cr.speciesMean(s.id, P.LandUse, true) > 0.4;
       // cleverness is inherited down a lineage: a daughter species keeps its parent's head start
       if (!clever) { this.cleverSince.delete(s.id); continue; }
