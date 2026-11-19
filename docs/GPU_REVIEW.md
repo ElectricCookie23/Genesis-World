@@ -13,6 +13,73 @@ This is the second version. The first was cut short by a flat battery; this one 
 - Roughly 60 of about 230 captures were looked at. Each finding names the files it rests on; the rest are listed at the end.
 - For part of the second run the machine's owner was also using the same browser window, so the Genesis tab may have been in the background at times. The frame-rate table was finished before that; the creature captures after it were checked to be in a visible tab.
 
+## Re-test of commit 29ea8ad (2026-11-19)
+
+Same machine, browser and window as below; cache disabled; the site served `assets/index-C5rnxzCy.js` for the whole run (the deploy for `29ea8ad` was the latest green run when testing began; no redeploy was noticed). The laptop was charging, 55% rising to 62%, so not on the battery-saver cap. Files start `retest2-`; 20 of about 60 were looked at. Worlds differ run to run, so each backend's captures come from its own world.
+
+**Fixed / not fixed / new**
+
+| Item | Result | Evidence |
+|---|---|---|
+| Console, WebGPU Medium/Ultra/High and WebGL2 High (fresh load, warp, visual pass, slot load) | **Clean.** Only `x1 Failed to load resource: the server responded with a status of 404 ()` on two WebGPU loads and `x2 Max polyphony exceeded. Note dropped.` No pipeline errors, no non-finite warnings, and the `toNonIndexed` warnings are gone. | logs |
+| Black surface | **Fixed, still.** Coast luminance 0.454 at 238 s parked and 0.459 after a slot reload (WebGPU); 0.444 and 0.443 (WebGL2). | logs |
+| Imposters upright and matching near models (WebGPU) | **Fixed for conifers.** Far conifers are upright, trunk inside the crown, same shape and colour as the near models. They are still visibly stair-stepped at mid distance. | `retest2-webgpu-forest-mid.jpg` `(-1.1, -0.66, 0.05)` |
+| Upside-down jungle slabs (C5) | **Not verified.** The old jungle spot was open sea in this world. | `retest2-webgpu-jungle-ground.jpg` |
+| Umbrella tree: domed crown, imposter match | **Not seen**; neither world's densest forest had that form. | |
+| White discs / limb glare (sibling planets) | **Fixed.** Day orbit shows one shaded moon, no white disc or halo. | `retest2-webgpu-orbit-day.jpg` |
+| Aurora | **Fixed.** No pink crown by day; thin fringes at both poles at night; thin rays from the ground at night. | `-orbit-day.jpg`, `-orbit-night.jpg`, `-civ-town-night-low.jpg` |
+| Daytime sky from the ground | **Partly fixed.** Lavender day sky at 0.3 km (WebGPU). **At 3 km it is still dark indigo with stars showing** at sun +0.3 (WebGL2 forest, `(3.06, -0.24)`). | `-webgpu-sample-animals-mid.jpg`; `retest2-webgl-forest-mid.jpg`, `-forest-sky-sun0.3.jpg` |
+| Sea glint from orbit | **Fixed.** No blown-out patch. | `-orbit-day.jpg` |
+| Animal and tree proportions | **Better.** Sample animals are now below tree height; the long-necked one is about half a conifer. | `-webgpu-sample-animals-mid.jpg` |
+| Nest mounds | **Improved.** Small smooth cones; far fewer; none seen on water. | `-webgpu-sample-animals-mid.jpg`, `-coast.jpg` |
+| "Hoops in the sky" | **Fixed.** Rings now lie flat on the sea. | `-webgpu-forest-night.jpg` |
+| Contour stripes on hills | **Not seen** at the coast this time. | `-webgpu-coast.jpg` |
+| Depth of field when not following | **Fixed.** Coast is sharp edge to edge. | `-webgpu-coast.jpg` |
+| Milestone titles after a warp | **Fixed.** One title in 40 s ("The last war") on both backends. | logs |
+| Green causeway lines on the sea | **Not fixed, or changed.** On the Night Map, thin dotted lines run straight across open sea between coasts. They may be shipping lanes by design. | `-civ-night-map.jpg` |
+| Presets and step-downs | See the table below. High now holds about 50 fps at orbit and coast. | logs |
+
+**Frame rate** ("full" = within 1.5 s of re-applying the preset, remembered step cleared; "settled" = after 12 to 16 s; pr = pixel ratio)
+
+| Preset, backend | Orbit full / settled | Coast full / settled | Ground full / settled | Settles at | Orbit: clouds shown to hidden |
+|---|---|---|---|---|---|
+| Medium, WebGPU (asks pr 1.25, 12 cloud steps) | 74 / 81 | 61 / 63 | 54 / 55 | step 0: nothing stepped down; bloom on, anti-aliasing and ambient occlusion off by preset | 73.5 to 90.9 |
+| High, WebGPU (pr 1.5, 18 steps) | 50 / 52 | 46 / 51 | 34 to 36 / 65 | orbit: step 1, pr 1.5, clouds 12, anti-aliasing, bloom, ambient occlusion all on. Ground: step 2, pr 1, clouds 12, all three still on | 50.7 to 69.9 |
+| Ultra, WebGPU (pr 2) | 21 to 25 / 46 to 67 | 17 to 18 / 63 | 14 to 15 / 54 to 57 | orbit: step 4, pr 1.5, clouds 14, anti-aliasing on, bloom and ambient occlusion off. Ground: step 5, pr 1, all three off | 20.4 to 46.9 |
+| High, WebGL2 (pr 1.5, 18 steps) | 60 / 95 to 97 | 46 to 48 / 82 | 38 to 39 / 71 to 74 | step 0: nothing stepped down | 57.9 to 77.3 |
+
+- High is now usable on this machine: about 50 fps from orbit and the coast at its own settings, and it keeps anti-aliasing, bloom and ambient occlusion when it steps down at ground level.
+- Ultra still starts at 14 to 25 fps and ends up at High-or-lower settings (step 4 to 5).
+- Clouds cost less than before: hiding them gains 19 fps at High (was 24 to 30) and 17 at Medium.
+- **Ultra's cloud steps read 21 on a fresh load, not 32**, and `genesis:steps:ultra` was already "1" straight after I cleared the remembered steps and reloaded; it stepped down during loading.
+- `&noadapt` figures: High on WebGPU with step-downs off held pr 1.5, 18 cloud steps and all effects on, at 47 to 49 fps orbit, 43 to 44 coast, 34 ground; clouds shown to hidden 49 to 68. These agree with the "full" column. Medium and Ultra were not run with `&noadapt`.
+
+**Civilization, seen for the first time** (WebGPU, High, 200 My warp: 15 nations, largest town "Zohan", population 503, `tech` 1.035, at `setImmediate(1.844, 0.648, ...)`; diagnostic dump `retest2-webgpu-civ-town-low-diagnose.json`). Note the 150 My worlds in this run also had settlements (6,390 to 8,456 entries in `state.settlements`) while `stats.stage` still read "animals".
+
+1. **Buildings do not match their era.** A town of 503 people at tech 1.0 with farms is drawn as white tower blocks with regular dark window grids, spired towers and large pink domes: a modern skyline. `retest2-webgpu-civ-town-ground.jpg` (dist 0.02), `-town-near.jpg` (0.008).
+2. **Buildings stand in wild grass with nothing between them**: no streets, plots, fields or cleared ground, although the settlement has `farms: true`. Grass blades as tall as house doors grow against the walls.
+3. **Buildings sit on rough terrain without foundations**; several are half-sunk or perched on bumps, all perfectly vertical.
+4. **A river runs up and over the hills through the town** as a flat teal band draped on the terrain, crossing ridges rather than lying in a valley (`-town-near.jpg`, centre).
+5. Building shading is flat: plain white walls, uniform pink roofs, no shadows cast on the ground.
+6. From low altitude the town is a scatter of white specks; the tower blocks read as pins (`-civ-town-low.jpg`, dist 0.08).
+7. **At night the lit ground around towns is blown out**: large hard-edged white-pink patches with ragged borders, far brighter than anything else, with buildings as dark silhouettes inside them. More patches follow what look like roads. `-civ-town-night-low.jpg`, sun +2.8.
+8. **Night Map works.** Fifteen nations with names, flags, glowing borders and settlement lights; readable and attractive (`-civ-night-map.jpg`). Problems: borders are hexagon-edged and step along cell boundaries; several labels overlap ("Soutan Union" over "United Siamivolia"); labels are drawn for nations on the far limb.
+9. City lights show from orbit on the night side as orange and green points (`retest2-webgpu-after-warp-ui.jpg`).
+10. **Roads and boats were not identified** in any capture. Satellites not looked for.
+
+**Other new observations**
+
+1. **A square-cornered slab of sand juts into the sea** from the island at `(-1.1, -0.66)`: straight edges and right angles, like a terrain patch drawn at the wrong level (`retest2-webgpu-forest-mid.jpg`, `-sample-animals-mid.jpg`).
+2. **Conifer fronds are flat cut-out cards with hard zig-zag edges**; inside the forest the view is a mass of overlapping flat shards in one flat colour, with a speckled noise on them (`retest2-webgpu-forest-ground.jpg`, `retest2-webgl-forest-ground.jpg`). No leaf has thickness or shading.
+3. **Evolved animal close up** (*Helolornis sagax*, 0.09 m): scaled body, thin legs ending in ball feet that hover just above the ground, and a **flat pink rectangle sticking out of its side** (`retest2-webgpu-evolved-close.jpg`).
+4. **Evolved land animals over water:** 6 of 99 land-walking individuals near one home cell were over water on WebGPU, 5 of 174 on WebGL2. Not looked at in a picture.
+5. Sample animals still stand in the sea at the shore, and one flier is inside a tree (`-webgpu-sample-animals-mid.jpg`); that is the sample tool placing them everywhere.
+6. The night side from orbit is very dark; land is barely distinguishable from sea apart from the lights (`-orbit-night.jpg`).
+7. High snowfields are a uniform grey-white speckle to the horizon (`retest2-webgpu-highground-sky.jpg`).
+8. Half-resolution clouds: no halos or blockiness seen at the limb from orbit or against the tree line in the captures looked at. Cloud edges against mountains were not checked.
+
+**Not re-tested:** under water; the eight views as a set; popping during movement; trails; `&noadapt` at Medium and Ultra; WebGL2 at Medium and Ultra; civilization on WebGL2; a second world for settlements.
+
 ## Re-test of commit 5bbe93a (2026-11-19)
 
 Same machine, browser and window as below, on mains power, cache disabled. The deploy run for `5bbe93a` was green before testing and the page served `assets/index-BrT09p0l.js`. Everything below this section describes the site *before* that commit. Files for this section start `retest-`; about 20 of roughly 90 were looked at.
