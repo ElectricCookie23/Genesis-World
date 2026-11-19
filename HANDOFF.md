@@ -95,6 +95,8 @@ Not bugs, for the record: `stats.stage` stays "animals" by design once life is c
 - Land animals stand on the bottom in the shallows and are left out where their herd's path crosses deeper water (an evolved animal was seen walking on the sea).
 - The gliding flap on would-be fliers is a drooping flank of skin, not a flat rectangle.
 
+**Fifth batch from the fix session**, software-checked only: buildings in a town keep clear of each other; broadleaf and umbrella leaf clusters are crossed cards (body from every side); exposure may open a little further on the night side from orbit (`maxExposure` 2.1 there, was 1.5), because a GPU check found land hardly told from sea. A draft direction note for the owner is at `docs/DIRECTION_DRAFT.md`: **not agreed, do not build from it yet.** The Mac session's asset shortlist with preview sheets is `docs/ASSET_SHORTLIST.md`; the owner's "assets later" decision still stands.
+
 Still open, for whoever gets to it: conifer and broadleaf leaves as flat cards (some hanging edge-on as spikes), the river draped over hills through a town, no streets in towns and buildings tilted or overlapping on slopes, hexagon-stepped borders, ball feet on small animals, a very dark night side from orbit, harsh snow-and-shadow speckle at 5 km, the white fog smudge over tree lines, the sea's diamond-grid pattern from 0.3, the flat looking-down view under water and plain-tube reef plants, bare ground under trees, Ultra's cost in a warped world, whether the dotted lines across the sea on the Night Map are shipping lanes, and the sky at altitude on WebGL2.
 
 ## Graphics: still open
