@@ -1,6 +1,7 @@
 // Rain and snow around the camera: thousands of streaks (or flakes) that live entirely on the GPU.
 // Each one falls through a box that travels with the camera and wraps around, leaning with the wind.
-import { DoubleSide, InstancedBufferAttribute, InstancedMesh, MeshBasicNodeMaterial, PlaneGeometry, Vector3 } from 'three/webgpu';
+import { DoubleSide, InstancedBufferAttribute, MeshBasicNodeMaterial, PlaneGeometry, Vector3 } from 'three/webgpu';
+import { Copies } from './packed';
 import { attribute, cameraPosition, cross, dot, float, fract, length, mix, normalize, positionGeometry, smoothstep, uniform, uv, vec3 } from 'three/tsl';
 import { uSunDir, uTime } from '../common';
 
@@ -8,7 +9,7 @@ import { uSunDir, uTime } from '../common';
 type N = any;
 
 export class Precipitation {
-  readonly mesh: InstancedMesh;
+  readonly mesh: Copies;
   /** 0..1 how hard it rains or snows at the camera. */
   readonly amount = uniform(0);
   /** 0 rain, 1 snow. */
@@ -53,7 +54,7 @@ export class Precipitation {
     // drops right at the eye are faded so they do not flash across the lens
     const near = smoothstep(0.0002, 0.0012, length(q));
     material.opacityNode = soft.mul(mix(float(0.2), float(0.85), this.snow)).mul(near).mul(shown);
-    this.mesh = new InstancedMesh(g, material, count);
+    this.mesh = new Copies(g, material, count);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 7;
     this.mesh.visible = false;

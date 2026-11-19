@@ -1,9 +1,10 @@
 // Small things that mark a place: the bones of a creature that died out there, and the dark mouths
 // of caves on steep mountainsides.
 import {
-  BufferAttribute, BufferGeometry, CylinderGeometry, DynamicDrawUsage, IcosahedronGeometry, InstancedBufferAttribute, InstancedMesh, MeshBasicNodeMaterial, Quaternion,
+  BufferAttribute, BufferGeometry, CylinderGeometry, DynamicDrawUsage, IcosahedronGeometry, InstancedBufferAttribute, MeshBasicNodeMaterial, Quaternion,
   TorusGeometry, Vector3, type Texture,
 } from 'three/webgpu';
+import { Copies } from './packed';
 import { attribute, cross, dot, float, max, mix, normalGeometry, normalize, positionGeometry, smoothstep, varying, vec3 } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Grid } from '../../sim/world';
@@ -51,7 +52,7 @@ function buildCave(): BufferGeometry {
 
 /** Cave mouths on the steepest ground near the camera. */
 export class Caves {
-  readonly mesh: InstancedMesh;
+  readonly mesh: Copies;
   private iDir: InstancedBufferAttribute;
   private iQuat: InstancedBufferAttribute;
   private iData: InstancedBufferAttribute;
@@ -78,7 +79,7 @@ export class Caves {
     const day = smoothstep(-0.12, 0.22, dot(vUp, uSunDir));
     const rock: N = mix(vec3(uLook.rockA), vec3(uLook.rockB), 0.5).mul(max(dot(nW, uSunDir), 0).mul(0.8).add(0.25)).mul(vec3(uLook.star)).mul(day.mul(0.95).add(0.04));
     material.colorNode = mix(rock, vec3(0.004, 0.004, 0.006), vDark);
-    this.mesh = new InstancedMesh(g, material, cap);
+    this.mesh = new Copies(g, material, cap);
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;
     void float;

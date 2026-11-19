@@ -3,9 +3,10 @@
 // boats working the sea lanes. All of it is instanced models that find the ground in the vertex
 // shader, lit like everything else, with windows that light up at night in the nation's own colour.
 import {
-  BufferAttribute, BufferGeometry, DoubleSide, DynamicDrawUsage, InstancedBufferAttribute, InstancedMesh, MeshBasicNodeMaterial, Quaternion, Vector3,
+  BufferAttribute, BufferGeometry, DoubleSide, type InterleavedBufferAttribute, MeshBasicNodeMaterial, Quaternion, Vector3,
   type Texture,
 } from 'three/webgpu';
+import { Copies, packAttributes } from './packed';
 import {
   abs, attribute, cameraPosition, cross, dot, float, floor, fract, max, mix, normalGeometry, normalize, positionGeometry, positionWorld, sin, smoothstep, step,
   varying, vec2, vec3,
@@ -141,7 +142,7 @@ export function buildBuilding(kind: Building): BufferGeometry {
   return s.build();
 }
 
-interface Slot { mesh: InstancedMesh; iDir: InstancedBufferAttribute; iQuat: InstancedBufferAttribute; iData: InstancedBufferAttribute; iTint: InstancedBufferAttribute; iLight: InstancedBufferAttribute; cap: number; n: number; }
+interface Slot { mesh: Copies; iDir: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; iLight: InterleavedBufferAttribute; cap: number; n: number; }
 
 function hash(n: number): number {
   let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
@@ -154,7 +155,7 @@ function hash(n: number): number {
 export interface TownInfo extends SettlementInfo { temple?: boolean }
 
 export class Towns {
-  readonly meshes: InstancedMesh[] = [];
+  readonly meshes: Copies[] = [];
   /** Most buildings drawn at once. */
   budget = 4000;
   private slots = new Map<Building, Slot>();
@@ -173,13 +174,11 @@ export class Towns {
       const boat = kind === 'boat';
       const slotCap = boat ? 96 : kind === 'house' ? cap : kind === 'hut' ? Math.ceil(cap / 2) : kind === 'temple' ? 64 : Math.ceil(cap / 4);
       const g = buildBuilding(kind);
-      const iDir = new InstancedBufferAttribute(new Float32Array(slotCap * 3), 3);
-      const iQuat = new InstancedBufferAttribute(new Float32Array(slotCap * 4), 4);
-      const iData = new InstancedBufferAttribute(new Float32Array(slotCap * 4), 4); // size, seed, share of windows lit at night, technology
-      const iTint = new InstancedBufferAttribute(new Float32Array(slotCap * 3), 3);
-      const iLight = new InstancedBufferAttribute(new Float32Array(slotCap * 3), 3);
-      for (const a of [iDir, iQuat, iData, iTint, iLight]) a.setUsage(DynamicDrawUsage);
-      g.setAttribute('iDir', iDir); g.setAttribute('iQuat', iQuat); g.setAttribute('iData', iData); g.setAttribute('iTint', iTint); g.setAttribute('iLight', iLight);
+      // per-building data in one shared buffer (WebGPU allows 8 vertex buffers per draw; separately these made 9)
+      const { iDir, iQuat, iData, iTint, iLight } = packAttributes(g, [
+        { name: 'iDir', size: 3 }, { name: 'iQuat', size: 4 }, { name: 'iData', size: 4 }, // iData: size, seed, share of windows lit at night, technology
+        { name: 'iTint', size: 3 }, { name: 'iLight', size: 3 },
+      ], slotCap, { instanced: true, dynamic: true }) as { iDir: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; iLight: InterleavedBufferAttribute };
       const material = new MeshBasicNodeMaterial({ side: DoubleSide });
       const aDir: N = attribute('iDir', 'vec3'), aQuat: N = attribute('iQuat', 'vec4'), aData: N = attribute('iData', 'vec4');
       // boats ride the sea, rocking a little; everything else stands on the ground
@@ -225,7 +224,7 @@ export class Towns {
       color = color.add(vLight.mul(litPane.mul(is(PART.windows))).mul(night).mul(2.4))
         .add(mix(vec3(3.4, 1.3, 0.25), vLight.mul(2.6), smoothstep(0.45, 0.75, tech)).mul(is(PART.flame)).mul(flicker).mul(night.mul(0.8).add(0.35)));
       material.colorNode = color;
-      const mesh = new InstancedMesh(g, material, slotCap);
+      const mesh = new Copies(g, material, slotCap);
       mesh.count = 0;
       mesh.frustumCulled = false;
       this.meshes.push(mesh);
@@ -340,7 +339,7 @@ export class Towns {
       for (const [k, s] of this.slots) {
         if (k === 'boat') continue;
         s.mesh.count = s.n;
-        s.iDir.needsUpdate = s.iQuat.needsUpdate = s.iData.needsUpdate = s.iTint.needsUpdate = s.iLight.needsUpdate = true;
+        s.iDir.needsUpdate = true; // one shared buffer: this uploads all of the instance data
       }
     }
     // ---- boats: a few on every sea lane, sailing back and forth
@@ -369,6 +368,6 @@ export class Towns {
       }
     }
     boats.mesh.count = boats.n;
-    boats.iDir.needsUpdate = boats.iQuat.needsUpdate = boats.iData.needsUpdate = boats.iTint.needsUpdate = boats.iLight.needsUpdate = true;
+    boats.iDir.needsUpdate = true;
   }
 }

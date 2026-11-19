@@ -19,6 +19,7 @@ import { EXAG, uSeaKm, uTime } from './common';
 import { dayAmount, surfaceLight } from './lighting';
 import type { GroundSampler } from './gfx/ground';
 import { addCreatureInstanceData, buildCreatureModel } from './gfx/creaturemesh';
+import { Copies } from './gfx/packed';
 import { makeCreatureMaterial } from './gfx/creatureskin';
 import type { PlanetData } from './gfx/planetdata';
 import { eclipseAt } from './gfx/eclipse';
@@ -35,7 +36,7 @@ function hash(n: number): number {
 
 const CAP = 384;
 
-interface Slot { mesh: InstancedMesh; iPos: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; used: number; }
+interface Slot { mesh: Copies; iPos: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; used: number; }
 
 /** True for the rare golden individuals. */
 export function isGolden(key: number): boolean {
@@ -81,7 +82,7 @@ export class CreatureLayer {
   individuals: Individual[] = [];
   private cells?: CellSnapshot;
   budget: number;
-  onMesh?: (mesh: InstancedMesh) => void;
+  onMesh?: (mesh: Copies) => void;
   /** Where the moon is and how big (w = radius), for eclipses. */
   moonBody = { x: 9, y: 0, z: 0, w: 0 };
   onArc?: (pos: Vector3, size: number) => void;
@@ -129,9 +130,7 @@ export class CreatureLayer {
     const geo = model.geometry;
     // all per-animal data shares one buffer (WebGPU allows 8 vertex buffers per draw)
     const { iPos, iQuat, iData, iTint } = addCreatureInstanceData(model, CAP);
-    const mesh = new InstancedMesh(geo, this.material, CAP);
-    const m = new Matrix4();
-    for (let i = 0; i < CAP; i++) mesh.setMatrixAt(i, m);
+    const mesh = new Copies(geo, this.material, CAP);
     mesh.count = 0;
     mesh.frustumCulled = false;
     s = { mesh, iPos, iQuat, iData, iTint, used: 0 };
@@ -285,8 +284,8 @@ export class CreatureLayer {
   }
 
   /** Remove meshes of species that have died out. */
-  prune(): InstancedMesh[] {
-    const gone: InstancedMesh[] = [];
+  prune(): Copies[] {
+    const gone: Copies[] = [];
     for (const [id, s] of this.slots) {
       const info = this.species.get(id < 0 ? -id - 1 : id);
       if (!info || info.extinctYear >= 0) {

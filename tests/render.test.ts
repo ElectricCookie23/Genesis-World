@@ -1,13 +1,12 @@
 // The models must be drawable on WebGPU, which binds at most 8 vertex buffers for one draw.
 // Before this check existed, plants needed 10 and animals 14, so neither was drawn there at all.
+// A draw may also use at most 16 attributes on either backend; animals use 14, which is why they
+// are drawn as plain counted meshes (`Copies`) with no per-copy matrix taking four more.
 import { describe, expect, it } from 'vitest';
 import { GENE_COUNT } from '../src/sim/genetics';
 import { addCreatureInstanceData, buildCreatureModel } from '../src/render/gfx/creaturemesh';
-import { MAX_VERTEX_BUFFERS, vertexBufferCount } from '../src/render/gfx/packed';
+import { MAX_VERTEX_ATTRIBUTES, MAX_VERTEX_BUFFERS, vertexBufferCount } from '../src/render/gfx/packed';
 import { FORMS, addPlantInstanceData, buildPlant } from '../src/render/gfx/plantmesh';
-
-/** WebGPU's default limit on vertex attributes for one draw (WebGL2 guarantees the same number). */
-const MAX_VERTEX_ATTRIBUTES = 16;
 
 describe('model vertex buffers', () => {
   it('every plant form fits with its per-plant data', () => {

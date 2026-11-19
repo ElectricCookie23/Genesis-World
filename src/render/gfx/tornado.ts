@@ -1,6 +1,7 @@
 // Tornadoes: a twisting funnel of dust from the ground to the cloud base under a storm cell over
 // land, swaying like a rope. Over a big fire the same funnel burns orange.
-import { DoubleSide, DynamicDrawUsage, InstancedBufferAttribute, InstancedMesh, MeshBasicNodeMaterial, CylinderGeometry, type Texture } from 'three/webgpu';
+import { DoubleSide, DynamicDrawUsage, InstancedBufferAttribute, MeshBasicNodeMaterial, CylinderGeometry, type Texture } from 'three/webgpu';
+import { Copies } from './packed';
 import { attribute, cameraPosition, cos, cross, dot, float, mix, normalGeometry, normalize, positionGeometry, positionWorld, pow, sin, smoothstep, uv, varying, vec3 } from 'three/tsl';
 import { EXAG, uSunDir, uTime } from '../common';
 import { uLook } from './look';
@@ -13,7 +14,7 @@ type N = any;
 export interface Twister { dir: [number, number, number]; fire: boolean; seed: number; }
 
 export class Tornadoes {
-  readonly mesh: InstancedMesh;
+  readonly mesh: Copies;
   private iDir: InstancedBufferAttribute;
   private iData: InstancedBufferAttribute;
 
@@ -59,7 +60,7 @@ export class Tornadoes {
     const flame: N = mix(vec3(4.0, 1.5, 0.2), vec3(1.6, 0.25, 0.04), vH).mul(streak.mul(0.8).add(0.5));
     material.colorNode = mix(dust, flame, vFire);
     material.opacityNode = facing.mul(streak.mul(0.4).add(0.55)).mul(smoothstep(0.0, 0.04, vH)).mul(float(1).sub(smoothstep(0.85, 1.0, vH))).mul(0.9);
-    this.mesh = new InstancedMesh(g, material, cap);
+    this.mesh = new Copies(g, material, cap);
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 2;

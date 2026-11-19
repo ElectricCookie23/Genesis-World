@@ -3,7 +3,7 @@
 // of them baked from three angles at load); underfoot there is a dense ring of grass and ground
 // plants. Which form grows where comes from the genes of the local plant species.
 import {
-  BufferGeometry, Color, DataTexture, DoubleSide, DynamicDrawUsage, InstancedBufferAttribute, InstancedMesh, LinearFilter, Mesh, MeshBasicNodeMaterial,
+  BufferGeometry, Color, DataTexture, DoubleSide, DynamicDrawUsage, InstancedBufferAttribute, LinearFilter, Mesh, MeshBasicNodeMaterial,
   OrthographicCamera, PlaneGeometry, Quaternion, RGBAFormat, RenderTarget, Scene, UnsignedByteType, Vector3, type InterleavedBufferAttribute, type Texture,
   type WebGPURenderer,
 } from 'three/webgpu';
@@ -19,6 +19,7 @@ import { faceDirection } from './cubebake';
 import { Pass, makeTarget } from './gpu';
 import { uLook } from './look';
 import type { PlanetData } from './planetdata';
+import { Copies } from './packed';
 import { FORMS, PART, addPlantInstanceData, buildPlant, type Form } from './plantmesh';
 import { groundRadiusNode } from './terrain';
 import { eclipseLight } from './eclipse';
@@ -80,10 +81,10 @@ function plantLight(albedo: N, Nrm: N, P: N, thin: N, ao: N, shadow: N): N {
 
 const ign = (): N => { const sc: N = screenCoordinate; return sc.x.add(uDitherFrame).mul(0.06711056).add(sc.y.add(uDitherFrame).mul(0.00583715)).fract().mul(52.9829189).fract(); };
 
-interface FullSlot { mesh: InstancedMesh; iDir: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; iTint2: InterleavedBufferAttribute; cap: number; n: number; }
+interface FullSlot { mesh: Copies; iDir: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; iTint2: InterleavedBufferAttribute; cap: number; n: number; }
 
 export class Flora {
-  readonly meshes: (InstancedMesh | Mesh)[] = [];
+  readonly meshes: (Copies | Mesh)[] = [];
   plants = new Map<number, PlantInfo>();
   /** Budget for far plants (imposters). Near models get a fortieth of it, grass a tenth. */
   maxInstances: number;
@@ -100,8 +101,8 @@ export class Flora {
   readonly uGrassR = uniform(0.009);
   private full = new Map<Form, FullSlot>();
   private geos = new Map<Form, BufferGeometry>();
-  private far!: { mesh: InstancedMesh; iDir: InstancedBufferAttribute; iData: InstancedBufferAttribute; iTint: InstancedBufferAttribute; iTint2: InstancedBufferAttribute; cap: number };
-  private grass!: { mesh: InstancedMesh; iDir: InstancedBufferAttribute; iData: InstancedBufferAttribute; iTint: InstancedBufferAttribute; cap: number };
+  private far!: { mesh: Copies; iDir: InstancedBufferAttribute; iData: InstancedBufferAttribute; iTint: InstancedBufferAttribute; iTint2: InstancedBufferAttribute; cap: number };
+  private grass!: { mesh: Copies; iDir: InstancedBufferAttribute; iData: InstancedBufferAttribute; iTint: InstancedBufferAttribute; cap: number };
   private atlasNode: N;
   private baked = false;
   private baking = false;
@@ -174,7 +175,7 @@ export class Flora {
       const dCam = length(cameraPosition.sub(vBase));
       const keep = float(1).sub(smoothstep(this.uLod.mul(0.85), this.uLod.mul(1.15), dCam));
       material.opacityNode = cutout(vCard).mul(step(ign(), keep.add(0.001)));
-      const mesh = new InstancedMesh(g, material, cap);
+      const mesh = new Copies(g, material, cap);
       mesh.count = 0;
       mesh.frustumCulled = false;
       this.meshes.push(mesh);
@@ -229,7 +230,7 @@ export class Flora {
       const dCam = length(cameraPosition.sub(vBase));
       const keep = smoothstep(this.uLod.mul(0.85), this.uLod.mul(1.15), dCam);
       material.opacityNode = tex.a.mul(step(float(1).sub(keep), ign()));
-      const mesh = new InstancedMesh(g, material, cap);
+      const mesh = new Copies(g, material, cap);
       mesh.count = 0;
       mesh.frustumCulled = false;
       this.meshes.push(mesh);
@@ -268,7 +269,7 @@ export class Flora {
       const vN: N = varying(normalize(aDir.add(ax.mul(normalGeometry.x)).add(az.mul(normalGeometry.z))));
       const albedo: N = vTint.mul(vH.mul(0.7).add(0.55));
       material.colorNode = plantLight(albedo, vN, positionWorld, float(1), vH.mul(0.6).add(0.4), this.cloudShadow(vBase));
-      const mesh = new InstancedMesh(g, material, cap);
+      const mesh = new Copies(g, material, cap);
       mesh.count = 0;
       mesh.frustumCulled = false;
       this.meshes.push(mesh);
