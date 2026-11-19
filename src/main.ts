@@ -354,7 +354,8 @@ async function boot(): Promise<void> {
     ctx.fillText('west', 8, 16); ctx.fillText('east', W - 38, 16); ctx.fillText('sea level', 8, yOf(cells.seaLevel) - 4);
   };
   actions.rewind = (index) => send({ type: 'rewind', index });
-  update({ colorblind: store.get('genesis:cb') === '1' });
+  update({ colorblind: store.get('genesis:cb') === '1', earthNotes: store.get('genesis:earth') === '1' });
+  actions.setEarthNotes = (on) => { update({ earthNotes: on }); store.set('genesis:earth', on ? '1' : '0'); };
 
   // flat map: an equirectangular picture of the planet as it is painted right now
   let mapCells: Int32Array | null = null;
@@ -554,6 +555,7 @@ async function boot(): Promise<void> {
 
   let lastHud = 0;
   let heldNoted = false;
+  let bannerTimer = 0;
   const resetHistory = () => {
     state.events = [];
     state.chronicle = [];
@@ -575,6 +577,13 @@ async function boot(): Promise<void> {
       if (ev.importance >= 1 && ev.id > 0) state.chronicle.push(ev.id);
       if (!live) continue;
       if (ev.importance >= 3) toasts.push(ev);
+      // a new age somewhere in the world: a banner, for a few seconds
+      if (ev.type === 'era' && ev.importance >= 2 && ev.data) {
+        const d = ev.data;
+        update({ eraBanner: { title: ev.title, nation: String(d.name ?? ''), own: String(d.own ?? ''), earth: String(d.earth ?? ''), year: ev.simYear } });
+        window.clearTimeout(bannerTimer);
+        bannerTimer = window.setTimeout(() => update({ eraBanner: null }), 9000);
+      }
       // documentary director: cut to wherever something notable just happened
       if ((state.director || state.postcard) && ev.importance >= 2 && ev.cellId >= 0 && scene.following === null) actions.flyToCell(ev.cellId, 0.9);
       if ((ev.type === 'war' || ev.type === 'plague') && ev.cellId >= 0) scene.civUnrest(ev.cellId, ev.type);
@@ -647,6 +656,7 @@ async function boot(): Promise<void> {
           }
         }
         music.setCivMusic(msg.stats.civMusic && msg.stats.settlements > 0, seed.length * 7919 + seed.charCodeAt(0));
+        music.civEra = msg.stats.topEra ?? 0;
         music.setMood({ stage: msg.stats.stage, era: msg.stats.era, life: Math.min(1, msg.stats.livingSpecies / 30), hush: performance.now() < hushUntil });
         break;
       case 'events':

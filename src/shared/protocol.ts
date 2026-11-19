@@ -136,6 +136,8 @@ export interface SettlementInfo {
 export interface NationInfo {
   id: number; name: string; species: number; capital: number; founded: number; ended: number; parent: number;
   government: string; stability: number; tech: number; era: number; eraName: string; hue: number;
+  /** The age in the nation's own tongue, and what it compares to on Earth. */
+  eraOwn: string; earth: string;
   /** People, in thousands, and number of towns. */
   pop: number; towns: number;
   culture: string; language: string;

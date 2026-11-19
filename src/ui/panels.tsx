@@ -610,7 +610,7 @@ export function NationPanel() {
         {!d && <p class={css.sub}>Asking the archives.</p>}
         {d && realm && (
           <p class={css.sub} style={{ margin: '0 0 8px' }}>
-            {realm.eraName}{realm.ended >= 0 ? ' (the nation is gone)' : ''}. {d.tech.filter((t) => t.state === 1).length} of {d.tech.filter((t) => t.state !== 2).length} things its land allows are known.
+            {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}){realm.ended >= 0 ? ' (the nation is gone)' : ''}. {d.tech.filter((t) => t.state === 1).length} of {d.tech.filter((t) => t.state !== 2).length} things its land allows are known.
             {' '}Its land offers {d.land.length ? d.land.join(', ') : 'little'}{d.land.includes('ore') ? '' : '; no ore, so no metal'}.
           </p>
         )}
@@ -681,7 +681,7 @@ export function Peoples() {
                   const year = s.stats?.simYear ?? 0;
                   return (
                     <div class={css.when} style={{ color: '#a9a498' }}>
-                      {realm.eraName}. {realm.ruler} of the {realm.house} has ruled {Math.max(1, Math.round(year - realm.rulerSince)).toLocaleString('en-US')} {Math.round(year - realm.rulerSince) === 1 ? 'year' : 'years'} ({realm.houseReigns} {realm.houseReigns === 1 ? 'reign' : 'reigns'} of that house). Founded {Math.round(year - realm.founded).toLocaleString('en-US')} years ago. They speak {realm.language}.
+                      {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}). {realm.ruler} of the {realm.house} has ruled {Math.max(1, Math.round(year - realm.rulerSince)).toLocaleString('en-US')} {Math.round(year - realm.rulerSince) === 1 ? 'year' : 'years'} ({realm.houseReigns} {realm.houseReigns === 1 ? 'reign' : 'reigns'} of that house). Founded {Math.round(year - realm.founded).toLocaleString('en-US')} years ago. They speak {realm.language}.
                     </div>
                   );
                 })()}
@@ -796,6 +796,7 @@ export function Settings() {
         </div>
         <div class={css.row}><span>Slow down on big events</span><button class={css.btn} onClick={() => actions.setSlowOnEvents(!s.slowOnEvents)}>{s.slowOnEvents ? 'on' : 'off'}</button></div>
         <div class={css.row}><span>Documentary director<br /><span class={css.sub}>The camera flies to whatever just happened.</span></span><button class={css.btn} onClick={() => update({ director: !s.director })}>{s.director ? 'on' : 'off'}</button></div>
+        <div class={css.row}><span>Compare ages to Earth's</span><button class={css.btn} onClick={() => actions.setEarthNotes(!s.earthNotes)}>{s.earthNotes ? 'on' : 'off'}</button></div>
         <div class={css.row}><span>Colour-blind safe overlays</span><button class={css.btn} onClick={() => actions.setColorblind(!s.colorblind)}>{s.colorblind ? 'on' : 'off'}</button></div>
         <div class={css.row}>
           <span>Overlay (O)</span>

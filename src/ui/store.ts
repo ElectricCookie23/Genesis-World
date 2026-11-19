@@ -60,6 +60,10 @@ export interface UIState {
   other: OtherFuture | null;
   overlay: Overlay;
   colorblind: boolean;
+  /** Show "comparable to Earth around ..." beside the names of ages. */
+  earthNotes: boolean;
+  /** An age has just begun somewhere for the first time: shown as a banner for a few seconds. */
+  eraBanner: { title: string; nation: string; own: string; earth: string; year: number } | null;
   /** When on, god tools are locked and the world runs untouched. */
   handsOff: boolean;
   /** Documentary director: the camera flies to whatever just happened. */
@@ -113,6 +117,8 @@ export const state: UIState = {
   other: null,
   overlay: 'none',
   colorblind: false,
+  earthNotes: false,
+  eraBanner: null,
   handsOff: false,
   director: false,
   history: [],
@@ -177,6 +183,7 @@ export const actions = {
   familyTree: (_key: number): FamilyTree | null => null,
   /** Open the knowledge and rulers of a nation (by the simulation's nation id). */
   openNation: (_id: number) => {},
+  setEarthNotes: (_on: boolean) => {},
   selectCreatureKey: (_key: number) => {},
   /** Swap places with the other future, or stop running it. */
   crossOver: () => {},

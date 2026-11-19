@@ -7,7 +7,7 @@ import { loadSimulation, saveSimulation, type SaveState } from './snapshot';
 import {
   HISTORY_SPEED, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type NationDetail, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
 } from '../shared/protocol';
-import { ERAS, eraOf } from './history/eras';
+import { ERAS, earthNote, eraOf } from './history/eras';
 import { compound } from './history/language';
 import { WEB, wayFor } from './history/tech';
 
@@ -159,7 +159,7 @@ function nationList(s: Simulation): NationInfo[] {
     const ruler = h.people[n.ruler], house = h.dynasties[n.dynasty], culture = h.cultures[n.culture]!;
     return {
       id: n.id, name: n.name, species: n.species, capital: n.capital, founded: n.founded, ended: n.ended, parent: n.parent, government: n.government,
-      stability: n.stability, tech: n.tech, era: n.era, eraName: ERAS[n.era]!.name, hue: n.hue, pop: n.pop, towns: n.towns,
+      stability: n.stability, tech: n.tech, era: n.era, eraName: s.civ.eraName(n), eraOwn: s.civ.eraOwnName(n), earth: earthNote(n.era), hue: n.hue, pop: n.pop, towns: n.towns,
       culture: culture.name, language: h.languages[culture.language]!.name, ruler: ruler ? ruler.name : '', rulerSince: ruler ? ruler.reignFrom : -1,
       house: house ? house.name : '', houseReigns: house ? house.reigns : 0, eventId: n.eventId,
     };

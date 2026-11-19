@@ -320,3 +320,48 @@ describe('the tech web (E1)', () => {
     expect(h.people.some((p) => p.role === 'inventor')).toBe(true);
   }, 240000);
 });
+
+import { eraTitle } from '../src/sim/history/eras';
+import { lightColour } from '../src/render/gfx/nations';
+
+describe('era progression (E2)', () => {
+  it('an age is named for how a people got there', () => {
+    const ore = (slot: string) => ({ edge: 'copper', hard: 'iron', compass: 'lodestone', engine: 'steam', telegraph: 'wire' } as Record<string, string>)[slot] ?? '';
+    const poor = (slot: string) => ({ edge: 'glassblade', hard: 'sinter', compass: '', engine: 'sunboiler', telegraph: 'heliograph' } as Record<string, string>)[slot] ?? '';
+    expect([2, 3, 4, 6, 7].map((e) => eraTitle(e, ore))).toEqual(['Age of Copper', 'Age of Iron', 'Age of Sails', 'Age of Steam', 'Age of Wires']);
+    expect([2, 3, 4, 6, 7].map((e) => eraTitle(e, poor))).toEqual(['Age of Glass', 'Age of White Stone', 'Age of Roads', 'Age of Mirrors', 'Age of Flashing Towers']);
+    expect(eraTitle(1, ore)).toBe('Age of Fields');
+    expect(eraTitle(8, poor)).toBe('Age of Orbit');
+  });
+
+  it('a full run passes through at least six ages, each announced, named in the people\'s tongue, and compared to Earth', () => {
+    const s = worldWithHistory('amber-reef-101');
+    expect(s).not.toBeNull();
+    for (let y = 0; y < 8000; y++) s!.step(1);
+    const firsts = s!.events.events.filter((e) => e.type === 'era' && e.importance >= 2);
+    expect(firsts.length).toBeGreaterThanOrEqual(6);
+    expect(new Set(firsts.map((e) => e.title)).size).toBe(firsts.length);
+    for (const e of firsts) {
+      expect(e.title).toMatch(/^The Age .+ begins$/);
+      expect(String(e.data!.earth)).toMatch(/^comparable to Earth around \d+/);
+      expect(String(e.data!.own).length).toBeGreaterThan(3);
+      expect(e.causes.length).toBeGreaterThan(0);
+    }
+    // years of the firsts run forward
+    for (let i = 1; i < firsts.length; i++) expect(firsts[i]!.simYear).toBeGreaterThan(firsts[i - 1]!.simYear);
+    const n = [...s!.civ.h.nations].sort((a, b) => b.tech - a.tech)[0]!;
+    expect(s!.civ.eraName(n)).toMatch(/^Age /);
+    expect(s!.civ.eraOwnName(n)).toMatch(/^\S+ \S+$/);
+  }, 240000);
+
+  it('the colour of a people\'s lights follows its age', () => {
+    const sig: [number, number, number] = [0.2, 0.9, 1.0];
+    const fire = lightColour(0.3, sig), lamp = lightColour(0.66, sig), gas = lightColour(0.9, sig), electric = lightColour(1.1, sig);
+    expect(fire).toEqual([1.0, 0.5, 0.14]);
+    expect(lamp[1]).toBeGreaterThan(fire[1]);
+    expect(gas[2]).toBeGreaterThan(lamp[2] + 0.2);
+    expect(electric).toEqual(sig);
+    // no sudden jumps between neighbouring levels
+    for (let t = 0.2; t < 1.2; t += 0.01) { const a = lightColour(t, sig), b = lightColour(t + 0.01, sig); for (let k = 0; k < 3; k++) expect(Math.abs(a[k]! - b[k]!)).toBeLessThan(0.08); }
+  });
+});

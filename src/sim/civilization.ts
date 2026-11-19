@@ -12,11 +12,11 @@ import { G, GENE_COUNT, P, PHEN_COUNT, computePhenotype } from './genetics';
 import { hashSeed, type RNG } from './rng';
 import type { Simulation } from './simulation';
 import { Log } from './history/celllog';
-import { ERAS, eraOf } from './history/eras';
+import { eraOf, eraSlot, eraTitle, earthNote } from './history/eras';
 import { hash32 } from './history/hash';
 import { capital, compound, makeLanguage, personName, placeMeanings, word, type Language } from './history/language';
 import { emptyHistory, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role } from './history/model';
-import { WEB, chooseNext, levelOf, newKnowledge, wayFor, type Land, type Leaning } from './history/tech';
+import { SLOT_INDEX, WEB, chooseNext, levelOf, newKnowledge, wayFor, type Land, type Leaning } from './history/tech';
 
 export interface Settlement {
   id: number;
@@ -226,10 +226,13 @@ export class Civilization {
         const first = era > h.topEra;
         if (first) h.topEra = era;
         const cap = this.settlements[n.capital]!;
+        const title = this.eraName(n), own = this.eraOwnName(n, year);
         const ev = sim.emit({
-          type: 'era', year, cellId: cap.cell, title: first ? `The ${ERAS[era]!.name} begins` : `${n.name} enters the ${ERAS[era]!.name}`,
-          description: first ? `In ${n.name} something has changed for good. ${eraLine(era)} No one alive will see the world go back.` : `${n.name} has caught up with the age. ${eraLine(era)}`,
-          causes: [n.eventId].filter((x) => x >= 0), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, era },
+          type: 'era', year, cellId: cap.cell, title: first ? `The ${title} begins` : `${n.name} enters its ${title}`,
+          description: first
+            ? `In ${n.name} something has changed for good. ${eraLine(era)} They will come to call these years ${own}. No one alive will see the world go back.`
+            : `${n.name} has come to a new age of its own, which it calls ${own}. ${eraLine(era)}`,
+          causes: [n.eventId].filter((x) => x >= 0), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, era, earth: earthNote(era), own, name: n.name },
         });
         sim.cellLog.note(cap.cell, year, Log.Era, era);
         const now = h.people[n.ruler];
@@ -351,6 +354,26 @@ export class Civilization {
     lang.name = c.name;
     h.cultures.push(c);
     return c;
+  }
+
+  /** What a nation's present age is called, in plain words: named for how this nation got there. */
+  eraName(n: Nation, era = n.era): string {
+    const land = new Set(n.land);
+    return eraTitle(era, (slotId) => {
+      const i = SLOT_INDEX.get(slotId);
+      if (i === undefined) return '';
+      const k = n.know.way[i]! >= 0 ? n.know.way[i]! : wayFor(i, land);
+      return k >= 0 ? WEB[i]!.ways[k]!.id : '';
+    });
+  }
+
+  /** The same age in the nation's own tongue: its word for the thing the age is named for, and its word for a span of years. */
+  eraOwnName(n: Nation, year = Infinity, era = n.era): string {
+    const lang = this.languageOf(n), land = new Set(n.land);
+    const i = SLOT_INDEX.get(eraSlot(era));
+    let what = ['herd', 'field', 'fire', 'stone', 'sea', 'new', 'fire', 'star', 'moon', 'star'][era] ?? 'new';
+    if (i !== undefined) { const k = n.know.way[i]! >= 0 ? n.know.way[i]! : wayFor(i, land); if (k >= 0) what = WEB[i]!.ways[k]!.words[0]; }
+    return `${compound(lang, what, undefined, year)} ${capital(word(lang, 'years'))}`;
   }
 
   languageOf(nation: Nation): Language {

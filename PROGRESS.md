@@ -212,7 +212,7 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | # | System | Status | Notes |
 |---|---|---|---|
 | E1 | The Tech Web | done | `sim/history/tech.ts`: 108 needs met by about 150 inventions; a need can have two or three ways depending on the land (ore, coast, river, forest, tamed beasts, sand, coal), so a people without ore meets the same needs with glass, bone and fired clay. Research is saved up from people, minds, stability and reach, and spent on what is open; which need comes next depends on the culture's and ruler's leanings and on luck. Every invention has a name in the nation's own language. First discoveries of turning points go in the chronicle with their inventor; every discovery keeps its year. Panel: Peoples, then "knowledge" on a nation. Tests: "the tech web (E1)" |
-| E2 | Era Progression | not started | |
+| E2 | Era Progression | done | ten ages by level of knowledge, each nation in its own (`sim/history/eras.ts`). An age is named for how that nation got there (Age of Copper, or of Glass, or of Fired Clay; Age of Steam, or of Falling Water, or of Mirrors) and also has a name in the nation's own tongue. The first time anyone enters an age is a chronicle event with a banner; a setting adds "comparable to Earth around ...". What changes with the age: buildings (forms by level of knowledge), light colour (fire, lamp oil, gas, then electric light in the nation's colour: `lightColour`), the people's music (pace, length and a second voice), roads and sea lanes on the night side. Clothing is not drawn (people are not drawn yet: section 5). Tests: "era progression (E2)" |
 | E3 | Uneven History | not started | |
 | E4 | Rise and Fall | not started | |
 | E5 | Dark Ages | not started | |

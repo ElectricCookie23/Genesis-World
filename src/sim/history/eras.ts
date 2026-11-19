@@ -35,3 +35,30 @@ export function earthNote(era: number): string {
   const y = ERAS[Math.max(0, Math.min(ERAS.length - 1, era))]!.earth;
   return y < 0 ? `comparable to Earth around ${-y} BCE` : `comparable to Earth around ${y}`;
 }
+
+/**
+ * What an age is called depends on how a people got there (system E2). The age that begins with the
+ * first hard cutting edge is an Age of Copper for those with ore, an Age of Glass for those with
+ * only sand, an Age of Fired Clay for the rest. `wayOf` gives the invention a nation has, or will
+ * have, for a need of the tech web ('' if its land allows none).
+ */
+const NAMED: Record<number, { slot: string; by: Record<string, string>; none?: string }> = {
+  2: { slot: 'edge', by: { copper: 'Age of Copper', glassblade: 'Age of Glass', hardclay: 'Age of Fired Clay' } },
+  3: { slot: 'hard', by: { iron: 'Age of Iron', bonecomp: 'Age of Horn', sinter: 'Age of White Stone' } },
+  4: { slot: 'compass', by: { lodestone: 'Age of Sails', sunstone: 'Age of Sun Stones' }, none: 'Age of Roads' },
+  6: { slot: 'engine', by: { steam: 'Age of Steam', turbine: 'Age of Falling Water', sunboiler: 'Age of Mirrors' } },
+  7: { slot: 'telegraph', by: { wire: 'Age of Wires', heliograph: 'Age of Flashing Towers' } },
+};
+
+export function eraTitle(era: number, wayOf: (slot: string) => string): string {
+  const e = Math.max(0, Math.min(ERAS.length - 1, era));
+  const named = NAMED[e];
+  if (!named) return ERAS[e]!.name;
+  const way = wayOf(named.slot);
+  return named.by[way] ?? (way === '' && named.none ? named.none : ERAS[e]!.name);
+}
+
+/** The need of the tech web that an age is named for, or '' if the age has one name for everyone. */
+export function eraSlot(era: number): string {
+  return NAMED[era]?.slot ?? '';
+}

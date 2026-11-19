@@ -44,6 +44,23 @@ function hsv(h: number, s: number, v: number): RGB {
 }
 
 const FIRE: RGB = [1.0, 0.5, 0.14];
+const LAMP: RGB = [1.0, 0.66, 0.3];
+const GAS: RGB = [0.95, 0.93, 0.62];
+
+/**
+ * The colour of a people's lights at a level of knowledge (system E2): open fire, then oil lamps from
+ * the Age of Sails, pale gas light in the Age of Engines, and electric light in the nation's own colour
+ * from the Age of Signals on.
+ */
+export function lightColour(tech: number, signature: RGB): RGB {
+  const stops: [number, RGB][] = [[0.45, FIRE], [0.66, LAMP], [0.9, GAS], [1.04, signature]];
+  if (tech <= stops[0]![0]) return [...FIRE] as RGB;
+  for (let i = 1; i < stops.length; i++) {
+    const [t1, c1] = stops[i]!, [t0, c0] = stops[i - 1]!;
+    if (tech <= t1) { const t = (tech - t0) / (t1 - t0), k = t * t * (3 - 2 * t); return [c0[0] + (c1[0] - c0[0]) * k, c0[1] + (c1[1] - c0[1]) * k, c0[2] + (c1[2] - c0[2]) * k]; }
+  }
+  return [...signature] as RGB;
+}
 
 function nationName(capital: string, seed: number, tech: number, faith: boolean): string {
   const root = capital.replace(/[aeiou]+$/i, '') || capital;
@@ -114,10 +131,7 @@ export function deriveNations(settlements: SettlementInfo[], grid: Grid, species
     const cap = byId.get(n.capital)!;
     const own = cap.nation !== undefined && cap.nation >= 0 ? info.get(cap.nation) : undefined;
     n.name = own ? own.name : nationName(cap.name, cap.id * 7 + n.species, tech, cap.belief >= 0);
-    // fire and oil lamps first; electric light in the nation's own colour comes with technology
-    const t = Math.max(0, Math.min(1, (tech - 0.42) / 0.3));
-    const k = t * t * (3 - 2 * t);
-    n.color = [FIRE[0] + (n.signature[0] - FIRE[0]) * k, FIRE[1] + (n.signature[1] - FIRE[1]) * k, FIRE[2] + (n.signature[2] - FIRE[2]) * k];
+    n.color = lightColour(tech, n.signature);
   }
   return nations;
 }
