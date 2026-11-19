@@ -13,6 +13,58 @@ This is the second version. The first was cut short by a flat battery; this one 
 - Roughly 60 of about 230 captures were looked at. Each finding names the files it rests on; the rest are listed at the end.
 - For part of the second run the machine's owner was also using the same browser window, so the Genesis tab may have been in the background at times. The frame-rate table was finished before that; the creature captures after it were checked to be in a visible tab.
 
+## Re-test of commit 5bbe93a (2026-11-19)
+
+Same machine, browser and window as below, on mains power, cache disabled. The deploy run for `5bbe93a` was green before testing and the page served `assets/index-BrT09p0l.js`. Everything below this section describes the site *before* that commit. Files for this section start `retest-`; about 20 of roughly 90 were looked at.
+
+**What is fixed**
+
+| Check | WebGPU | WebGL2 |
+|---|---|---|
+| Console, Low, fresh load | `x4 THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.` and `x1 Failed to load resource: the server responded with a status of 404 ()`. Nothing else: no "Vertex buffer count", no "Binding size ... is zero". | `x2 THREE.BufferGeometry.toNonIndexed(): ...` only |
+| Console, High, fresh load | `x2 THREE.BufferGeometry.toNonIndexed(): ...` only | same |
+| Console, High, during warp, plant close-ups, slot load, sample animals | none (the two `toNonIndexed` warnings again on the slot load) | same |
+| Young world from orbit straight after load | Blue sea and pink-tan land visible (`retest-webgpu-high-young-orbit.jpg`); coast luminance 0.36 | Same (`retest-webgl-high-young-orbit.jpg`); coast luminance 0.38 |
+| Warped world parked with the sim paused | Coast luminance 0.444 to 0.447 at every 30 s sample from 127 s to 400 s. **Stayed lit.** `state.notice` empty throughout. | 0.378 to 0.380 through 425 s. **Stayed lit.** |
+| Save a slot, reload with `&slot=0` | **Lit**: orbit 0.114, coast 0.444, ground 0.544 (`retest-webgpu-slot-coast.jpg`) | **Lit**: 0.114, 0.396, 0.548 |
+| Near plant models | **Draw now.** At the densest clear-sky forest in that world, `setImmediate(2.44, 0.36, 0.02)`: 35 near models, 292 imposters, 1579 grass blades; at `0.008`: 70 near, 201 imposters, 4048 blades (`retest-webgpu-forest-ground.jpg`, `-near.jpg`) | Drew before; 1 to 2 near models at the old forest spot |
+| Sample animals (`debugSpawn` with the stub) | **Draw as animals**: bodies, necks, heads with eyes, horns, back plates, jointed legs with feet, tails, stripes and spots, fur on the furry one (`retest-webgpu-creature-sp0-c-mid.jpg`, `-sp5-a-side.jpg`, `-sp6-b-above.jpg`) | Same (`retest-webgl-creature-sp1-c-mid.jpg`, `-sp0-a-side.jpg`) |
+| Sky panels from creature meshes | Gone | Gone |
+
+WebGL2 limits: `MAX_UNIFORM_BLOCK_SIZE` 16384, `MAX_VERTEX_ATTRIBS` 16, `MAX_VERTEX_UNIFORM_VECTORS` 1024.
+
+**Frame rate at High after the fix** (full settings, then settled; pr = pixel ratio)
+
+| Backend | Orbit | Coast | Ground (0.94, 0.74) | Orbit: clouds shown to hidden |
+|---|---|---|---|---|
+| WebGPU | 20 fps (pr 2), settled 48 (pr 1) | 16 to 17, settled 44 (pr 1) | 14 to 15, settled 40 (pr 1) | 21.3 to 51.7 |
+| WebGL2 | 25 to 30 (pr 2), settled 62 to 80 (pr 2) | 18, settled 56 to 57 (pr 2) | 17.5 to 18, settled 55 to 58 (pr 2) | 26.7 to 46.5 |
+
+WebGPU is 2 to 4 fps slower than before at coast and ground (was 21 and 17), and its settled figure at ground level (40) is further under the 50 fps target. WebGL2 is unchanged. The ground spot was bare snow in these worlds, so this is not the cost of plants.
+
+**Correction to C2 below.** The "plain brown faceted arch" that the first review took for sample species 1 was not the animal. The same arch stands in `retest-webgpu-forest-ground.jpg` with no sample animals spawned, and sample species 1 now draws as a tall tan long-necked animal. The arch is some other object (a burrow or nest); what it is was not identified.
+
+**New problems, visible now that things draw**
+
+1. **Tree imposters do not match their near models (umbrella-style tree).** Near: dark branching trunks with flat blue-violet leaf rosettes. Far, in the same frame: pale tan rectangular posts with rows of thin horizontal dashes. The change in shape and colour is abrupt. `retest-webgpu-forest-ground.jpg`, `setImmediate(2.44, 0.36, 0.02)`, tilt -0.5, sun +0.5.
+2. **Leaves are flat single-colour discs**, all horizontal, with no shading or thickness; close up one rosette fills the screen as a flat purple shape (`retest-webgpu-forest-near.jpg`, dist 0.008).
+3. **Daytime sky at ground level is night-dark with stars and aurora while the ground is in full sun.** Every ground capture in the re-test, at sun +0.3 and +0.5, on both backends (`retest-webgpu-forest-ground.jpg`, `retest-webgl-creature-sp1-c-mid.jpg`). Before the fix the same sun angles gave a lilac day sky (`6-forest-ground.png`). The earlier captures were lower ground; these are 2 to 3 km up, so it may be altitude, but it reads as night.
+4. **Land animals stand on the sea, and sea animals lie on land.** Sample land animals over water stand on the surface in a group (`retest-webgpu-creature-sp4-c-mid.jpg`); the aquatic sample animal lies on a snowfield (`retest-webgl-creature-sp0-a-side.jpg`). `debugSpawn` puts every sample species in every neighbouring region, so this may be the test tool rather than the game; not checked with evolved animals.
+5. **Animals are very large against the terrain.** The long-necked sample animal is as tall as the cliff behind it and many times a tree's height; the fliers are of similar size. Size on screen comes from `ind.size * boost` in `src/render/creatures.ts`.
+6. **Fur is a coarse blocky speckle** around the body with visible square steps, not hair (`retest-webgl-creature-sp0-a-side.jpg`, upper left; `retest-webgpu-creature-sp0-a-side.jpg`).
+7. **Detached or floating parts.** A small loose foot-shaped piece sits under the striped animal away from any leg (`retest-webgpu-creature-sp0-a-side.jpg`, centre). The aquatic animal's fins are flat paddles lying apart from the body. One leg of the long-necked animal is paler and see-through (`retest-webgpu-creature-sp1-a-side.jpg`).
+8. **Feet mostly meet the ground**, with some hovering slightly above uneven snow (`retest-webgpu-creature-sp5-a-side.jpg`, right-hand animal).
+9. **Shading on animals is flat with hard white streak highlights**; colours are saturated and toy-like.
+10. **Hillsides and shores show evenly spaced pale contour stripes**, like terraces (`retest-webgpu-creature-sp4-c-mid.jpg`, `retest-webgpu-slot-coast.jpg`).
+11. **WebGPU, young world from orbit: a large blown-out white patch on the open sea** left of centre, and a white body with a wide halo at the right limb (`retest-webgpu-high-young-orbit.jpg`). The halo is the WebGL2 glare of C4, now on WebGPU too.
+12. **Several captures are dim with a heavy dark vignette** (`retest-webgpu-plants-0.02.jpg`, `-slot-coast.jpg`, `-creature-sp1-a-side.jpg`). They were taken about 1.3 s after re-applying the preset, so this may be exposure still settling.
+13. **Nest mounds are now four-sided pyramids**, still tall against everything else and numerous (`retest-webgpu-slot-coast.jpg`, `-plants-0.02.jpg`).
+14. A patch of white haze covers the left of `retest-webgpu-forest-ground.jpg` at ground level.
+
+**Seen for the first time and looking right:** evolved animals in the wild (small green lizard-like and yellow two-legged animals on the snow in `retest-webgpu-plants-0.02.jpg`), sea animals as pale shapes in a bay from mid altitude (`retest-webgpu-slot-coast.jpg`), flocks of fliers in the air.
+
+**Not re-tested:** Medium and Ultra; the eight views as a set; under water; C5 (the upside-down jungle imposters); hand-over popping during movement; evolved animals close up; legs and gait in motion (stills only).
+
 ## Machine
 
 | | |
