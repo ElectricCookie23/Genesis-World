@@ -192,7 +192,8 @@ export class OceanSurface {
     const whiteLit: N = sunColor.mul(sunVis).mul(max(dot(dir, L), 0).mul(0.8).add(0.2)).add(ambient.mul(1.6));
     color = mix(color, vec3(0.94, 0.96, 0.97).mul(whiteLit), foam.mul(0.92));
     // glowing plankton, stirred by breaking waves at night
-    color = color.add(vec3(0.05, 0.75, 0.95).mul(C.b).mul(foam.add(crest.mul(0.6)).add(0.06)).mul(night).mul(uSeaGlow).mul(1.5));
+    // seen close, the glow sits in the foam and the wave tops; from far away it is only a faint, even tint
+    color = color.add(vec3(0.05, 0.75, 0.95).mul(C.b).mul(mix(foam.add(crest.mul(0.6)).add(0.03), float(0.012), far)).mul(night).mul(uSeaGlow).mul(1.5));
 
     // ---- sea ice: pale sheets split by blue leads
     const e1: N = texture(erosionTex, dir.zy.mul(9)).mul(w.x).add(texture(erosionTex, dir.xz.mul(9)).mul(w.y)).add(texture(erosionTex, dir.xy.mul(9)).mul(w.z));
