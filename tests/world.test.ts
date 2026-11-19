@@ -4,6 +4,7 @@ import { Simulation } from '../src/sim/simulation';
 import { computeDrainage, countContinents } from '../src/sim/geology';
 import { driftPlatesMoving } from '../src/sim/tectonics';
 import { dustFall, shapeLandforms } from '../src/sim/landforms';
+import { computeCurrents } from '../src/sim/climate';
 
 const landShare = (sim: Simulation) => { let n = 0; const w = sim.world; for (let i = 0; i < w.elevation.length; i++) if (w.elevation[i]! > w.seaLevel) n++; return n / w.elevation.length; };
 
@@ -83,4 +84,54 @@ describe('landforms', () => {
       if (out[i]! > 0) expect(w.elevation[i]!).toBeLessThanOrEqual(w.seaLevel);
     }
   });
+});
+
+describe('ocean currents', () => {
+  it('every sea cell is fed from a sea cell, land from itself, and the sea stays at sane temperatures', () => {
+    const sim = new Simulation('amber-reef-101', 21);
+    for (let i = 0; i < 40; i++) sim.step(15000);
+    const w = sim.world, c = sim.climate;
+    computeCurrents(w, c);
+    let sea = 0, moved = 0;
+    for (let i = 0; i < sim.grid.count; i++) {
+      const up = c.upcurrent[i]!;
+      expect(up).toBeGreaterThanOrEqual(0);
+      expect(up).toBeLessThan(sim.grid.count);
+      if (w.elevation[i]! > w.seaLevel) expect(up).toBe(i);
+      else {
+        sea++;
+        expect(w.elevation[up]!).toBeLessThanOrEqual(w.seaLevel);
+        if (up !== i) moved++;
+        expect(Number.isFinite(c.sst[i]!)).toBe(true);
+        expect(c.sst[i]!).toBeGreaterThan(-40);
+        expect(c.sst[i]!).toBeLessThan(70);
+      }
+      expect(Number.isFinite(w.temperature[i]!)).toBe(true);
+    }
+    // most of the sea is in motion
+    expect(moved).toBeGreaterThan(sea * 0.5);
+    expect(c.currentAnomaly).toBeGreaterThanOrEqual(0);
+  }, 120000);
+
+  it('herds that move with the seasons wear trails on land only', () => {
+    const sim = new Simulation('amber-reef-101', 21) as unknown as { world: Simulation['world']; grid: Simulation['grid']; regions: { centre: Int32Array; count: number; land: Float32Array; grid: { neighbors: Int32Array; ncount: Uint8Array } }; wearTrail(a: number, b: number, m: number): void };
+    const reg = sim.regions;
+    let walked = 0;
+    for (let r = 0; r < reg.count && walked < 12; r++) {
+      if (reg.land[r]! <= 0.5) continue;
+      for (let k = 0; k < reg.grid.ncount[r]!; k++) {
+        const nb = reg.grid.neighbors[r * 6 + k]!;
+        if (reg.land[nb]! > 0.5) { for (let n = 0; n < 6; n++) sim.wearTrail(r, nb, 1e5); walked++; break; }
+      }
+    }
+    expect(walked).toBeGreaterThan(0);
+    let worn = 0;
+    for (let i = 0; i < sim.grid.count; i++) {
+      const t = sim.world.trail[i]!;
+      expect(t).toBeGreaterThanOrEqual(0);
+      expect(t).toBeLessThanOrEqual(1);
+      if (t > 0) { worn++; expect(sim.world.elevation[i]!).toBeGreaterThan(sim.world.seaLevel); }
+    }
+    expect(worn).toBeGreaterThan(0);
+  }, 60000);
 });

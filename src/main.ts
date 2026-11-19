@@ -93,6 +93,8 @@ async function boot(): Promise<void> {
     if (saved && (saved as { seed?: string }).seed === seed) pendingLoad = saved;
     update({ slots: ((await get('genesis:slots')) as SlotInfo[] | undefined) ?? [] });
   } catch { /* storage unavailable: play without saves */ }
+  // the other future: a second simulation started from a fork of this one, running alongside
+  let altWorker: Worker | null = null;
   let opening: Opening | null = null;
   let started = false;
 
@@ -101,6 +103,7 @@ async function boot(): Promise<void> {
     if (i > 0) state.lastSpeedIndex = i;
     update({ speedIndex: i });
     send({ type: 'speed', index: i });
+    altWorker?.postMessage({ type: 'speed', index: i });
   };
   actions.setSpeed = setSpeed;
   actions.togglePause = () => setSpeed(state.speedIndex === 0 ? state.lastSpeedIndex : 0);
@@ -207,17 +210,89 @@ async function boot(): Promise<void> {
   actions.setOverlay = (o) => {
     update({ overlay: o });
     scene.setNightMap(o === 'nations');
-    scene.setOverlay(o === 'fossils' || o === 'nations' || o === 'fungal' ? 'none' : o, state.colorblind);
+    scene.setOverlay(o === 'fossils' || o === 'nations' || o === 'fungal' || o === 'diversity' || o === 'oxygen' ? 'none' : o, state.colorblind);
     scene.setFungalView(o === 'fungal', state.plants);
+    if (o === 'diversity' || o === 'oxygen') send({ type: 'requestLayer', kind: o }); else scene.setLayerOverlay(null);
     scene.setFossils(fossilCells(), o === 'fossils');
   };
-  actions.setColorblind = (on) => { update({ colorblind: on }); store.set('genesis:cb', on ? '1' : '0'); scene.setOverlay(state.overlay === 'fossils' || state.overlay === 'nations' || state.overlay === 'fungal' ? 'none' : state.overlay, on); };
-  actions.fork = () => { send({ type: 'fork' }); update({ notice: 'Fork point saved. Rewind to it from this panel.' }); window.setTimeout(() => update({ notice: '' }), 3000); };
+  actions.setColorblind = (on) => { update({ colorblind: on }); store.set('genesis:cb', on ? '1' : '0'); scene.setOverlay(['fossils', 'nations', 'fungal', 'diversity', 'oxygen'].includes(state.overlay) ? 'none' : (state.overlay as 'none' | 'temp' | 'rain' | 'life' | 'people'), on); };
+  actions.fork = () => {
+    send({ type: 'fork' });
+    if (mobile) { update({ notice: 'Fork point saved. Rewind to it from this panel.' }); window.setTimeout(() => update({ notice: '' }), 3000); return; }
+    // on a desktop the fork really runs: this world is copied and the copy sets off on its own
+    send({ type: 'save', name: 'fork', slot: 'fork' });
+    update({ notice: 'The timeline forks here. A second future is now running beside this one.' });
+    window.setTimeout(() => update({ notice: '' }), 5000);
+  };
+  const startOtherFuture = (save: unknown) => {
+    altWorker?.terminate();
+    const forkedAt = state.stats?.simYear ?? 0;
+    update({ other: { stats: null, events: [], forkedAt } });
+    const w = new Worker(new URL('./sim/worker.ts', import.meta.url), { type: 'module' });
+    altWorker = w;
+    w.onmessage = (e: MessageEvent<FromWorker>) => {
+      const m = e.data;
+      if (altWorker !== w || !state.other) return;
+      if (m.type === 'ready') { w.postMessage({ type: 'load', save, diverge: true }); w.postMessage({ type: 'speed', index: state.speedIndex }); w.postMessage({ type: 'settings', slowOnEvents: false }); }
+      else if (m.type === 'stats') { if (performance.now() - lastOther > 400) { lastOther = performance.now(); update({ other: { ...state.other, stats: m.stats } }); } else state.other.stats = m.stats; }
+      else if (m.type === 'events') { const fresh = m.events.filter((ev) => ev.importance >= 2 && ev.simYear >= state.other!.forkedAt); if (fresh.length) update({ other: { ...state.other, events: [...state.other.events, ...fresh].slice(-6) } }); }
+      else if (m.type === 'saved' && m.slot === 'cross') { crossSaves.theirs = m.save; finishCross(); }
+    };
+    w.onerror = () => { actions.endOtherFuture(); };
+    w.postMessage({ type: 'init', seed });
+  };
+  let lastOther = 0;
+  const crossSaves: { mine: unknown; theirs: unknown } = { mine: null, theirs: null };
+  // crossing over: each simulation takes the other's world, so the planet on screen becomes the other future
+  actions.crossOver = () => {
+    if (!altWorker || !state.other) return;
+    crossSaves.mine = null; crossSaves.theirs = null;
+    send({ type: 'save', name: 'cross', slot: 'cross' });
+    altWorker.postMessage({ type: 'save', name: 'cross', slot: 'cross' });
+  };
+  const finishCross = () => {
+    if (!crossSaves.mine || !crossSaves.theirs || !altWorker || !state.other) return;
+    send({ type: 'load', save: crossSaves.theirs });
+    altWorker.postMessage({ type: 'load', save: crossSaves.mine });
+    update({ other: { ...state.other, events: [], stats: null }, notice: 'You have crossed into the other future.' });
+    window.setTimeout(() => update({ notice: '' }), 4000);
+    crossSaves.mine = null; crossSaves.theirs = null;
+  };
+  actions.endOtherFuture = () => { altWorker?.terminate(); altWorker = null; update({ other: null }); };
   // a small invented family for an individual, stable for as long as it is on screen
   actions.familyOf = (key) => {
     const r = new RNG((key * 40503) >>> 0);
     const mother = placeName(r), father = placeName(r);
     return [`mother ${mother}, father ${father}`, `grandmothers ${placeName(r)} and ${placeName(r)}`, `${1 + r.int(5)} siblings, ${r.int(4)} young`];
+  };
+  // a family tree that holds together: herd-mates share parents, and the young seen following an animal are its own
+  actions.familyTree = (key) => {
+    const inds = scene.creatures?.individuals ?? [];
+    const me = inds.find((x) => x.key === key);
+    if (!me) return null;
+    const info = state.species.get(me.species);
+    const nameOf = (k: number) => { const ind = inds.find((x) => x.key === k); return ind && info ? describeIndividual(ind, info).name : placeName(new RNG((k * 40503) >>> 0)); };
+    const root = me.parent ?? me;
+    // one family per herd: the herd number seeds the names of the elders
+    const herd = ((root.key / 16) | 0) * 977 + root.species;
+    const r = new RNG((herd * 2654435761) >>> 0);
+    const mother = placeName(r), father = placeName(r);
+    const grand: [string, string, string, string] = [placeName(r), placeName(r), placeName(r), placeName(r)];
+    if (me.parent) {
+      // a young one: its parent is the animal it follows; its siblings are the other young behind the same parent
+      const sibs = inds.filter((x) => x.parent === me.parent && x.key !== key).map((x) => ({ name: nameOf(x.key), key: x.key }));
+      return { self: nameOf(key), parents: [nameOf(me.parent.key), placeName(new RNG((me.parent.key * 7919) >>> 0))], grandparents: [mother, father, grand[0], grand[1]], siblings: sibs, young: [] };
+    }
+    const sibs = inds.filter((x) => !x.parent && x.key !== key && x.species === me.species && (((x.key / 16) | 0) * 977 + x.species) === herd).slice(0, 5).map((x) => ({ name: nameOf(x.key), key: x.key }));
+    const young = inds.filter((x) => x.parent === me).map((x) => ({ name: nameOf(x.key), key: x.key }));
+    return { self: nameOf(key), parents: [mother, father], grandparents: grand, siblings: sibs, young };
+  };
+  actions.selectCreatureKey = (key) => {
+    const ind = scene.creatures?.byKey(key);
+    const info = ind ? state.species.get(ind.species) : undefined;
+    if (!ind || !info) return;
+    update({ creature: { key: ind.key, species: ind.species, ...describeIndividual(ind, info), following: false }, selectedSpecies: -1, whyEvent: -1 });
+    scene.follow(null);
   };
   // cross-section: a west-to-east slice through the ground under the centre of the view
   actions.drawSection = (cv) => {
@@ -567,7 +642,12 @@ async function boot(): Promise<void> {
         for (const pl of msg.plants) state.plants.set(pl.id, pl);
         scene.setPlants(state.plants);
         break;
+      case 'layer':
+        if (state.overlay === msg.kind) scene.setLayerOverlay(msg.values, msg.kind === 'oxygen' ? [0.25, 0.85, 1.0] : [0.2, 1.0, 0.55]);
+        break;
       case 'saved': {
+        if (msg.slot === 'fork') { startOtherFuture(msg.save); break; }
+        if (msg.slot === 'cross') { crossSaves.mine = msg.save; finishCross(); break; }
         const key = msg.slot === 'auto' ? autoKey : `genesis:slot:${msg.slot}`;
         void set(key, msg.save).catch(() => update({ notice: 'Could not save: browser storage is full or blocked.' }));
         break;
@@ -590,6 +670,8 @@ async function boot(): Promise<void> {
     worker.onmessage = onMessage;
     worker.onerror = (e) => { console.error('worker error', e.message); recover(); };
     send({ type: 'init', seed });
+    // each rewind point is a whole copy of the world: keep fewer where memory is short
+    send({ type: 'rewindLimit', count: mobile ? 5 : 12 });
   };
   // if the simulation crashes, restart it from the last autosave rather than leave a frozen planet
   const recover = () => {
@@ -614,6 +696,7 @@ async function boot(): Promise<void> {
 
   render(h(App, {}), document.getElementById('ui') as HTMLElement);
   scene.cam.attach(canvas);
+  let lastLayer = 0;
   const refreshCreature = (following?: boolean) => {
     const c = state.creature;
     if (!c) return;
@@ -676,7 +759,7 @@ async function boot(): Promise<void> {
     else if (k === 'x') togglePanel('section');
     else if (k === 'u') { scene.underwater = !scene.underwater; update({ notice: scene.underwater ? 'Diving allowed: zoom in over the sea to go under.' : '' }); window.setTimeout(() => update({ notice: '' }), 2500); }
     else if (k === 'v') scene.firstPerson = !scene.firstPerson;
-    else if (k === 'o') { const order = ['none', 'temp', 'rain', 'life', 'people', 'fossils', 'nations', 'fungal'] as const; actions.setOverlay(order[(order.indexOf(state.overlay) + 1) % order.length]!); }
+    else if (k === 'o') { const order = ['none', 'temp', 'rain', 'life', 'people', 'fossils', 'nations', 'fungal', 'diversity', 'oxygen'] as const; actions.setOverlay(order[(order.indexOf(state.overlay) + 1) % order.length]!); }
     else if (k === 'f') { if (state.creature) actions.followCreature(!state.creature.following); }
     else if (k === 'escape' && scene.following !== null) actions.followCreature(false);
     else if (k === 'escape') { if (state.postcard) update({ postcard: false }); else closeAll(); }
@@ -710,7 +793,11 @@ async function boot(): Promise<void> {
         const near = Math.max(0, 1 - scene.cam.dist / 0.5);
         const wet = cellsNow ? cellsNow.elevation[here]! <= cellsNow.seaLevel + 0.05 : false;
         const rain = cellsNow ? Math.max(0, cellsNow.cloud[here]! - 0.75) * 4 : 0;
-        music.ambience(Math.min(1, scene.cam.dist) * 0.5 + 0.1, wet ? near : near * 0.2, Math.min(1, rain) * near);
+        const snd = scene.soundscape();
+        music.ambience(Math.min(1, scene.cam.dist) * 0.5 + 0.1, Math.max(snd.surf, wet ? near : near * 0.2), Math.max(snd.rain, Math.min(1, rain) * near));
+        music.place(snd.surfPan, snd.rainPan, snd.lava, snd.lavaPan);
+        // the living overlays follow the world as it changes
+        if ((state.overlay === 'diversity' || state.overlay === 'oxygen') && now - lastLayer > 4000) { lastLayer = now; send({ type: 'requestLayer', kind: state.overlay }); }
         if (rain > 0.2 && near > 0.2 && Math.random() < 0.12) music.thunder();
       }
       // adaptive quality: two seconds under target steps down bloom, then instance counts, then resolution

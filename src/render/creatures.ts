@@ -219,7 +219,7 @@ export class CreatureLayer {
     const rng = new RNG(12345);
     const species = new Map<number, SpeciesInfo>();
     const archetypes: Partial<Record<number, number>>[] = [
-      { [G.Size]: 0.5, [G.LimbType]: 0.6, [G.LimbPairs]: 0.5, [G.LimbLength]: 0.6, [G.Neck]: 0.2, [G.Tail]: 0.4, [G.Water]: 0.05, [G.Diet]: 0.1, [G.Sociality]: 0.9, [G.EyeCount]: 0.34, [G.Insulation]: 0.9, [G.PatternType]: 0.6 },
+      { [G.Size]: 0.5, [G.LimbType]: 0.6, [G.LimbPairs]: 0.5, [G.LimbLength]: 0.6, [G.Neck]: 0.2, [G.Tail]: 0.4, [G.Water]: 0.05, [G.Diet]: 0.1, [G.Sociality]: 0.9, [G.EyeCount]: 0.34, [G.Insulation]: 0.9, [G.PatternType]: 0.6, [G.Care]: 0.9 },
       { [G.Size]: 0.75, [G.LimbType]: 0.6, [G.LimbPairs]: 0.5, [G.LimbLength]: 0.8, [G.Neck]: 0.95, [G.Tail]: 0.5, [G.Water]: 0.05, [G.Diet]: 0.05, [G.Sociality]: 0.5, [G.EyeCount]: 0.34 },
       { [G.Size]: 0.45, [G.LimbType]: 0.6, [G.LimbPairs]: 0.5, [G.LimbLength]: 0.5, [G.Tail]: 0.7, [G.Water]: 0.05, [G.Diet]: 0.95, [G.Sociality]: 0.7, [G.Horn]: 0.1, [G.EyeCount]: 0.34, [G.PatternType]: 0.4 },
       { [G.Size]: 0.3, [G.LimbType]: 0.9, [G.LimbPairs]: 0.3, [G.LimbLength]: 0.7, [G.Tail]: 0.4, [G.Water]: 0.05, [G.Diet]: 0.4, [G.Sociality]: 0.8, [G.EyeCount]: 0.34, [G.Insulation]: 0.8 },

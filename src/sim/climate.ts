@@ -23,6 +23,13 @@ export interface ClimateState {
   jitter: Float32Array;
   /** Upwind neighbour for each cell. */
   upwind: Int32Array;
+  /** For every sea cell, the sea cell its surface water flows in from (itself where the water is still or on land). */
+  upcurrent: Int32Array;
+  /** Sea surface temperature: it remembers, so warmth and cold are carried a long way along the currents. */
+  sst: Float32Array;
+  /** The sea cell that a current has warmed or cooled furthest from what its latitude alone would give, and by how much (deg C). */
+  currentCell: number;
+  currentAnomaly: number;
   /** Carried humidity. */
   humidity: Float32Array;
   /** Annual mean temperature (smoothed), used for biomes. */
@@ -63,6 +70,10 @@ export function createClimate(world: World, rng: RNG): ClimateState {
     iceFraction: 0,
     jitter,
     upwind: new Int32Array(count),
+    upcurrent: new Int32Array(count),
+    sst: new Float32Array(count).fill(NaN),
+    currentCell: -1,
+    currentAnomaly: 0,
     humidity: new Float32Array(count),
     meanT: new Float32Array(count),
     scratch: new Float32Array(count),
@@ -80,6 +91,7 @@ export function createClimate(world: World, rng: RNG): ClimateState {
     state.cloudBand[i] = 0.5 + 0.6 * Math.exp(-(a * a) / 160) - 0.4 * Math.exp(-((a - 26) * (a - 26)) / 110) + 0.45 * Math.exp(-((a - 55) * (a - 55)) / 260);
   }
   computeWind(world, state, r);
+  computeCurrents(world, state);
   return state;
 }
 
@@ -123,6 +135,37 @@ export function computeWind(world: World, state: ClimateState, rng: RNG): void {
   }
 }
 
+/**
+ * Surface currents of the sea. The wind pushes the water, the planet's spin turns it (to the right in the north,
+ * to the left in the south), and where it meets land it runs along the coast. Call again whenever the coasts change.
+ */
+export function computeCurrents(world: World, state: ClimateState): void {
+  const { grid, elevation, seaLevel, windE, windN } = world;
+  const { pos, lat, neighbors, ncount, count } = grid;
+  if (!state.upcurrent || state.upcurrent.length !== count) state.upcurrent = new Int32Array(count);
+  for (let i = 0; i < count; i++) {
+    if (elevation[i]! > seaLevel) { state.upcurrent[i] = i; continue; }
+    const turn = lat[i]! >= 0 ? -0.7 : 0.7;
+    const c = Math.cos(turn), sn = Math.sin(turn);
+    const u = windE[i]! * c - windN[i]! * sn, v = windE[i]! * sn + windN[i]! * c;
+    const x = pos[i * 3]!, y = pos[i * 3 + 1]!, z = pos[i * 3 + 2]!;
+    let ex = -z, ez = x;
+    const el = Math.hypot(ex, ez) || 1;
+    ex /= el; ez /= el;
+    const nx = -y * ez, ny = ez * x - ex * z, nz = y * ex;
+    const wx = u * ex + v * nx, wy = v * ny, wz = u * ez + v * nz;
+    // the water here came from whichever neighbouring sea cell lies most nearly upstream; land does not count
+    let best = i, bestDot = 0;
+    for (let j = 0; j < ncount[i]!; j++) {
+      const nb = neighbors[i * 6 + j]!;
+      if (elevation[nb]! > seaLevel) continue;
+      const d = -((pos[nb * 3]! - x) * wx + (pos[nb * 3 + 1]! - y) * wy + (pos[nb * 3 + 2]! - z) * wz);
+      if (d > bestDot) { bestDot = d; best = nb; }
+    }
+    state.upcurrent[i] = best;
+  }
+}
+
 export function longCycleOffset(state: ClimateState, simYear: number): number {
   let o = 0;
   for (const c of state.cycles) o += c.amp * Math.sin((simYear / c.period) * Math.PI * 2 + c.phase);
@@ -153,14 +196,28 @@ export function updateTemperature(world: World, state: ClimateState, simYear: nu
     scratch[i] = t;
   }
   // maritime smoothing
+  if (!state.upcurrent || state.upcurrent.length !== count || !state.sst || state.sst.length !== count) { computeCurrents(world, state); state.sst = new Float32Array(count).fill(NaN); }
+  const upc = state.upcurrent, sst = state.sst;
+  let anomalyBest = 0, anomalyCell = -1;
   let sum = 0;
   for (let i = 0; i < count; i++) {
     let s = 0;
     const nc = ncount[i]!;
     for (let j = 0; j < nc; j++) s += scratch[neighbors[i * 6 + j]!]!;
     let t = scratch[i]! * 0.7 + (s / nc) * 0.3;
-    // ocean currents: the wind drags surface water along, carrying its warmth or cold with it
-    if (elevation[i]! <= seaLevel) t += (scratch[state.upwind[i]!]! - t) * 0.35;
+    // ocean currents: the sea remembers its temperature and hands it on downstream, so warm water reaches cold coasts
+    // and cold water runs down toward the tropics along the shores that steer it
+    if (elevation[i]! <= seaLevel) {
+      const up = upc[i]!, up2 = upc[up]!;
+      const before = Number.isFinite(sst[i]!) ? sst[i]! : t;
+      const s1 = Number.isFinite(sst[up]!) ? sst[up]! : scratch[up]!, s2 = Number.isFinite(sst[up2]!) ? sst[up2]! : scratch[up2]!;
+      const now = before + (t - before) * 0.22 + (s1 * 0.6 + s2 * 0.4 - before) * 0.45;
+      sst[i] = now;
+      const local = t;
+      t = t * 0.45 + now * 0.55;
+      const anomaly = Math.abs(t - local);
+      if (anomaly > anomalyBest) { anomalyBest = anomaly; anomalyCell = i; }
+    } else sst[i] = t;
     // a ring system casts a cold stripe of shadow along the equator
     if (state.ringShadow > 0) { const sl = state.sinLat[i]!; t -= state.ringShadow * Math.exp(-(sl * sl) / 0.006); }
     temperature[i] = t;
@@ -169,6 +226,8 @@ export function updateTemperature(world: World, state: ClimateState, simYear: nu
     state.meanT[i] = seasonal ? state.meanT[i]! + (t - season * state.sinLat[i]! * tiltScale * (elevation[i]! > seaLevel ? 15 : 5) - state.meanT[i]!) * 0.2 : t;
   }
   state.meanTemp = sum / count;
+  state.currentAnomaly = anomalyBest;
+  state.currentCell = anomalyCell;
 }
 
 /** Advect humidity along the wind and rain it out. A few passes per call. */

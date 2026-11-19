@@ -95,21 +95,21 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 53 | Earthquakes and tsunamis. | done | earthquakes at plate boundaries; undersea ones raise tsunamis that scour coasts and are witnessed |
 | 54 | Hotspots that build island chains. | done | hotspots stay fixed in the deep rock while the plates slide over them, so repeated eruptions leave chains of islands |
 | 55 | Erosion that carves canyons and grows deltas. | done | `sim/landforms.ts`: rivers cut down where they run steep (never below the bed downstream), their mud builds deltas at the mouth that fan out and become land; events for the first canyon and the first delta |
-| 56 | Ocean currents that carry heat. | simplified | sea temperature is carried along the wind-driven surface flow |
+| 56 | Ocean currents that carry heat. | done | sea surface temperature is carried along the wind-driven surface flow and remembered from step to step, so warm water reaches high latitudes and cold water runs toward the tropics along coasts; the first strong current is an event; test in `tests/world.test.ts` |
 | 57 | Rafting: creatures ride storm debris to colonize islands. | done | storms occasionally raft shore animals to a far coast, where they found new populations |
 | 58 | Coral reefs and atolls, with bleaching in heat waves. | done | coral tints warm shallows and bleaches above 30.5 C; dead volcanic islands on ocean crust sink slowly while living reef grows upward to stay near the surface, leaving rings of reef round lagoons (atoll event) |
 | 59 | Plankton blooms visible from orbit, and bioluminescent waves at night. | done | plankton stains the sea green by sea-plant cover and glows blue at night where waves stir it |
 | 60 | Hurricanes with a visible eye. | done | strong storms over warm sea become hurricanes; the cloud volume draws them as spiral bands around a clear eye, with damage at landfall |
 | 61 | Snow that builds up and melts, feeding the rivers. | done | snow builds and melts with temperature, and meltwater adds to river flow |
 | 62 | Oxygen level tracked, with a giant-insect era when it spikes. | done | oxygen tracked, limits body size and activity; an age of giants is declared when it passes 30% |
-| 63 | Seasonal migrations that wear trails into the land. | done | at 1x and 10x wandering herds shift toward the summer hemisphere; where herds migrate the ground is worn into braided pale trails that show from above (trail event) |
-| 64 | Hibernation, and day versus night species. | done | slow-living burrowers feel much less of the cold (they sleep through it), with an event for the first hibernator; at 1x and 10x they are underground while it is winter where they live; night animals lie low by day and day animals by night |
+| 63 | Seasonal migrations that wear trails into the land. | done | at 1x and 10x wandering herds shift toward the summer hemisphere; herds of a migratory land species walk between the neighbouring regions they live in and wear the ground into braided pale trails that show from above and fade when the herds stop (trail event) |
+| 64 | Hibernation, and day versus night species. | done | slow-living burrowers feel less of the cold, by degree (they sleep through it), with an event for the first hibernator living in cold country; at 1x and 10x they are underground while it is winter where they live; night animals lie low by day and day animals by night |
 | 65 | Camouflage evolving to match each biome. | done | prey whose hue matches the ground cover of its region is harder for hunters to detect, so colour is under selection |
 | 66 | Sexual selection: mating displays and ornaments. | done | ornaments raise breeding success but cost energy and concealment |
 | 67 | Nests and parental care. | done | species with strong parental care get a nest mound at each home, and are seen with one or two small young walking close behind a parent |
 | 68 | Disease outbreaks spreading through herds. | done | plagues strike crowded, sociable species and spread to neighbouring regions |
-| 69 | Symbiosis pairs. | done | a large and a small species sharing a home become a pair (event); from then on each forages about 7% better wherever the other lives too |
-| 70 | Flowers co-evolving with pollinators. | done | small flying plant-feeders count as pollinators: they get extra food from flowering plants, and flowering plants grow and spread faster where they visit (pollination event) |
+| 69 | Symbiosis pairs. | done | a large and a small species sharing at least two regions become a pair (event, worded by what the small one eats and whether they live in the sea); from then on each forages about 7% better wherever the other lives too; a few pairs per world |
+| 70 | Flowers co-evolving with pollinators. | done | small land plant-feeders count as pollinators (fliers most of all): they get extra food from flowering plants, and flowering plants grow and spread faster where they visit (pollination event) |
 | 71 | Toxin versus resistance arms races, shown on a chart. | done | mean plant toxicity and mean animal toxin resistance are tracked and charted |
 | 72 | Convergent evolution detector ("Two unrelated lineages have both evolved into crab-like forms"). | done | detector for unrelated lineages with the same body plan |
 | 73 | Island dwarfism and gigantism. | done | isolated island populations that shrink or grow are flagged as dwarfs or giants |
@@ -125,15 +125,15 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 83 | Fossil layer: see-through ground showing bones where extinct species died. | done | fossils view (overlay): the ground turns to dark glass with its layers showing, and ribcage skeletons shine through it where extinct species last lived; out of the view the bones lie small on the ground |
 | 84 | Auto-generated field guide with a sketch-style card for every species. | done | field guide shows every living species as a paper card with an ink sketch drawn from its genes (`ui/sketch.tsx`: body, legs, wings, fins, horns, sail, plates, markings, hand-drawn wobble) and a description |
 | 85 | Extinction memorial. | done | memorial section lists extinct species; click one for why it died |
-| 86 | Rewind timeline with snapshots and major events marked. | simplified | up to six rewind points at milestone events, listed in settings |
+| 86 | Rewind timeline with snapshots and major events marked. | done | a timeline strip above the speed bar shows the whole history: great events as coloured ticks (click for the story) and rewind points as diamonds (click to go back). Up to twelve rewind points on desktop (five on phones), thinned so they stay spread over history. The brief asked for fifty; each is a whole copy of the world, so twelve is the memory limit chosen |
 | 87 | God tools: ice age, heat wave, raise mountains, flood, plague, lightning. | done | meteor, lightning, plague, raise mountains, flood, ice age, heat wave |
 | 88 | Custom species designer. | done | designer panel with 18 gene sliders; click the planet to release the species |
 | 89 | A monolith that speeds up intelligence nearby. | done | monolith god tool raises intelligence and curiosity of animals living beside it |
-| 90 | Overlays: temperature, rain, population, genetic diversity, oxygen. | simplified | temperature, rain, life and people overlays with a colour-blind safe ramp; genetic diversity and oxygen overlays not built |
+| 90 | Overlays: temperature, rain, population, genetic diversity, oxygen. | done | overlays: temperature, rain, life, people, genetic diversity (kinds of animal per region) and oxygen (where it is being made), with a ramp that does not rely on red against green; the last two are computed by the sim on request and refresh every few seconds |
 | 91 | Graphs of population, biomass and atmosphere over time. | done | graphs of temperature, oxygen, plant cover, species count and population |
 | 92 | First-person creature view. | done | V looks out from the followed creature |
 | 93 | Creature calls generated from body size. | done | selecting a creature plays a call pitched by its body size |
-| 94 | Spatial sound: wind, rain, thunder, waves, lava. | simplified | ambient wind, surf and rain layers follow altitude, coast and storm cloud; thunder under storms; not positional |
+| 94 | Spatial sound: wind, rain, thunder, waves, lava. | done | ambient wind, surf, rain and a low lava rumble; surf, rain and lava are placed left or right of the listener by where the sea, the storm and the molten rock lie relative to the camera, and grow louder as they come closer; thunder under storms |
 | 95 | Documentary director: an auto-camera that cuts to whatever is most interesting right now. | done | optional director flies the camera to notable events; always on in postcard mode |
 | 96 | Solar eclipses that make creatures go quiet. | done | when the moon passes between the star and the planet its shadow falls on ground, sea, cloud, plants and animals as a dark spot with a soft edge (`gfx/eclipse.ts`); day animals under it settle as if night had come; peoples still witness eclipses as events |
 | 97 | Comets that return on a long cycle and become myths. | done | a seeded comet returns on a fixed period, each return linked to the last, and becomes myth |
@@ -147,7 +147,7 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 105 | Binary-sun seeds with double shadows. | done | 14% of seeds have a second sun that adds its own light, and mountains cast a second set of shadows from it |
 | 106 | The supercontinent cycle. | done | continent count is tracked as plates drift; supercontinent formation and break-up are logged |
 | 107 | Supervolcano ash winters. | done | super-eruptions bring a volcanic winter with global dieback |
-| 108 | Glaciers carving fjords. | simplified | ice near the coast carves valleys below sea level, which flood as fjords when it melts |
+| 108 | Glaciers carving fjords. | done | ice near the coast carves valleys below sea level, which flood as fjords when it melts |
 | 109 | Cave networks with blind, pale species. | done | blind, pale burrowers of the dark are recorded as cave dwellers; cave mouths (a rock arch round a black opening) appear on steep mountainsides near the camera |
 | 110 | Hydrothermal vent ecosystems. | done | undersea volcanic sites feed life without sunlight; vent dwellers are recorded |
 | 111 | Geysers and hot springs. | done | scattered land cells puff steam in bursts and hold a hot spring: a mineral-blue pool in a pale crust ringed with rust-coloured terraces |
@@ -182,8 +182,8 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 140 | Cross-section slice showing rock layers, caves and roots. | done | X draws a west-to-east slice under the view: strata, caves, sea, soil, roots, plants, ice, lava |
 | 141 | Flat map view. | done | M opens a flat map; click to fly there; overlays and settlements show on it |
 | 142 | Photo mode with film filters. | done | five photo filters and save-as-PNG |
-| 143 | Timeline fork that runs two futures side by side. | simplified | fork saves this moment as a rewind point; futures are not run side by side |
-| 144 | Full family tree of any individual creature. | simplified | creature card shows an invented family; no real pedigree |
+| 143 | Timeline fork that runs two futures side by side. | done | on a desktop, forking copies the world into a second simulation that takes a different road from that moment; a panel shows both futures side by side (year, species, animals, temperature, ice, settlements, the latest events of the other future) and you can cross over to the other one. On phones the fork is a rewind point only |
+| 144 | Full family tree of any individual creature. | done | the creature card shows a family tree that holds together across the herd: grandparents, parents, the animal among its siblings (herd-mates, clickable) and its young (the small ones seen following it, clickable), plus the real line of ancestor species |
 | 145 | Intelligent species developing their own music. | done | a people that reaches music adds its own melody to the score (and an event) |
 | 146 | Near silence after a mass extinction. | done | music falls near silent for 45 seconds after a mass extinction |
 | 147 | More god tools: gene ray, shield dome, summon comet, tilt axis, rain of life. | done | gene ray, shield dome, summon comet, tilt axis, rain of life |

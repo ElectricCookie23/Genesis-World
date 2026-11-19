@@ -31,6 +31,8 @@ export class Music {
   private surfGain: any = null;
   private rainGain: any = null;
   private rumble: any = null;
+  private lavaGain: any = null;
+  private pans: Record<string, any> = {};
   private civMusic = false;
   private civTimer = 0;
   private timer = 0;
@@ -69,15 +71,19 @@ export class Music {
       }).connect(reverb);
       this.voice = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'triangle' }, envelope: { attack: 0.02, decay: 0.15, sustain: 0.3, release: 0.4 }, volume: -12 }).connect(reverb);
       // three noise layers make the ambient bed
-      const layer = (type: 'pink' | 'brown' | 'white', freq: number, kind: 'lowpass' | 'bandpass' | 'highpass') => {
-        const gain = new Tone.Gain(0).connect(this.master);
+      const layer = (type: 'pink' | 'brown' | 'white', freq: number, kind: 'lowpass' | 'bandpass' | 'highpass', name = '') => {
+        // each layer sits somewhere between the left ear and the right
+        const pan = new Tone.Panner(0).connect(this.master);
+        if (name) this.pans[name] = pan;
+        const gain = new Tone.Gain(0).connect(pan);
         const filter = new Tone.Filter(freq, kind).connect(gain);
         new Tone.Noise(type).connect(filter).start();
         return gain;
       };
       this.windGain = layer('pink', 500, 'bandpass');
-      this.surfGain = layer('brown', 380, 'lowpass');
-      this.rainGain = layer('white', 3200, 'highpass');
+      this.surfGain = layer('brown', 380, 'lowpass', 'surf');
+      this.rainGain = layer('white', 3200, 'highpass', 'rain');
+      this.lavaGain = layer('brown', 90, 'lowpass', 'lava');
       this.rumble = new Tone.NoiseSynth({ noise: { type: 'brown' }, envelope: { attack: 0.05, decay: 1.4, sustain: 0, release: 1.2 }, volume: -8 }).connect(new Tone.Filter(160, 'lowpass').connect(reverb));
       this.applyVolume();
       this.seed = (Date.now() & 0xffff) | 1;
@@ -141,6 +147,20 @@ export class Music {
     this.rainGain.gain.rampTo(rain * 0.24 * this.sfx, 1.2);
     if (this.voice) this.voice.volume.value = this.sfx <= 0.01 ? -80 : -12 + 20 * Math.log10(this.sfx);
     if (this.rumble) this.rumble.volume.value = this.sfx <= 0.01 ? -80 : -8 + 20 * Math.log10(this.sfx);
+  }
+
+  /**
+   * Where the sounds come from: each pan runs from -1 (left) to 1 (right) as seen by the camera.
+   * lava is how close and how much molten rock is near, 0..1.
+   */
+  place(surfPan: number, rainPan: number, lava: number, lavaPan: number): void {
+    if (!this.windGain) return;
+    try {
+      this.pans.surf?.pan.rampTo(Math.max(-1, Math.min(1, surfPan)), 0.8);
+      this.pans.rain?.pan.rampTo(Math.max(-1, Math.min(1, rainPan)), 0.8);
+      this.pans.lava?.pan.rampTo(Math.max(-1, Math.min(1, lavaPan)), 0.8);
+      this.lavaGain.gain.rampTo(lava * 0.5 * this.sfx, 1.2);
+    } catch { /* ignore */ }
   }
 
   /** Distant thunder. */

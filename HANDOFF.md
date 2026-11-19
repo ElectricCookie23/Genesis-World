@@ -9,25 +9,19 @@ Read this first when resuming. Then PROGRESS.md, DECISIONS.md and `git log`.
 - Stop and show the owner only at points that are worth showing.
 - Graphics rules (owner): full techniques on WebGL2 (FFT ocean, GPU erosion, TAA with a history buffer), quadtree LOD terrain, WebGPU optional, screenshots here check correctness only, push every step.
 
-## Where the "simplified" pass stands (work queue item 3, in progress)
-Done so far in this pass: leg IK (11), temples (46), eclipse shadow (96), tornado and fire tornado funnels (113, 114), boats (123), borders (124), satellites (125), hurricane eye (60). Towns are now drawn up close as buildings (`gfx/buildings.ts`: huts, houses, halls, towers, domes, spires by technology, windows lit at night in the nation's colour).
+## Where things stand
+Work queue items 1 to 3 are finished: every feature row in PROGRESS.md is "done", and all twelve graphics steps have a first pass. **Next is item 4, the expansion brief** (`docs/EXPANSION_BRIEF.md`): architecture additions first, then sections 1 to 10 in order.
 
-Also done in this pass: drifting plates (51, 52, 54; `sim/tectonics.ts`, all 11 tests pass and a 300 My history still fills with life), GIF export (149), PDF history book (150), sketch cards in the field guide (84; not yet looked at in a browser).
+The last batch of the "simplified" pass: timeline strip with thinned rewind points (86), diversity and oxygen overlays (90), positional sound (94), two futures side by side (143), real ancestry in the family tree (144), ocean currents that remember (56). Trails, hibernation, pollinators and symbiosis were retuned against real histories so their events fire (DECISIONS 65). `scripts/systems.ts <seed> <My>` prints when each of these events first fires and the gene ranges behind them.
 
-Also done: second-sun shadows (105), hot spring pools (111), mist, rainbow and heat shimmer (117; the rainbow has not been seen in a test frame yet), departure light (127), fungal view (128), fossil view with ribcages (83, 136), mass hatching glow (135), electric arcs (77), cave mouths (109), light shafts under water (139).
-
-Also done (sim): canyons and deltas (55), sinking islands and atolls (58), dust feeding the sea (115), trails worn by migrating herds that roads follow (49, 63), hibernation (64), young beside a parent (67), symbiosis with an effect (69), pollinators (70). `tests/world.test.ts` covers plates, landforms and dust; all 16 tests pass.
-
-Still to do, nothing started: timeline strip with more rewind points (86), genetic diversity and oxygen overlays (90), positional sound (94), two futures side by side (143), real ancestry in the family tree (144). Not yet seen in a browser: trails on the ground, young animals, the rainbow, sketch cards, GIF and PDF buttons.
-
-Fixed on the way: the terrain and sea quadtrees could run out of patches near the corners of a cube face and leave holes showing the sea; splitting now allows for the smaller patches there and running short makes the ground coarser instead of dropping patches. The two bright ticks seen from orbit were bone markers; bones are now hidden from orbit.
+Checked in the headless browser: two futures run and cross over, young animals follow parents, the family tree links real herd-mates and young, the field guide shows sketch cards. Not yet seen in a browser frame: trails on the ground, the rainbow, the timeline strip, the GIF and PDF buttons (the UI hides itself after four seconds without input, which empties page screenshots).
 
 A card "Review Genesis live site on a real GPU" was left in the owner's desktop app. If they run it, its findings arrive as `docs/GPU_REVIEW.md` and `docs/screenshots/gpu/` on main: pull and tune from them.
 
 ## Work queue, in the owner's order
 1. Original brief: built (every feature in PROGRESS.md is done or simplified).
 2. **Graphics overhaul** (`docs/GRAPHICS_BRIEF.md`): all twelve steps have a first pass, see the table at the top of PROGRESS.md. What is still open is listed below under "Graphics: still open".
-3. **Then complete every item marked "simplified" in PROGRESS.md.**
+3. Complete every item marked "simplified" in PROGRESS.md: done.
 4. **Then the expansion brief** `docs/EXPANSION_BRIEF.md` (100 new systems: architecture additions first, then sections 1 to 10 in order, each writing to the cause graph, deterministic, with a mobile fallback and at least one headless test).
 
 ## The renderer now (src/render)
@@ -67,7 +61,7 @@ Everything reads the planet from cube-map textures baked from the simulation's c
 - Speciation thresholds are measured in average cohort sizes (see DECISIONS 40). Soft cap 40 living species, hard cap 64, four cohorts per region.
 - Civilization: settlements founded after a lineage stays above intelligence 0.5 for 60 My; technology drives every stage.
 - Stats now also carry `cyclones` (cells) and `solar`.
-- Tests: `npm test` (11 tests, about five minutes). `scripts/history.ts <seed> <My> <gridN>` prints a whole history (`npx vite-node`).
+- Tests: `npm test` (18 tests, about six minutes). `scripts/history.ts <seed> <My> <gridN>` prints a whole history (`npx vite-node`).
 
 ## Known issues
 - Powered flight is rare and cold seeds can lose their land animals; see git log for the tuning history.
