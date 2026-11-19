@@ -186,7 +186,11 @@ export class Towns {
       const radius: N = boat ? float(1).add(uSeaKm.mul(EXAG)).add(bobbing) : groundRadiusNode(data, erosionTex, aDir);
       const base: N = aDir.mul(radius);
       const roll: N = boat ? (vec3 as any)(0, sin(uTime.mul(1.1).add(aData.y.mul(30))).mul(0.06).mul((positionGeometry as any).z), 0) : vec3(0, 0, 0);
-      material.positionNode = base.add(rotate((positionGeometry as any).add(roll).mul(aData.x), aQuat));
+      // Nothing is built in the water. Sites are chosen by the nearest cell, but the drawn ground is blended between
+      // cells and can dip under the tide inside a land cell: such a building shrinks to nothing (huts stood half
+      // under water in the surf).
+      const dry: N = boat ? float(1) : step(float(1).add(uSeaKm.mul(EXAG)).add(0.00002), radius);
+      material.positionNode = base.add(rotate((positionGeometry as any).add(roll).mul(aData.x).mul(dry), aQuat));
       const nW: N = varying(normalize(rotate(normalGeometry, aQuat)));
       const vPart: N = varying(attribute('bpart', 'float'));
       const vUv: N = varying(attribute('buv', 'vec2'));
