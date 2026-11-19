@@ -43,3 +43,4 @@ Choices made where the brief was unclear or something had to change. Newest at t
 36. **WebGPU is optional.** A WebGPU path is kept behind feature detection only where it adds quality. WebGL2 must look the same on the High preset.
 37. **Screenshots from the build machine check correctness, not final look.** It renders in software. The owner judges the visuals on a real GPU from the deployed site, so every step is pushed as soon as it is correct.
 38. **After the graphics overhaul,** return to the items marked "simplified" in PROGRESS.md and complete them.
+39. **Expansion brief queued.** `docs/EXPANSION_BRIEF.md` (100 systems) follows after the graphics overhaul and the simplified-items pass, in that order, as the owner asked.

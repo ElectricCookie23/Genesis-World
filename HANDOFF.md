@@ -13,6 +13,10 @@ Read this first when resuming. Then BRIEF.md, PROGRESS.md, DECISIONS.md and `git
 - Verified in a headless browser: opening, planet, plants, creatures, UI panels, particles, ring, city lights, music start, autosave and resume, crash recovery, save slots. All 11 tests pass.
 - NOT verified: frame rate on a real GPU, mobile layout on a real phone, the live site (Pages is off).
 - Deferred to the graphics overhaul: real shadow maps, ambient occlusion, LOD levels for plants and creatures.
+- WORK QUEUE, in the owner's order:
+  1. Graphics overhaul: `docs/GRAPHICS_BRIEF.md`, plan and rules in `docs/GRAPHICS_PLAN.md` (full WebGL2 techniques, push every step).
+  2. Then complete every item marked "simplified" in PROGRESS.md.
+  3. Then the expansion brief: `docs/EXPANSION_BRIEF.md` (100 new systems, built in section order, each with a headless test).
 - NEXT: the owner's graphics overhaul brief (alien art direction, high-fidelity rendering). Its text is in `docs/GRAPHICS_BRIEF.md`. Start with its PROCESS step 1 (eight "before" screenshots), then follow its order.
 
 ## What exists
