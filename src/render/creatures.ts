@@ -375,7 +375,12 @@ export class CreatureLayer {
       if (size <= 0) continue;
       ind.fwd.copy(fwd);
       let r: number;
-      if (ind.medium === 1) r = Math.max(this.groundRadius(ind, a), sea);
+      if (ind.medium === 1) {
+        // Walkers wade in the shallows, standing on the bottom. Where the herd's path crosses deeper water they are
+        // left out for that stretch: they used to be lifted to the surface and walked on the sea.
+        r = this.groundRadius(ind, a);
+        if (r < sea - size * 0.45) continue;
+      }
       else if (ind.medium === 0) r = sea - size * (0.5 + 0.8 * ind.h);
       else r = Math.max(this.groundRadius(ind, a), sea) + (asleep ? size * 0.2 : 0.0035 + size * 1.5 + 0.0012 * Math.sin(time * 0.6 + ind.h * 30));
       ind.pos.copy(a).multiplyScalar(r);
@@ -392,7 +397,7 @@ export class CreatureLayer {
       if (this.onArc && dist < 0.06 && Math.random() < 0.012 && this.isElectric(ind.species)) this.onArc(ind.pos, size);
       // dust at the feet of walkers, wakes and splashes where swimmers break the surface
       if (this.onStep && dist < 0.07 && ind.moving > 0.5 && Math.random() < 0.02 + size * 6) {
-        if (ind.medium === 1) this.onStep(ind.pos, r <= sea + 1e-7 ? 2 : 1, size);
+        if (ind.medium === 1) this.onStep(ind.pos.clone().setLength(Math.max(r, sea)), r < sea ? 2 : 1, size);
         else if (ind.medium === 0 && sea - r < size * 0.9) this.onStep(a.clone().multiplyScalar(sea), 0, size);
       }
     }
