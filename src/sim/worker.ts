@@ -80,6 +80,7 @@ function snapshotCells(s: Simulation): { cells: CellSnapshot; transfer: Transfer
     ash: w.ash.slice(),
     lava: w.lava.slice(),
     lights: w.lights.slice(),
+    trail: w.trail.slice(),
     fields: w.fields.slice(),
     reef: w.reef.slice(),
     bloom: w.bloom.slice(),

@@ -2,6 +2,7 @@
 import { RNG, hashSeed } from './rng';
 import { BIOME_NAMES, buildGrid, createWorld, GRID_N, type Grid, type World } from './world';
 import { driftPlatesMoving } from './tectonics';
+import { dustFall, shapeLandforms } from './landforms';
 import { carveFjords, computeConvergence, computeDrainage, countContinents, erode, erupt, uplift, generateTerrain, impact, type GeologyState, type VolcanoSite } from './geology';
 import { classifyBiomes, createClimate, updateMoisture, updateSnow, updateTemperature, type ClimateState } from './climate';
 import { EventLog, type SimEvent } from './events';
@@ -102,6 +103,8 @@ export class Simulation {
   private snowballNoted = false;
   private richAirNoted = false;
   /** Storm cells: dense rain cloud with lightning, drifting with the wind. */
+  private canyonWork = 0;
+  private dustCells?: Float32Array;
   storms: { cell: number; strength: number; years: number; ticks: number; eternal?: boolean; hurricane?: boolean }[] = [];
   private eternalHome = 0;
   /** Cells on fire right now (low time speeds only), with days left to burn. */
@@ -680,6 +683,25 @@ export class Simulation {
     uplift(this.world, this.geology.convergence, Math.min(0.2, 0.012 * 16 * tau));
     if (this.climate.iceFraction > 0.12) carveFjords(this.world, Math.min(0.1, 0.006 * 16 * tau));
     erode(this.world, Math.min(0.5, 0.06 * 16 * tau));
+    // rivers cut canyons and build deltas, dead volcanic islands sink, and reefs grow up to stay in the light
+    const lf = shapeLandforms(this.world, Math.min(1.6, 16 * tau));
+    this.canyonWork += lf.canyon;
+    const once = (key: string) => { if (this.notedOnce.has(key)) return false; this.notedOnce.add(key); return true; };
+    if (this.canyonWork > 4000 && once('first-canyon')) {
+      let cell = 0, best = 0;
+      for (let i = 0; i < this.grid.count; i++) { const d = this.world.downhill[i]!; if (d >= 0 && this.world.elevation[i]! > this.world.seaLevel + 0.3 && this.world.flow[i]! > best) { best = this.world.flow[i]!; cell = i; } }
+      this.emit({ type: 'canyon', cellId: cell, title: 'A river cuts a canyon', description: 'Grain by grain, for longer than any living thing has existed, a river has been sawing down through the rock. Its walls now stand far above the water that made them.', importance: 1 });
+    }
+    if (lf.newLand > 0 && once('first-delta')) {
+      let cell = 0, best = 0;
+      for (let i = 0; i < this.grid.count; i++) { const d = this.world.downhill[i]!; if (d >= 0 && this.world.elevation[d]! <= this.world.seaLevel + 0.02 && this.world.elevation[i]! > this.world.seaLevel && this.world.flow[i]! > best) { best = this.world.flow[i]!; cell = i; } }
+      this.emit({ type: 'delta', cellId: cell, title: 'A delta grows', description: 'Where a great river meets the sea it drops the mud it has carried from the mountains. New land is rising out of the water, flat and rich, fanned out like an open hand.', importance: 1 });
+    }
+    if (lf.atollRim >= 3 && once('first-atoll')) {
+      let cell = 0;
+      for (let i = 0; i < this.grid.count; i++) if (this.world.reef[i]! > 0.25 && this.world.seaLevel - this.world.elevation[i]! < 0.06 && this.world.seaLevel - this.world.elevation[i]! > 0) { cell = i; break; }
+      this.emit({ type: 'atoll', cellId: cell, title: 'An atoll', description: 'A volcano that once stood above the waves has sunk back into the sea. The coral that ringed its shore grew upward as fast as it went down, and now a circle of reef encloses a quiet lagoon where the mountain used to be.', importance: 1 });
+    }
     return true;
   }
 
@@ -787,6 +809,15 @@ export class Simulation {
         if (this.plants.vents.has(sp.home) && g[G.Water]! > 0.8 && once(`vent-${sp.id}`) && once('vent-first')) {
           this.emit({ type: 'vent', cellId: cell, title: 'Life at the vents', description: `Far below the reach of sunlight, ${sp.name} crowds around cracks where hot, mineral-black water pours from the sea floor. If the sun went out, it would not notice.`, causes: c0, importance: 1, speciesIds: [sp.id] });
         }
+        // hibernation: slow-living burrowers of cold country sleep the winter away
+        if (g[G.Burrow]! > 0.5 && g[G.Metabolism]! < 0.55 && g[G.Water]! < 0.5 && this.regions.landTemp[sp.home]! < 6 && once(`hib-${sp.id}`) && once('hib-first')) {
+          this.emit({ type: 'hibernation', cellId: cell, title: `${sp.name} sleeps through the winter`, description: `When the cold comes, ${sp.name} goes underground, slows its heart almost to nothing, and waits. It wakes thin and hungry when the ground thaws, having missed the worst of the year entirely.`, causes: c0, importance: 1, speciesIds: [sp.id] });
+        }
+        // pollination: small fliers that feed at flowers and carry their dust from plant to plant
+        if (g[G.Size]! < 0.3 && g[G.Diet]! < 0.45 && g[G.LimbType]! > 0.75 && this.plants.fruit[sp.home]! > 0.3 && this.plants.pollinators[sp.home]! > 0.2 && once('pollination-first')) {
+          const flower = this.plants.species[this.plants.dominant[sp.home]!];
+          this.emit({ type: 'pollination', cellId: cell, title: 'Flowers find a partner', description: `${sp.name} drinks at the flowers${flower ? ` of ${flower.name}` : ''} and leaves each one dusted with the last. The plants that feed it best set the most seed, and the animals that visit most are best fed: each is now shaping the other.`, causes: c0, importance: 2, speciesIds: [sp.id] });
+        }
         // mass hatchings: glowing sea animals that breed all at once
         if (g[G.Water]! > 0.7 && g[G.Offspring]! > 0.75 && g[G.Glow]! > 0.4 && once(`hatch-${sp.id}`)) {
           this.emit({ type: 'hatching', cellId: cell, title: `The ${sp.name.split(' ')[0]} hatching`, description: `On one night of the year every egg of ${sp.name} hatches together. For a few hours the sea is lit from below, coast to coast.`, causes: c0, importance: 1, speciesIds: [sp.id] });
@@ -796,7 +827,9 @@ export class Simulation {
       const big = cr.species.filter((x) => x.extinctYear < 0 && x.name && x.ref[G.Size]! > 0.6 && x.pop > 2000);
       const small = cr.species.filter((x) => x.extinctYear < 0 && x.name && x.ref[G.Size]! < 0.25 && x.ref[G.Diet]! > 0.3 && x.ref[G.Diet]! < 0.7);
       for (const a of big) for (const b of small) {
-        if (a.home !== b.home || Math.abs(a.ref[G.Water]! - b.ref[G.Water]!) > 0.3 || !once(`sym-${a.id}-${b.id}`)) continue;
+        if (a.home !== b.home || Math.abs(a.ref[G.Water]! - b.ref[G.Water]!) > 0.3 || cr.symbiont.has(a.id) || cr.symbiont.has(b.id) || !once(`sym-${a.id}-${b.id}`)) continue;
+        // from now on each does a little better wherever the other lives too
+        cr.symbiont.set(a.id, b.id); cr.symbiont.set(b.id, a.id);
         this.emit({ type: 'symbiosis', cellId: this.regions.centre[a.home]!, title: 'An unlikely pair', description: `${b.name} spends its days picking pests from the hide of ${a.name}. One gets a meal, the other gets clean, and neither would do as well alone.`, causes: [a.eventId, b.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [a.id, b.id] });
         break;
       }
@@ -899,7 +932,27 @@ export class Simulation {
       return;
     }
     const p = this.plants;
+    if (!this.creatures.onTrek) this.creatures.onTrek = (from, to, mass) => this.wearTrail(from, to, mass);
     const t0 = performance.now();
+    // every few steps: dust blown off the deserts falls on the sea downwind and feeds it
+    if (this.milestoneTimer % 4 === 0) {
+      const dust = (this.dustCells ??= new Float32Array(this.grid.count));
+      const fed = dustFall(this.world, dust);
+      p.dust.fill(0);
+      const seen = new Uint16Array(reg.count);
+      for (let i = 0; i < this.grid.count; i++) if (dust[i]! > 0) { const r = reg.regionOf[i]!; p.dust[r] = p.dust[r]! + dust[i]!; seen[r] = seen[r]! + 1; }
+      for (let r = 0; r < reg.count; r++) if (seen[r]!) p.dust[r] = Math.min(1, p.dust[r]! / Math.max(3, seen[r]!));
+      if (fed > this.grid.count * 0.004 && !this.notedOnce.has('dust-bloom')) {
+        this.notedOnce.add('dust-bloom');
+        let cell = 0, best = 0;
+        for (let i = 0; i < this.grid.count; i++) if (dust[i]! > best) { best = dust[i]!; cell = i; }
+        this.emit({ type: 'dust', cellId: cell, title: 'Dust feeds the sea', description: 'Wind lifts the red dust of a desert high into the air and carries it out over the ocean. Where it settles, the water turns green: the dust is food, and the sea was hungry for it.', importance: 1 });
+      }
+    }
+    // old trails fade unless herds keep walking them
+    const fade = Math.exp(-0.9 * tau);
+    const trail = this.world.trail;
+    for (let i = 0; i < trail.length; i++) if (trail[i]! > 0) trail[i] = trail[i]! < 0.01 ? 0 : trail[i]! * fade;
     p.step(this.world, this.climate, this.lifeRng, this.simYear, tau);
     const t1 = performance.now();
     if (this.stage === 'animals') this.creatures.step(this.lifeRng, this.simYear, tau, p.oxygen);
@@ -915,6 +968,35 @@ export class Simulation {
     if (this.milestoneTimer % 8 === 0) this.checkMilestones();
     this.extras(tau);
     if (this.milestoneTimer % 16 === 0 && this.shapeLand(tau)) this.terrainDirty = true;
+  }
+
+  /** A migrating herd has walked from one region to the next: the ground between is worn a little more. */
+  private wearTrail(from: number, to: number, mass: number): void {
+    const g = this.grid, w = this.world;
+    let cur = this.regions.centre[from]!;
+    const target = this.regions.centre[to]!;
+    const tx = g.pos[target * 3]!, ty = g.pos[target * 3 + 1]!, tz = g.pos[target * 3 + 2]!;
+    const add = Math.min(0.08, 0.012 + 0.012 * Math.log10(1 + Math.max(0, mass)));
+    for (let step = 0; step < 24 && cur !== target; step++) {
+      if (w.elevation[cur]! > w.seaLevel) w.trail[cur] = Math.min(1, w.trail[cur]! + add);
+      let best = cur, bd = g.pos[cur * 3]! * tx + g.pos[cur * 3 + 1]! * ty + g.pos[cur * 3 + 2]! * tz;
+      for (let k = 0; k < g.ncount[cur]!; k++) {
+        const nb = g.neighbors[cur * 6 + k]!;
+        const d = g.pos[nb * 3]! * tx + g.pos[nb * 3 + 1]! * ty + g.pos[nb * 3 + 2]! * tz;
+        // herds go round the sea and the steepest ground rather than through it
+        if (d > bd && w.elevation[nb]! > w.seaLevel) { bd = d; best = nb; }
+      }
+      if (best === cur) break;
+      cur = best;
+    }
+    if (!this.notedOnce.has('first-trail')) {
+      let worn = 0;
+      for (let i = 0; i < w.trail.length; i += 7) if (w.trail[i]! > 0.5) worn++;
+      if (worn > 6) {
+        this.notedOnce.add('first-trail');
+        this.emit({ type: 'trail', cellId: target, title: 'A trail is worn', description: 'The herds take the same way every year: over the low pass, along the river, down to the plain. So many feet have followed it that nothing grows there now. From high above it shows as a pale thread across the land.', importance: 1 });
+      }
+    }
   }
 
   private bestSeaRegion(): number {

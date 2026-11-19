@@ -62,8 +62,8 @@ export function shapeLandforms(world: World, amount: number): LandformResult {
     // only small islands: land with open sea close on every side
     let sea = 0;
     for (let k = 0; k < ncount[i]!; k++) if (elevation[neighbors[i * 6 + k]!]! <= seaLevel - 0.3) sea++;
-    if (sea < 2 && e > seaLevel) continue;
-    elevation[i] = e - 0.0016 * amount;
+    if (sea < 4 && e > seaLevel) continue;
+    elevation[i] = e - 0.001 * amount;
   }
   // ---- coral grows upward as fast as the island sinks, as long as the water is warm and the reef alive
   for (let i = 0; i < count; i++) {

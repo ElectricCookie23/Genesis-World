@@ -88,28 +88,28 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 46 | If the user intervenes a lot, civilizations build temples facing the camera. | done | after three or more god-tool uses, villages raise temples; each is drawn as a stepped temple with a fire on top in the middle of its town (`gfx/buildings.ts`) |
 | 47 | Domestication: tamed species start evolving in new directions. | done | farming peoples tame a real grazer; tamed herds grow calmer, more sociable and more numerous each generation |
 | 48 | Agriculture that turns land into fields. | done | settlements with farming paint field patchwork around them |
-| 49 | Roads that follow ancient migration trails. | simplified | lit roads join neighbouring towns by the direct route, not along old migration trails |
+| 49 | Roads that follow ancient migration trails. | done | migrating herds wear trails (a per-cell field that builds where they walk and fades when they stop); road routing prefers those trails, then valleys, rivers and coasts |
 | 50 | Ruins that forests overgrow, later found by a second intelligent species. | done | ruins are logged and listed; a later, different people building on the same ground rediscover them (event) |
 | 51 | Plate tectonics with drifting continents. | done | `sim/tectonics.ts`: every plate carries its crust forward around its pole, so the outlines of the plates move; gaps behind a plate fill with new sea floor at a ridge, and continental crust is conserved. A single continent breaks into several over a few hundred million years |
 | 52 | Mountain building at plate collisions, creating rain-shadow deserts. | done | where two plates arrive in the same place the lighter crust rides up and a range grows (capped near 7.5 km) with foothills beside it; plate stress is recomputed after every move, erosion wears ranges down, and rain shadows come from the moisture model |
 | 53 | Earthquakes and tsunamis. | done | earthquakes at plate boundaries; undersea ones raise tsunamis that scour coasts and are witnessed |
 | 54 | Hotspots that build island chains. | done | hotspots stay fixed in the deep rock while the plates slide over them, so repeated eruptions leave chains of islands |
-| 55 | Erosion that carves canyons and grows deltas. | simplified | peaks erode and glaciers carve coastal valleys; no canyon or delta modelling |
+| 55 | Erosion that carves canyons and grows deltas. | done | `sim/landforms.ts`: rivers cut down where they run steep (never below the bed downstream), their mud builds deltas at the mouth that fan out and become land; events for the first canyon and the first delta |
 | 56 | Ocean currents that carry heat. | simplified | sea temperature is carried along the wind-driven surface flow |
 | 57 | Rafting: creatures ride storm debris to colonize islands. | done | storms occasionally raft shore animals to a far coast, where they found new populations |
-| 58 | Coral reefs and atolls, with bleaching in heat waves. | simplified | warm shallow water with sea plants grows coral that tints the shallows; it bleaches white above 30.5 C (event) |
+| 58 | Coral reefs and atolls, with bleaching in heat waves. | done | coral tints warm shallows and bleaches above 30.5 C; dead volcanic islands on ocean crust sink slowly while living reef grows upward to stay near the surface, leaving rings of reef round lagoons (atoll event) |
 | 59 | Plankton blooms visible from orbit, and bioluminescent waves at night. | done | plankton stains the sea green by sea-plant cover and glows blue at night where waves stir it |
 | 60 | Hurricanes with a visible eye. | done | strong storms over warm sea become hurricanes; the cloud volume draws them as spiral bands around a clear eye, with damage at landfall |
 | 61 | Snow that builds up and melts, feeding the rivers. | done | snow builds and melts with temperature, and meltwater adds to river flow |
 | 62 | Oxygen level tracked, with a giant-insect era when it spikes. | done | oxygen tracked, limits body size and activity; an age of giants is declared when it passes 30% |
-| 63 | Seasonal migrations that wear trails into the land. | simplified | at 1x and 10x wandering herds shift toward the summer hemisphere; no worn trails |
-| 64 | Hibernation, and day versus night species. | simplified | night animals lie low by day and day animals by night (drawn individuals); no hibernation |
+| 63 | Seasonal migrations that wear trails into the land. | done | at 1x and 10x wandering herds shift toward the summer hemisphere; where herds migrate the ground is worn into braided pale trails that show from above (trail event) |
+| 64 | Hibernation, and day versus night species. | done | slow-living burrowers feel much less of the cold (they sleep through it), with an event for the first hibernator; at 1x and 10x they are underground while it is winter where they live; night animals lie low by day and day animals by night |
 | 65 | Camouflage evolving to match each biome. | done | prey whose hue matches the ground cover of its region is harder for hunters to detect, so colour is under selection |
 | 66 | Sexual selection: mating displays and ornaments. | done | ornaments raise breeding success but cost energy and concealment |
-| 67 | Nests and parental care. | simplified | species with strong parental care get a small nest mound at each group's home |
+| 67 | Nests and parental care. | done | species with strong parental care get a nest mound at each home, and are seen with one or two small young walking close behind a parent |
 | 68 | Disease outbreaks spreading through herds. | done | plagues strike crowded, sociable species and spread to neighbouring regions |
-| 69 | Symbiosis pairs. | simplified | a large and a small species sharing a home are recorded as a pair (event); no fitness effect |
-| 70 | Flowers co-evolving with pollinators. | simplified | fruiting plants spread faster where animals eat them; no dedicated pollinator trait |
+| 69 | Symbiosis pairs. | done | a large and a small species sharing a home become a pair (event); from then on each forages about 7% better wherever the other lives too |
+| 70 | Flowers co-evolving with pollinators. | done | small flying plant-feeders count as pollinators: they get extra food from flowering plants, and flowering plants grow and spread faster where they visit (pollination event) |
 | 71 | Toxin versus resistance arms races, shown on a chart. | done | mean plant toxicity and mean animal toxin resistance are tracked and charted |
 | 72 | Convergent evolution detector ("Two unrelated lineages have both evolved into crab-like forms"). | done | detector for unrelated lineages with the same body plan |
 | 73 | Island dwarfism and gigantism. | done | isolated island populations that shrink or grow are flagged as dwarfs or giants |
@@ -154,7 +154,7 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 112 | Salt flats where inland seas dry. | done | hot dry lowlands become white salt flats (biome) |
 | 113 | Tornadoes. | done | a twisting funnel of dust reaches from the ground to the cloud base under some storm cells over land (`gfx/tornado.ts`), with the debris particles at its foot |
 | 114 | Fire tornadoes in big wildfires. | done | over a big fire the same funnel burns orange |
-| 115 | Dust storms that fertilize the ocean. | simplified | strong wind lifts dust from deserts and salt flats; no ocean fertilising |
+| 115 | Dust storms that fertilize the ocean. | done | strong wind lifts dust from deserts and salt flats (particles); in the sim the dust is carried downwind and where it falls on the sea the plants of the open water grow faster (event) |
 | 116 | Acid rain after eruptions. | done | large eruptions bring acid rain that thins plant cover downwind |
 | 117 | Valley fog, rainbows and heat shimmer. | done (rainbow not yet seen in a test frame) | ground mist thickens the lowest air over damp, cool ground when the star is low; a rainbow stands 42 degrees from the point opposite the star when rain falls in sunshine; hot ground makes the lower part of the picture waver |
 | 118 | The ozone layer, and what happens when it's stripped. | done | a supernova strips the ozone layer; land plants suffer until it heals |

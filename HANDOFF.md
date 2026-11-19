@@ -16,9 +16,9 @@ Also done in this pass: drifting plates (51, 52, 54; `sim/tectonics.ts`, all 11 
 
 Also done: second-sun shadows (105), hot spring pools (111), mist, rainbow and heat shimmer (117; the rainbow has not been seen in a test frame yet), departure light (127), fungal view (128), fossil view with ribcages (83, 136), mass hatching glow (135), electric arcs (77), cave mouths (109), light shafts under water (139).
 
-Written but NOT wired in yet: `src/sim/landforms.ts` (`shapeLandforms`: canyons, deltas, sinking volcanic islands, reefs that keep pace into atolls; `dustFall`: desert dust feeding the sea downwind) for features 55, 58, 115.
+Also done (sim): canyons and deltas (55), sinking islands and atolls (58), dust feeding the sea (115), trails worn by migrating herds that roads follow (49, 63), hibernation (64), young beside a parent (67), symbiosis with an effect (69), pollinators (70). `tests/world.test.ts` covers plates, landforms and dust; all 16 tests pass.
 
-Still to do, nothing started: worn migration trails that roads follow (49, 63), hibernation (64), young beside nests (67), symbiosis and pollinators with real effects (69, 70), timeline strip with more rewind points (86), genetic diversity and oxygen overlays (90), positional sound (94), two futures side by side (143), real ancestry in the family tree (144).
+Still to do, nothing started: timeline strip with more rewind points (86), genetic diversity and oxygen overlays (90), positional sound (94), two futures side by side (143), real ancestry in the family tree (144). Not yet seen in a browser: trails on the ground, young animals, the rainbow, sketch cards, GIF and PDF buttons.
 
 Fixed on the way: the terrain and sea quadtrees could run out of patches near the corners of a cube face and leave holes showing the sea; splitting now allows for the smaller patches there and running short makes the ground coarser instead of dropping patches. The two bright ticks seen from orbit were bone markers; bones are now hidden from orbit.
 

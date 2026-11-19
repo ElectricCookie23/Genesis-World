@@ -67,6 +67,10 @@ export interface Individual {
   hunter: boolean;
   migrate: number;
   echo: boolean;
+  /** Sleeps underground through the cold season. */
+  hibernates: boolean;
+  /** A young one keeps close behind this parent. */
+  parent?: Individual;
 }
 
 export class CreatureLayer {
@@ -195,7 +199,14 @@ export class CreatureLayer {
           pos: home.clone(), fwd: e1.clone(), moving: 0, cell, night: info.genes[G.Nocturnal]!,
           larva: info.genes[G.Metamorphosis]! > 0.6 && hash(key * 53 + 7) < 0.35,
           rival: null, hunter: info.genes[G.Diet]! > 0.6, migrate: info.genes[G.Migration]!, echo: info.genes[G.Echo]! > 0.6,
+          hibernates: info.genes[G.Burrow]! > 0.5 && info.genes[G.Metabolism]! < 0.55 && medium === 1,
         });
+        // species that care for their young are seen with them: one or two small ones close behind a parent
+        if (info.genes[G.Care]! > 0.6 && medium !== 2 && k % 3 === 0 && !list[list.length - 1]!.larva) {
+          const parent = list[list.length - 1]!;
+          const broods = 1 + (hash(key * 91 + 3) < 0.5 ? 1 : 0);
+          for (let y = 0; y < broods; y++) list.push({ ...parent, key: (key + 0x20000000 + y * 0x1000000) | 0, size: parent.size * 0.45, pos: home.clone(), fwd: e1.clone(), parent, h: parent.h + 0.013 * (y + 1) });
+        }
       }
     }
     // hunters and prey that share a region are paired: the chase is on now and then
@@ -345,8 +356,13 @@ export class CreatureLayer {
     for (const ind of this.individuals) {
       const slot = this.slot(ind.larva ? -ind.species - 1 : ind.species);
       if (!slot || slot.used >= CAP) continue;
-      this.place(ind, time, a);
-      this.place(ind, time + 0.4, b);
+      // hibernators are underground while it is winter where they live
+      if (ind.hibernates && Math.abs(ind.home.y) > 0.4 && this.season * Math.sign(ind.home.y) < -0.45) continue;
+      // the young walk where the parent walked a moment ago
+      const src = ind.parent ?? ind;
+      const lag = ind.parent ? 0.7 + (ind.h - ind.parent.h) * 40 : 0;
+      this.place(src, time - lag, a);
+      this.place(src, time - lag + 0.4, b);
       fwd.copy(b).sub(a);
       const speed = fwd.length() / 0.4;
       up.copy(a);

@@ -155,6 +155,10 @@ export class TerrainSurface {
     // farmland: ploughed strips in alternating crops
     const rows = sin(dot(dir, t1).mul(5200).add(e1.r.mul(40))).mul(0.5).add(0.5);
     albedo = mix(albedo, mix(sandC.mul(0.8), pigment.mul(1.4), rows), C.r.mul(0.8).mul(float(1).sub(steep)));
+    // trails worn by herds: braided paths of bare, pale earth through whatever grows there
+    const braid = pow(float(1).sub(abs(e2.r.mul(2).sub(1))), 5).add(pow(float(1).sub(abs(e1.r.mul(2).sub(1))), 9).mul(0.7));
+    const worn = smoothstep(0.75, 1.1, X.r.mul(braid.mul(1.3).add(0.35))).mul(smoothstep(-0.01, 0.03, above)).mul(float(1).sub(smoothstep(0.3, 1.5, snow)));
+    albedo = mix(albedo, mix(soilC, sandC, 0.6).mul(1.1), worn.mul(0.85));
     albedo = albedo.mul(mix(float(1), e3.r.mul(0.7).add(0.65), microFade));
     // hot springs: a pool of mineral-blue water in a pale crust, ringed with rust-coloured terraces
     const springField: N = samplePlanet(data.overlay, dir).a.mul(e1.r.mul(0.7).add(0.55));

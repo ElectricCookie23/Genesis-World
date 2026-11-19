@@ -72,6 +72,10 @@ export class Creatures {
   readonly count = new Float64Array(MAX_COHORTS);
   readonly genome = new Float32Array(MAX_COHORTS * GENE_COUNT);
   readonly phen = new Float32Array(MAX_COHORTS * PHEN_COUNT);
+  /** Pairs of species that live together and do better for it (each id maps to its partner). */
+  symbiont = new Map<number, number>();
+  /** Called when a migrating land herd moves from one region to the next (regions, biomass moved). */
+  onTrek?: (from: number, to: number, mass: number) => void;
   /** Last intake ratio (energy eaten / energy needed), for display and migration. */
   readonly fed = new Float32Array(MAX_COHORTS);
   high = 0; // one past the highest slot in use
@@ -219,8 +223,10 @@ export class Creatures {
     const oxyLimit = sat(oxygen / 0.12);
     for (let r = 0; r < R; r++) {
       const a = this.regionStart[r]!, b = this.regionStart[r + 1]!;
+      let pollVisits = 0;
       plants.grazeLand[r] = 0;
       plants.grazeSea[r] = 0;
+      plants.pollinators[r] = 0;
       this.carrion[r] = this.carrion[r]! * Math.exp(-1.5 * tau);
       const n = Math.min(M, b - a);
       if (n === 0) continue;
@@ -237,7 +243,10 @@ export class Creatures {
         const l = this.fitLand(c, land), s = this.fitSea(c, sea);
         fl[i] = l; fs[i] = s;
         const t = l + s > 0 ? (l * tL + s * tS) / (l + s) : land > 0.5 ? tL : tS;
-        const st = Math.max(0, (phen[p + P.TMin]! - t) / 10, (t - phen[p + P.TMax]!) / 10);
+        // hibernators (slow-living burrowers) sleep through the cold underground and feel far less of it
+        let cold = (phen[p + P.TMin]! - t) / 10;
+        if (cold > 0 && genome[g + G.Burrow]! > 0.5 && genome[g + G.Metabolism]! < 0.55) cold *= 0.55;
+        const st = Math.max(0, cold, (t - phen[p + P.TMax]!) / 10);
         stress[i] = st;
         const warm = genome[g + G.WarmBlood]! > 0.5;
         let activity = warm ? 1 : 0.25 + 0.75 * sat((t + 1) / 19);
@@ -246,7 +255,13 @@ export class Creatures {
         activity *= sat(0.75 + oxyLimit * 0.6 - o2need * (1 - oxyLimit) * 1.5);
         act[i] = activity / (1 + st);
         demand[i] = count[c]! * phen[p + P.Need]!;
-        const cap = count[c]! * phen[p + P.Forage]! * INTAKE_CAP * act[i]!;
+        // partners: a species that lives with its symbiont forages a little better; small flying plant-feeders drink from flowers
+        let partner = 1;
+        const mate = this.symbiont.get(sp[c]!);
+        if (mate !== undefined) for (let j = 0; j < n; j++) if (sp[this.regionList[a + j]!] === mate) { partner = 1.07; break; }
+        const pol = sat((0.32 - genome[g + G.Size]!) * 5) * sat(phen[p + P.Fly]! * 2 + 0.25) * sat(phen[p + P.HerbEff]! * 1.5);
+        pollVisits += count[c]! * pol;
+        const cap = count[c]! * phen[p + P.Forage]! * INTAKE_CAP * act[i]! * partner * (1 + 0.3 * pol * plants.fruit[r]!);
         capacity[i] = cap;
         const herb = phen[p + P.HerbEff]!;
         const toxLoss = 1 - sat(Math.max(0, ptox - genome[g + G.ToxinResist]!) * 1.3);
@@ -292,6 +307,7 @@ export class Creatures {
       }
       const availL = plants.landFood[r]! * FOOD_SCALE, availS = plants.seaFood[r]! * FOOD_SCALE;
       if (availL > 0) plants.grazeLand[r] = grazedL / availL;
+      plants.pollinators[r] = sat(pollVisits / 2.5e4);
       if (availS > 0) plants.grazeSea[r] = grazedS / availS;
       this.carrion[r] = Math.max(0, carr - sumC * shareC);
       // predation: every predator cohort against every possible prey cohort here
@@ -349,7 +365,7 @@ export class Creatures {
             takenEnergy += e;
             const ps = this.species[sp[this.regionList[a + i]!]!]!;
             const qs = this.species[sp[q]!]!;
-            if (qs.topPredator < 0 || e > demand[i]! * 0.2) qs.topPredator = ps.id;
+            if (ps.id !== qs.id && (qs.topPredator < 0 || e > demand[i]! * 0.2)) qs.topPredator = ps.id;
           }
           eaten[j] = takenEnergy / perPrey;
           this.carrion[r] = this.carrion[r]! + takenEnergy * 0.2;
@@ -488,9 +504,12 @@ export class Creatures {
           if (kin >= 0) {
             this.blend(kin, moving, src, so);
             count[c] = n - moving;
+            if (this.onTrek && genome[g + G.Migration]! > 0.45 && land > 0.5 && reg.land[r]! > 0.5) this.onTrek(r, nb, moving * phen[p + P.Mass]!);
           } else if (occupancy[nb]! < REGION_CAP || this.makeRoom(nb, moving * phen[p + P.Mass]!)) {
             const made = this.spawn(this.sp[c]!, nb, moving, src, so);
             if (made >= 0) {
+              // wandering herds on land wear a path between the places they move through
+              if (this.onTrek && genome[g + G.Migration]! > 0.45 && land > 0.5 && reg.land[r]! > 0.5) this.onTrek(r, nb, moving * phen[p + P.Mass]!);
               count[c] = n - moving;
               occupancy[nb] = occupancy[nb]! + 1;
             }

@@ -67,6 +67,10 @@ export class Plants {
   readonly canopy: Float32Array;
   readonly toxicity: Float32Array;
   readonly fruit: Float32Array;
+  /** Set by the creature step: how many small flying plant-feeders visit each region's flowers, 0..1. */
+  readonly pollinators: Float32Array;
+  /** Set by the simulation: desert dust falling on each region's sea, 0..1. It feeds the plants of the open water. */
+  readonly dust: Float32Array;
   readonly landCover: Float32Array;
   readonly seaCover: Float32Array;
   /** Set by the creature step: how hard each region's plants were grazed (0..1+). */
@@ -106,6 +110,8 @@ export class Plants {
     this.canopy = new Float32Array(R);
     this.toxicity = new Float32Array(R);
     this.fruit = new Float32Array(R);
+    this.pollinators = new Float32Array(R);
+    this.dust = new Float32Array(R);
     this.landCover = new Float32Array(R);
     this.seaCover = new Float32Array(R);
     this.grazeLand = new Float32Array(R);
@@ -235,7 +241,9 @@ export class Plants {
             const ratio = o.weight / sp.weight;
             crowd += slotCover[base + j]! * (j === s ? 1 : ratio > 1 ? Math.min(1.5, ratio) : ratio * ratio * 0.6);
           }
-          const growth = sp.rate * tau * 1.6 * (1 - crowd / k);
+          // flowers pay where something comes to them: with pollinators a flowering plant sets more seed
+          const bloom = sp.aquatic ? 1 + 0.45 * this.dust[r]! : 1 + sp.genes[PG.Fruit]! * 0.3 * this.pollinators[r]!;
+          const growth = sp.rate * bloom * tau * 1.6 * (1 - crowd / (k * (sp.aquatic ? 1 + 0.3 * this.dust[r]! : 1)));
           c *= Math.exp(Math.max(-1.5, Math.min(1.2, growth)));
         }
         // grazing and fire
@@ -271,7 +279,7 @@ export class Plants {
         // spread to a neighbouring region, sometimes as a mutant
         const disp = sp.genes[PG.Dispersal]!;
         // fruiting plants spread faster where animals eat them and carry the seeds
-        const carried = sp.aquatic ? 0 : 0.35 * sp.genes[PG.Fruit]! * Math.min(1, grazeL);
+        const carried = sp.aquatic ? 0 : 0.35 * sp.genes[PG.Fruit]! * Math.min(1, grazeL) + 0.3 * sp.genes[PG.Fruit]! * this.pollinators[r]!;
         if (c > 0.012 && rng.chance(Math.min(0.9, (0.2 + 0.5 * disp + carried) * tau * 2))) {
           let nb = reg.grid.neighbors[r * 6 + rng.int(reg.grid.ncount[r]!)]!;
           // wind-blown and animal-carried seeds can jump further

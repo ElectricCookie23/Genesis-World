@@ -212,6 +212,8 @@ export interface World {
   ash: Float32Array; // 0..1 ash / scorch cover
   lava: Float32Array; // 0..1 glowing lava / fire heat
   lights: Float32Array; // 0..1 firelight and city light
+  /** 0..1: how worn the ground is by herds that migrate across it, year after year. */
+  trail: Float32Array;
   fields: Float32Array; // 0..1 farmland
   reef: Float32Array; // 0..1 living coral, negative when bleached
   bloom: Float32Array; // 0..1 plankton in the water
@@ -243,6 +245,7 @@ export function createWorld(grid: Grid): World {
     ash: new Float32Array(c),
     lava: new Float32Array(c),
     lights: new Float32Array(c),
+    trail: new Float32Array(c),
     fields: new Float32Array(c),
     reef: new Float32Array(c),
     bloom: new Float32Array(c),

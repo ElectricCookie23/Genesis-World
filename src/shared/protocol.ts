@@ -26,6 +26,8 @@ export interface CellSnapshot {
   ash: Float32Array;
   lava: Float32Array;
   lights: Float32Array;
+  /** Ground worn by migrating herds, 0..1. */
+  trail: Float32Array;
   fields: Float32Array;
   reef: Float32Array;
   bloom: Float32Array;

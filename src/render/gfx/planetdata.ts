@@ -17,7 +17,7 @@ export class PlanetData {
   readonly cover: CubeTexture;
   /** bytes: r = farmland, g = reef (0.5 = none, above = living, below = bleached), b = plankton, a = cloud cover */
   readonly life: CubeTexture;
-  /** bytes: r = settlement light, g = leaf hue gene of the main plant, b = wind strength, a = sea ice */
+  /** bytes: r = ground worn by migrating herds, g = leaf hue gene of the main plant, b = wind strength, a = sea ice */
   readonly extra: CubeTexture;
   /** bytes: rgb = data overlay colour (temperature, rain, life or people), when one is switched on */
   readonly overlay: CubeTexture;
@@ -65,7 +65,7 @@ export class PlanetData {
     b.commit(this.life);
     const s = this.scratch;
     const n = this.grid.count;
-    b.fill(this.extra, 0, cells.lights);
+    b.fill(this.extra, 0, cells.trail ?? cells.lights);
     for (let i = 0; i < n; i++) { const p = plants.get(cells.flora[i]!); s[i] = p ? p.genes[PG.LeafHue]! : 0.5; }
     b.fill(this.extra, 1, s);
     for (let i = 0; i < n; i++) s[i] = Math.min(1, Math.hypot(cells.windE[i]!, cells.windN[i]!) * 0.7);

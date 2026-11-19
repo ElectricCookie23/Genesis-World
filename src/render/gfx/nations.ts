@@ -292,6 +292,7 @@ function route(grid: Grid, from: number, to: number, stepCost: (a: number, b: nu
 export function buildNetworks(grid: Grid, cells: CellSnapshot, settlements: SettlementInfo[]): Networks {
   const { pos, neighbors, ncount, count } = grid;
   const { elevation, seaLevel, flow } = cells;
+  const trail = cells.trail;
   const alive = settlements.filter((s) => s.ruined < 0 && s.tech > 0.3);
   const net: Networks = { roads: [], lanes: [] };
   if (alive.length < 2) return net;
@@ -305,6 +306,8 @@ export function buildNetworks(grid: Grid, cells: CellSnapshot, settlements: Sett
     let c = 1 + Math.abs(elevation[b]! - elevation[a]!) * 3.5 + Math.max(0, elevation[b]! - seaLevel - 2.2) * 0.8;
     if (flow[b]! > 1.6) c *= 0.72;
     if (coastal[b]) c *= 0.86;
+    // the first roads follow the old trails the herds wore, long before there was anyone to build a road
+    if (trail && trail[b]! > 0.2) c *= 1 - 0.4 * Math.min(1, trail[b]! * 1.5);
     return c;
   };
   const seaStep = (a: number, b: number): number => {
