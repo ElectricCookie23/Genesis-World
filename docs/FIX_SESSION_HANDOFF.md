@@ -1,6 +1,6 @@
 # Fix session handoff (GPU review follow-up)
 
-Written 2026-11-19 at a pause the owner asked for, to save usage. This is the note for the session that fixes what the real-GPU review found. It is separate from `HANDOFF.md`, which belongs to the session building the game on `main`. Read this first, then the top of `docs/GPU_REVIEW.md` (the re-test section) and the "GPU review: fixed and still open" part of `HANDOFF.md`.
+Written 2026-11-19 at a pause the owner asked for, to save usage, and updated the same day when work resumed (see "Since the pause"). This is the note for the session that fixes what the real-GPU review found. It is separate from `HANDOFF.md`, which belongs to the session building the game on `main`. Read this first, then the top of `docs/GPU_REVIEW.md` (the re-test section) and the "GPU review: fixed and still open" part of `HANDOFF.md`.
 
 ## Who does what
 
@@ -16,17 +16,22 @@ How the sessions talk:
 ## Owner's standing rules
 
 - Chrome on the Mac: **only the "stratcomm 314" profile**, and only when the owner says it is fine to open a window. The Mac session has been using a scratch profile for tests; the owner decides which, in that session.
-- **The second re-test is on hold** ("we are holding back on it for a bit right now"). Do not ask the Mac session to run it until the owner says so.
+- The second re-test is cleared: "the second re-test run can run and use scratch chrome". It was requested from the Mac session against `29ea8ad`.
 - Commit messages are plain: no Co-Authored-By line, no session link.
 - The owner said to do whatever is needed with git and pushing, and merged pull request 1 themselves. Pushing straight to `main` has been fine. Every push to `main` deploys the live site about six minutes later, after the tests pass, so do not push to `main` while the Mac session is in the middle of a test.
-- Assets: BRIEF.md allows CC0 or public domain only, each logged in `CREDITS.md`. Nothing from the collected assets goes into the game until the owner decides.
+- Assets: **not now.** The owner's decision: the collected assets come later, "once the base game is done and the blackbox testing of it is essentially complete. the normal features need to work first." BRIEF.md allows CC0 or public domain only, each logged in `CREDITS.md`.
 - The owner paused this work because of usage limits. Keep to work that matters, and do not start long speculative jobs.
+
+## Since the pause
+
+- The build session resumed and pushed three commits (`ce6771a`, `c81a310`, `29ea8ad`). It merged its own review fixes with mine, keeping my verified versions where both touched the same thing, and added a third batch: clouds marched at half resolution, a non-finite guard with a diagnostic report (Shift+D), no river causeways on the sea, trails as trampled patches, ground and plant colours, conifers reshaped, animals drawn only from near, depth of field only while following, exposure capped from orbit, thinner atmosphere shell, `&noadapt`. Its notes are in `HANDOFF.md`.
+- It also did its own civilization tuning (`29ea8ad`): social animals pay less for a big brain and the wait is 15 My, so first camps come around 130 My in most seeds. **My tuning (`66595dc`) is dropped as superseded**; it changed the same constants a different way and never reached `main`. Note for the owner: 130 My is earlier than the brief's timeline (a mind between 234 and 360 My in roughly 60 percent of seeds).
+- The build session found that WebGPU can be checked in the container after all, with a stand-in canvas context (see "How to check visuals here" in `HANDOFF.md`). It reports pipeline validation errors; it still hides not-a-number faults.
+- This branch was restarted from `29ea8ad`. It carries only this file and `scripts/checks/`.
 
 ## State of the code
 
-`main` is at `f284319` and deployed. The working branch is ahead of it by:
-- `66595dc` civilization tuning (see task 2). **The full test suite has not been run on it.**
-- the commit that adds this file and `scripts/checks/`.
+`main` is at `29ea8ad` and deployed. Always `git fetch` and merge before pushing: the build session pushes to `main` too.
 
 Verified on the owner's GPU (re-test of `5bbe93a`, both backends):
 - Plants, animals and buildings draw (vertex buffers packed, `Copies` instead of `InstancedMesh`). No console errors at Low or High.
@@ -69,14 +74,14 @@ In `scripts/checks/`, copied from the scratch folder so they survive. They expec
 ## Task list, in order
 
 1. **Ask the owner** the three open questions at the end of this file before doing anything that depends on them.
-2. **Civilization tuning (`66595dc`, on the branch only).** In `src/sim/civilization.ts` the count toward a thinking lineage now starts above 0.47 and is lost only below 0.41, over 100 My. Evidence, nine seeds on the small planet (grid 21): before, three minds in 600 My and one inside the brief's window; after, five in 480 My (at 178, 187, 204, 359 and 439 My). The brief asks for roughly 60 percent of seeds between 234 and 360 My at Epoch speed. Still to do: run `npm test`; run one or two seeds on the full-size planet (grid 63, about 15 minutes each for 330 My) because the small planet may not behave the same; add a line to `DECISIONS.md` (it corrects decision 41) and to `HANDOFF.md`; then put it on `main`.
-3. **When the owner allows the second re-test,** remind the Mac session of the brief I sent it (re-test of `f284319`, ten points, plus Medium, High and Ultra frame rates). Read its section at the top of `docs/GPU_REVIEW.md` and fix what it finds. The imposter orientation is the one most in need of eyes.
-4. **Frame rate.** Clouds are over half the frame above Low. The presets and step-downs were changed blind from the first review's numbers; the re-test will say whether High now settles near 50 fps with anti-aliasing still on. If not, the real fix is a half-resolution cloud pass (clouds drawn into their own target at half size and composited), which needs care because the atmosphere is drawn over the clouds. WebGPU also measured 2 to 4 fps slower at coast and ground after the first fixes; cause not looked for.
+2. ~~Civilization tuning~~ Done by the build session in `29ea8ad`; mine is dropped. Worth checking once: `npx vite-node scripts/minds.ts <seed> <My>` on a few seeds, against the brief's timeline.
+3. **Second re-test, requested.** The Mac session was asked to test the live site at `29ea8ad` (my ten points, plus the third batch: half-resolution clouds, frame rates with `&noadapt`, settlements and the Night Map after a 200 My warp, diagnostics). Its section will be at the top of `docs/GPU_REVIEW.md` with `retest2-` screenshots. Read it and fix what it finds, coordinating with the build session through `HANDOFF.md`.
+4. **Frame rate.** The half-resolution cloud pass now exists (build session). The re-test will say whether High settles near 50 fps with anti-aliasing still on. WebGPU also measured 2 to 4 fps slower at coast and ground after the first fixes; cause not looked for.
 5. **Animals.** From the re-test: a pale see-through leg on a walking animal (probably a ghost from temporal anti-aliasing, which has no motion vectors for animated meshes), an occasional loose foot, fins lying apart from an aquatic body, feet hovering on rough ground, shading still toy-like. Check with evolved animals, not only `debugSpawn`, whether land animals stand on water.
 6. **No meat-eaters.** In a 900 My small-planet history of the default seed no species ever had a diet gene above 0.6, although extinction notes say animals were hunted. The renderer's chase behaviour needs that gene above 0.6, so it never happens. Check on the full-size planet before concluding; this is sim tuning and overlaps the build session.
 7. **Determinism.** The same seed gives different worlds from run to run in the browser (23 to 41 living species at 150 My), because the worker steps the sim by wall-clock ticks at the current speed. BRIEF.md requires the same seed and actions to give the same history. This belongs with the build session; it is noted in `HANDOFF.md`.
 8. **Smaller look items still open:** flat single-colour leaves on most plant forms, the empty sea bed, hard polygonal coastlines, rivers as thin even lines, exposure taking a second or two to settle after a preset change, the white haze patch at ground level, depth of field blurring half the coast view (not reproduced).
-9. **Using the collected assets,** if the owner wants it (question 2 below).
+9. **Using the collected assets:** deferred by the owner until the base game is done and tested.
 
 ## The collected assets
 
@@ -88,6 +93,4 @@ On the Mac at `~/genesis-review/assets/`, with `MANIFEST.md`: 1,121 packs and as
 
 ## Questions for the owner
 
-1. May the second re-test run now, and in which Chrome profile?
-2. Should the collected assets be used in the game, and for what first? My suggestion is to start with one contained thing, buildings and boats from Kenney's kits, since those are fixed objects and the game's own are plain; and to leave plants generated in code unless the result still looks poor after the re-test, because Kenney's trees are faceted and would change the look of every forest.
-3. Should the civilization tuning go to `main` once its tests pass?
+None open. Answered on 2026-11-19: the re-test may run in the scratch Chrome; assets later; civilization tuning to `main` (it is there, in the build session's version).
