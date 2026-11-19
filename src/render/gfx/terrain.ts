@@ -308,6 +308,10 @@ export class TerrainSurface {
       const cityLight = built.mul(streets.add(0.12)).mul(pow(reachI.min(1), 0.8).mul(0.65).add(0.35)).mul(fire.add(1)).mul(alive).mul(landMask);
       const traffic = e3.r.mul(0.8).add(0.5);
       lit = mix(lit, lit.mul(0.6).add(sandC.mul(0.35).mul(day)), roadLine.mul(0.5).mul(day));
+      // Around a town the ground is worked and trodden: bare earth between the houses, broken up so it is not a flat
+      // stain. (Seen on a real GPU: buildings standing in untouched wild grass, with nothing between them.)
+      const worked = smoothstep(0.03, 0.22, glowI).mul(landMask).mul(e2.r.mul(0.5).add(0.5)).mul(float(1).sub(smoothstep(0.5, 3.0, camDist)));
+      lit = mix(lit, lit.mul(0.55).add(soilC.mul(0.3).add(sandC.mul(0.18)).mul(day.add(0.04))), worked.mul(0.6));
       const roadLight = roadLine.mul(importance.mul(0.6).add(0.4)).mul(traffic).mul(alive).mul(0.9);
       // up close the light comes from real windows and lamps, so the painted glow steps back
       // (It steps back further and over a longer distance than it did: from low over a town at night the painted
