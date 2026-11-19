@@ -13,6 +13,35 @@ This is the second version. The first was cut short by a flat battery; this one 
 - Roughly 60 of about 230 captures were looked at. Each finding names the files it rests on; the rest are listed at the end.
 - For part of the second run the machine's owner was also using the same browser window, so the Genesis tab may have been in the background at times. The frame-rate table was finished before that; the creature captures after it were checked to be in a visible tab.
 
+## Check of commit 6766d4a (2026-11-20)
+
+Deploy run for `6766d4a` green before testing; the site served `assets/index-DEGcW2rY.js` throughout. WebGPU, High (Ultra for item 4), 200 My warp, mains power. Files start `retest4-`; 10 of about 45 were looked at. Console over the run: `x1 Failed to load resource: the server responded with a status of 404 ()` only.
+
+**Correction to earlier sections:** `pop` is in thousands. "Zohan, population 503" is about half a million people, not 500 farmers, so its tower blocks are less out of scale than I wrote. The world had 468 live settlements, median `pop` 21.3.
+
+| # | Item | Result | Evidence |
+|---|---|---|---|
+| 1 | Daytime sky at altitude | **Fixed on WebGPU where the sky was in frame.** Lavender day sky with clouds and no stars at 1.7 km (`setImmediate(-2.6, -0.3, 0.055)`, tilt -0.35) and at 3.6 km (`(2.78, 0.18, 0.055)`); a strip of lavender sky, no stars, at 5.03 km (`(0.5, 1.02, 0.02)`, sun +0.3). **WebGL2 not verified:** my dedicated sky captures on both backends were framed at the ground (tilt +0.25 at `dist 0.02` looks steeply down), so the WebGL2 frames show only snow. | `retest4-webgpu-forest0-0.055.jpg`, `-forest1-0.055.jpg`, `-sky-5km.jpg` |
+| 2 | Far trees at mid distance | **Fixed.** At `dist 0.055` the conifers are real models with clean frond edges, no stair-stepping; forest 1 had 314 near models and 640 far pictures in view (was 0 near at this distance). | `-forest0-0.055.jpg`, `-forest1-0.055.jpg` |
+| 2b | Zoom 0.049 to 0.012 | **Smaller change.** Near models are already present at 0.049 (28, 68, 12 across three plant meshes) and far pictures fall from 64 to 25; before, near models rose from 7 to 24 while far pictures fell from 115 to 63. Frames `-zoom-0..6.jpg` were not looked at. | logs |
+| 3a | Large town at night, from the ground | **Much better.** The scene is lit by the buildings' own windows, glowing pink-white in grids, with a soft pink halo; domes show a lit band of windows. No blown-out ground. The halo is strong enough that every tower looks wrapped in neon. | `-large-night-ground.jpg`, `(1.844, 0.648, 0.02)`, sun +2.8 |
+| 3b | Large town at night, from low | **Not fixed.** From `dist 0.08` there are still large pale pink patches on the ground with hard ragged edges, around the town and in four other places, though dimmer than before (luminance 0.007, was 0.022). Lit windows now show as points inside the patch. | `-large-night-low.jpg` |
+| 3c | Village at night | **Not fixed.** Huts are unlit dark boxes on a pink-lit patch of ground, and a bright pink ribbon (a road or stream) runs across the dark terrain like a painted stripe. Nothing is lit by windows or fires. The aurora behind is thin rays, which looks right. | `-village-night-ground.jpg`, `(1.929, 0.874, 0.02)` |
+| 4 | Ultra on a fresh load | **Fixed.** `clouds.steps` 32, `genesis:steps:ultra` absent, pixel ratio 2, all effects on, from first ready through 36 s. It did not step down at all in the young world's default view (63 to 71 fps there); where it settles in a warped world was not re-measured. | logs |
+| 5 | Square slab of sand on the island | **Not checkable.** `(-1.1, -0.66)` is open sea in this world (cell 2.17 km below sea level). | `-island-0.05.jpg` (not looked at) |
+| 6 | Huts in the surf | **Not confirmed either way.** The lowest-lying small village (`pop` 0.5, 0.22 km above sea) had no huts in frame from `(2.609, 0.212, 0.02)`; the view was of the sea and a hillside. | `-coastal-day-ground.jpg` |
+| 7 | Middling town ("Gebemiath", `pop` 27.6, `tech` 0.28) | **Looks right for its size and era**: dozens of small pale huts with pitched or conical roofs spread over a hillside, no towers. Huts are plain untextured beige boxes, some tilted with the slope and several overlapping each other. | `-mid-day-ground.jpg`, `(0.964, 0.586, 0.02)` |
+
+**New or still wrong**
+
+1. **A land animal stands on the sea** in the coastal view: a striped two-legged animal upright on the water well offshore, with others walking the hill behind (`retest4-webgpu-coastal-day-ground.jpg`, right side). This is an evolved animal, not a sample one.
+2. Small red-brown blobs float on the sea surface in the same frame (heads of swimmers, or debris; not identified).
+3. Broadleaf trees over the middling town: thick dark trunks and flat rosette leaves, some leaf cards hanging edge-on as thin spikes (`-mid-day-ground.jpg`).
+4. At 5 km the terrain is a harsh high-contrast speckle of white snow and black shadow, and a crater's far wall is evenly lit with no shading (`-sky-5km.jpg`).
+5. The fog smudge over part of a tree line is still there (`-forest0-0.055.jpg`, left).
+
+**Nothing looked worse** than in the last pass in the frames reviewed.
+
 ## Third pass: under water, more forests, zoom, a village (2026-11-20)
 
 Live site at `a42b083` plus docs-only commits; bundle `assets/index-BsLmvyFQ.js`. High preset, 200 My warp, mains power. Files start `retest3-`; 14 of about 55 were looked at. This fills the "not re-tested" gaps of the section below. Console over the whole WebGPU run: `x2 Failed to load resource: the server responded with a status of 404 ()`, `x8 Max polyphony exceeded. Note dropped.`, nothing else.
