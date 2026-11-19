@@ -4,7 +4,7 @@ import { MeshBasicNodeMaterial, type Texture, type Vector3 } from 'three/webgpu'
 import {
   abs, atan, cameraPosition, cross, dot, exp, float, fract, max, min, mix, normalize, positionWorld, pow, reflect, select, sin, smoothstep, sqrt, step, texture, varying, vec2, vec3,
 } from 'three/tsl';
-import { EXAG, uUnderwater, uFossil, uFungal, uImpact, uOverlay, uHazeAmount, uHazeTint, uMolten, uMoonDir, uRing, uSeaKm, uSun2, uSun2Dir, uSunDir, uTime } from '../common';
+import { EXAG, uExposure, uUnderwater, uFossil, uFungal, uImpact, uOverlay, uHazeAmount, uHazeTint, uMolten, uMoonDir, uRing, uSeaKm, uSun2, uSun2Dir, uSunDir, uTime } from '../common';
 import { cloudShadowAt } from '../clouds';
 import type { ErosionBake } from './erosion';
 import { uLook } from './look';
@@ -310,8 +310,12 @@ export class TerrainSurface {
       lit = mix(lit, lit.mul(0.6).add(sandC.mul(0.35).mul(day)), roadLine.mul(0.5).mul(day));
       const roadLight = roadLine.mul(importance.mul(0.6).add(0.4)).mul(traffic).mul(alive).mul(0.9);
       // up close the light comes from real windows and lamps, so the painted glow steps back
-      const paint = mix(float(0.22), float(1), smoothstep(0.02, 0.25, camDist));
-      lit = lit.add(hue.mul(cityLight.mul(1.25).mul(paint).add(roadLight)).mul(nightAmt));
+      // (It steps back further and over a longer distance than it did: from low over a town at night the painted
+      // glow was large hard-edged white patches, far brighter than anything else, because the exposure opens up in
+      // the dark. The glow is also held back by that exposure, as the stars are.)
+      const paint = mix(float(0.05), float(1), smoothstep(0.04, 0.5, camDist));
+      const heldBack = float(1).div(max(uExposure, 1)).pow(0.5);
+      lit = lit.add(hue.mul(cityLight.mul(1.25).mul(paint).add(roadLight.mul(mix(float(0.35), float(1), smoothstep(0.04, 0.5, camDist))))).mul(nightAmt).mul(heldBack));
       // the Night Map: borders as fine bright lines, and a faint wash of each nation's colour over its land
       const border = float(1).sub(smoothstep(0.2, 0.42, CB.r));
       const frontier = float(1).sub(smoothstep(0.6, 0.78, CB.r)).mul(0.3);

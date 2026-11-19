@@ -795,7 +795,7 @@ async function boot(): Promise<void> {
   window.addEventListener('resize', () => scene.resize());
 
   let lastFocus = 0;
-  let slowFor = 0, fastFor = 0, steppedUpAt = 0, retryAfter = 0, retryWait = 300000;
+  let slowFor = 0, fastFor = 0, steppedUpAt = 0, retryAfter = 0, retryWait = 300000, quietUntil = Infinity;
   let postcardBase = 0;
   const focusVec = new Vector3();
   let last = performance.now();
@@ -833,7 +833,11 @@ async function boot(): Promise<void> {
       // trying again, so a machine on the edge is not made to stutter every few minutes.
       const target = mobile ? 26 : 50;
       // (`&noadapt` in the address keeps the preset as chosen: software rendering in checks is always "too slow")
-      const watching = !state.opening && !params.has('noadapt') && document.visibilityState === 'visible';
+      // Loading is not the picture: while the erosion bake runs and the first shaders compile, frames are slow for
+      // reasons that have nothing to do with the preset. Counting them stepped Ultra down before it had drawn a
+      // single normal frame, and then remembered that. The watch starts a few seconds after the bake is done.
+      if (!scene.erosion?.finished) quietUntil = now + 5000;
+      const watching = !state.opening && !params.has('noadapt') && document.visibilityState === 'visible' && now > quietUntil;
       if (watching && scene.fpsAvg < target) {
         slowFor += dt; fastFor = 0;
         if (slowFor > 2 && adaptive < 5) {

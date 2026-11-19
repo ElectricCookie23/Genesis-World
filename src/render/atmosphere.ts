@@ -96,9 +96,13 @@ export function createAtmosphere(): Mesh {
     // a tenth as bright, which the exposure for the ground then showed as a night sky at noon (seen once the ground
     // itself was lit correctly on a real GPU). The lift applies in full to open sky, and gently to the haze in front
     // of solid things, and fades out as the camera climbs out of the air so the view from orbit is unchanged.
-    const inside = float(1).sub(smoothstep(1.012, ATMO_RADIUS, sqrt(rr)));
+    const inside = float(1).sub(smoothstep(1.02, ATMO_RADIUS, sqrt(rr)));
     const openSky = select(hitPlanet, float(0), smoothstep(tFarA.mul(0.9), tFarA.mul(0.99), tSolid));
-    const lift = mix(float(1), mix(float(1.35), float(3.0), openSky), inside);
+    // Terrain heights are drawn far larger than life but the air's scale height is not, so a hillside three
+    // kilometres up stands above most of the air and its sky went dark indigo with stars at noon. The lift grows with
+    // how thin the air is at the camera, so the sky keeps about the same brightness wherever there is ground to stand on.
+    const thinHere = exp(max(sqrt(rr).sub(RP + 0.002), 0).div(HR)).min(5);
+    const lift = mix(float(1), mix(float(1.35), float(3.0), openSky).mul(thinHere), inside);
     return color.mul(5).mul(lift).mul(vec3(uLook.star)).mul(uAtmo).mul(vec3(uGradeTint)).mul(select(discA.greaterThan(0), 1, 0)).add(bow.mul(vec3(uLook.star)));
   });
   material.colorNode = scatter();
@@ -163,7 +167,7 @@ export function createSky(): Mesh {
   const keepDark = float(1).div(max(uExposure, 0.5));
   // by day, from inside the air, the sky outshines the stars
   const camR = length(cameraPosition);
-  const veil = float(1).sub(float(1).sub(smoothstep(1.012, ATMO_RADIUS, camR)).mul(smoothstep(-0.12, 0.1, dot(cameraPosition.div(camR), uSunDir))).mul(0.97));
+  const veil = float(1).sub(float(1).sub(smoothstep(1.02, ATMO_RADIUS, camR)).mul(smoothstep(-0.12, 0.1, dot(cameraPosition.div(camR), uSunDir))));
   material.colorNode = stars.mul(pow(keepDark, 0.6)).add(nebula.mul(keepDark)).add(siblings.mul(pow(keepDark, 0.6))).mul(veil).add(sun).add(sun2);
   const mesh = new Mesh(new SphereGeometry(400, 48, 32), material);
   mesh.frustumCulled = false;
