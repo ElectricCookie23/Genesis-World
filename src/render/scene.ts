@@ -872,7 +872,9 @@ export class GenesisScene {
     this.sky.position.copy(c.position);
     this.sky.scale.setScalar((far * 0.9) / 400);
     guardUniforms();
-    this.post.maxExposure = 1.5 + 2.1 * Math.max(0, Math.min(1, (1.2 - this.cam.dist) / 1.0));
+    // (Raised a little from orbit after a GPU check found the night side so dark that land could hardly be told
+    // from sea. The cap only matters in dark scenes: a daylit view never asks for this much.)
+    this.post.maxExposure = 2.1 + 1.5 * Math.max(0, Math.min(1, (1.2 - this.cam.dist) / 1.0));
     if (this.clouds) this.clouds.jitter.value = this.post.temporal ? 1 : 0.3;
     this.clouds?.render(this.renderer, this.cam.camera);
     this.post.render(dt);

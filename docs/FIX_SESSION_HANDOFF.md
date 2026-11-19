@@ -22,6 +22,37 @@ How the sessions talk:
 - Assets: **not now.** The owner's decision: the collected assets come later, "once the base game is done and the blackbox testing of it is essentially complete. the normal features need to work first." BRIEF.md allows CC0 or public domain only, each logged in `CREDITS.md`.
 - The owner paused this work because of usage limits. Keep to work that matters, and do not start long speculative jobs.
 
+## Where I stopped (second pause, 2026-11-20 about 2:10 am Qatar time, for usage)
+
+Read this section first; the older sections below are background.
+
+**State.** `main` and this branch were level at `945a395` plus the Mac session's write-up `13a9402` (merged here). Five batches of fixes are on `main`. On the GPU, batches one to three are confirmed (see the re-tests in `docs/GPU_REVIEW.md`); batch four and five are software-checked only, because the last GPU check could not be completed.
+
+**Why the last GPU check failed** ("Check of commit 6249d6c: not completed", top of `docs/GPU_REVIEW.md`). Not because of the fixes: the build session's expansion commits (E1 to E5) changed how the game behaves under a fast-forward.
+1. A scripted `warp` now stops at each milestone (the build session made warps stop "at the dawn of history" on purpose) and must be re-sent; `stats.simYear` reads 0.01 My for about a minute while a warp runs.
+2. Civilization appears at about 59 My and is entirely gone by 90 My (698 settlement records, none live; 5,359 at 200 My, none live), where the day before the same seed had 468 live settlements at 200 My. Either a regression in the history model or the fields changed meaning (`settlement.ruined`, `stats.maxTech`, `state.nations`). **This belongs to the build session and it has not been told**: my message to it did not go through. Tell it, or write it under "GPU review" in `HANDOFF.md`.
+3. "The land has holes through it" (`docs/screenshots/gpu/retest5-webgpu-broadleaf-0.06.jpg`): a ridge hanging over the sea with arch-shaped openings under it, and pink, white and green polylines crossing the sea. I took this one. What I ruled out: the quadtree is not running short (terrain 842 of 1,200 patches at worst, sea 575 of 1,000, measured with `scripts/checks/patchcheck.js` if I saved it, otherwise re-create: sweep camera spots and read `scene.terrain.sphere.patchCount` and `.max`); and no renderer file that shapes terrain changed since `6766d4a`, which checked out well. So suspect the world's data in the new sim (very steep coasts from the newer landform and tectonics code opening cracks between patches of different detail, with the skirts too short to cover them), or sea level. The coloured lines are probably roads, borders and trails drawn across water. Next step: reproduce in software by growing the seed to 200 My on the current build (re-send the warp after each milestone stop), go to `setImmediate(2.86, 0.18, 0.06)`, tilt -0.35, and look; also ask the Mac session for a Shift+D diagnostic dump at that view.
+
+**What the Mac check was meant to cover and still has not:** towns and a village at night from 0.08 and 0.02, worked ground in towns, Night Map labels, broadleaf trunks, bark and crossed leaves, land animals wading, the gliding flap, building spacing, the night side from orbit, the sky at altitude on WebGL2, a small island for the missing-sea squares, huts in the surf. To review towns now: stop soon after civilization begins (about 60 My on this seed) and step forward in small warps while watching the count of live settlements.
+
+**Owner's decisions since the first pause** (also in `docs/DIRECTION_DRAFT.md`):
+- The game should have a goals mode as a feature, but mostly be relaxed sandbox play, with no energy or budget on tools.
+- Audience teenagers to adults; fun first; a Kerbal Space Program and SimEarth hybrid in feel; download acceptable if it stays shareable; no native-engine rebuild planned.
+- Assets stay for later, after the base game works. The Mac session keeps collecting and has a reviewed shortlist in `docs/ASSET_SHORTLIST.md` (about 20 GB on the Mac).
+- GPU checks were allowed in the scratch Chrome each time I asked. Ask again before each one.
+- "you can do whatever you want, however you want whenever you want": proceed on judgment, but usage is the constraint, so spend it on what matters.
+- Give times in Qatar time (UTC+3).
+
+**Task list, in order, for when work resumes**
+1. Tell the build session about findings 1 and 2 above (message it, or write in `HANDOFF.md`). Ask for a way to make a scripted warp run through milestones, so check scripts work again.
+2. Reproduce and fix the holes in the land (finding 3).
+3. When civilization survives again, ask the owner for a GPU check of batches four and five (list above), and fix what it finds.
+4. Start on the direction: with the owner's go, the first step in `docs/DIRECTION_DRAFT.md` is a mission framework with a handful of optional missions and a debrief, then one clear toolbar of free planet tools. Agree with the build session who builds it before starting, since it is still working through the old expansion list.
+5. Remaining look items from the reviews, in `HANDOFF.md` under "Still open, for whoever gets to it".
+6. Later, when the owner says: the look pass with the shortlisted assets.
+
+**Check scripts** are in `scripts/checks/` (see below for what each does; newer ones: `towncheck.js` made-up towns, `labelcheck.js` Night Map labels, `atlascheck.js` all plant forms). They need the dev server on port 5199 and may need `&noadapt` and a re-sent warp on the current build.
+
 ## Since the pause
 
 - The build session resumed and pushed three commits (`ce6771a`, `c81a310`, `29ea8ad`). It merged its own review fixes with mine, keeping my verified versions where both touched the same thing, and added a third batch: clouds marched at half resolution, a non-finite guard with a diagnostic report (Shift+D), no river causeways on the sea, trails as trampled patches, ground and plant colours, conifers reshaped, animals drawn only from near, depth of field only while following, exposure capped from orbit, thinner atmosphere shell, `&noadapt`. Its notes are in `HANDOFF.md`.

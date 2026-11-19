@@ -159,6 +159,7 @@ export interface TownInfo extends SettlementInfo { temple?: boolean }
 
 export class Towns {
   readonly meshes: Copies[] = [];
+  private placedX = new Float32Array(260); private placedY = new Float32Array(260); private placedS = new Float32Array(260);
   /** Most buildings drawn at once. */
   budget = 4000;
   private slots = new Map<Building, Slot>();
@@ -307,6 +308,8 @@ export class Towns {
       const reachCos = Math.cos(Math.min(0.5, 0.08 + dist * 0.7));
       const up = new Vector3(), east = new Vector3(), north = new Vector3(), c = new Vector3();
       let total = 0;
+      const placedX = this.placedX, placedY = this.placedY, placedS = this.placedS;
+      let placedN = 0;
       for (const st of this.settlements) {
         if (st.ruined >= 0 || total >= this.budget) continue;
         c.set(pos[st.cell * 3]!, pos[st.cell * 3 + 1]!, pos[st.cell * 3 + 2]!);
@@ -325,6 +328,7 @@ export class Towns {
         // modern skyline.) Small places stay huts, houses and a hall whatever the age.
         const era = Math.min(st.tech, 0.15 + size * 0.95);
         if (st.temple) { this.put('temple', c, hash(st.id * 31) * 6.28, 0.0009 * boost, hash(st.id), lit, st.tech, tint, light); total++; }
+        placedN = 0;
         for (let k = 0; k < count && total < this.budget; k++) {
           const h1 = hash(st.id * 7919 + k * 31), h2 = hash(st.id * 104729 + k * 17), h3 = hash(st.id * 1299709 + k * 7);
           // dense in the middle, thinning outward, on loose rings so there are streets between
@@ -342,6 +346,12 @@ export class Towns {
           else if (era < 0.85) kind = central ? (h3 < 0.45 ? 'tower' : 'hall') : h3 < 0.12 ? 'tower' : 'house';
           else kind = central ? (h3 < 0.3 ? 'spire' : h3 < 0.75 ? 'tower' : 'dome') : h3 < 0.25 ? 'tower' : h3 < 0.35 ? 'dome' : 'house';
           const sz = (kind === 'hut' ? 0.00026 : kind === 'house' ? 0.00034 : kind === 'hall' ? 0.00044 : kind === 'dome' ? 0.0006 : 0.00046) * boost * (0.8 + 0.5 * h3);
+          // keep clear of what already stands here: placed purely by chance, buildings grew through one another
+          const bx = Math.cos(a) * r, by = Math.sin(a) * r;
+          let clash = false;
+          for (let j = 0; j < placedN && !clash; j++) { const dx = placedX[j]! - bx, dy = placedY[j]! - by, gap = (placedS[j]! + sz) * 0.62; clash = dx * dx + dy * dy < gap * gap; }
+          if (clash) continue;
+          if (placedN < placedX.length) { placedX[placedN] = bx; placedY[placedN] = by; placedS[placedN] = sz; placedN++; }
           // face along the ring, like buildings along a street
           this.put(kind, up, a + (h3 < 0.5 ? 0 : Math.PI / 2) + (h1 - 0.5) * 0.3, sz, h2, lit, era, tint, light);
           total++;

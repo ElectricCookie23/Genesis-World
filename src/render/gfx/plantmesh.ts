@@ -198,7 +198,12 @@ function tree(b: Builder, spec: TreeSpec): void {
         const off: V3 = [b.r(-1, 1), b.r(-0.5, 1) * (1 - spec.flatCrown), b.r(-1, 1)];
         const centre = add(at, mul(norm(off), spec.leafSize * b.r(0.2, 0.7)));
         const facing = norm(lerp(norm([b.r(-1, 1), b.r(0.2, 1), b.r(-1, 1)]), [0, 1, 0], spec.flatCrown));
-        b.quad(centre, facing, perp(facing), spec.leafSize * b.r(0.8, 1.25), spec.leafSize * b.r(0.8, 1.25), spec.leafPart, phase + k * 0.7, 1);
+        const lw = spec.leafSize * b.r(0.8, 1.25), lh = spec.leafSize * b.r(0.8, 1.25);
+        b.quad(centre, facing, perp(facing), lw, lh, spec.leafPart, phase + k * 0.7, 1);
+        // a second card across the first: a single card seen edge-on is a thin spike, and from most angles a crown
+        // of single cards looks like paper; crossed, each cluster has some body from every side
+        const across = perp(facing);
+        b.quad(centre, across, facing, lw * 0.85, lh * 0.85, spec.leafPart, phase + k * 0.7 + 0.3, 1);
       }
       return;
     }

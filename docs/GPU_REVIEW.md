@@ -13,6 +13,31 @@ This is the second version. The first was cut short by a flat battery; this one 
 - Roughly 60 of about 230 captures were looked at. Each finding names the files it rests on; the rest are listed at the end.
 - For part of the second run the machine's owner was also using the same browser window, so the Genesis tab may have been in the background at times. The frame-rate table was finished before that; the creature captures after it were checked to be in a visible tab.
 
+## Check of commit 6249d6c: not completed (2026-11-20)
+
+**None of the nine requested items could be judged.** The builds that were live during this check behave differently under a fast-forward, and by the time the worlds reached the usual test age there was no living civilization to look at. What follows is what happened, as findings in their own right. WebGPU, High, seed `amber-reef-101`, mains power. Files start `retest5-`; one was looked at.
+
+The site redeployed during the session. Three bundles were seen: `index-fbVPCIsX.js` (first two runs), then `index-Btwbmnw6.js` (last two runs, after `945a395` was pushed). I did not record which commit each bundle belongs to.
+
+| Run | Bundle | What was asked | What happened |
+|---|---|---|---|
+| 1 | `fbVPCIsX` | `send({ type: 'warp', years: 200e6 })` | **The warp stopped at 82.4 My** with the milestone "The dawn of history", 4 settlements, `maxTech` 0.221, speed 0. It did not resume in 90 s. Earlier builds ran straight to 200 My. `state.stats.simYear` also reads 0.01 My for about 60 s while a warp is running, then jumps. |
+| 2 | `fbVPCIsX` | (my script queued ten warps by mistake) | Reached 282.4 My: era "winter", last milestone "The last war", 23,007 settlement records of which **2 live**, largest `pop` 1.8, `tech` 0.03, 2 nations. Console: `music unavailable TypeError: Failed to fetch dynamically imported module: https://electriccookie23.github.io/Genesis-World/assets/esm-BgEymAd-.js` (the redeploy removed a chunk the open page still needed). Captures from this world were not reviewed. |
+| 3 | `Btwbmnw6` | warp to 200 My, resumed after each stop | Stopped once at 58.63 My ("First tamed animal", 3 settlements, `maxTech` 0.22), then ran to 200 My. **At 200 My: 5,359 settlement records, none live (`ruined < 0` matched nothing), `stats.maxTech` 0, 0 nations.** No living species with `land > 0.5` either, so the shoreline check had nothing to follow. `stats.stage` still "animals". |
+| 4 | `Btwbmnw6` | warp to 90 My | Stopped once at 59.03 My ("First farms", 3 settlements), then ran to 90 My. **At 90 My: 698 settlement records, none live, `maxTech` 0, 0 nations.** |
+
+So on `Btwbmnw6` civilization appears at about 59 My and is entirely gone by 90 My, in both runs. On the build checked the day before (`DEGcW2rY`, commit `6766d4a`) the same seed had 468 live settlements and 15 nations at 200 My. Either civilizations now die out within about 30 My, or the fields I read (`settlement.ruined`, `stats.maxTech`, `state.nations`) changed meaning; I did not open the Peoples panel to tell which.
+
+**New visual problem** (run 3, `Btwbmnw6`, 200 My, `setImmediate(2.86, 0.18, 0.06)`, tilt -0.35, sun +0.5; `retest5-webgpu-broadleaf-0.06.jpg`):
+
+1. **The land has holes through it.** A ridge of bare brown terrain hangs over the sea with three arch-shaped openings along its lower edge; the sea surface shows through them as if the land were a hollow shell lifted off the water.
+2. **Straight coloured lines cross the sea under and beside the land**: a pink polyline, a white double line and a pale green line, with sharp corners, like a wireframe or the "causeway" lines reported earlier.
+3. No plants at all at a site that was dense broadleaf forest in the previous build's world (the worlds differ, so this may simply be a different place now).
+
+No diagnostic dump was saved for this view.
+
+**For whoever repeats this:** a scripted warp must now be re-sent after each milestone stop, and the script must wait for `simYear` to move before deciding the warp has stopped. To review towns, stop soon after civilization begins (about 60 My on this seed) and step forward in small warps while watching the count of live settlements.
+
 ## Check of commit 6766d4a (2026-11-20)
 
 Deploy run for `6766d4a` green before testing; the site served `assets/index-DEGcW2rY.js` throughout. WebGPU, High (Ultra for item 4), 200 My warp, mains power. Files start `retest4-`; 10 of about 45 were looked at. Console over the run: `x1 Failed to load resource: the server responded with a status of 404 ()` only.
