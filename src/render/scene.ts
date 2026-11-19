@@ -45,6 +45,20 @@ const GRADE_SICK = new Vector3(1.0, 0.95, 0.7);
 const HAZE_BLUE = new Vector3(0.42, 0.62, 1.0);
 const HAZE_SICK = new Vector3(0.75, 0.62, 0.38);
 
+export type Preset = 'low' | 'medium' | 'high' | 'ultra';
+
+/** What each quality preset turns on. Ultra may need a strong desktop GPU; Low is for phones. */
+export const PRESETS: Record<Preset, {
+  ratio: number; dataSize: number; erosionSize: number; erosionIterations: number; oceanResolution: number; fftEvery: number;
+  cloudSteps: number; cloudLight: number; cloudDetail: number; cloudNoise: number; auroraSteps: number; shadowSteps: number; maxLevel: number; lineSize: number;
+  plants: number; models: number; grass: number; creatures: number; rain: number; taa: boolean; ao: boolean; bloom: boolean; fringe: boolean;
+}> = {
+  low: { ratio: 1, dataSize: 128, erosionSize: 256, erosionIterations: 160, oceanResolution: 64, fftEvery: 2, cloudSteps: 8, cloudLight: 2, cloudDetail: 0, cloudNoise: 32, auroraSteps: 12, shadowSteps: 3, maxLevel: 9, lineSize: 256, plants: 4000, models: 200, grass: 0, creatures: 600, rain: 1500, taa: false, ao: false, bloom: false, fringe: false },
+  medium: { ratio: 1.5, dataSize: 192, erosionSize: 384, erosionIterations: 240, oceanResolution: 128, fftEvery: 1, cloudSteps: 14, cloudLight: 3, cloudDetail: 1, cloudNoise: 48, auroraSteps: 18, shadowSteps: 6, maxLevel: 10, lineSize: 512, plants: 15000, models: 600, grass: 2000, creatures: 3000, rain: 3000, taa: false, ao: false, bloom: true, fringe: true },
+  high: { ratio: 2, dataSize: 256, erosionSize: 512, erosionIterations: 320, oceanResolution: 256, fftEvery: 1, cloudSteps: 22, cloudLight: 4, cloudDetail: 1, cloudNoise: 64, auroraSteps: 28, shadowSteps: 8, maxLevel: 11, lineSize: 512, plants: 40000, models: 1600, grass: 6000, creatures: 5000, rain: 6000, taa: true, ao: true, bloom: true, fringe: true },
+  ultra: { ratio: 3, dataSize: 384, erosionSize: 768, erosionIterations: 400, oceanResolution: 512, fftEvery: 1, cloudSteps: 40, cloudLight: 6, cloudDetail: 1, cloudNoise: 64, auroraSteps: 40, shadowSteps: 12, maxLevel: 12, lineSize: 1024, plants: 60000, models: 2600, grass: 10000, creatures: 5000, rain: 10000, taa: true, ao: true, bloom: true, fringe: true },
+};
+
 export class GenesisScene {
   readonly renderer: WebGPURenderer;
   readonly scene = new Scene();
@@ -163,6 +177,34 @@ export class GenesisScene {
     this.renderer.setSize(w, h, false);
     this.cam.camera.aspect = w / Math.max(1, h);
     this.cam.camera.updateProjectionMatrix();
+  }
+
+  /** The preset the planet was built with: texture sizes and buffer sizes are fixed from then on. */
+  builtWith: Preset = 'high';
+
+  /** Sizes that are fixed when the planet is built. Call before setGrid. */
+  presetForBuild(name: Preset): void {
+    const p = PRESETS[name];
+    this.builtWith = name;
+    this.dataSize = p.dataSize; this.erosionSize = p.erosionSize; this.erosionIterations = p.erosionIterations;
+    this.oceanResolution = p.oceanResolution; this.cloudNoiseSize = p.cloudNoise; this.cloudLightSteps = p.cloudLight;
+    this.shadowSteps = p.shadowSteps; this.riverSize = p.lineSize;
+    this.plantBudget = p.plants; this.plantModels = p.models; this.grassBudget = p.grass; this.creatureBudget = p.creatures; this.rainDrops = p.rain;
+  }
+
+  /**
+   * Everything that can change while running: march steps, level of detail, how many plants and animals, post effects.
+   * cut 0..1 scales the counts down further when the frame rate sags.
+   */
+  presetLive(name: Preset, cut = 1, post = true): void {
+    const p = PRESETS[name];
+    if (this.clouds) { this.clouds.steps.value = p.cloudSteps; this.clouds.detail.value = p.cloudDetail; }
+    if (this.aurora) this.aurora.steps.value = p.auroraSteps;
+    if (this.terrain) this.terrain.maxLevel = p.maxLevel;
+    if (this.ocean) { this.ocean.maxLevel = p.maxLevel; this.ocean.fftEvery = p.fftEvery; }
+    if (this.vegetation) { this.vegetation.maxInstances = Math.round(p.plants * cut); this.vegetation.modelBudget = Math.round(p.models * cut); this.vegetation.grassBudget = Math.round(p.grass * cut); }
+    if (this.creatures) this.creatures.budget = Math.round(p.creatures * cut);
+    if (post) this.post.set({ taa: p.taa, ao: p.ao, bloom: p.bloom, fringe: p.fringe });
   }
 
   /** The seed-derived look of this world: star, sky, seas, rocks, pigments, moon. */

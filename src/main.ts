@@ -2,7 +2,7 @@ import '@fontsource/cormorant-garamond/500.css';
 import '@fontsource/cormorant-garamond/500-italic.css';
 import '@fontsource/jetbrains-mono/400.css';
 import { h, render } from 'preact';
-import { GenesisScene } from './render/scene';
+import { GenesisScene, PRESETS, type Preset } from './render/scene';
 import { Opening } from './render/opening';
 import { buildGrid } from './sim/world';
 import { randomSeedCode } from './sim/rng';
@@ -62,12 +62,16 @@ async function boot(): Promise<void> {
     return;
   }
   // development switches for slow machines: smaller planet maps and a shorter erosion bake
+  // the quality preset decides texture and buffer sizes when the planet is built
+  {
+    const saved = store.get('genesis:quality') as Preset | null;
+    const preset: Preset = saved && PRESETS[saved] ? saved : mobile ? 'low' : 'high';
+    scene.presetForBuild(preset);
+    scene.setPixelRatio(PRESETS[preset].ratio);
+  }
   if (params.get('dsize')) scene.dataSize = Number(params.get('dsize'));
   if (params.get('esize')) scene.erosionSize = Number(params.get('esize'));
   if (params.get('eiter')) scene.erosionIterations = Number(params.get('eiter'));
-  scene.setPixelRatio(mobile ? 1 : 2);
-  scene.plantBudget = mobile ? 15000 : 60000;
-  scene.creatureBudget = mobile ? 1500 : 5000;
   update({ backend: scene.backend });
   progress(0.3);
 
@@ -125,22 +129,16 @@ async function boot(): Promise<void> {
   };
 
   // quality presets, and automatic step-downs when the frame rate sags
-  const QUALITY: Record<UIState['quality'], { ratio: number; plants: number; creatures: number; bloom: boolean }> = {
-    low: { ratio: 1, plants: 12000, creatures: 1200, bloom: false },
-    medium: { ratio: 1.5, plants: 30000, creatures: 3000, bloom: true },
-    high: { ratio: 2, plants: 60000, creatures: 5000, bloom: true },
-    ultra: { ratio: 3, plants: 60000, creatures: 5000, bloom: true },
-  };
+  const QUALITY = PRESETS;
   let adaptive = 0;
   const applyQuality = () => {
-    const q = QUALITY[state.quality];
+    const q = PRESETS[state.quality];
     const cut = adaptive >= 2 ? 0.5 : 1;
+    // dynamic resolution: the last two steps lower the resolution to hold the frame rate
     scene.setPixelRatio(Math.max(0.75, q.ratio - (adaptive >= 3 ? 0.5 : 0) - (adaptive >= 4 ? 0.5 : 0)));
-    const fine = state.quality === 'high' || state.quality === 'ultra';
-    scene.post.set({ bloom: q.bloom && adaptive < 1, taa: fine && adaptive < 2, ao: fine && adaptive < 1, fringe: state.quality !== 'low' });
+    scene.presetLive(state.quality, cut, false);
+    scene.post.set({ bloom: q.bloom && adaptive < 1, taa: q.taa && adaptive < 2, ao: q.ao && adaptive < 1, fringe: q.fringe });
     scene.post.allowDof = state.quality !== 'low' && adaptive < 2;
-    if (scene.vegetation) scene.vegetation.maxInstances = Math.min(mobile ? 15000 : 60000, q.plants * cut);
-    if (scene.creatures) scene.creatures.budget = Math.min(mobile ? 1500 : 5000, q.creatures * cut);
     // blurred glass panels are costly on weak GPUs: use plain dark panels below the high preset
     document.documentElement.classList.toggle('lite', state.quality === 'low' || state.quality === 'medium' || adaptive >= 1);
   };
@@ -149,6 +147,8 @@ async function boot(): Promise<void> {
     update({ quality: q });
     store.set('genesis:quality', q);
     applyQuality();
+    // texture sizes were fixed when the planet was built: say so if the new preset wants different ones
+    if (q !== scene.builtWith) { update({ notice: 'Some of this preset (texture detail, wave and cloud resolution) takes effect after a reload.' }); window.setTimeout(() => update({ notice: '' }), 6000); }
   };
   actions.setMusicVolume = (v) => {
     update({ musicVolume: v });

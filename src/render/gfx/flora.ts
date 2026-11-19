@@ -89,6 +89,9 @@ export class Flora {
   pigmentB: [number, number, number] = [0.3, 0.3, 0.05];
   /** Season signal: sun declination over axial tilt, -1..1 (0 when seasons are not shown). */
   autumn = 0;
+  /** Most real models and grass tufts to draw (never more than the buffers built at load). */
+  modelBudget = 1e9;
+  grassBudget = 1e9;
   /** Camera distance at which real models hand over to imposters. */
   readonly uLod = uniform(0.02);
   /** Radius of the grass ring around the camera. */
@@ -447,7 +450,7 @@ export class Flora {
     let farN = 0;
     const far = this.far;
     const farCap = Math.min(far.cap, this.maxInstances);
-    const fullBudget = Math.max(40, Math.floor(this.maxInstances / 40));
+    const fullBudget = Math.min(this.modelBudget, Math.max(40, Math.floor(this.maxInstances / 25)));
     let fullN = 0;
     const q = new Quaternion(), yaw = new Quaternion(), up = new Vector3();
     const Y = new Vector3(0, 1, 0);
@@ -543,7 +546,8 @@ export class Flora {
     const gr = this.grass;
     const camR = camera.length();
     const R = this.uGrassR.value;
-    if (dist > 0.06 || gr.cap < 8) { if (gr.mesh.count) gr.mesh.count = 0; this.lastGrass.set(9, 9, 9); return; }
+    const cap = Math.min(gr.cap, this.grassBudget);
+    if (dist > 0.06 || cap < 8) { if (gr.mesh.count) gr.mesh.count = 0; this.lastGrass.set(9, 9, 9); return; }
     if (camera.distanceToSquared(this.lastGrass) < (R * 0.18) ** 2) return;
     this.lastGrass.copy(camera);
     const fx = camera.x / camR, fy = camera.y / camR, fz = camera.z / camR;
@@ -560,7 +564,7 @@ export class Flora {
       case 4: cu = fx / m; cv = -fy / m; break;
       default: cu = -fx / m; cv = -fy / m; break;
     }
-    const side = Math.max(8, Math.floor(Math.sqrt(gr.cap) * 1.15));
+    const side = Math.max(8, Math.floor(Math.sqrt(cap) * 1.15));
     const step = (R * 2 * 1.5) / side;
     const iu = Math.round(cu / step), iv = Math.round(cv / step);
     const d: [number, number, number] = [0, 0, 0];
@@ -570,8 +574,8 @@ export class Flora {
     let n = 0;
     let cell = this.grassCell;
     const half = side >> 1;
-    for (let j = -half; j <= half && n < gr.cap; j++) {
-      for (let i = -half; i <= half && n < gr.cap; i++) {
+    for (let j = -half; j <= half && n < cap; j++) {
+      for (let i = -half; i <= half && n < cap; i++) {
         const gi = iu + i, gj = iv + j;
         const key = (gi * 73856093) ^ (gj * 19349663) ^ (face * 83492791);
         const u = (gi + hash(key) - 0.5) * step, v = (gj + hash(key + 1) - 0.5) * step;
