@@ -27,6 +27,8 @@ export class OrbitCamera {
   heading = 0;
   /** User tilt offset in radians (negative = look more toward the horizon). */
   tiltOffset = 0;
+  /** 1 lets a positive tilt raise the gaze above the focus point (used under water); 0 keeps it on the ground. */
+  lookUp = 0;
   private tLon = this.lon;
   private tLat = this.lat;
   private tDist = this.dist;
@@ -199,6 +201,8 @@ export class OrbitCamera {
     if (cr < under) cam.position.multiplyScalar(under / cr);
     tmpUp.copy(tmpF).multiplyScalar(Math.sin(tilt)).addScaledVector(S, Math.cos(tilt)).normalize();
     cam.up.copy(tmpUp);
+    // under water a raised tilt lifts the gaze off the sea bed, toward the horizon and then up to the surface
+    if (this.lookUp > 0 && this.tiltOffset > 0) tmpFocus.addScaledVector(S, this.lookUp * this.tiltOffset * this.dist * 3);
     cam.lookAt(tmpFocus);
     cam.near = Math.max(0.0004, this.dist * 0.05);
     cam.far = 1200;

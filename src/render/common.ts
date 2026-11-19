@@ -47,6 +47,8 @@ export const uRing = uniform(0);
 export const uSeaGlow = uniform(0.35);
 /** 1 when the camera is under water. */
 export const uUnderwater = uniform(0);
+/** Under water: rgb = the colour things fade into with distance, w = how fast (per planet radius). */
+export const uWaterFog = uniform(new Vector4(0.02, 0.18, 0.22, 180));
 /** 0..1: how strongly the data overlay (temperature, rain, life, people) covers the surface. */
 export const uOverlay = uniform(0);
 /** The latest meteor strike: xyz = where, w = seconds since (negative = none). */
