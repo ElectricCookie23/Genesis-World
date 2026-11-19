@@ -241,3 +241,15 @@ export function chooseNext(k: Knowledge, land: ReadonlySet<Land>, lean: Leaning,
   for (let j = 0; j < options.length; j++) { r -= weights[j]!; if (r <= 0) return options[j]!; }
   return options[options.length - 1]!;
 }
+
+/**
+ * What one nation could learn from another it is in contact with (system E3): the earliest need the
+ * other has met that is open to this one. Returns the slot index, or -1 if there is nothing to learn.
+ * The need is then met in whatever way the learner's own land allows.
+ */
+export function borrowable(mine: Knowledge, theirs: Knowledge, land: ReadonlySet<Land>): number {
+  let best = -1;
+  for (const i of open(mine, land)) if (theirs.way[i]! >= 0 && (best < 0 || WEB[i]!.level < WEB[best]!.level)) best = i;
+  return best;
+}
+

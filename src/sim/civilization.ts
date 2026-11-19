@@ -16,7 +16,7 @@ import { eraOf, eraSlot, eraTitle, earthNote } from './history/eras';
 import { hash32 } from './history/hash';
 import { capital, compound, makeLanguage, personName, placeMeanings, word, type Language } from './history/language';
 import { emptyHistory, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role } from './history/model';
-import { SLOT_INDEX, WEB, chooseNext, levelOf, newKnowledge, wayFor, type Land, type Leaning } from './history/tech';
+import { SLOT_INDEX, WEB, borrowable, chooseNext, levelOf, newKnowledge, wayFor, type Land, type Leaning } from './history/tech';
 
 export interface Settlement {
   id: number;
@@ -300,6 +300,16 @@ export class Civilization {
         if (o.species === st.species && (o.belief === st.belief || o.belief < 0 || st.belief < 0) && !rng.chance(0.35)) continue;
         st.pop *= 0.7; o.pop *= 0.65; st.tech = Math.max(0.03, st.tech - 0.02); o.tech = Math.max(0.03, o.tech - 0.02);
         n.stability = sat(n.stability - 0.05);
+        // conquest carries knowledge with it, or burns it (system E3)
+        const foe = o.nation >= 0 ? this.h.nations[o.nation] : undefined;
+        if (foe && foe.ended < 0 && foe.id !== n.id) {
+          const [strong, weak] = n.tech >= foe.tech ? [n, foe] : [foe, n];
+          if (strong.tech - weak.tech > 0.05) {
+            const wl = new Set(weak.land);
+            if (rng.chance(0.5)) { for (let k = 0; k < 2; k++) { const i = borrowable(weak.know, strong.know, wl); if (i >= 0) { weak.know.way[i] = wayFor(i, wl); weak.know.year[i] = year; } } }
+            else { let top = -1; for (let i = 0; i < WEB.length; i++) if (weak.know.way[i]! >= 0 && (top < 0 || WEB[i]!.level > WEB[top]!.level)) top = i; if (top >= 0) weak.know.way[top] = -1; }
+          }
+        }
         sim.civEvent('war', st.species, st.cell, st.id, o.id);
         // with the atom in hand, a war can end the age
         if (this.spaceAgeYear >= 0 && rng.chance(0.04)) sim.civEvent('nuclear', st.species, st.cell, st.id);
@@ -428,6 +438,38 @@ export class Civilization {
     return [...has].sort();
   }
 
+  /**
+   * Who a nation is in touch with: nations whose towns stand next to its own, and, once it builds ships,
+   * nations on other coasts within the range of its ships.
+   */
+  private contactsOf(sim: Simulation, n: Nation, towns: Settlement[]): number[] {
+    const reg = sim.regions, g = reg.grid, h = this.h, gp = sim.grid.pos;
+    const out = new Set<number>();
+    for (const st of towns) {
+      for (let j = 0; j < g.ncount[st.region]!; j++) {
+        const oid = this.occupied.get(g.neighbors[st.region * 6 + j]!);
+        if (oid === undefined) continue;
+        const o = this.settlements[oid]!;
+        if (o.nation >= 0 && o.nation !== n.id) out.add(o.nation);
+      }
+    }
+    // by sea: rafts keep to the shore, keeled ships cross a strait, ocean ships and engine ships reach anywhere
+    const knows = (id: string) => n.know.way[SLOT_INDEX.get(id)!]! >= 0;
+    const range = knows('steamship') ? 4 : knows('ship2') ? 1.7 : knows('ship1') ? 0.55 : knows('sail') ? 0.25 : 0;
+    if (range > 0 && n.land.includes('coast')) {
+      const cap = this.settlements[n.capital]!;
+      for (const o of h.nations) {
+        if (o.id === n.id || o.ended >= 0 || !o.land.includes('coast')) continue;
+        const oc = this.settlements[o.capital]!;
+        const cos = gp[cap.cell * 3]! * gp[oc.cell * 3]! + gp[cap.cell * 3 + 1]! * gp[oc.cell * 3 + 1]! + gp[cap.cell * 3 + 2]! * gp[oc.cell * 3 + 2]!;
+        if (Math.acos(Math.max(-1, Math.min(1, cos))) < range) out.add(o.id);
+      }
+    }
+    // from the Age of Signals word travels without ships or roads
+    if (n.era >= 7) for (const o of h.nations) if (o.id !== n.id && o.ended < 0 && o.era >= 7) out.add(o.id);
+    return [...out].sort((a, b) => a - b);
+  }
+
   /** How a culture and its ruler lean among the fields of knowledge. */
   private leaning(n: Nation): Leaning {
     const c = this.h.cultures[n.culture]!, r = this.h.people[n.ruler];
@@ -443,12 +485,28 @@ export class Civilization {
    */
   private research(sim: Simulation, rng: RNG, n: Nation, towns: Settlement[], gain: number, year: number, y: number): void {
     const h = this.h;
-    if (year - n.surveyed > 60) { n.land = this.survey(sim, n, towns); n.surveyed = year; }
+    if (year - n.surveyed > 60) { n.land = this.survey(sim, n, towns); n.contacts = this.contactsOf(sim, n, towns); n.surveyed = year; }
     const land = new Set(n.land);
     let possible = 0;
     for (let i = 0; i < WEB.length; i++) if (wayFor(i, land) >= 0) possible++;
     const each = (1.2 - FARMING) / Math.max(1, possible);
     n.know.saved += gain / each;
+    // ---- learning from neighbours (system E3): what a nation in contact already knows is far cheaper to take up than
+    // to discover, so neighbours and trading partners keep pace while a people alone on an island falls ages behind
+    for (const id of n.contacts) {
+      const other = h.nations[id];
+      if (!other || other.ended >= 0 || other.tech <= n.tech + 0.004) continue;
+      // about one thing learned per contact every century and a half (a lifetime or two in the Age of Signals), sooner for
+      // a trading people: enough to keep neighbours within sight of each other, not enough to keep them level
+      const culture = h.cultures[n.culture]!;
+      const every = n.era >= 7 && other.era >= 7 ? 70 : 150;
+      if (!rng.chance(1 - Math.exp(-y * (0.6 + 0.8 * culture.trade) / every))) continue;
+      const i = borrowable(n.know, other.know, land);
+      if (i < 0) continue;
+      n.know.way[i] = wayFor(i, land); n.know.year[i] = year;
+      n.know.saved = Math.max(-1, n.know.saved - 0.3 * WEB[i]!.ways[n.know.way[i]!]!.cost);
+      n.borrowed = (n.borrowed ?? 0) + 1;
+    }
     for (let made = 0; made < 8; made++) {
       const i = chooseNext(n.know, land, this.leaning(n), rng);
       if (i < 0) { n.know.saved = Math.min(n.know.saved, 2); break; }
@@ -569,7 +627,7 @@ export class Civilization {
     const n: Nation = {
       id: h.nations.length, name, culture: culture.id, species: st.species, capital: st.id, founded: year, ended: -1, parent: from ? from.id : -1, government: 'chiefdom',
       ruler: -1, dynasty: -1, stability: 0.7, tech: st.tech, era: eraOf(st.tech), hue: (culture.hue + ((hash32(this.seedNum, h.nations.length, 7) % 1000) / 1000) * 0.3 + 0.85) % 1, eventId: -1, pop: st.pop, towns: 1,
-      know: newKnowledge(), land: [], surveyed: -1e9,
+      know: newKnowledge(), land: [], surveyed: -1e9, contacts: [],
     };
     // settlers carry what the old country knew; what their new land cannot support they will have to relearn another way
     if (from) { n.know.way.set(from.know.way); n.know.year.set(from.know.year); n.land = from.land.slice(); n.tech = Math.max(st.tech, levelOf(n.know, new Set(n.land))); n.era = eraOf(n.tech); }
