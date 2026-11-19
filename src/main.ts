@@ -183,6 +183,11 @@ async function boot(): Promise<void> {
   };
   window.setInterval(() => { if (!state.opening && state.speedIndex > 0) send({ type: 'save', name: 'autosave', slot: 'auto' }); }, 120000);
 
+  actions.setOverlay = (o) => { update({ overlay: o }); scene.setOverlay(o, state.colorblind); };
+  actions.setColorblind = (on) => { update({ colorblind: on }); store.set('genesis:cb', on ? '1' : '0'); scene.setOverlay(state.overlay, on); };
+  actions.rewind = (index) => send({ type: 'rewind', index });
+  update({ colorblind: store.get('genesis:cb') === '1' });
+
   // milestone pop-ups play one after another
   const toasts: SimEvent[] = [];
   let toastUntil = 0;
@@ -220,7 +225,8 @@ async function boot(): Promise<void> {
     state.species = new Map();
     state.plants = new Map();
     toasts.length = 0;
-    update({ whyEvent: -1, selectedSpecies: -1, creature: null, milestone: null });
+    state.history = [];
+    update({ whyEvent: -1, selectedSpecies: -1, creature: null, milestone: null, settlements: [] });
     scene.creatures?.clear();
   };
   const takeEvents = (events: SimEvent[], live: boolean) => {
@@ -234,6 +240,8 @@ async function boot(): Promise<void> {
       if (ev.importance >= 1 && ev.id > 0) state.chronicle.push(ev.id);
       if (!live) continue;
       if (ev.importance >= 3) toasts.push(ev);
+      // documentary director: cut to wherever something notable just happened
+      if ((state.director || state.postcard) && ev.importance >= 2 && ev.cellId >= 0 && scene.following === null) actions.flyToCell(ev.cellId, 0.9);
       if (ev.type === 'impact') scene.flash(0.9);
       else if (ev.type === 'super-eruption') scene.flash(0.35);
       else if (ev.type === 'mass-extinction') hushUntil = performance.now() + 45000;
@@ -278,6 +286,14 @@ async function boot(): Promise<void> {
         scene.applyStats(msg.stats);
         // the HUD refreshes four times a second; the scene gets every update
         if (performance.now() - lastHud > 250) { lastHud = performance.now(); update({ stats: msg.stats, fps: scene.fpsAvg }); } else state.stats = msg.stats;
+        {
+          const st = msg.stats, h = state.history;
+          const lastYear = h.length ? h[h.length - 1]!.year : -1;
+          if (st.simYear - lastYear > Math.max(2e5, st.simYear / 240)) {
+            h.push({ year: st.simYear, temp: st.meanTemp, oxygen: st.oxygen, species: st.livingSpecies, pop: st.population, land: st.landCover });
+            if (h.length > 480) h.splice(0, h.length - 480);
+          }
+        }
         music.setMood({ stage: msg.stats.stage, era: msg.stats.era, life: Math.min(1, msg.stats.livingSpecies / 30), hush: performance.now() < hushUntil });
         break;
       case 'events':
@@ -287,6 +303,12 @@ async function boot(): Promise<void> {
         for (const sp of msg.species) state.species.set(sp.id, sp);
         scene.setSpecies(state.species);
         update({});
+        break;
+      case 'settlements':
+        update({ settlements: msg.settlements });
+        break;
+      case 'timeline':
+        update({ timeline: msg.points });
         break;
       case 'herds':
         scene.setHerds(msg.herds);
@@ -356,7 +378,7 @@ async function boot(): Promise<void> {
     if (state.creature) refreshCreature(on);
   };
   scene.cam.onTap = (x, y, double) => {
-    if (state.godTool !== 'meteor') {
+    if (!state.godTool) {
       const ind = scene.pickCreature(x, y);
       const info = ind ? state.species.get(ind.species) : undefined;
       if (ind && info) {
@@ -366,10 +388,10 @@ async function boot(): Promise<void> {
         return;
       }
     }
-    if (state.godTool === 'meteor') {
+    if (state.godTool && !state.handsOff) {
       const hit = scene.pick(x, y);
       if (hit) {
-        send({ type: 'god', tool: 'meteor', cell: scene.cellAt(hit.x, hit.y, hit.z), power: 0.8 });
+        send({ type: 'god', tool: state.godTool, cell: scene.cellAt(hit.x, hit.y, hit.z), power: 0.8 });
         update({ godTool: '', panel: 'none' });
       }
     }
@@ -398,6 +420,7 @@ async function boot(): Promise<void> {
     else if (k === 'g') togglePanel('god');
     else if (e.key === '?' || k === '/') togglePanel('help');
     else if (k === 'p') { update({ postcard: !state.postcard }); scene.cam.idle = state.postcard ? 100 : 0; }
+    else if (k === 'o') { const order = ['none', 'temp', 'rain', 'life', 'people'] as const; actions.setOverlay(order[(order.indexOf(state.overlay) + 1) % order.length]!); }
     else if (k === 'f') { if (state.creature) actions.followCreature(!state.creature.following); }
     else if (k === 'escape' && scene.following !== null) actions.followCreature(false);
     else if (k === 'escape') { if (state.postcard) update({ postcard: false }); else closeAll(); }

@@ -53,6 +53,10 @@ export interface Species {
   /** Region holding most of the population. */
   home: number;
   children: number;
+  /** Sapient species that domesticated this one, or -1. */
+  tamedBy: number;
+  /** Set once it has been noted as a living fossil. */
+  fossilNoted: boolean;
   /** Year of the last time this species split or was born. */
   lastSplit: number;
 }
@@ -113,7 +117,7 @@ export class Creatures {
     const s: Species = {
       id: this.species.length, name, genus, genusRef, parent, bornYear: year, extinctYear: -1, eventId: -1, ref: r, origin: r.slice(),
       pop: 0, biomass: 0, cohorts: 0, regions: 0, peakPop: 0, peakRegions: 0,
-      lossStarve: 0, lossThermal: 0, lossPredation: 0, lossHabitat: 0, lossDisaster: 0, topPredator: -1, disasterEvent: -1, home: 0, children: 0, lastSplit: year,
+      lossStarve: 0, lossThermal: 0, lossPredation: 0, lossHabitat: 0, lossDisaster: 0, topPredator: -1, disasterEvent: -1, home: 0, children: 0, tamedBy: -1, fossilNoted: false, lastSplit: year,
     };
     this.species.push(s);
     this.livingSpecies++;

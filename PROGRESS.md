@@ -38,7 +38,7 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 16 | Herds, flocks and fish schools. | in progress | individuals move as herds, flocks and schools around a drifting centre (render side) |
 | 17 | Pack hunting, and prey that flee. | in progress | pack hunting emerges (milestone seen); fleeing behaviour of individuals to come |
 | 18 | Life starts in the sea and moves onto land over time. | done | life starts in the sea; oxygen opens the land; first land animals emerge around 85 My |
-| 19 | Flight evolves gradually, starting with gliding. | in progress | gliding now evolves (legs to membrane); powered flight has not yet appeared in test runs |
+| 19 | Flight evolves gradually, starting with gliding. | done | legs to gliding membrane to wings; powered flight has now appeared in a test run (not yet in every seed) |
 | 20 | The cause graph: every event stores its causes and effects. | done | every event stores causes with weights and effects |
 | 21 | "Why did this happen?" panel on any event. | done | panel walks the cause graph backward as a vertical story with a glyph thumbnail per step |
 | 22 | One continuous camera zoom from deep space down to the ground. | done | one zoom from deep space to the ground, tilting to the horizon as it descends |
@@ -63,16 +63,16 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 41 | An intelligence threshold any lineage can cross. | done | any lineage that is clever, social, numerous and on land crosses the threshold; intelligence now pays its way in social species |
 | 42 | Campfires appearing on the night side. | done | camps show as faint firelight on the night side; First fire milestone |
 | 43 | Villages, then city lights visible from orbit. | done | camps grow into villages and cities whose lights show from orbit and spread into networks |
-| 44 | Cave paintings depicting the real species they hunted. | not started | |
-| 45 | Religions founded on real events (the comet, the eclipse, the volcano). | in progress | young settlements that witness an eruption or impact found a faith on that real event (cause-linked); eclipse and comet to come |
-| 46 | If the user intervenes a lot, civilizations build temples facing the camera. | not started | |
-| 47 | Domestication: tamed species start evolving in new directions. | not started | |
-| 48 | Agriculture that turns land into fields. | not started | |
-| 49 | Roads that follow ancient migration trails. | not started | |
-| 50 | Ruins that forests overgrow, later found by a second intelligent species. | in progress | settlements are abandoned and logged as ruins; overgrowth visuals and rediscovery to come |
+| 44 | Cave paintings depicting the real species they hunted. | done | early camps paint the real species that live beside them (cause-linked event) |
+| 45 | Religions founded on real events (the comet, the eclipse, the volcano). | done | faiths are founded on real eruptions, impacts, tsunamis, eclipses, comets and god-tool events |
+| 46 | If the user intervenes a lot, civilizations build temples facing the camera. | simplified | after three or more god-tool uses, villages raise temples that face the sky (event; no temple model yet) |
+| 47 | Domestication: tamed species start evolving in new directions. | done | farming peoples tame a real grazer; tamed herds grow calmer, more sociable and more numerous each generation |
+| 48 | Agriculture that turns land into fields. | done | settlements with farming paint field patchwork around them |
+| 49 | Roads that follow ancient migration trails. | simplified | lit roads join neighbouring towns by the direct route, not along old migration trails |
+| 50 | Ruins that forests overgrow, later found by a second intelligent species. | in progress | abandoned settlements are logged as ruins and listed; overgrowth visuals and rediscovery by a second people to come |
 | 51 | Plate tectonics with drifting continents. | not started | |
 | 52 | Mountain building at plate collisions, creating rain-shadow deserts. | not started | |
-| 53 | Earthquakes and tsunamis. | not started | |
+| 53 | Earthquakes and tsunamis. | done | earthquakes at plate boundaries; undersea ones raise tsunamis that scour coasts and are witnessed |
 | 54 | Hotspots that build island chains. | not started | |
 | 55 | Erosion that carves canyons and grows deltas. | not started | |
 | 56 | Ocean currents that carry heat. | not started | |
@@ -81,17 +81,17 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 59 | Plankton blooms visible from orbit, and bioluminescent waves at night. | not started | |
 | 60 | Hurricanes with a visible eye. | not started | |
 | 61 | Snow that builds up and melts, feeding the rivers. | not started | |
-| 62 | Oxygen level tracked, with a giant-insect era when it spikes. | in progress | oxygen tracked; limits body size and activity |
+| 62 | Oxygen level tracked, with a giant-insect era when it spikes. | done | oxygen tracked, limits body size and activity; an age of giants is declared when it passes 30% |
 | 63 | Seasonal migrations that wear trails into the land. | not started | |
 | 64 | Hibernation, and day versus night species. | not started | |
 | 65 | Camouflage evolving to match each biome. | not started | |
 | 66 | Sexual selection: mating displays and ornaments. | not started | |
 | 67 | Nests and parental care. | not started | |
-| 68 | Disease outbreaks spreading through herds. | not started | |
+| 68 | Disease outbreaks spreading through herds. | done | plagues strike crowded, sociable species and spread to neighbouring regions |
 | 69 | Symbiosis pairs. | not started | |
 | 70 | Flowers co-evolving with pollinators. | not started | |
 | 71 | Toxin versus resistance arms races, shown on a chart. | not started | |
-| 72 | Convergent evolution detector ("Two unrelated lineages have both evolved into crab-like forms"). | not started | |
+| 72 | Convergent evolution detector ("Two unrelated lineages have both evolved into crab-like forms"). | done | detector for unrelated lineages with the same body plan |
 | 73 | Island dwarfism and gigantism. | not started | |
 | 74 | Flight lost on predator-free islands. | not started | |
 | 75 | Land species returning to the sea as ocean giants. | not started | |
@@ -101,22 +101,22 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 79 | Hive species with growing mounds. | not started | |
 | 80 | Keystone species whose loss collapses an ecosystem. | not started | |
 | 81 | Invasive species crossing land bridges. | not started | |
-| 82 | Living fossils flagged when a species stays unchanged for eons. | not started | |
+| 82 | Living fossils flagged when a species stays unchanged for eons. | done | species unchanged for 60 My are flagged |
 | 83 | Fossil layer: see-through ground showing bones where extinct species died. | not started | |
-| 84 | Auto-generated field guide with a sketch-style card for every species. | not started | |
-| 85 | Extinction memorial. | not started | |
-| 86 | Rewind timeline with snapshots and major events marked. | not started | |
-| 87 | God tools: ice age, heat wave, raise mountains, flood, plague, lightning. | not started | |
+| 84 | Auto-generated field guide with a sketch-style card for every species. | simplified | field guide lists every living species with a description; no sketch cards yet |
+| 85 | Extinction memorial. | done | memorial section lists extinct species; click one for why it died |
+| 86 | Rewind timeline with snapshots and major events marked. | simplified | up to six rewind points at milestone events, listed in settings |
+| 87 | God tools: ice age, heat wave, raise mountains, flood, plague, lightning. | done | meteor, lightning, plague, raise mountains, flood, ice age, heat wave |
 | 88 | Custom species designer. | not started | |
 | 89 | A monolith that speeds up intelligence nearby. | not started | |
-| 90 | Overlays: temperature, rain, population, genetic diversity, oxygen. | not started | |
-| 91 | Graphs of population, biomass and atmosphere over time. | not started | |
+| 90 | Overlays: temperature, rain, population, genetic diversity, oxygen. | simplified | temperature, rain, life and people overlays with a colour-blind safe ramp; genetic diversity and oxygen overlays not built |
+| 91 | Graphs of population, biomass and atmosphere over time. | done | graphs of temperature, oxygen, plant cover, species count and population |
 | 92 | First-person creature view. | not started | |
 | 93 | Creature calls generated from body size. | not started | |
 | 94 | Spatial sound: wind, rain, thunder, waves, lava. | not started | |
-| 95 | Documentary director: an auto-camera that cuts to whatever is most interesting right now. | not started | |
-| 96 | Solar eclipses that make creatures go quiet. | not started | |
-| 97 | Comets that return on a long cycle and become myths. | not started | |
+| 95 | Documentary director: an auto-camera that cuts to whatever is most interesting right now. | done | optional director flies the camera to notable events; always on in postcard mode |
+| 96 | Solar eclipses that make creatures go quiet. | simplified | eclipses happen as events that peoples witness; no shadow on the planet yet |
+| 97 | Comets that return on a long cycle and become myths. | done | a seeded comet returns on a fixed period, each return linked to the last, and becomes myth |
 | 98 | Meteor showers that trigger mutation bursts. | not started | |
 | 99 | A rare captured second moon. | not started | |
 | 100 | Shattering the moon into a ring system. | not started | |
@@ -167,6 +167,6 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 145 | Intelligent species developing their own music. | not started | |
 | 146 | Near silence after a mass extinction. | not started | |
 | 147 | More god tools: gene ray, shield dome, summon comet, tilt axis, rain of life. | not started | |
-| 148 | Hands-off mode that locks all god tools. | not started | |
+| 148 | Hands-off mode that locks all god tools. | done | hands-off mode locks every god tool |
 | 149 | GIF and video recording. | not started | |
 | 150 | Export a planet's history as an illustrated PDF book. | not started | |

@@ -1,7 +1,7 @@
 import { SPEEDS } from '../shared/protocol';
 import { actions, togglePanel, useStore } from './store';
 import { bigNumber, formatYear } from './format';
-import { Chronicle, CreatureCard, GodTools, Help, Num, Settings, SpeciesCard, Tree, Why } from './panels';
+import { Chronicle, CreatureCard, GodTools, Graphs, Guide, Help, Num, Peoples, Settings, SpeciesCard, Tree, Why } from './panels';
 import css from './ui.module.css';
 
 const STAGE: Record<string, string> = { barren: 'lifeless', microbes: 'microbes', algae: 'algae seas', animals: 'living world' };
@@ -42,6 +42,9 @@ export function App() {
           {s.panel === 'help' && <Help />}
           {s.panel === 'god' && <GodTools />}
           {s.panel === 'settings' && <Settings />}
+          {s.panel === 'guide' && <Guide />}
+          {s.panel === 'peoples' && <Peoples />}
+          {s.panel === 'graphs' && <Graphs />}
           {s.whyEvent >= 0 && <Why />}
           {s.selectedSpecies >= 0 && s.whyEvent < 0 && <SpeciesCard />}
           {s.creature && s.selectedSpecies < 0 && s.whyEvent < 0 && <CreatureCard />}
@@ -57,6 +60,9 @@ export function App() {
             <i class={css.sep} />
             <button class={s.panel === 'chronicle' ? css.active : ''} onClick={() => togglePanel('chronicle')} title="Chronicle (C)">Chronicle</button>
             <button class={s.panel === 'tree' ? css.active : ''} onClick={() => togglePanel('tree')} title="Tree of life (T)">Tree</button>
+            <button class={s.panel === 'guide' ? css.active : ''} onClick={() => togglePanel('guide')} title="Field guide and memorial">Guide</button>
+            {st && st.settlements > 0 && <button class={s.panel === 'peoples' ? css.active : ''} onClick={() => togglePanel('peoples')} title="Settlements and peoples">Peoples</button>}
+            <button class={s.panel === 'graphs' ? css.active : ''} onClick={() => togglePanel('graphs')} title="Graphs over time">∿</button>
             <button class={s.panel === 'god' ? css.active : ''} onClick={() => togglePanel('god')} title="God tools (G)">✦</button>
             <button class={s.panel === 'settings' ? css.active : ''} onClick={() => togglePanel('settings')} title="World and settings">⚙</button>
             <button class={s.panel === 'help' ? css.active : ''} onClick={() => togglePanel('help')} title="Controls (?)">?</button>

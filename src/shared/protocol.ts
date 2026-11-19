@@ -26,6 +26,7 @@ export interface CellSnapshot {
   ash: Float32Array;
   lava: Float32Array;
   lights: Float32Array;
+  fields: Float32Array;
   canopy: Float32Array;
   flora: Int32Array;
   flow: Float32Array;
@@ -93,6 +94,13 @@ export interface PlantInfo {
   cover: number;
 }
 
+export interface SettlementInfo {
+  id: number; name: string; cell: number; species: number; pop: number; tech: number; founded: number; belief: number; eventId: number; ruined: number;
+}
+
+/** A point in history the user can rewind to. */
+export interface TimelinePoint { index: number; simYear: number; title: string; }
+
 /** Populations in the regions around the camera focus, for drawing individuals. */
 export interface HerdSnapshot {
   /** Per cohort: region index, species id, head count, fraction of time on land, flight ability, how well fed. */
@@ -112,6 +120,7 @@ export type ToWorker =
   | { type: 'god'; tool: string; cell: number; power?: number }
   | { type: 'settings'; slowOnEvents?: boolean }
   | { type: 'save'; name: string; slot: string }
+  | { type: 'rewind'; index: number }
   | { type: 'load'; save: unknown }
   /** Jump ahead by running the sim flat out (used by automated checks). */
   | { type: 'warp'; years: number };
@@ -125,5 +134,7 @@ export type FromWorker =
   | { type: 'plants'; plants: PlantInfo[] }
   | { type: 'herds'; herds: HerdSnapshot }
   | { type: 'saved'; slot: string; save: unknown }
+  | { type: 'settlements'; settlements: SettlementInfo[] }
+  | { type: 'timeline'; points: TimelinePoint[] }
   | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }
   | { type: 'error'; message: string };

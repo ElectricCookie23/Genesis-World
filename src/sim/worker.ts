@@ -24,6 +24,8 @@ let slowUntil = 0;
 let speciesVersion = -1;
 let plantVersion = -1;
 const sentExtinct = new Set<number>();
+const rewinds: { simYear: number; title: string; save: SaveState }[] = [];
+let lastRewindYear = -1e12;
 let focus: { x: number; y: number; z: number; altitude: number } | null = null;
 let lastHerds = 0;
 let focusRegion = 0;
@@ -78,6 +80,7 @@ function snapshotCells(s: Simulation): { cells: CellSnapshot; transfer: Transfer
     ash: w.ash.slice(),
     lava: w.lava.slice(),
     lights: w.lights.slice(),
+    fields: w.fields.slice(),
     canopy: w.canopy.slice(),
     flora: w.flora.slice(),
     flow: w.flow.slice(),
@@ -89,7 +92,7 @@ function snapshotCells(s: Simulation): { cells: CellSnapshot; transfer: Transfer
   s.terrainDirty = false;
   const transfer = [
     cells.elevation.buffer, cells.temperature.buffer, cells.moisture.buffer, cells.biome.buffer,
-    cells.vegetation.buffer, cells.snow.buffer, cells.cloud.buffer, cells.ash.buffer, cells.lava.buffer, cells.lights.buffer,
+    cells.vegetation.buffer, cells.snow.buffer, cells.cloud.buffer, cells.ash.buffer, cells.lava.buffer, cells.lights.buffer, cells.fields.buffer,
     cells.canopy.buffer, cells.flora.buffer, cells.flow.buffer, cells.downhill.buffer, cells.windE.buffer, cells.windN.buffer,
   ];
   return { cells, transfer };
@@ -166,6 +169,14 @@ function tick(): void {
   if (slowOnEvents && s.bigEvent >= 2 && SPEEDS[speedIndex]!.yearsPerSecond > SLOW_YPS) slowUntil = start + (s.bigEvent >= 3 ? 5000 : 3000);
   const fresh = s.events.drainFresh();
   if (fresh.length) post({ type: 'events', events: fresh });
+  // keep a few rewind points: every milestone-grade event, at most one per 4 My
+  const major = fresh.find((e) => e.importance >= 3);
+  if (major && s.simYear - lastRewindYear > 4e6) {
+    lastRewindYear = s.simYear;
+    rewinds.push({ simYear: s.simYear, title: major.title, save: saveSimulation(s, major.title) });
+    if (rewinds.length > 6) rewinds.shift();
+    post({ type: 'timeline', points: rewinds.map((r, index) => ({ index, simYear: r.simYear, title: r.title })) });
+  }
   const now = performance.now();
   tickMs = tickMs * 0.9 + (now - start) * 0.1;
   const cellInterval = yps > 0 ? 250 : 1000;
@@ -184,6 +195,9 @@ function tick(): void {
   if (now - lastSpecies > 700 && s.stage === 'animals') {
     lastSpecies = now;
     post({ type: 'species', species: speciesList(s) });
+    if (s.civ.settlements.length) {
+      post({ type: 'settlements', settlements: s.civ.settlements.map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, belief: t.belief, eventId: t.eventId, ruined: t.ruined })) });
+    }
     speciesVersion = s.creatures.version;
     if (s.plants.version !== plantVersion) {
       plantVersion = s.plants.version;
@@ -226,8 +240,8 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         if (msg.slowOnEvents !== undefined) slowOnEvents = msg.slowOnEvents;
         break;
       case 'god':
-        if (sim && msg.tool === 'meteor') {
-          sim.meteor(msg.cell, msg.power ?? 0.8, true);
+        if (sim) {
+          sim.god(msg.tool, msg.cell, msg.power ?? 0.8);
           slowUntil = performance.now() + 6000;
           cellsRequested = true;
         }
@@ -246,6 +260,22 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         lastSpecies = 0;
         const { cells, transfer } = snapshotCells(sim);
         post({ type: 'loaded', cells, stats: stats(sim), events: sim.events.events }, transfer);
+        break;
+      }
+      case 'rewind': {
+        const point = rewinds[msg.index];
+        if (!point) break;
+        sim = new Simulation(point.save.seed, point.save.gridN);
+        loadSimulation(sim, point.save);
+        sim.events.drainFresh();
+        sentExtinct.clear();
+        plantVersion = -1;
+        lastSpecies = 0;
+        rewinds.length = msg.index + 1;
+        lastRewindYear = sim.simYear;
+        const { cells, transfer } = snapshotCells(sim);
+        post({ type: 'loaded', cells, stats: stats(sim), events: sim.events.events }, transfer);
+        post({ type: 'timeline', points: rewinds.map((r, index) => ({ index, simYear: r.simYear, title: r.title })) });
         break;
       }
       case 'warp':

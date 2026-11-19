@@ -282,17 +282,145 @@ export function Help() {
   );
 }
 
+const GOD_TOOLS: [string, string, string][] = [
+  ['meteor', 'Meteor', 'Shockwave, crater, impact winter.'],
+  ['lightning', 'Lightning', 'A bolt from a clear sky. Dry land burns.'],
+  ['plague', 'Plague', 'Sickness among the most crowded animals there.'],
+  ['mountain', 'Raise mountains', 'Lift the land where you click.'],
+  ['flood', 'Flood', 'Raise the seas. Lowlands drown.'],
+  ['iceage', 'Ice age', 'Drain the warmth from the world.'],
+  ['heat', 'Heat wave', 'Set the air alight.'],
+];
+
 export function GodTools() {
   const s = useStore();
   return (
-    <div class={`${css.panel} ${css.side}`} style={{ bottom: 'auto' }}>
+    <div class={`${css.panel} ${css.side}`}>
       <div class={css.head}><h2>God tools</h2><button class={css.close} onClick={() => update({ panel: 'none', godTool: '' })}>✕</button></div>
       <div class={css.scroll}>
         <div class={css.row}>
-          <span><b style={{ fontWeight: 400 }}>Meteor</b><br /><span class={css.sub}>Shockwave, crater, impact winter.</span></span>
-          <button class={css.btn} onClick={() => update({ godTool: s.godTool === 'meteor' ? '' : 'meteor' })}>{s.godTool === 'meteor' ? 'cancel' : 'aim'}</button>
+          <span>Hands-off mode<br /><span class={css.sub}>Lock every tool and let the world run untouched.</span></span>
+          <button class={css.btn} onClick={() => update({ handsOff: !s.handsOff, godTool: '' })}>{s.handsOff ? 'on' : 'off'}</button>
         </div>
-        {s.godTool === 'meteor' && <p class={css.sub}>Click a spot on the planet to strike it.</p>}
+        {!s.handsOff && GOD_TOOLS.map(([id, name, what]) => (
+          <div class={css.row} key={id}>
+            <span>{name}<br /><span class={css.sub}>{what}</span></span>
+            <button class={css.btn} style={{ opacity: s.godTool === id ? 1 : 0.8 }} onClick={() => update({ godTool: s.godTool === id ? '' : id })}>{s.godTool === id ? 'cancel' : 'aim'}</button>
+          </div>
+        ))}
+        {s.godTool && <p class={css.sub}>Click a spot on the planet to use it there.</p>}
+      </div>
+    </div>
+  );
+}
+
+/** Field guide: a card for every living species, and a memorial for those that are gone. */
+export function Guide() {
+  const s = useStore();
+  const all = [...s.species.values()];
+  const living = all.filter((x) => x.extinctYear < 0).sort((a, b) => b.pop - a.pop);
+  const gone = all.filter((x) => x.extinctYear >= 0 && x.peakPop > 2e4).sort((a, b) => b.extinctYear - a.extinctYear).slice(0, 80);
+  const lastWords = (id: number) => {
+    for (let i = s.chronicle.length - 1; i >= 0; i--) {
+      const e = s.events[s.chronicle[i]!]!;
+      if (e.type === 'extinction' && e.speciesIds?.[0] === id) return e;
+    }
+    return undefined;
+  };
+  return (
+    <div class={`${css.panel} ${css.side}`}>
+      <div class={css.head}><h2>Field guide</h2><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
+      <div class={css.scroll}>
+        {living.length === 0 && <p class={css.sub}>No animals yet.</p>}
+        {living.map((sp) => (
+          <button class={css.entry} key={sp.id} onClick={() => actions.selectSpecies(sp.id)} style={{ color: hsl(sp.genes[G.Hue]!) }}>
+            <i class={css.dot} />
+            <div class={css.what} style={{ color: '#ece7db', fontStyle: 'italic' }}>{sp.name}</div>
+            <div class={css.when} style={{ color: '#ece7db' }}>{describe(sp)} {metres(sp.metres)}, {bigNumber(sp.pop)} alive.</div>
+          </button>
+        ))}
+        {gone.length > 0 && <div class={css.sub} style={{ margin: '14px 0 4px' }}>IN MEMORY</div>}
+        {gone.map((sp) => {
+          const e = lastWords(sp.id);
+          return (
+            <button class={css.entry} key={sp.id} onClick={() => (e ? update({ whyEvent: e.id }) : actions.selectSpecies(sp.id))} style={{ color: '#8f8a9a' }}>
+              <i class={css.dot} />
+              <div class={css.what} style={{ color: '#cfc9bd', fontStyle: 'italic' }}>{sp.name} †</div>
+              <div class={css.when} style={{ color: '#ece7db' }}>{shortYear(sp.bornYear)} to {shortYear(sp.extinctYear)}. Lasted {shortYear(sp.extinctYear - sp.bornYear)}.</div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** The peoples of the world: every settlement, its size, and what it believes. */
+export function Peoples() {
+  const s = useStore();
+  const live = s.settlements.filter((x) => x.ruined < 0).sort((a, b) => b.tech * 10 + Math.log(b.pop + 1) - (a.tech * 10 + Math.log(a.pop + 1))).slice(0, 60);
+  const ruins = s.settlements.filter((x) => x.ruined >= 0).slice(-20).reverse();
+  const kind = (t: number) => (t >= 0.9 ? 'great city' : t >= 0.6 ? 'city' : t >= 0.3 ? 'village' : 'camp');
+  return (
+    <div class={`${css.panel} ${css.side}`}>
+      <div class={css.head}><h2>Peoples</h2><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
+      <div class={css.scroll}>
+        {s.settlements.length === 0 && <p class={css.sub}>No one has lit a fire yet. In some worlds, no one ever does.</p>}
+        {live.map((st) => {
+          const sp = s.species.get(st.species);
+          const belief = s.events[st.belief];
+          return (
+            <div class={css.entry} key={st.id} style={{ color: '#ffcf8a', cursor: 'default' }}>
+              <i class={css.dot} />
+              <div class={css.what} style={{ color: '#ece7db' }}>{st.name}</div>
+              <div class={css.when} style={{ color: '#ece7db' }}>A {kind(st.tech)} of {bigNumber(st.pop * 1000)} {sp ? sp.name : 'people'}, founded {formatYear(st.founded).toLowerCase()}.</div>
+              {belief && <div class={css.when} style={{ color: '#ece7db' }}>Its faith remembers: {belief.title.toLowerCase()}.</div>}
+              <button class={css.link} onClick={() => actions.flyToCell(st.cell, 0.25)}>fly there</button>
+              {st.eventId >= 0 && <button class={css.link} onClick={() => update({ whyEvent: st.eventId })}>its story</button>}
+              {belief && <button class={css.link} onClick={() => update({ whyEvent: st.belief })}>its faith</button>}
+            </div>
+          );
+        })}
+        {ruins.length > 0 && <div class={css.sub} style={{ margin: '14px 0 4px' }}>RUINS</div>}
+        {ruins.map((st) => (
+          <div class={css.entry} key={st.id} style={{ color: '#b9a48c', cursor: 'default' }}>
+            <i class={css.dot} />
+            <div class={css.what} style={{ color: '#cfc9bd' }}>{st.name}</div>
+            <div class={css.when} style={{ color: '#ece7db' }}>Abandoned {formatYear(st.ruined).toLowerCase()}.</div>
+            <button class={css.link} onClick={() => actions.flyToCell(st.cell, 0.25)}>visit the ruins</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Spark({ label, values, color, format }: { label: string; values: number[]; color: string; format: (n: number) => string }) {
+  if (values.length < 2) return null;
+  const min = Math.min(...values), max = Math.max(...values);
+  const W = 330, H = 54;
+  const pts = values.map((v, i) => `${(i / (values.length - 1)) * W},${H - 4 - ((v - min) / Math.max(1e-9, max - min)) * (H - 8)}`).join(' ');
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div class={css.row} style={{ padding: 0 }}><span>{label}</span><span class={css.sub}>{format(values[values.length - 1]!)}</span></div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H }}><polyline points={pts} fill="none" stroke={color} stroke-width="1.6" style={{ filter: `drop-shadow(0 0 3px ${color})` }} /></svg>
+    </div>
+  );
+}
+
+export function Graphs() {
+  const s = useStore();
+  const h = s.history;
+  return (
+    <div class={`${css.panel} ${css.side}`}>
+      <div class={css.head}><h2>The long view</h2><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
+      <div class={css.scroll}>
+        {h.length < 2 && <p class={css.sub}>Graphs fill in as time passes.</p>}
+        <Spark label="Mean temperature" values={h.map((x) => x.temp)} color="#ffb26b" format={(n) => `${n.toFixed(1)} °C`} />
+        <Spark label="Oxygen" values={h.map((x) => x.oxygen * 100)} color="#a8e6ff" format={(n) => `${n.toFixed(1)}%`} />
+        <Spark label="Plant cover on land" values={h.map((x) => x.land * 100)} color="#b7e07a" format={(n) => `${n.toFixed(1)}%`} />
+        <Spark label="Living animal species" values={h.map((x) => x.species)} color="#8fe3a0" format={(n) => n.toFixed(0)} />
+        <Spark label="Animals alive (log scale)" values={h.map((x) => Math.log10(x.pop + 1))} color="#e9e4d8" format={(n) => bigNumber(Math.pow(10, n))} />
       </div>
     </div>
   );
@@ -333,6 +461,16 @@ export function Settings() {
           <input type="range" min="0" max="1" step="0.05" value={s.musicVolume} onInput={(e) => actions.setMusicVolume(Number((e.target as HTMLInputElement).value))} />
         </div>
         <div class={css.row}><span>Slow down on big events</span><button class={css.btn} onClick={() => actions.setSlowOnEvents(!s.slowOnEvents)}>{s.slowOnEvents ? 'on' : 'off'}</button></div>
+        <div class={css.row}><span>Documentary director<br /><span class={css.sub}>The camera flies to whatever just happened.</span></span><button class={css.btn} onClick={() => update({ director: !s.director })}>{s.director ? 'on' : 'off'}</button></div>
+        <div class={css.row}><span>Colour-blind safe overlays</span><button class={css.btn} onClick={() => actions.setColorblind(!s.colorblind)}>{s.colorblind ? 'on' : 'off'}</button></div>
+        <div class={css.row}>
+          <span>Overlay (O)</span>
+          <span>{(['none', 'temp', 'rain', 'life', 'people'] as const).map((o) => <button class={css.btn} style={{ marginLeft: 4, opacity: s.overlay === o ? 1 : 0.55 }} onClick={() => actions.setOverlay(o)}>{o}</button>)}</span>
+        </div>
+        {s.timeline.length > 0 && <div class={css.sub} style={{ margin: '12px 0 2px' }}>REWIND TO</div>}
+        {s.timeline.map((t) => (
+          <div class={css.row} key={t.index}><span>{t.title}<br /><span class={css.sub}>{formatYear(t.simYear).toLowerCase()}</span></span><button class={css.btn} onClick={() => actions.rewind(t.index)}>rewind</button></div>
+        ))}
         <div class={css.row}><span>Reduced motion</span><button class={css.btn} onClick={() => actions.setReducedMotion(!s.reducedMotion)}>{s.reducedMotion ? 'on' : 'off'}</button></div>
       </div>
     </div>

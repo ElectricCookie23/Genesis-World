@@ -1,6 +1,6 @@
 // Civilization, abstracted: settlements are entities with population, technology and beliefs.
 // They are not individual people. A lineage that crosses the intelligence threshold founds them.
-import { G, P } from './genetics';
+import { G, GENE_COUNT, P, PHEN_COUNT, computePhenotype } from './genetics';
 import { placeName } from './names';
 import type { RNG } from './rng';
 import type { Simulation } from './simulation';
@@ -20,9 +20,12 @@ export interface Settlement {
   belief: number;
   eventId: number;
   ruined: number; // year it was abandoned, or -1
+  painted: boolean;
+  temple: boolean;
+  farms: boolean;
 }
 
-export const INTELLIGENCE_THRESHOLD = 0.55;
+export const INTELLIGENCE_THRESHOLD = 0.57;
 
 export class Civilization {
   settlements: Settlement[] = [];
@@ -63,6 +66,25 @@ export class Civilization {
       const neighbours = this.neighbourCount(sim, st);
       const before = st.tech;
       st.tech = Math.min(1.2, st.tech + tau * 0.0005 * (0.4 + Math.log10(1 + st.pop)) * (1 + 0.35 * neighbours) * (0.6 + s.ref[G.Intelligence]!));
+      if (!st.painted && st.tech > 0.06) {
+        st.painted = true;
+        // cave paintings show the animals these people really live among
+        const prey = this.neighbourSpecies(sim, st, true);
+        if (prey >= 0) sim.civEvent('painting', st.species, st.cell, st.id, prey);
+      }
+      if (!st.farms && st.tech > 0.22) {
+        st.farms = true;
+        sim.civEvent('farms', st.species, st.cell, st.id);
+        const tame = this.neighbourSpecies(sim, st, false);
+        if (tame >= 0 && cr.species[tame]!.tamedBy < 0) {
+          cr.species[tame]!.tamedBy = st.species;
+          sim.civEvent('tamed', st.species, st.cell, st.id, tame);
+        }
+      }
+      if (!st.temple && st.tech > 0.3 && sim.godEvents.length >= 3) {
+        st.temple = true;
+        sim.civEvent('temple', st.species, st.cell, st.id);
+      }
       if (st.tech >= 0.3 && before < 0.3) sim.civEvent('village', st.species, st.cell, st.id);
       if (st.tech >= 0.6 && before < 0.6) sim.civEvent('city', st.species, st.cell, st.id);
       // people move on and found daughter settlements
@@ -85,7 +107,49 @@ export class Civilization {
     }
     this.living = living;
     this.maxTech = maxTech;
+    this.tend(sim, tau);
     this.paint(sim);
+  }
+
+  /** A species living beside a settlement: its main prey (largest other animal) or a grazer worth taming. */
+  private neighbourSpecies(sim: Simulation, st: Settlement, anyDiet: boolean): number {
+    const cr = sim.creatures;
+    let best = -1, bb = 0;
+    for (let c = 0; c < cr.high; c++) {
+      if (!cr.alive[c] || cr.region[c] !== st.region || cr.sp[c] === st.species) continue;
+      const g = c * GENE_COUNT, p = c * PHEN_COUNT;
+      if (cr.phen[p + P.LandUse]! < 0.4) continue;
+      if (!anyDiet && (cr.genome[g + G.Diet]! > 0.35 || cr.genome[g + G.Size]! < 0.25)) continue;
+      const b = cr.count[c]! * cr.phen[p + P.Mass]!;
+      if (b > bb && cr.species[cr.sp[c]!]!.name) { bb = b; best = cr.sp[c]!; }
+    }
+    return best;
+  }
+
+  /** Tamed herds near settlements are fed and bred: calmer, more sociable, a little smaller each generation. */
+  private tend(sim: Simulation, tau: number): void {
+    const cr = sim.creatures;
+    for (let c = 0; c < cr.high; c++) {
+      if (!cr.alive[c]) continue;
+      const sp = cr.species[cr.sp[c]!]!;
+      if (sp.tamedBy < 0 || !this.occupied.has(cr.region[c]!)) continue;
+      const g = c * GENE_COUNT;
+      const k = Math.min(0.05, 0.004 * tau);
+      cr.genome[g + G.Aggression] = cr.genome[g + G.Aggression]! * (1 - k);
+      cr.genome[g + G.Sociality] = cr.genome[g + G.Sociality]! + (1 - cr.genome[g + G.Sociality]!) * k;
+      cr.genome[g + G.Boldness] = cr.genome[g + G.Boldness]! + (0.8 - cr.genome[g + G.Boldness]!) * k;
+      computePhenotype(cr.genome, g, cr.phen, c * PHEN_COUNT);
+      cr.count[c] = cr.count[c]! * (1 + Math.min(0.2, 0.08 * tau));
+    }
+  }
+
+  /** A sight in the sky that every young culture sees: some will build a faith on it. */
+  omen(sim: Simulation, eventId: number, rng: RNG): void {
+    for (const st of this.settlements) {
+      if (st.ruined >= 0 || st.belief >= 0 || st.tech > 0.7 || !rng.chance(0.5)) continue;
+      st.belief = eventId;
+      sim.civEvent('belief', st.species, st.cell, st.id, eventId);
+    }
   }
 
   private neighbourCount(sim: Simulation, st: Settlement): number {
@@ -108,7 +172,7 @@ export class Civilization {
     }
     if (cell < 0) return null;
     const st: Settlement = {
-      id: this.settlements.length, name: placeName(rng), cell, region, species, pop: 0.2, tech: 0.03, founded: sim.simYear, belief: -1, eventId: -1, ruined: -1,
+      id: this.settlements.length, name: placeName(rng), cell, region, species, pop: 0.2, tech: 0.03, founded: sim.simYear, belief: -1, eventId: -1, ruined: -1, painted: false, temple: false, farms: false,
     };
     this.settlements.push(st);
     this.occupied.set(region, st.id);
@@ -130,19 +194,48 @@ export class Civilization {
     }
   }
 
-  /** Light on the night side: campfires flicker faintly, cities glow. */
+  /** Paint night lights, farmland and roads onto the planet's cells. */
   private paint(sim: Simulation): void {
-    const lights = sim.world.lights;
+    const { lights, fields, elevation, seaLevel } = sim.world;
     lights.fill(0);
-    const g = sim.grid;
+    fields.fill(0);
+    const g = sim.grid, reg = sim.regions;
     for (const st of this.settlements) {
       if (st.ruined >= 0) continue;
       const glow = Math.min(1, 0.12 + st.tech * 0.9);
       lights[st.cell] = Math.max(lights[st.cell]!, glow);
-      if (st.tech > 0.45) {
-        for (let j = 0; j < g.ncount[st.cell]!; j++) {
-          const nb = g.neighbors[st.cell * 6 + j]!;
-          if (sim.world.elevation[nb]! > sim.world.seaLevel) lights[nb] = Math.max(lights[nb]!, glow * (st.tech - 0.4) * 0.9);
+      for (let j = 0; j < g.ncount[st.cell]!; j++) {
+        const nb = g.neighbors[st.cell * 6 + j]!;
+        if (elevation[nb]! <= seaLevel) continue;
+        if (st.tech > 0.45) lights[nb] = Math.max(lights[nb]!, glow * (st.tech - 0.4) * 0.9);
+        if (st.farms) {
+          fields[nb] = Math.max(fields[nb]!, Math.min(1, st.tech * 1.4));
+          // big cities are ringed by a second belt of farms
+          if (st.tech > 0.7) for (let k = 0; k < g.ncount[nb]!; k++) {
+            const n2 = g.neighbors[nb * 6 + k]!;
+            if (elevation[n2]! > seaLevel) fields[n2] = Math.max(fields[n2]!, 0.6);
+          }
+        }
+      }
+      // roads: lit ways between neighbouring towns
+      if (st.tech > 0.55) {
+        for (let j = 0; j < reg.grid.ncount[st.region]!; j++) {
+          const other = this.occupied.get(reg.grid.neighbors[st.region * 6 + j]!);
+          if (other === undefined || other >= st.id) continue;
+          const target = this.settlements[other]!.cell;
+          const tx = g.pos[target * 3]!, ty = g.pos[target * 3 + 1]!, tz = g.pos[target * 3 + 2]!;
+          let cur = st.cell;
+          for (let step = 0; step < 14 && cur !== target; step++) {
+            let best = cur, bd = g.pos[cur * 3]! * tx + g.pos[cur * 3 + 1]! * ty + g.pos[cur * 3 + 2]! * tz;
+            for (let k = 0; k < g.ncount[cur]!; k++) {
+              const nb = g.neighbors[cur * 6 + k]!;
+              const d = g.pos[nb * 3]! * tx + g.pos[nb * 3 + 1]! * ty + g.pos[nb * 3 + 2]! * tz;
+              if (d > bd) { bd = d; best = nb; }
+            }
+            if (best === cur) break;
+            cur = best;
+            if (elevation[cur]! > seaLevel) lights[cur] = Math.max(lights[cur]!, 0.16);
+          }
         }
       }
     }

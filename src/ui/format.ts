@@ -40,8 +40,13 @@ export function eventColor(type: string): string {
     case 'settlement': case 'belief': return '#ffcf8a';
     case 'ruin': return '#b9a48c';
     case 'storm': return '#b5c4de';
+    case 'earthquake': case 'tsunami': return '#c7b299';
+    case 'plague': return '#b7d08a';
+    case 'eclipse': case 'comet': return '#d9c8ff';
+    case 'painting': case 'tamed': case 'temple': return '#ffcf8a';
+    case 'living-fossil': case 'convergence': return '#8fe3a0';
     case 'orbital-shift': return '#d9c8ff';
-    default: return '#e9e4d8';
+    default: return type.startsWith('god-') ? '#fff1c9' : '#e9e4d8';
   }
 }
 
@@ -65,8 +70,18 @@ export function eventGlyph(type: string): string {
     case 'belief': return '☼';
     case 'ruin': return '∴';
     case 'storm': return '☇';
+    case 'earthquake': return '≋';
+    case 'tsunami': return '≈';
+    case 'plague': return '✚';
+    case 'eclipse': return '◐';
+    case 'comet': return '☄';
+    case 'painting': return '✎';
+    case 'tamed': return '∞';
+    case 'temple': return '△';
+    case 'living-fossil': return '◈';
+    case 'convergence': return '≍';
     case 'orbital-shift': return '◔';
-    default: return '•';
+    default: return type.startsWith('god-') ? '✦' : '•';
   }
 }
 

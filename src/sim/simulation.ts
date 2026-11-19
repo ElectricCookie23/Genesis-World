@@ -7,7 +7,8 @@ import { EventLog, type SimEvent } from './events';
 import { buildRegions, updateRegions, type Regions } from './regions';
 import { Plants, type PlantSpecies } from './plants';
 import { Creatures, type Species } from './creatures';
-import { G, GENE_COUNT, P, PG, PLANT_GENES, sizeMetres } from './genetics';
+import { G, GENE_COUNT, P, PG, PLANT_GENES, geneDistance, sizeMetres } from './genetics';
+import { cellsWithin } from './geology';
 import { nameSpecies, plantName } from './naming';
 import { placeName } from './names';
 import { Civilization } from './civilization';
@@ -67,6 +68,16 @@ export class Simulation {
   private geoRng: RNG;
   private nameRng: RNG;
   private milestoneTimer = 0;
+  /** Events caused by the user's god tools (temples are built when there are many). */
+  godEvents: number[] = [];
+  /** Extra sea level from the flood tool, km. Drains away slowly. */
+  private seaBias = 0;
+  private cometPeriod = 0;
+  private cometNext = 0;
+  private cometLast = -1;
+  private cometName = '';
+  private convergentNoted = new Set<string>();
+  private richAirNoted = false;
   /** Storm cells: dense rain cloud with lightning, drifting with the wind. */
   storms: { cell: number; strength: number; years: number; ticks: number }[] = [];
   /** Cells on fire right now (low time speeds only), with days left to burn. */
@@ -100,6 +111,9 @@ export class Simulation {
     this.nameRng = this.rng.fork('names');
     this.weatherRng = this.rng.fork('weather');
     this.civRng = this.rng.fork('civilization');
+    this.cometPeriod = this.lifeRng.range(18e6, 34e6);
+    this.cometNext = this.cometPeriod * this.lifeRng.range(0.4, 1);
+    this.cometName = placeName(this.nameRng);
     this.lifeYear = this.lifeRng.range(0.35e6, 0.9e6);
     this.algaeDelay = this.lifeRng.range(1.2e6, 3e6);
     this.animalDelay = this.lifeRng.range(5e6, 10e6);
@@ -165,7 +179,8 @@ export class Simulation {
     updateMoisture(w, c, 1);
     updateSnow(w, c, dt);
     // ice sheets lock up water: sea level falls in cold eras and rises in warm ones
-    const target = Math.max(-0.3, Math.min(0.2, -(this.iceVolume() - this.baseIce) * 0.035));
+    this.seaBias *= Math.exp(-dt / 60000);
+    const target = Math.max(-0.3, Math.min(0.2, -(this.iceVolume() - this.baseIce) * 0.035)) + this.seaBias;
     w.seaLevel += (target - w.seaLevel) * 0.15;
     classifyBiomes(w, c);
     // visual fields fade by sim time, but stay visible for about a second at high speed
@@ -389,6 +404,13 @@ export class Simulation {
       if (r.chance(Math.min(0.5, dt / 3.5e6))) this.eruption(vol[r.int(vol.length)]!, r.range(0.4, 0.75));
       if (r.chance(Math.min(0.3, dt / 70e6))) this.eruption(vol[r.int(vol.length)]!, 1);
     }
+    // earthquakes where plates grind; under or beside the sea they raise tsunamis
+    if (r.chance(Math.min(0.5, dt / 900_000))) {
+      const conv = this.geology.convergence;
+      let cell = -1;
+      for (let tries = 0; tries < 30 && cell < 0; tries++) { const c = r.int(this.grid.count); if (Math.abs(conv[c]!) > 0.4) cell = c; }
+      if (cell >= 0) this.earthquake(cell, r.range(0.3, 1));
+    }
     // meteors fall on their own now and then
     if (r.chance(Math.min(0.3, dt / 90e6))) this.meteor(r.int(this.grid.count), r.range(0.55, 1), false);
   }
@@ -442,6 +464,154 @@ export class Simulation {
       });
       this.era = { kind: 'winter', eventId: winter.id };
       this.globalDieback(0.35, winter.id);
+    }
+  }
+
+  earthquake(cell: number, magnitude: number): void {
+    const w = this.world, g = this.grid;
+    const name = placeName(this.nameRng);
+    const quake = this.emit({
+      type: 'earthquake', cellId: cell, title: `The ${name} earthquake`,
+      description: this.say('quake', ['Two plates that have strained for an age let go at once.', 'The ground lurches. Cliffs fall and rivers change their beds.', 'A fault slips and the land shudders for a hundred leagues.']),
+      importance: magnitude > 0.8 ? 1 : 0,
+    });
+    const { cells } = cellsWithin(g, cell, Math.round(2 + 4 * magnitude));
+    let wet = 0;
+    for (const c of cells) if (w.elevation[c]! <= w.seaLevel) wet++;
+    const hit = this.regionsOf(cells, () => 0.05 + 0.1 * magnitude);
+    this.creatures.disaster({ regions: hit.regions, kill: hit.kill, eventId: quake.id });
+    if (wet > cells.length * 0.3 && magnitude > 0.55) {
+      // the sea floor moved: a wave runs out and breaks on every coast nearby
+      const far = cellsWithin(g, cell, Math.round(8 + 10 * magnitude));
+      const coast = far.cells.filter((c) => w.elevation[c]! > w.seaLevel && w.elevation[c]! - w.seaLevel < 0.25);
+      const wave = this.emit({
+        type: 'tsunami', cellId: cell, title: 'A tsunami',
+        description: this.say('tsunami', ['The sea draws back from the shore, then returns as a wall.', 'A wave taller than the trees crosses the shallows and keeps going inland.']),
+        causes: [quake.id], importance: 1,
+      });
+      for (const c of coast) { w.vegetation[c] = w.vegetation[c]! * 0.4; w.ash[c] = Math.max(w.ash[c]!, 0.3); }
+      const drowned = this.regionsOf(coast, () => 0.3);
+      for (const reg of drowned.regions) this.regionEvent[reg] = wave.id;
+      this.creatures.disaster({ regions: drowned.regions, kill: drowned.kill, eventId: wave.id });
+      this.civ.witness(this, wave.id, drowned.regions, drowned.kill);
+    }
+  }
+
+  /** A sickness sweeps the most crowded, sociable animals of a region. */
+  plague(region: number, byHand: boolean): SimEvent | null {
+    const cr = this.creatures;
+    let victim = -1, dense = 0;
+    for (let c = 0; c < cr.high; c++) {
+      if (!cr.alive[c] || cr.region[c] !== region) continue;
+      const d = cr.count[c]! * (0.3 + cr.genome[c * GENE_COUNT + G.Sociality]!);
+      if (d > dense && cr.species[cr.sp[c]!]!.name) { dense = d; victim = cr.sp[c]!; }
+    }
+    if (victim < 0) return null;
+    const sp = cr.species[victim]!;
+    const ev = this.emit({
+      type: 'plague', cellId: this.regions.centre[region]!, title: `Sickness among ${sp.name}`,
+      description: this.say('plague', [`A sickness runs through the herds of ${sp.name}. Where they crowd closest, it kills fastest.`, `${sp.name} is dying of something it cannot see or flee.`]),
+      causes: sp.eventId >= 0 ? [sp.eventId] : [], importance: 1, speciesIds: [victim], data: { byHand: byHand ? 1 : 0 },
+    });
+    // it spreads with the herds through neighbouring regions
+    const regs = [region];
+    for (let j = 0; j < this.regions.grid.ncount[region]!; j++) regs.push(this.regions.grid.neighbors[region * 6 + j]!);
+    for (const r of regs) for (let c = 0; c < cr.high; c++) {
+      if (!cr.alive[c] || cr.region[c] !== r || cr.sp[c] !== victim) continue;
+      const lost = cr.count[c]! * (0.35 + 0.4 * cr.genome[c * GENE_COUNT + G.Sociality]!);
+      cr.count[c] = cr.count[c]! - lost;
+      sp.lossDisaster += lost;
+      sp.disasterEvent = ev.id;
+    }
+    return ev;
+  }
+
+  /** God tools. Every use is an event with consequences, and the peoples of the world notice. */
+  god(tool: string, cell: number, power = 0.8): void {
+    const w = this.world, c = this.climate;
+    const region = this.regions.regionOf[cell]!;
+    let ev: SimEvent | null = null;
+    const note = (title: string, description: string) => this.emit({ type: `god-${tool}`, cellId: cell, title, description, importance: 2, data: { byHand: 1 } });
+    if (tool === 'meteor') ev = this.meteor(cell, power, true);
+    else if (tool === 'iceage') { c.forced -= 9; ev = note('A sudden cold', 'For no reason any rock or tide can explain, the warmth drains out of the world.'); }
+    else if (tool === 'heat') { c.forced += 9; ev = note('A sudden heat', 'The air itself seems to catch fire. Ice that stood for ages begins to run.'); }
+    else if (tool === 'mountain') {
+      const { cells, dist } = cellsWithin(this.grid, cell, 4);
+      for (let k = 0; k < cells.length; k++) w.elevation[cells[k]!] = w.elevation[cells[k]!]! + 2.6 * Math.pow(1 - dist[k]! / 5, 1.5);
+      this.terrainDirty = true;
+      ev = note('The land rises', 'The ground heaves upward as if lifted from below. Where there was plain, there are peaks.');
+    } else if (tool === 'flood') { this.seaBias += 0.16; ev = note('The great flood', 'The seas climb their shores without storm or tide. Lowlands vanish under water.'); }
+    else if (tool === 'plague') ev = this.plague(region, true);
+    else if (tool === 'lightning') {
+      if (w.elevation[cell]! > w.seaLevel) {
+        this.burning.set(cell, 10);
+        w.lava[cell] = 1;
+        const reg = this.regions;
+        for (let k = reg.cellStart[region]!; k < reg.cellStart[region + 1]!; k++) { const i = reg.cellList[k]!; if (w.vegetation[i]! > 0.2) { w.ash[i] = Math.max(w.ash[i]!, 0.6); w.lava[i] = Math.max(w.lava[i]!, 0.4); } }
+        this.plants.burn(region, 0.7);
+      }
+      ev = note('Fire from a clear sky', 'A bolt falls from a cloudless sky and the land below it burns.');
+    }
+    if (ev) {
+      this.godEvents.push(ev.id);
+      this.civ.omen(this, ev.id, this.civRng);
+    }
+  }
+
+  /** Smaller wonders: plagues, eclipses, comets, look-alike species, living fossils, an age of giants. */
+  private extras(tau: number): void {
+    const r = this.lifeRng, cr = this.creatures;
+    if (cr.livingSpecies > 3 && r.chance(Math.min(0.2, 0.006 * tau))) {
+      const list = cr.species.filter((s) => s.extinctYear < 0 && s.ref[G.Sociality]! > 0.45 && s.pop > 5000);
+      if (list.length) this.plague(r.pick(list).home, false);
+    }
+    if (r.chance(Math.min(0.2, 0.0025 * tau))) {
+      const ev = this.emit({
+        type: 'eclipse', title: 'A total eclipse',
+        description: this.say('eclipse', ['The moon slides across the sun. For a few minutes the day goes dark and every animal falls silent.', 'A black disc eats the sun at noon. Stars come out, and the birds stop.']),
+        importance: this.civ.living > 0 ? 1 : 0,
+      });
+      this.civ.omen(this, ev.id, this.civRng);
+    }
+    if (this.simYear >= this.cometNext) {
+      this.cometNext += this.cometPeriod;
+      const ev = this.emit({
+        type: 'comet', title: `Comet ${this.cometName} returns`,
+        description: this.cometLast < 0 ? `A long-tailed comet crosses the night sky for the first time anyone could have seen it.` : `The comet is back, right on time, hanging in the evening sky like a pale feather.`,
+        causes: this.cometLast >= 0 ? [this.cometLast] : [], importance: this.civ.living > 0 ? 1 : 0,
+      });
+      this.cometLast = ev.id;
+      this.civ.omen(this, ev.id, this.civRng);
+    }
+    if (!this.richAirNoted && this.plants.oxygen > 0.3) {
+      this.richAirNoted = true;
+      this.emit({ type: 'oxygen', title: 'An age of giants', description: 'Forests have made the air so rich that bodies can grow huge on it. Small things become large, and large things enormous.', causes: this.oxygenEvent >= 0 ? [this.oxygenEvent] : [], importance: 2 });
+    }
+    if (this.milestoneTimer % 48 !== 0) return;
+    const living = cr.species.filter((s) => s.extinctYear < 0 && s.name && s.pop > 1000);
+    // living fossils: old species that have barely changed
+    for (const s of living) {
+      if (!s.fossilNoted && this.simYear - s.bornYear > 60e6 && geneDistance(s.ref, 0, s.origin, 0) < 0.28) {
+        s.fossilNoted = true;
+        this.emit({ type: 'living-fossil', cellId: this.regions.centre[s.home]!, title: `${s.name}, a living fossil`, description: `${s.name} has hardly changed in ${Math.round((this.simYear - s.bornYear) / 1e6)} million years. Whatever it is doing, it still works.`, causes: s.eventId >= 0 ? [s.eventId] : [], importance: 1, speciesIds: [s.id] });
+      }
+    }
+    // convergent evolution: unrelated lines that have arrived at the same body
+    const shape = [G.Size, G.LimbType, G.LimbPairs, G.Armor, G.Diet, G.Water, G.Neck, G.Horn];
+    const ancestors = (s: Species) => { const a = new Set<number>(); for (let p = s.parent, k = 0; p >= 0 && k < 4; p = cr.species[p]!.parent, k++) a.add(p); return a; };
+    for (let i = 0; i < living.length; i++) for (let j = i + 1; j < living.length; j++) {
+      const a = living[i]!, b = living[j]!;
+      const key = `${a.id}:${b.id}`;
+      if (this.convergentNoted.has(key) || a.genus === b.genus) continue;
+      let d = 0;
+      for (const gi of shape) d += (a.ref[gi]! - b.ref[gi]!) ** 2;
+      if (d > 0.012) continue;
+      const aa = ancestors(a), ab = ancestors(b);
+      if (aa.has(b.id) || ab.has(a.id) || [...aa].some((x) => ab.has(x))) continue;
+      this.convergentNoted.add(key);
+      const form = a.ref[G.Armor]! > 0.5 ? 'armoured, crab-like' : a.ref[G.LimbType]! >= 0.75 ? 'winged' : a.ref[G.Water]! > 0.6 ? 'fish-like' : a.ref[G.Neck]! > 0.6 ? 'long-necked' : 'near-identical';
+      this.emit({ type: 'convergence', cellId: this.regions.centre[a.home]!, title: 'Two lines, one shape', description: `Two unrelated lineages, ${a.name} and ${b.name}, have both evolved into ${form} forms. The same problem has found the same answer twice.`, causes: [a.eventId, b.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [a.id, b.id] });
+      return;
     }
   }
 
@@ -518,6 +688,7 @@ export class Simulation {
     this.creatureEvents();
     this.milestoneTimer++;
     if (this.milestoneTimer % 8 === 0) this.checkMilestones();
+    this.extras(tau);
     if (this.milestoneTimer % 16 === 0 && erode(this.world, Math.min(0.5, 0.06 * 16 * tau))) this.terrainDirty = true;
   }
 
@@ -823,6 +994,18 @@ export class Simulation {
     } else if (kind === 'city') {
       const ev = this.emit({ type: 'settlement', cellId: cell, title: `${st!.name} becomes a city`, description: `${st!.name} is home to more people than any of them could ever know by name.`, causes: [st!.eventId], importance: 2, speciesIds: [speciesId] });
       this.milestone('first-city', 'First city', `From orbit, a new light shows on the night side. It does not flicker like a fire. It is ${st!.name}, the first city.`, cell, [ev.id], [speciesId]);
+    } else if (kind === 'painting') {
+      const prey = this.creatures.species[cause]!;
+      this.emit({ type: 'painting', cellId: cell, title: `Paintings at ${st!.name}`, description: `On a cave wall near ${st!.name}, in ochre and soot, someone has painted ${prey.name}. The animals are running.`, causes: [st!.eventId, prey.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [speciesId, prey.id] });
+    } else if (kind === 'farms') {
+      const ev = this.emit({ type: 'settlement', cellId: cell, title: `Fields at ${st!.name}`, description: `The people of ${st!.name} no longer only gather seeds. They plant them, and wait.`, causes: [st!.eventId], importance: 0, speciesIds: [speciesId] });
+      this.milestone('first-farm', 'First farms', `Around ${st!.name} the wild growth gives way to rows. For the first time, a species decides what will grow.`, cell, [ev.id], [speciesId]);
+    } else if (kind === 'tamed') {
+      const tame = this.creatures.species[cause]!;
+      const ev = this.emit({ type: 'tamed', cellId: cell, title: `${tame.name} is tamed`, description: `The people of ${st!.name} keep ${tame.name} close, feed it, and choose which of its young will breed. It will not stay the animal it was.`, causes: [st!.eventId, tame.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [speciesId, tame.id] });
+      this.milestone('first-tame', 'First tamed animal', `${tame.name} now lives beside ${sp.name}, by choice or by fence.`, cell, [ev.id], [tame.id]);
+    } else if (kind === 'temple') {
+      this.emit({ type: 'temple', cellId: cell, title: `A temple at ${st!.name}`, description: `Too many wonders have fallen from the sky. At ${st!.name} they raise a temple whose doors face straight up, toward whatever is watching.`, causes: [st!.eventId, ...this.godEvents.slice(-3)].filter((x) => x >= 0), importance: 2, speciesIds: [speciesId] });
     } else if (kind === 'belief') {
       const src = this.events.get(cause)!;
       this.emit({

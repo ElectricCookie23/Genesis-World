@@ -34,4 +34,11 @@ for (let y = 0; y < my * 1e6; y += dt) {
 }
 const ext = sim.events.events.filter((e) => e.type === 'extinction').length;
 console.log('ms per part:', JSON.stringify(Object.fromEntries(Object.entries(sim.prof).map(([k, v]) => [k, Math.round(v)]))));
+const tally: Record<string, number> = {};
+for (const e of sim.events.events) tally[e.type] = (tally[e.type] ?? 0) + 1;
+console.log('event types:', JSON.stringify(tally));
+for (const t of ['painting', 'tamed', 'temple', 'belief', 'tsunami', 'plague', 'convergence', 'living-fossil', 'comet', 'eclipse']) {
+  const e = sim.events.events.find((x) => x.type === t);
+  if (e) console.log(`  sample ${t}: ${e.description.slice(0, 170)}`);
+}
 console.log(`done: ${sim.events.events.length} events, ${ext} extinctions, milestones: ${[...sim.milestones.keys()].join(', ')}`);

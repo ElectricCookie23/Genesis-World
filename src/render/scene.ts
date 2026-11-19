@@ -125,6 +125,7 @@ export class GenesisScene {
 
   applyCells(cells: CellSnapshot, first = false): void {
     if (!this.planet || !this.ocean || !this.clouds) return;
+    this.lastCells = cells;
     this.planet.update(cells, first);
     this.ocean.update(cells);
     this.clouds.update(cells);
@@ -168,6 +169,15 @@ export class GenesisScene {
     this.lastCell = nearestCell(this.grid, x, y, z, this.lastCell);
     const e = Math.max(this.lastElevation[this.lastCell]!, uSeaKm.value);
     return 1 + e * EXAG;
+  }
+
+  private lastCells?: CellSnapshot;
+
+  setOverlay(mode: 'none' | 'temp' | 'rain' | 'life' | 'people', colorblind: boolean): void {
+    if (!this.planet) return;
+    this.planet.overlay = mode;
+    this.planet.colorblind = colorblind;
+    if (this.lastCells) this.planet.update(this.lastCells, false);
   }
 
   /** Unit direction on the planet under a screen point, or null if the point misses it. */

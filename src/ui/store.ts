@@ -1,9 +1,10 @@
 // Tiny observable store shared by the Preact UI and the app.
 import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
-import type { PlantInfo, SpeciesInfo, WorldStats } from '../shared/protocol';
+import type { PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs';
+export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people';
 
 export interface UIState {
   stats: WorldStats | null;
@@ -39,6 +40,16 @@ export interface UIState {
   musicVolume: number;
   reducedMotion: boolean;
   slots: SlotInfo[];
+  settlements: SettlementInfo[];
+  timeline: TimelinePoint[];
+  overlay: Overlay;
+  colorblind: boolean;
+  /** When on, god tools are locked and the world runs untouched. */
+  handsOff: boolean;
+  /** Documentary director: the camera flies to whatever just happened. */
+  director: boolean;
+  /** Samples of world history for the graphs. */
+  history: { year: number; temp: number; oxygen: number; species: number; pop: number; land: number }[];
 }
 
 export interface SlotInfo { slot: number; name: string; seed: string; simYear: number; savedAt: number; }
@@ -73,6 +84,13 @@ export const state: UIState = {
   musicVolume: 0.6,
   reducedMotion: false,
   slots: [],
+  settlements: [],
+  timeline: [],
+  overlay: 'none',
+  colorblind: false,
+  handsOff: false,
+  director: false,
+  history: [],
 };
 
 const listeners = new Set<() => void>();
@@ -115,6 +133,9 @@ export const actions = {
   saveSlot: (_name: string) => {},
   loadSlot: (_slot: number) => {},
   deleteSlot: (_slot: number) => {},
+  setOverlay: (_o: Overlay) => {},
+  setColorblind: (_on: boolean) => {},
+  rewind: (_index: number) => {},
 };
 
 export function togglePanel(p: Panel): void {

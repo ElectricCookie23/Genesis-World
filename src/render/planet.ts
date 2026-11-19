@@ -54,6 +54,9 @@ export class PlanetMesh {
   /** Smoothed biome colours, so biomes blend over 2 to 3 cells. */
   private readonly scratch: Float32Array;
   elevation: Float32Array;
+  /** Data overlay painted over the terrain: none, temp, rain, life or people. */
+  overlay: 'none' | 'temp' | 'rain' | 'life' | 'people' = 'none';
+  colorblind = false;
 
   constructor(private readonly grid: Grid) {
     const triCount = grid.tris.length / 3;
@@ -160,12 +163,35 @@ export class PlanetMesh {
         const rock = Math.min(0.75, Math.max(0, (steep - 0.9) * 0.6));
         r += (ROCK.r - r) * rock; g += (ROCK.g - g) * rock; bl += (ROCK.b - bl) * rock;
       }
+      // farmland: a patchwork of field colours around settlements
+      const fl = land ? cells.fields[i]! : 0;
+      if (fl > 0) {
+        const patch = ((i * 2654435761) >>> 0) % 3;
+        const fr = patch === 0 ? 0.74 : patch === 1 ? 0.5 : 0.62, fg = patch === 0 ? 0.62 : patch === 1 ? 0.6 : 0.5, fb = patch === 0 ? 0.2 : patch === 1 ? 0.18 : 0.22;
+        r += (fr - r) * fl * 0.75; g += (fg - g) * fl * 0.75; bl += (fb - bl) * fl * 0.75;
+      }
       const a = Math.min(1, ash[i]!);
       if (a > 0) { r += (ASH.r - r) * a; g += (ASH.g - g) * a; bl += (ASH.b - bl) * a; }
       // snow sticks less to steep faces
       let s = Math.min(1, snow[i]! / (land ? 1.2 : 0.5)) * (1 - Math.min(0.5, steep * 0.12));
       if (!land) s = 0;
       if (s > 0) { r += (SNOW.r - r) * s; g += (SNOW.g - g) * s; bl += (SNOW.b - bl) * s; }
+      if (this.overlay !== 'none') {
+        // data overlays use a perceptual ramp (dark blue to yellow) that is safe for colour-blind viewers
+        let v = 0;
+        if (this.overlay === 'temp') v = (cells.temperature[i]! + 25) / 60;
+        else if (this.overlay === 'rain') v = cells.moisture[i]!;
+        else if (this.overlay === 'life') v = land ? cells.vegetation[i]! : 0.05;
+        else v = Math.max(cells.lights[i]!, cells.fields[i]! * 0.5);
+        v = Math.max(0, Math.min(1, v));
+        const k = land ? 1 : 0.55;
+        if (this.colorblind || this.overlay !== 'temp') {
+          // viridis-like
+          r = (0.27 + v * (0.99 - 0.27) * v) * k; g = (0.0 + 0.9 * Math.pow(v, 0.8)) * k; bl = (0.33 + 0.35 * Math.sin(v * 3.1) - 0.3 * v) * k;
+        } else {
+          r = (v < 0.5 ? 0.1 + v * 0.6 : 0.4 + (v - 0.5) * 1.2) * k; g = (0.25 + 0.5 * Math.sin(v * 3.14)) * k; bl = (1 - v) * 0.9 * k;
+        }
+      }
       cc[i * 3] = r; cc[i * 3 + 1] = g; cc[i * 3 + 2] = bl;
     }
     const P = this.positions, C = this.colors, Nn = this.normals, A = this.aux;
