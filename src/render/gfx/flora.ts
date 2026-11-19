@@ -472,13 +472,24 @@ export class Flora {
     let fullN = 0;
     const q = new Quaternion(), yaw = new Quaternion(), up = new Vector3();
     const Y = new Vector3(0, 1, 0);
-    const { elevation, vegetation, canopy, flora, seaLevel, snow, windE, windN } = cells;
+    const { elevation, vegetation, canopy, flora, seaLevel, snow, windE, windN, reef } = cells;
     // plants are drawn larger from higher up so forests stay readable
     const sizeBoost = 1 + Math.min(1.6, dist * 3.2);
     const A = this.pigmentA, B = this.pigmentB;
     for (const t of visible) {
       const ia = tris[t]!, ib = tris[t + 1]!, ic = tris[t + 2]!;
-      const va = vegetation[ia]!, vb = vegetation[ib]!, vc = vegetation[ic]!;
+      let va = vegetation[ia]!, vb = vegetation[ib]!, vc = vegetation[ic]!;
+      // the sea bed has its own gardens: coral where a reef lives, weed in the shallows. Only planted from near,
+      // where they can be seen through the water or from under it.
+      const depthA = seaLevel - elevation[ia]!, depthB = seaLevel - elevation[ib]!, depthC = seaLevel - elevation[ic]!;
+      const seaBed = depthA > 0 && depthB > 0 && depthC > 0;
+      let coralA = 0, coralB = 0, coralC = 0;
+      if (seaBed) {
+        if (dist > 0.07) continue;
+        const shallow = (d: number) => Math.max(0, 1 - d / 0.45);
+        coralA = Math.max(0, reef[ia]!); coralB = Math.max(0, reef[ib]!); coralC = Math.max(0, reef[ic]!);
+        va = Math.min(1, coralA * 0.9 + shallow(depthA) * 0.5); vb = Math.min(1, coralB * 0.9 + shallow(depthB) * 0.5); vc = Math.min(1, coralC * 0.9 + shallow(depthC) * 0.5);
+      }
       if (va + vb + vc < 0.05) continue;
       for (let k = 0; k < perTri; k++) {
         const h0 = hash(t * 131 + k * 7919);
@@ -488,23 +499,24 @@ export class Flora {
         const density = va * w + vb * u + vc * v;
         if (h0 > density * 0.95) continue;
         const e = elevation[ia]! * w + elevation[ib]! * u + elevation[ic]! * v;
-        if (e <= seaLevel + 0.02) continue;
+        if (seaBed ? e > seaLevel - 0.03 : e <= seaLevel + 0.02) continue;
         const near = w >= u && w >= v ? ia : u >= v ? ib : ic;
         // nothing grows out of deep snow: a thin cover thins the plants, a thick one buries them
-        if (snow[near]! > 0.5 + 1.5 * h0) continue;
+        if (!seaBed && snow[near]! > 0.5 + 1.5 * h0) continue;
         const sp = this.plants.get(flora[near]!);
         const genes = sp?.genes;
         const height = genes ? genes[PG.Height]! : canopy[near]!;
         // individual variation around the species' height
         const hv = height * (0.6 + 0.8 * hash(t * 53 + k * 15485863));
-        const form = this.formFor(genes, hv, 0.5, hash(t * 71 + k * 911));
+        const coral = seaBed && hash(t * 37 + k * 433) < (coralA * w + coralB * u + coralC * v) * 1.2;
+        const form: Form = seaBed ? (coral ? 'fan' : hash(t * 41 + k * 617) < 0.55 ? 'fern' : 'tuft') : this.formFor(genes, hv, 0.5, hash(t * 71 + k * 911));
         up.set(
           pos[ia * 3]! * w + pos[ib * 3]! * u + pos[ic * 3]! * v,
           pos[ia * 3 + 1]! * w + pos[ib * 3 + 1]! * u + pos[ic * 3 + 1]! * v,
           pos[ia * 3 + 2]! * w + pos[ib * 3 + 2]! * u + pos[ic * 3 + 2]! * v,
         ).normalize();
         const small = form === 'tuft' || form === 'fern' || form === 'flower';
-        const size = (small ? 0.0011 : form === 'shrub' ? 0.0015 : 0.0021 + 0.0042 * hv) * sizeBoost * (0.8 + 0.4 * hash(t * 7 + k * 31));
+        const size = (seaBed ? (coral ? 0.0015 : form === 'fern' ? 0.0034 : 0.0013) : small ? 0.0011 : form === 'shrub' ? 0.0015 : 0.0021 + 0.0042 * hv) * sizeBoost * (0.8 + 0.4 * hash(t * 7 + k * 31));
         // colour: this world's pigments, with the leaf-hue gene running between the two
         const tHue = Math.max(0, Math.min(1, (genes ? genes[PG.LeafHue]! : 0.5) + (hash(t + k * 5) - 0.5) * 0.18));
         const light = (small ? 1.35 : 1) * (0.8 + 0.5 * hash(t * 11 + k));
@@ -522,10 +534,20 @@ export class Flora {
         // flowers, glow bulbs and petals take the flower-hue gene
         const fh = genes ? genes[PG.FlowerHue]! : 0.9;
         const f6 = (n: number) => { const kk = (n + fh * 6) % 6; return 0.95 - 0.95 * 0.7 * Math.max(0, Math.min(kk, 4 - kk, 1)); };
-        const r2 = f6(5), g2 = f6(3), b2 = f6(1);
+        let r2 = f6(5), g2 = f6(3), b2 = f6(1);
         if (genes && genes[PG.Fruit]! > 0.45 && form === 'broadleaf' && hash(t * 97 + k * 13) < 0.25) { r = r2 * 0.8; g = g2 * 0.8; b = b2 * 0.8; }
-        const glow = genes && genes[PG.Glow]! > 0.5 ? genes[PG.Glow]! : 0;
-        const windHere = Math.min(1.6, 0.35 + Math.hypot(windE[near]!, windN[near]!) * 0.9);
+        let glow = genes && genes[PG.Glow]! > 0.5 ? genes[PG.Glow]! : 0;
+        let windHere = Math.min(1.6, 0.35 + Math.hypot(windE[near]!, windN[near]!) * 0.9);
+        if (seaBed) {
+          // coral in its own bright colours; weed in a dull olive cast of the world's pigment; everything sways in the swell
+          const tone = hash(t * 23 + k * 59);
+          if (coral) {
+            const c = tone < 0.34 ? [0.95, 0.38, 0.5] : tone < 0.67 ? [0.2, 0.78, 0.7] : [0.95, 0.72, 0.28];
+            r = c[0]! * light; g = c[1]! * light; b = c[2]! * light;
+            r2 = Math.min(1, c[0]! * 1.3 + 0.1); g2 = Math.min(1, c[1]! * 1.3 + 0.1); b2 = Math.min(1, c[2]! * 1.3 + 0.1);
+          } else { r = (r * 0.35 + 0.1) * light; g = (g * 0.35 + 0.2) * light; b = (b * 0.35 + 0.08) * light; }
+          glow = 0; windHere = 0.9;
+        }
         const rr = 1 + e * EXAG;
         const dCam = Math.hypot(up.x * rr - camera.x, up.y * rr - camera.y, up.z * rr - camera.z);
         if (dCam < lod * 1.15 && fullN < fullBudget) {

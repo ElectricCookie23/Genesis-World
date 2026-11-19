@@ -41,7 +41,7 @@ import { CivMap, uNightMap } from './gfx/civmap';
 import type { Nation } from './gfx/nations';
 import { hashSeed as seedHash } from '../sim/rng';
 import type { HerdSnapshot, PlantInfo, SpeciesInfo } from '../shared/protocol';
-import { EXAG, MOON_DISTANCE, uBolts, uFlash, uRing, uSun2, uSun2Dir, uUnderwater, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime, uOceanFill, uOverlay, uAtmo, uImpact, uPlumes, uPlumeWind, uFog, uRainbow, uShimmer, uHatch, uFungal, uFossil } from './common';
+import { EXAG, MOON_DISTANCE, uWaterFog, uBolts, uFlash, uRing, uSun2, uSun2Dir, uUnderwater, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime, uOceanFill, uOverlay, uAtmo, uImpact, uPlumes, uPlumeWind, uFog, uRainbow, uShimmer, uHatch, uFungal, uFossil } from './common';
 
 export type Quality = 'low' | 'medium' | 'high' | 'ultra';
 
@@ -820,6 +820,15 @@ export class GenesisScene {
     }
     const camR = this.cam.camera.position.length();
     uUnderwater.value = this.underwater && camR < 1 + uSeaKm.value * EXAG ? 1 : 0;
+    this.cam.lookUp = uUnderwater.value;
+    if (uUnderwater.value > 0 && this.look) {
+      // the water's colour: bright and green-blue just under a sunlit surface, dark and blue further down and at night
+      const down = 0.3 + 0.7 * Math.max(0, Math.min(1, (1 + uSeaKm.value * EXAG - camR) / 0.004));
+      const up = this.cam.camera.position.clone().normalize();
+      const day = Math.max(0, Math.min(1, (up.dot(uSunDir.value as Vector3) + 0.1) / 0.4));
+      const a = this.look.oceanShallow, b = this.look.oceanDeep, light = (0.06 + 0.94 * day) * (1 - 0.6 * down) * 0.42;
+      (uWaterFog.value as Vector4).set((a[0] + (b[0] - a[0]) * down) * light, (a[1] + (b[1] - a[1]) * down) * light, (a[2] + (b[2] - a[2]) * down) * light, 120);
+    }
     if (this.vegetation) this.vegetation.autumn = this.tilt > 0 ? this.declination / this.tilt : 0;
     // the erosion bake runs a few iterations a frame until it is done, then the terrain keeps its result
     if (this.erosion && !this.erosion.finished) this.erosion.step(this.renderer, this.erosionPerFrame);

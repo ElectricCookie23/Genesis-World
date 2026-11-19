@@ -5,7 +5,7 @@ import {
   AgXToneMapping, Matrix4, RenderPipeline, type PerspectiveCamera, type Scene, type Texture, type WebGPURenderer,
 } from 'three/webgpu';
 import {
-  convertToTexture, dot, float, fract, getViewPosition, length, log, max, mix, pass, renderOutput, screenUV, sin, smoothstep, texture, uniform, uv, vec2,
+  convertToTexture, dot, exp, float, fract, getViewPosition, length, log, max, mix, pass, renderOutput, screenUV, sin, smoothstep, texture, uniform, uv, vec2,
   vec3, vec4,
 } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
@@ -13,7 +13,7 @@ import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
 import { traa } from 'three/addons/tsl/display/TRAANode.js';
 import GTAONode from 'three/addons/tsl/display/GTAONode.js';
 import { sharpen } from 'three/addons/tsl/display/SharpenNode.js';
-import { uDitherFrame, uExposure, uFlash, uGradeTint, uShimmer, uTime, uUnderwater } from './common';
+import { uDitherFrame, uExposure, uFlash, uGradeTint, uShimmer, uTime, uUnderwater, uWaterFog } from './common';
 export { uExposure };
 import { Pass, makeTarget } from './gfx/gpu';
 
@@ -114,6 +114,12 @@ export class PostFX {
       const nearness = float(1).sub(smoothstep(0.03, 0.12, viewZ.negate()));
       color = vec4(color.rgb.mul(mix(float(1), occ, nearness.mul(0.9))), color.a);
     }
+    // ---- under water, distance swallows everything: the sea bed, plants and animals fade into the water's own colour
+    {
+      const away: N = this.scenePass.getViewZNode().negate().max(0);
+      const lost = float(1).sub(exp(away.mul(uWaterFog.w).negate())).mul(uUnderwater);
+      color = vec4(mix(color.rgb, uWaterFog.rgb, lost), color.a);
+    }
     // ---- temporal anti-aliasing: reproject last frame's result using the depth buffer and the previous camera
     if (o.taa) {
       const viewPos: N = getViewPosition(screenUV, depth, this.uInvProj);
@@ -136,7 +142,7 @@ export class PostFX {
     }
     hdr = hdr.mul(vec4(vec3(uGradeTint), 1));
     // under water: light is absorbed toward blue-green
-    hdr = mix(hdr, hdr.mul(vec4(0.22, 0.55, 0.72, 1)).add(vec4(0.0, 0.035, 0.07, 0)), uUnderwater);
+    hdr = mix(hdr, hdr.mul(vec4(0.45, 0.78, 0.9, 1)), uUnderwater);
     this.pipeline.outputColorTransform = false;
     let mapped: N = renderOutput(hdr);
     // AgX is gentle on highlights but a little flat: give some colour back

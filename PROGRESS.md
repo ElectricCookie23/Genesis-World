@@ -190,3 +190,169 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 148 | Hands-off mode that locks all god tools. | done | hands-off mode locks every god tool |
 | 149 | GIF and video recording. | done | records the 3D view to a WebM video, or saves a three second looping GIF (`util/gif.ts`, own encoder, checked against an independent decoder) |
 | 150 | Export a planet's history as an illustrated PDF book. | done | saves a real PDF (`util/pdf.ts`, own writer, checked with an independent reader): cover with the planet portrait, every great event in order, and a page of nations |
+
+## Expansion (docs/EXPANSION_BRIEF.md, also saved as EXPANSION.md)
+
+100 systems on top of the 150 features. Values: not started, in progress, done, simplified (with a note). Every system writes to the cause graph, is deterministic from the seed, has a cheaper path on phones and at least one headless test (`tests/history.test.ts` unless noted).
+
+### Architecture additions (built first)
+
+| Part | Status | Notes |
+|---|---|---|
+| Text generation: languages and template grammar | done | `sim/history/language.ts` (sounds from the speakers' bodies, words built from a family seed, sound changes, daughter languages, place and personal names), `sim/history/grammar.ts` (templates), `sim/history/hash.ts` |
+| Civilization model: nations, cultures, religions, languages as entities in the worker | not started | |
+| Notable people stored for good; citizens generated on demand | not started | |
+| Per-cell history log | not started | |
+| Snapshots at every major era | not started | |
+| Era clock per civilization, on human-scale time | not started | |
+
+
+### Section 1. The History Engine
+
+| # | System | Status | Notes |
+|---|---|---|---|
+| E1 | The Tech Web | not started | |
+| E2 | Era Progression | not started | |
+| E3 | Uneven History | not started | |
+| E4 | Rise and Fall | not started | |
+| E5 | Dark Ages | not started | |
+| E6 | Notable People | not started | |
+| E7 | Dynasties and Succession | not started | |
+| E8 | Calendars and Eras of Their Own | not started | |
+| E9 | Migrations of Peoples | not started | |
+| E10 | Golden Ages | not started | |
+
+### Section 2. Cities And Real-Time Growth
+
+| # | System | Status | Notes |
+|---|---|---|---|
+| E11 | Living City Growth | not started | |
+| E12 | Watch It Being Built | not started | |
+| E13 | Architecture From Biology | not started | |
+| E14 | Architectural Styles Over Time | not started | |
+| E15 | Infrastructure Networks | not started | |
+| E16 | Farmland and Landscape Change | not started | |
+| E17 | Ruins and Layers | not started | |
+| E18 | Feral Cities | not started | |
+| E19 | Wonders | not started | |
+| E20 | Disasters in Cities | not started | |
+
+### Section 3. Culture, Language And Belief
+
+| # | System | Status | Notes |
+|---|---|---|---|
+| E21 | Generated Languages | not started | |
+| E22 | Place Name Drift | not started | |
+| E23 | Writing Systems | not started | |
+| E24 | Religions | not started | |
+| E25 | The Observer Faith | not started | |
+| E26 | Art Movements | not started | |
+| E27 | Music of the World | not started | |
+| E28 | Myths From Fossils | not started | |
+| E29 | Their Map of the World | not started | |
+| E30 | Holidays and Festivals | not started | |
+
+### Section 4. Conflict, Power And Economy
+
+| # | System | Status | Notes |
+|---|---|---|---|
+| E31 | Resources and Trade Goods | not started | |
+| E32 | Markets and Crashes | not started | |
+| E33 | Wars With Campaigns | not started | |
+| E34 | Diplomacy | not started | |
+| E35 | Ideologies | not started | |
+| E36 | Colonization and Independence | not started | |
+| E37 | Plague Years | not started | |
+| E38 | Arms Races | not started | |
+| E39 | Spies and Secrets | not started | |
+| E40 | World Wars | not started | |
+
+### Section 5. In-Person Views
+
+| # | System | Status | Notes |
+|---|---|---|---|
+| E41 | Citizen Mode | not started | |
+| E42 | Life Stories | not started | |
+| E43 | Street-Level Cities | not started | |
+| E44 | Free Explorer | not started | |
+| E45 | Anchor View | not started | |
+| E46 | Eyewitness Cam | not started | |
+| E47 | Night Sky From the Ground | not started | |
+| E48 | Walk Into the Museum | not started | |
+| E49 | Battlefield View | not started | |
+| E50 | Through Their Eyes | not started | |
+
+### Section 6. Time And History Tools
+
+| # | System | Status | Notes |
+|---|---|---|---|
+| E51 | The Chronoscope | not started | |
+| E52 | The Archive | not started | |
+| E53 | Historical Atlas | not started | |
+| E54 | Truth vs Record | not started | |
+| E55 | Counterfactual Engine | not started | |
+| E56 | Butterfly Tracker | not started | |
+| E57 | Ancestry to the Sea | not started | |
+| E58 | The Braid | not started | |
+| E59 | Documentary Maker | not started | |
+| E60 | Prophecies | not started | |
+
+### Section 7. Industry To The Near Future
+
+| # | System | Status | Notes |
+|---|---|---|---|
+| E61 | Industrial Revolution | not started | |
+| E62 | Fossil Fuels From Your History | not started | |
+| E63 | Electrification | not started | |
+| E64 | Climate Change They Cause | not started | |
+| E65 | The Radio Bubble | not started | |
+| E66 | Information Age | not started | |
+| E67 | Space Age | not started | |
+| E68 | Moon Bases | not started | |
+| E69 | Global Institutions | not started | |
+| E70 | Asteroid Defense | not started | |
+
+### Section 8. Beyond The 21St Century
+
+| # | System | Status | Notes |
+|---|---|---|---|
+| E71 | Space Elevators and Orbital Rings | not started | |
+| E72 | Arcologies and Sea Cities | not started | |
+| E73 | Engineered Life | not started | |
+| E74 | De-extinction | not started | |
+| E75 | Uplift | not started | |
+| E76 | Machine Minds | not started | |
+| E77 | Upload and the Quiet Planet | not started | |
+| E78 | Terraforming and Geoengineering | not started | |
+| E79 | Far-Future Endings | not started | |
+| E80 | Star Swarm | not started | |
+
+### Section 9. Strange World Systems
+
+| # | System | Status | Notes |
+|---|---|---|---|
+| E81 | Deep-Time Strata | not started | |
+| E82 | Magnetic Pole Flips | not started | |
+| E83 | Microbe Layer | not started | |
+| E84 | Continental Hive Mind | not started | |
+| E85 | Trance Blooms | not started | |
+| E86 | Light and Noise Pollution | not started | |
+| E87 | Mimic Architects | not started | |
+| E88 | Predictable Catastrophe | not started | |
+| E89 | Ecological Memory | not started | |
+| E90 | The Planet's Pulse | not started | |
+
+### Section 10. Out Of This World
+
+| # | System | Status | Notes |
+|---|---|---|---|
+| E91 | The Star System | not started | |
+| E92 | Panspermia | not started | |
+| E93 | Rogue Planet Flyby | not started | |
+| E94 | Gamma-Ray Burst | not started | |
+| E95 | Red Giant | not started | |
+| E96 | Departure Fleets | not started | |
+| E97 | Messages From Beyond | not started | |
+| E98 | Neighbor Link | not started | |
+| E99 | Messages to the Observer | not started | |
+| E100 | The Last Archive | not started | |

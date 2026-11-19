@@ -4,7 +4,7 @@ import { MeshBasicNodeMaterial, type Texture, type Vector3 } from 'three/webgpu'
 import {
   abs, atan, cameraPosition, cross, dot, exp, float, fract, max, min, mix, normalize, positionWorld, pow, reflect, select, sin, smoothstep, sqrt, step, texture, varying, vec2, vec3,
 } from 'three/tsl';
-import { EXAG, uFossil, uFungal, uImpact, uOverlay, uHazeAmount, uHazeTint, uMolten, uMoonDir, uRing, uSeaKm, uSun2, uSun2Dir, uSunDir, uTime } from '../common';
+import { EXAG, uUnderwater, uFossil, uFungal, uImpact, uOverlay, uHazeAmount, uHazeTint, uMolten, uMoonDir, uRing, uSeaKm, uSun2, uSun2Dir, uSunDir, uTime } from '../common';
 import { cloudShadowAt } from '../clouds';
 import type { ErosionBake } from './erosion';
 import { uLook } from './look';
@@ -220,8 +220,10 @@ export class TerrainSurface {
       const drift = vec3(uTime.mul(0.00002), 0, uTime.mul(0.000013));
       const cj = (s: number): N => { const q: N = dir.mul(s).add(drift); return caustics.node.sample(q.zy.div(T)).a.mul(w.x).add(caustics.node.sample(q.xz.div(T)).a.mul(w.y)).add(caustics.node.sample(q.xy.div(T)).a.mul(w.z)); };
       const focus = pow(float(1.22).sub(cj(1)).clamp(0, 1.2), 3).add(pow(float(1.22).sub(cj(2.7)).clamp(0, 1.2), 3)).mul(1.6);
-      const wet = smoothstep(0.0, -0.03, above).mul(float(1).sub(smoothstep(0.12, 0.5, above.negate())));
-      causticLight = mix(float(1), focus.add(0.72), wet);
+      // from above the dancing light only shows in the shallows; from under water it plays over the whole lit bed
+      const reach = mix(smoothstep(0.12, 0.5, above.negate()), smoothstep(0.7, 1.6, above.negate()), uUnderwater);
+      const wet = smoothstep(0.0, -0.03, above).mul(float(1).sub(reach));
+      causticLight = mix(float(1), focus.mul(mix(float(1), float(1.5), uUnderwater)).add(0.72), wet);
     }
     const eclipse: N = eclipseLight(P);
     const direct = max(dot(Nrm, L), 0).mul(smoothstep(-0.1, 0.14, sunH)).mul(shadow).mul(ringShade).mul(terrainShadow).mul(causticLight).mul(eclipse);
