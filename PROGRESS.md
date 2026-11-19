@@ -60,16 +60,16 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 38 | Generative ambient music that shifts with the planet's state. | in progress | generative ambient music (Tone.js) that shifts with stage, era and life, near silence after a mass extinction |
 | 39 | Postcard mode: UI hidden, slow cinematic camera. | in progress | P hides the UI and speeds the camera drift; depth of field to come |
 | 40 | Seed codes: a shared code replays the same world exactly. | done | seed in the URL replays the world; copy-link button in the World panel |
-| 41 | An intelligence threshold any lineage can cross. | not started | |
-| 42 | Campfires appearing on the night side. | not started | |
-| 43 | Villages, then city lights visible from orbit. | not started | |
+| 41 | An intelligence threshold any lineage can cross. | done | any lineage that is clever, social, numerous and on land crosses the threshold; intelligence now pays its way in social species |
+| 42 | Campfires appearing on the night side. | done | camps show as faint firelight on the night side; First fire milestone |
+| 43 | Villages, then city lights visible from orbit. | done | camps grow into villages and cities whose lights show from orbit and spread into networks |
 | 44 | Cave paintings depicting the real species they hunted. | not started | |
-| 45 | Religions founded on real events (the comet, the eclipse, the volcano). | not started | |
+| 45 | Religions founded on real events (the comet, the eclipse, the volcano). | in progress | young settlements that witness an eruption or impact found a faith on that real event (cause-linked); eclipse and comet to come |
 | 46 | If the user intervenes a lot, civilizations build temples facing the camera. | not started | |
 | 47 | Domestication: tamed species start evolving in new directions. | not started | |
 | 48 | Agriculture that turns land into fields. | not started | |
 | 49 | Roads that follow ancient migration trails. | not started | |
-| 50 | Ruins that forests overgrow, later found by a second intelligent species. | not started | |
+| 50 | Ruins that forests overgrow, later found by a second intelligent species. | in progress | settlements are abandoned and logged as ruins; overgrowth visuals and rediscovery to come |
 | 51 | Plate tectonics with drifting continents. | not started | |
 | 52 | Mountain building at plate collisions, creating rain-shadow deserts. | not started | |
 | 53 | Earthquakes and tsunamis. | not started | |

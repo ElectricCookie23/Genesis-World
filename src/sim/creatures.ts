@@ -162,7 +162,7 @@ export class Creatures {
   private fitLand(c: number, land: number): number {
     const p = c * PHEN_COUNT;
     // wings add to getting around on top of legs
-    const move = Math.min(1.15, this.phen[p + P.Walk]! + this.phen[p + P.Fly]! * 0.7);
+    const move = Math.min(1.4, this.phen[p + P.Walk]! + this.phen[p + P.Fly]! * 0.9);
     return land > 0.02 ? Math.sqrt(this.phen[p + P.LandUse]!) * (0.42 + 0.58 * move) * Math.min(1, land * 3) : 0;
   }
 

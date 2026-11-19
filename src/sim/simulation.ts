@@ -10,6 +10,7 @@ import { Creatures, type Species } from './creatures';
 import { G, GENE_COUNT, P, PG, PLANT_GENES, sizeMetres } from './genetics';
 import { nameSpecies, plantName } from './naming';
 import { placeName } from './names';
+import { Civilization } from './civilization';
 
 /** Sim years covered by one full ecological step (one tick at Epoch speed). */
 export const ECO_YEARS = 15000;
@@ -27,6 +28,8 @@ export class Simulation {
   readonly plants: Plants;
   readonly creatures: Creatures;
   readonly events = new EventLog();
+  readonly civ = new Civilization();
+  private civRng: RNG;
   simYear = 0;
   moonAngle = 0;
   terrainDirty = true;
@@ -96,6 +99,7 @@ export class Simulation {
     this.geoRng = this.rng.fork('events');
     this.nameRng = this.rng.fork('names');
     this.weatherRng = this.rng.fork('weather');
+    this.civRng = this.rng.fork('civilization');
     this.lifeYear = this.lifeRng.range(0.35e6, 0.9e6);
     this.algaeDelay = this.lifeRng.range(1.2e6, 3e6);
     this.animalDelay = this.lifeRng.range(5e6, 10e6);
@@ -429,6 +433,7 @@ export class Simulation {
     void radius;
     for (const reg of hit.regions) this.regionEvent[reg] = ev.id;
     this.creatures.disaster({ regions: hit.regions, kill: hit.kill, eventId: ev.id });
+    if (big) this.civ.witness(this, ev.id, hit.regions, hit.kill);
     if (huge) {
       const winter = this.emit({
         type: 'volcanic-winter', title: 'A volcanic winter',
@@ -462,6 +467,7 @@ export class Simulation {
     const hit = this.regionsOf(hitInfo.cells, (k) => Math.max(0, 1 - hitInfo.dist[k]! / (hitInfo.radius * 2.5)));
     for (const reg of hit.regions) this.regionEvent[reg] = ev.id;
     this.creatures.disaster({ regions: hit.regions, kill: hit.kill, eventId: ev.id });
+    this.civ.witness(this, ev.id, hit.regions, hit.kill.map((k) => Math.max(0.3, k)));
     const winter = this.emit({
       type: 'impact-winter', title: 'Impact winter',
       description: 'Dust and soot wrap the planet. Plants starve for light and the cold deepens month after month.',
@@ -504,6 +510,7 @@ export class Simulation {
     if (this.stage === 'animals') this.creatures.step(this.lifeRng, this.simYear, tau, p.oxygen);
     const t2 = performance.now();
     this.fires();
+    if (this.stage === 'animals') this.civ.step(this, this.civRng, tau);
     p.paint(this.world, this.climate);
     const t3 = performance.now();
     this.prof.plants += t1 - t0; this.prof.creatures += t2 - t1; this.prof.paint += t3 - t2;
@@ -791,6 +798,48 @@ export class Simulation {
         this.milestone('first-flight', 'First flight', `${s.name} flies. It does not glide or fall slowly: it climbs into the sky under its own power.`, cell, gl !== undefined ? [...c, gl] : c, ids);
       }
       if (g[G.Intelligence]! > 0.55) this.milestone('first-mind', 'A thinking animal', `${s.name} solves problems it has never met before.`, cell, c, ids);
+    }
+  }
+
+  /** Events from the civilization layer, each tied to what caused it. */
+  civEvent(kind: string, speciesId: number, cell: number, settlementId: number, cause = -1): void {
+    const sp = this.creatures.species[speciesId]!;
+    const st = settlementId >= 0 ? this.civ.settlements[settlementId]! : undefined;
+    const spCause = sp.eventId >= 0 ? [sp.eventId] : [];
+    const mind = this.milestones.get('threshold');
+    if (kind === 'threshold') {
+      this.milestone('threshold', 'A mind awakens',
+        `${sp.name} has begun to teach its young things that no instinct ever knew. What one of them learns, the others keep.`, cell, spCause, [speciesId]);
+    } else if (kind === 'camp') {
+      const ev = this.emit({ type: 'settlement', cellId: cell, title: `Camp at ${st!.name}`, description: `A band of ${sp.name} stops wandering and makes a camp at ${st!.name}.`, causes: mind !== undefined ? [mind] : spCause, importance: 1, speciesIds: [speciesId] });
+      st!.eventId = ev.id;
+      this.milestone('first-fire', 'First fire', `On the night side of the world there is a new kind of light. At ${st!.name}, ${sp.name} has learned to keep a fire.`, cell, [ev.id], [speciesId]);
+    } else if (kind === 'daughter') {
+      const ev = this.emit({ type: 'settlement', cellId: cell, title: `${st!.name} is founded`, description: this.say('daughter', [`Families leave a crowded home and settle at ${st!.name}.`, `A new fire is lit at ${st!.name}.`, `Travellers put down roots at ${st!.name}.`]), causes: mind !== undefined ? [mind] : spCause, importance: 0, speciesIds: [speciesId] });
+      st!.eventId = ev.id;
+    } else if (kind === 'village') {
+      const ev = this.emit({ type: 'settlement', cellId: cell, title: `${st!.name} becomes a village`, description: `${st!.name} has stores of food, walls against the wind, and children who have never moved camp.`, causes: [st!.eventId], importance: 1, speciesIds: [speciesId] });
+      this.milestone('first-village', 'First village', `${st!.name} is no longer a camp. People are born there, grow old there, and are buried there.`, cell, [ev.id], [speciesId]);
+    } else if (kind === 'city') {
+      const ev = this.emit({ type: 'settlement', cellId: cell, title: `${st!.name} becomes a city`, description: `${st!.name} is home to more people than any of them could ever know by name.`, causes: [st!.eventId], importance: 2, speciesIds: [speciesId] });
+      this.milestone('first-city', 'First city', `From orbit, a new light shows on the night side. It does not flicker like a fire. It is ${st!.name}, the first city.`, cell, [ev.id], [speciesId]);
+    } else if (kind === 'belief') {
+      const src = this.events.get(cause)!;
+      this.emit({
+        type: 'belief', cellId: cell, title: `A faith is born at ${st!.name}`,
+        description: this.say('belief', [
+          `The people of ${st!.name} saw ${src.title.toLowerCase()}. They tell the story to their children, and the story becomes a faith.`,
+          `At ${st!.name} they remember ${src.title.toLowerCase()} in song. The song has turned into worship.`,
+          `After ${src.title.toLowerCase()}, the people of ${st!.name} began leaving offerings. They still do.`,
+        ]),
+        causes: [cause, st!.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [speciesId],
+      });
+    } else if (kind === 'ruin') {
+      this.emit({
+        type: 'ruin', cellId: cell, title: `${st!.name} falls silent`,
+        description: this.say('ruin', [`The fires of ${st!.name} go out. In time the forest will take the walls.`, `No one is left at ${st!.name}.`, `${st!.name} is abandoned to the weather.`]),
+        causes: [st!.eventId, ...(this.era.eventId >= 0 ? [this.era.eventId] : [])].filter((x) => x >= 0), importance: st!.tech > 0.3 ? 1 : 0, speciesIds: [speciesId],
+      });
     }
   }
 

@@ -77,6 +77,7 @@ function snapshotCells(s: Simulation): { cells: CellSnapshot; transfer: Transfer
     cloud: w.cloud.slice(),
     ash: w.ash.slice(),
     lava: w.lava.slice(),
+    lights: w.lights.slice(),
     canopy: w.canopy.slice(),
     flora: w.flora.slice(),
     flow: w.flow.slice(),
@@ -88,7 +89,7 @@ function snapshotCells(s: Simulation): { cells: CellSnapshot; transfer: Transfer
   s.terrainDirty = false;
   const transfer = [
     cells.elevation.buffer, cells.temperature.buffer, cells.moisture.buffer, cells.biome.buffer,
-    cells.vegetation.buffer, cells.snow.buffer, cells.cloud.buffer, cells.ash.buffer, cells.lava.buffer,
+    cells.vegetation.buffer, cells.snow.buffer, cells.cloud.buffer, cells.ash.buffer, cells.lava.buffer, cells.lights.buffer,
     cells.canopy.buffer, cells.flora.buffer, cells.flow.buffer, cells.downhill.buffer, cells.windE.buffer, cells.windN.buffer,
   ];
   return { cells, transfer };
@@ -122,6 +123,8 @@ function stats(s: Simulation): WorldStats {
     population: s.creatures.totalPop,
     landCover: s.plants.totalLandCover / Math.max(1, s.regions.count),
     storms: s.storms.map((x) => x.cell),
+    settlements: s.civ.living,
+    maxTech: s.civ.maxTech,
   };
 }
 

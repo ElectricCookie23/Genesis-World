@@ -29,7 +29,7 @@ for (let y = 0; y < my * 1e6; y += dt) {
       maxIq = Math.max(maxIq, s.ref[G.Intelligence]!);
       maxDiet = Math.max(maxDiet, s.ref[G.Diet]!);
     }
-    console.log(`${(sim.simYear / 1e6).toFixed(1)} My | T ${sim.climate.meanTemp.toFixed(1)} sea ${sim.world.seaLevel.toFixed(2)} O2 ${pl.oxygen.toFixed(3)} | plants ${pl.living} (land ${pl.totalLandCover.toFixed(0)} sea ${pl.totalSeaCover.toFixed(0)}) | species ${cr.livingSpecies}/${cr.species.length} cohorts ${cr.living} pop ${cr.totalPop.toExponential(1)} | land ${land} fly ${fly} hunt ${hunters} max ${maxSize.toFixed(1)}m iq ${maxIq.toFixed(2)} diet ${maxDiet.toFixed(2)} | events ${sim.events.events.length} | ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+    console.log(`${(sim.simYear / 1e6).toFixed(1)} My | T ${sim.climate.meanTemp.toFixed(1)} sea ${sim.world.seaLevel.toFixed(2)} O2 ${pl.oxygen.toFixed(3)} | plants ${pl.living} (land ${pl.totalLandCover.toFixed(0)} sea ${pl.totalSeaCover.toFixed(0)}) | species ${cr.livingSpecies}/${cr.species.length} cohorts ${cr.living} pop ${cr.totalPop.toExponential(1)} | land ${land} fly ${fly} hunt ${hunters} max ${maxSize.toFixed(1)}m iq ${maxIq.toFixed(2)} diet ${maxDiet.toFixed(2)} | civ ${sim.civ.living} tech ${sim.civ.maxTech.toFixed(2)} | events ${sim.events.events.length} | ${((Date.now() - t0) / 1000).toFixed(0)}s`);
   }
 }
 const ext = sim.events.events.filter((e) => e.type === 'extinction').length;

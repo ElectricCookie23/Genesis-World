@@ -49,6 +49,7 @@ export class PlanetMesh {
   private readonly colors: Float32Array;
   private readonly aux: Float32Array;
   private readonly glow: Float32Array;
+  private readonly lights: Float32Array;
   private readonly cellColor: Float32Array;
   /** Smoothed biome colours, so biomes blend over 2 to 3 cells. */
   private readonly scratch: Float32Array;
@@ -61,6 +62,7 @@ export class PlanetMesh {
     this.colors = new Float32Array(triCount * 9);
     this.aux = new Float32Array(triCount * 3);
     this.glow = new Float32Array(triCount * 3);
+    this.lights = new Float32Array(triCount * 3);
     this.cellColor = new Float32Array(grid.count * 3);
     this.scratch = new Float32Array(grid.count * 3);
     this.elevation = new Float32Array(grid.count);
@@ -70,6 +72,7 @@ export class PlanetMesh {
     this.geometry.setAttribute('color', new BufferAttribute(this.colors, 3));
     this.geometry.setAttribute('cloudCover', new BufferAttribute(this.aux, 1));
     this.geometry.setAttribute('glow', new BufferAttribute(this.glow, 1));
+    this.geometry.setAttribute('lights', new BufferAttribute(this.lights, 1));
 
     const material = new MeshBasicNodeMaterial();
     const albedo = attribute('color', 'vec3');
@@ -103,6 +106,11 @@ export class PlanetMesh {
     const heat = attribute('glow', 'float');
     const flicker = mx_fractal_noise_float(P.mul(60).add(vec3(0, uTime.mul(0.6), 0)), 2, 2.0, 0.5).mul(0.35).add(0.75);
     lit = lit.add(vec3(3.2, 0.75, 0.08).mul(heat.mul(heat)).mul(flicker));
+    // firelight and city light: warm points that only show on the night side
+    const town = attribute('lights', 'float');
+    const sparkle = mx_fractal_noise_float(P.mul(900), 2, 2.0, 0.5).mul(0.5).add(0.5);
+    const lamp = pow(town, 1.5).mul(smoothstep(0.35, 0.75, sparkle.add(town.mul(0.5)))).mul(float(1).sub(day));
+    lit = lit.add(vec3(2.6, 1.55, 0.55).mul(lamp));
     material.colorNode = lit;
     this.mesh = new Mesh(this.geometry, material);
     this.mesh.frustumCulled = false;
@@ -163,6 +171,8 @@ export class PlanetMesh {
     const cloud = cells.cloud;
     const lava = cells.lava;
     const Gl = this.glow;
+    const town = cells.lights;
+    const Li = this.lights;
     for (let t = 0, o = 0; t < tris.length; t += 3, o += 9) {
       const a = tris[t]!, b = tris[t + 1]!, c = tris[t + 2]!;
       if (geometryChanged) {
@@ -188,6 +198,7 @@ export class PlanetMesh {
       const ti = t;
       A[ti] = cloud[a]!; A[ti + 1] = cloud[b]!; A[ti + 2] = cloud[c]!;
       Gl[ti] = lava[a]!; Gl[ti + 1] = lava[b]!; Gl[ti + 2] = lava[c]!;
+      Li[ti] = town[a]!; Li[ti + 1] = town[b]!; Li[ti + 2] = town[c]!;
     }
     if (geometryChanged) {
       this.geometry.attributes.position!.needsUpdate = true;
@@ -196,5 +207,6 @@ export class PlanetMesh {
     this.geometry.attributes.color!.needsUpdate = true;
     this.geometry.attributes.cloudCover!.needsUpdate = true;
     this.geometry.attributes.glow!.needsUpdate = true;
+    this.geometry.attributes.lights!.needsUpdate = true;
   }
 }

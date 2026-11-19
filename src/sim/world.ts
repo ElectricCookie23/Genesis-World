@@ -208,6 +208,7 @@ export interface World {
   cloud: Float32Array; // 0..1 cloud cover
   ash: Float32Array; // 0..1 ash / scorch cover
   lava: Float32Array; // 0..1 glowing lava / fire heat
+  lights: Float32Array; // 0..1 firelight and city light
   canopy: Float32Array; // 0..1 height of the plant canopy
   flora: Int32Array; // dominant plant species id, -1 for none
   windE: Float32Array; // eastward wind component
@@ -235,6 +236,7 @@ export function createWorld(grid: Grid): World {
     cloud: new Float32Array(c),
     ash: new Float32Array(c),
     lava: new Float32Array(c),
+    lights: new Float32Array(c),
     canopy: new Float32Array(c),
     flora: new Int32Array(c).fill(-1),
     windE: new Float32Array(c),

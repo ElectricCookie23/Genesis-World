@@ -25,6 +25,7 @@ export interface CellSnapshot {
   cloud: Float32Array;
   ash: Float32Array;
   lava: Float32Array;
+  lights: Float32Array;
   canopy: Float32Array;
   flora: Int32Array;
   flow: Float32Array;
@@ -58,6 +59,8 @@ export interface WorldStats {
   landCover: number;
   /** Cells under storm cells right now (lightning flickers there). */
   storms: number[];
+  settlements: number;
+  maxTech: number;
 }
 
 /** One animal species, as shown in the tree of life and info cards. */

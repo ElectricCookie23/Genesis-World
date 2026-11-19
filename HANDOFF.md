@@ -44,6 +44,11 @@ Read this first when resuming. Then BRIEF.md, PROGRESS.md, DECISIONS.md and `git
 3. Performance and adaptive quality (BRIEF 2), mobile layout check.
 4. Tier 2 in numbered order (41 onward), starting with intelligence threshold, campfires and settlements.
 
+## Civilization (Tier 2 started)
+- `src/sim/civilization.ts`: settlements (pop, tech, belief, ruin) founded by any species over the intelligence threshold (0.55, social, on land). Events come through `Simulation.civEvent`. `world.lights` paints night lights; the terrain shader shows them on the night side only.
+- On `amber-reef-101` (grid 27) a mind awakens at about 248 My, then fire, village and city follow.
+- Not done: settlement markers and cards in the UI, agriculture, roads, domestication, cave paintings, temples.
+
 ## Known issues
 - Evolution reliability: after stopping gene-flow swamping (distinct lines no longer blend) and making flight widen feeding reach, `amber-reef-101` on a small grid reaches hunters, packs, gliding and about 20 land species by 300 My. Powered flight has not appeared in any run yet, and on cold seeds (`basalt-vale-202`) land animals appear but die out. Tune with `scripts/probe.ts`, `scripts/probe-fly.ts` and `scripts/history.ts`.
 - The build container has been killed for memory when a headless browser check and a history script ran at the same time. Run them one at a time.

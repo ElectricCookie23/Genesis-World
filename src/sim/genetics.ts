@@ -100,7 +100,7 @@ export function computePhenotype(g: Float32Array, o: number, out: Float32Array, 
     if (lt < 0.25) { swim = 0.3; walk = 0.08; }
     else if (lt < 0.5) { swim = 0.75 + 0.25 * limbLen; walk = sat((lt - 0.38) / 0.12) * 0.4; }
     else if (lt < 0.75) { swim = 0.35; walk = 0.6 + 0.4 * limbLen; fly = sat((lt - 0.64) / 0.11) * 0.3 * (1 - size * 0.8); }
-    else { swim = 0.2; walk = 0.45; fly = (0.45 + 0.55 * sat((lt - 0.75) / 0.2)) * sat(1.25 - size * 1.3); }
+    else { swim = 0.2; walk = 0.7; fly = (0.55 + 0.45 * sat((lt - 0.75) / 0.2)) * sat(1.25 - size * 1.3); }
   }
   swim *= 0.6 + 0.4 * g[o + G.Tail]!;
   const landUse = sat((1 - water) * 1.15 - 0.05);
@@ -117,7 +117,7 @@ export function computePhenotype(g: Float32Array, o: number, out: Float32Array, 
   const speed = baseSpeed * Math.max(swim * water, walk * (1 - water), fly * 1.6) * (1 - g[o + G.Armor]! * 0.45);
   // every trait costs energy, so nothing can be maxed for free
   const upkeep = 1
-    + brain * 1.1 + brain * brain * 1.6 + g[o + G.Armor]! * 0.5 + g[o + G.Horn]! * 0.25 + g[o + G.Ornament]! * 0.3 + g[o + G.Glow]! * 0.2
+    + brain * 0.5 + brain * brain * 1.2 + g[o + G.Armor]! * 0.5 + g[o + G.Horn]! * 0.25 + g[o + G.Ornament]! * 0.3 + g[o + G.Glow]! * 0.2
     + g[o + G.Venom]! * 0.3 + g[o + G.Toxicity]! * 0.3 + g[o + G.ToxinResist]! * 0.2 + g[o + G.Insulation]! * 0.15
     + eyes * 0.3 + echo * 0.3 + elec * 0.2 + g[o + G.Smell]! * 0.1 + g[o + G.Hearing]! * 0.1 + fly * 0.3 + g[o + G.ColorChange]! * 0.2
     + g[o + G.Care]! * 0.25;
@@ -133,8 +133,10 @@ export function computePhenotype(g: Float32Array, o: number, out: Float32Array, 
   out[p + P.Fly] = fly;
   out[p + P.LandUse] = landUse;
   out[p + P.Speed] = speed;
-  out[p + P.HerbEff] = Math.pow(1 - diet, 1.4) * (0.75 + 0.25 * g[o + G.Head]!) * (1 + brain * 0.9);
-  out[p + P.MeatEff] = Math.pow(diet, 0.8) * 1.6 * (1 + brain * 0.9);
+  // minds pay off most in company: shared knowledge finds more food
+  const wits = 1 + brain * 0.9 + brain * g[o + G.Sociality]! * 0.6;
+  out[p + P.HerbEff] = Math.pow(1 - diet, 1.4) * (0.75 + 0.25 * g[o + G.Head]!) * wits;
+  out[p + P.MeatEff] = Math.pow(diet, 0.8) * 1.6 * wits;
   out[p + P.ScavEff] = (1 - Math.abs(diet - 0.55) * 1.6) * (0.3 + 0.7 * g[o + G.Smell]!) * (1 - g[o + G.Aggression]! * 0.4);
   out[p + P.Sense] = sense;
   out[p + P.Conceal] = sat((1 - size) * 0.35 + g[o + G.Burrow]! * 0.3 + g[o + G.ColorChange]! * 0.3 + night * 0.15 - g[o + G.Glow]! * 0.2 - g[o + G.Ornament]! * 0.2);
