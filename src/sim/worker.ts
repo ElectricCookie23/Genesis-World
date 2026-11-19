@@ -25,6 +25,20 @@ let speciesVersion = -1;
 let plantVersion = -1;
 const sentExtinct = new Set<number>();
 const rewinds: { simYear: number; title: string; save: SaveState }[] = [];
+/** How many rewind points to keep (each is a whole copy of the world). */
+let rewindLimit = 12;
+/** When there are too many, drop the one that sits closest in time to the point before it, so the rest stay spread over history. */
+function thinRewinds(): void {
+  while (rewinds.length > rewindLimit) {
+    let drop = 1, gap = Infinity;
+    for (let i = 1; i < rewinds.length - 1; i++) {
+      if (rewinds[i]!.title === 'Fork point') continue;
+      const g = rewinds[i]!.simYear - rewinds[i - 1]!.simYear;
+      if (g < gap) { gap = g; drop = i; }
+    }
+    rewinds.splice(drop, 1);
+  }
+}
 let lastRewindYear = -1e12;
 let focus: { x: number; y: number; z: number; altitude: number } | null = null;
 let lastHerds = 0;
@@ -199,7 +213,7 @@ function tick(): void {
   if (major && s.simYear - lastRewindYear > 4e6) {
     lastRewindYear = s.simYear;
     rewinds.push({ simYear: s.simYear, title: major.title, save: saveSimulation(s, major.title) });
-    if (rewinds.length > 6) rewinds.shift();
+    thinRewinds();
     post({ type: 'timeline', points: rewinds.map((r, index) => ({ index, simYear: r.simYear, title: r.title })) });
   }
   const now = performance.now();
@@ -279,6 +293,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         const save = msg.save as SaveState;
         sim = new Simulation(save.seed, save.gridN);
         loadSimulation(sim, save);
+        if (msg.diverge) sim.diverge();
         sim.events.drainFresh();
         sentExtinct.clear();
         speciesVersion = -1;
@@ -288,10 +303,17 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         post({ type: 'loaded', cells, stats: stats(sim), events: sim.events.events }, transfer);
         break;
       }
+      case 'requestLayer':
+        if (sim) { const values = sim.layer(msg.kind); post({ type: 'layer', kind: msg.kind, values }, [values.buffer]); }
+        break;
+      case 'rewindLimit':
+        rewindLimit = Math.max(2, Math.min(24, msg.count));
+        thinRewinds();
+        break;
       case 'fork':
         if (sim) {
           rewinds.push({ simYear: sim.simYear, title: 'Fork point', save: saveSimulation(sim, 'fork') });
-          if (rewinds.length > 6) rewinds.shift();
+          thinRewinds();
           post({ type: 'timeline', points: rewinds.map((r, index) => ({ index, simYear: r.simYear, title: r.title })) });
         }
         break;

@@ -5,7 +5,13 @@ import type { PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats 
 import type { Nation } from '../render/gfx/nations';
 
 export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section';
-export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal';
+export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
+
+/** One person in an individual's family tree; key is set when that relative is drawn in the world and can be selected. */
+export interface Relative { name: string; key: number | null; }
+export interface FamilyTree { self: string; parents: [string, string]; grandparents: [string, string, string, string]; siblings: Relative[]; young: Relative[]; }
+/** The other future, when the timeline has been forked and both are running. */
+export interface OtherFuture { stats: WorldStats | null; events: SimEvent[]; forkedAt: number; }
 
 export interface UIState {
   stats: WorldStats | null;
@@ -46,6 +52,8 @@ export interface UIState {
   /** Nations derived from the settlements (name, colours, emblem), for the Night Map and the Peoples panel. */
   nations: Nation[];
   timeline: TimelinePoint[];
+  /** Set while two futures run side by side. */
+  other: OtherFuture | null;
   overlay: Overlay;
   colorblind: boolean;
   /** When on, god tools are locked and the world runs untouched. */
@@ -96,6 +104,7 @@ export const state: UIState = {
   settlements: [],
   nations: [],
   timeline: [],
+  other: null,
   overlay: 'none',
   colorblind: false,
   handsOff: false,
@@ -159,6 +168,11 @@ export const actions = {
   exportBook: () => {},
   drawSection: (_canvas: HTMLCanvasElement) => {},
   familyOf: (_key: number): string[] => [],
+  familyTree: (_key: number): FamilyTree | null => null,
+  selectCreatureKey: (_key: number) => {},
+  /** Swap places with the other future, or stop running it. */
+  crossOver: () => {},
+  endOtherFuture: () => {},
   fork: () => {},
   /** Screen position of a direction on the globe: [x, y, visible 0..1]. */
   project: (_x: number, _y: number, _z: number): [number, number, number] => [0, 0, 0],

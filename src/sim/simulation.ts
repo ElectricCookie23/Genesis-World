@@ -4,7 +4,7 @@ import { BIOME_NAMES, buildGrid, createWorld, GRID_N, type Grid, type World } fr
 import { driftPlatesMoving } from './tectonics';
 import { dustFall, shapeLandforms } from './landforms';
 import { carveFjords, computeConvergence, computeDrainage, countContinents, erode, erupt, uplift, generateTerrain, impact, type GeologyState, type VolcanoSite } from './geology';
-import { classifyBiomes, createClimate, updateMoisture, updateSnow, updateTemperature, type ClimateState } from './climate';
+import { classifyBiomes, createClimate, updateMoisture, updateSnow, updateTemperature, type ClimateState, computeCurrents } from './climate';
 import { EventLog, type SimEvent } from './events';
 import { buildRegions, updateRegions, type Regions } from './regions';
 import { Plants, type PlantSpecies } from './plants';
@@ -104,6 +104,7 @@ export class Simulation {
   private richAirNoted = false;
   /** Storm cells: dense rain cloud with lightning, drifting with the wind. */
   private canyonWork = 0;
+  private deltaLand = 0;
   private dustCells?: Float32Array;
   storms: { cell: number; strength: number; years: number; ticks: number; eternal?: boolean; hurricane?: boolean }[] = [];
   private eternalHome = 0;
@@ -230,7 +231,7 @@ export class Simulation {
     if (this.driftAcc >= 2e6) {
       // the plates themselves move: their outlines shift, they collide and pull apart, and the stress along their edges is worked out afresh
       const drift = driftPlatesMoving(w, this.driftAcc * 0.6);
-      if (drift.moved > 0) computeConvergence(w, this.geology.convergence);
+      if (drift.moved > 0) { computeConvergence(w, this.geology.convergence); computeCurrents(w, this.climate); }
       this.driftAcc = 0;
       this.terrainDirty = true;
       computeDrainage(w);
@@ -692,7 +693,8 @@ export class Simulation {
       for (let i = 0; i < this.grid.count; i++) { const d = this.world.downhill[i]!; if (d >= 0 && this.world.elevation[i]! > this.world.seaLevel + 0.3 && this.world.flow[i]! > best) { best = this.world.flow[i]!; cell = i; } }
       this.emit({ type: 'canyon', cellId: cell, title: 'A river cuts a canyon', description: 'Grain by grain, for longer than any living thing has existed, a river has been sawing down through the rock. Its walls now stand far above the water that made them.', importance: 1 });
     }
-    if (lf.newLand > 0 && once('first-delta')) {
+    this.deltaLand += lf.newLand;
+    if (this.deltaLand >= 6 && this.simYear > 15e6 && once('first-delta')) {
       let cell = 0, best = 0;
       for (let i = 0; i < this.grid.count; i++) { const d = this.world.downhill[i]!; if (d >= 0 && this.world.elevation[d]! <= this.world.seaLevel + 0.02 && this.world.elevation[i]! > this.world.seaLevel && this.world.flow[i]! > best) { best = this.world.flow[i]!; cell = i; } }
       this.emit({ type: 'delta', cellId: cell, title: 'A delta grows', description: 'Where a great river meets the sea it drops the mud it has carried from the mountains. New land is rising out of the water, flat and rich, fanned out like an open hand.', importance: 1 });
@@ -798,6 +800,20 @@ export class Simulation {
       if (old >= 0 && once('oldest-tree')) this.emit({ type: 'old-tree', cellId: this.oldestTreeCell, title: 'The oldest tree', description: 'In one valley the forest has never burned and never frozen. Somewhere in it stands the oldest living thing on the planet.', importance: 1 });
     }
     if (this.milestoneTimer % 32 === 0) {
+      // where each kind lives, the coldest country it lives in, and the best flower country it shares with other flower feeders
+      const where = new Map<number, Set<number>>();
+      const coldest = new Map<number, number>();
+      const flowers = new Map<number, number>();
+      for (let c = 0; c < cr.high; c++) {
+        if (!cr.alive[c]) continue;
+        const id = cr.sp[c]!, rg = cr.region[c]!;
+        let set = where.get(id); if (!set) { set = new Set(); where.set(id, set); } set.add(rg);
+        if (this.regions.land[rg]! > 0.5) {
+          const t = this.regions.landTemp[rg]!;
+          if (t < (coldest.get(id) ?? 99)) coldest.set(id, t);
+          if (this.plants.fruit[rg]! > 0.1 && this.plants.pollinators[rg]! > 0.15) { const was = flowers.get(id); if (was === undefined || this.plants.fruit[rg]! > this.plants.fruit[was]!) flowers.set(id, rg); }
+        }
+      }
       for (const sp of cr.species) {
         if (sp.extinctYear >= 0 || !sp.name || sp.pop < 2000) continue;
         const g = sp.ref, cell = this.regions.centre[sp.home]!, c0 = sp.eventId >= 0 ? [sp.eventId] : [];
@@ -810,13 +826,16 @@ export class Simulation {
           this.emit({ type: 'vent', cellId: cell, title: 'Life at the vents', description: `Far below the reach of sunlight, ${sp.name} crowds around cracks where hot, mineral-black water pours from the sea floor. If the sun went out, it would not notice.`, causes: c0, importance: 1, speciesIds: [sp.id] });
         }
         // hibernation: slow-living burrowers of cold country sleep the winter away
-        if (g[G.Burrow]! > 0.5 && g[G.Metabolism]! < 0.55 && g[G.Water]! < 0.5 && this.regions.landTemp[sp.home]! < 6 && once(`hib-${sp.id}`) && once('hib-first')) {
+        if (g[G.Burrow]! > 0.18 && g[G.Metabolism]! < 0.5 && g[G.Water]! < 0.5 && (coldest.get(sp.id) ?? 99) < 6 && !this.notedOnce.has('hib-first')) {
+          this.notedOnce.add('hib-first');
           this.emit({ type: 'hibernation', cellId: cell, title: `${sp.name} sleeps through the winter`, description: `When the cold comes, ${sp.name} goes underground, slows its heart almost to nothing, and waits. It wakes thin and hungry when the ground thaws, having missed the worst of the year entirely.`, causes: c0, importance: 1, speciesIds: [sp.id] });
         }
-        // pollination: small fliers that feed at flowers and carry their dust from plant to plant
-        if (g[G.Size]! < 0.3 && g[G.Diet]! < 0.45 && g[G.LimbType]! > 0.75 && this.plants.fruit[sp.home]! > 0.3 && this.plants.pollinators[sp.home]! > 0.2 && once('pollination-first')) {
-          const flower = this.plants.species[this.plants.dominant[sp.home]!];
-          this.emit({ type: 'pollination', cellId: cell, title: 'Flowers find a partner', description: `${sp.name} drinks at the flowers${flower ? ` of ${flower.name}` : ''} and leaves each one dusted with the last. The plants that feed it best set the most seed, and the animals that visit most are best fed: each is now shaping the other.`, causes: c0, importance: 2, speciesIds: [sp.id] });
+        // pollination: small animals that feed at flowers and carry their dust from plant to plant
+        if (g[G.Size]! < 0.3 && g[G.Diet]! < 0.45 && g[G.Water]! < 0.5 && (flowers.get(sp.id) ?? -1) >= 0 && !this.notedOnce.has('pollination-first')) {
+          this.notedOnce.add('pollination-first');
+          const at = flowers.get(sp.id)!;
+          const flower = this.plants.species[this.plants.dominant[at]!];
+          this.emit({ type: 'pollination', cellId: this.regions.centre[at]!, title: 'Flowers find a partner', description: `${sp.name} drinks at the flowers${flower ? ` of ${flower.name}` : ''} and leaves each one dusted with the last. The plants that feed it best set the most seed, and the animals that visit most are best fed: each is now shaping the other.`, causes: c0, importance: 2, speciesIds: [sp.id] });
         }
         // mass hatchings: glowing sea animals that breed all at once
         if (g[G.Water]! > 0.7 && g[G.Offspring]! > 0.75 && g[G.Glow]! > 0.4 && once(`hatch-${sp.id}`)) {
@@ -824,14 +843,29 @@ export class Simulation {
         }
       }
       // symbiosis: a big animal and a small one that are always found together
-      const big = cr.species.filter((x) => x.extinctYear < 0 && x.name && x.ref[G.Size]! > 0.6 && x.pop > 2000);
-      const small = cr.species.filter((x) => x.extinctYear < 0 && x.name && x.ref[G.Size]! < 0.25 && x.ref[G.Diet]! > 0.3 && x.ref[G.Diet]! < 0.7);
-      for (const a of big) for (const b of small) {
-        if (a.home !== b.home || Math.abs(a.ref[G.Water]! - b.ref[G.Water]!) > 0.3 || cr.symbiont.has(a.id) || cr.symbiont.has(b.id) || !once(`sym-${a.id}-${b.id}`)) continue;
-        // from now on each does a little better wherever the other lives too
-        cr.symbiont.set(a.id, b.id); cr.symbiont.set(b.id, a.id);
-        this.emit({ type: 'symbiosis', cellId: this.regions.centre[a.home]!, title: 'An unlikely pair', description: `${b.name} spends its days picking pests from the hide of ${a.name}. One gets a meal, the other gets clean, and neither would do as well alone.`, causes: [a.eventId, b.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [a.id, b.id] });
-        break;
+      const big = cr.species.filter((x) => x.extinctYear < 0 && x.name && x.ref[G.Size]! > 0.55 && x.pop > 2000 && !cr.symbiont.has(x.id));
+      const small = cr.species.filter((x) => x.extinctYear < 0 && x.name && x.ref[G.Size]! < 0.3 && x.pop > 2000 && !cr.symbiont.has(x.id));
+      // a pair forms between kinds that share ground, and a world has room for only a few such pairs
+      if (big.length && small.length && cr.symbiont.size < 6) {
+        pairing: for (const a of big) for (const b of small) {
+          if (Math.abs(a.ref[G.Water]! - b.ref[G.Water]!) > 0.3) continue;
+          const ra = where.get(a.id), rb = where.get(b.id);
+          if (!ra || !rb) continue;
+          let shared = -1, both = 0;
+          for (const r of ra) if (rb.has(r)) { both++; if (shared < 0) shared = r; }
+          if (both < 2 || !once(`sym-${a.id}-${b.id}`)) continue;
+          const cleaner = b.ref[G.Diet]! > 0.15;
+          const sea = a.ref[G.Water]! > 0.5;
+          const how = cleaner
+            ? `${b.name} spends its days picking pests from the ${sea ? 'skin' : 'hide'} of ${a.name}. One gets a meal, the other gets clean, and neither would do as well alone.`
+            : sea
+              ? `${b.name} keeps close under ${a.name} and grazes the growth off its skin. The big animal is rid of its passengers, and nothing dares come near enough to eat the small one.`
+              : `${b.name} feeds at the feet of ${a.name}, on what the big animal tramples and turns up. It is the first to see a hunter coming, and when it runs, ${a.name} runs too.`;
+          this.emit({ type: 'symbiosis', cellId: this.regions.centre[shared]!, title: 'An unlikely pair', description: how, causes: [a.eventId, b.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [a.id, b.id] });
+          // from now on each does a little better wherever the other lives too
+          cr.symbiont.set(a.id, b.id); cr.symbiont.set(b.id, a.id);
+          break pairing;
+        }
       }
       // meat-eating plants where the soil gives them nothing
       for (const pl of this.plants.species) {
@@ -941,16 +975,25 @@ export class Simulation {
       p.dust.fill(0);
       const seen = new Uint16Array(reg.count);
       for (let i = 0; i < this.grid.count; i++) if (dust[i]! > 0) { const r = reg.regionOf[i]!; p.dust[r] = p.dust[r]! + dust[i]!; seen[r] = seen[r]! + 1; }
-      for (let r = 0; r < reg.count; r++) if (seen[r]!) p.dust[r] = Math.min(1, p.dust[r]! / Math.max(3, seen[r]!));
-      if (fed > this.grid.count * 0.004 && !this.notedOnce.has('dust-bloom')) {
+      // spread over a good part of the region, so a thin fall of dust on one corner counts for little
+      for (let r = 0; r < reg.count; r++) if (seen[r]!) p.dust[r] = Math.min(1, p.dust[r]! / Math.max(3, 0.4 * (reg.cellStart[r + 1]! - reg.cellStart[r]!)));
+      if (fed > this.grid.count * 0.004 && p.living > 0 && this.simYear > 5e6 && !this.notedOnce.has('dust-bloom')) {
         this.notedOnce.add('dust-bloom');
         let cell = 0, best = 0;
         for (let i = 0; i < this.grid.count; i++) if (dust[i]! > best) { best = dust[i]!; cell = i; }
         this.emit({ type: 'dust', cellId: cell, title: 'Dust feeds the sea', description: 'Wind lifts the red dust of a desert high into the air and carries it out over the ocean. Where it settles, the water turns green: the dust is food, and the sea was hungry for it.', importance: 1 });
       }
     }
+    // a current that carries warmth or cold far from where it belongs is worth a line in the chronicle
+    if (this.climate.currentAnomaly > 5.5 && this.climate.currentCell >= 0 && !this.notedOnce.has('first-current')) {
+      this.notedOnce.add('first-current');
+      const c = this.climate.currentCell;
+      const warm = this.world.temperature[c]! > 27.5 - 49 * this.grid.pos[c * 3 + 1]! * this.grid.pos[c * 3 + 1]! + this.climate.globalOffset;
+      this.emit({ type: 'current', cellId: c, title: warm ? 'A warm current' : 'A cold current', description: warm ? 'A river in the sea is carrying the warmth of the tropics toward the pole. The coast it washes is milder than any land at that latitude has a right to be.' : 'Cold water from the high latitudes is running along this coast toward the tropics. The air above it is cool and dry, and the land beside it gets little rain.', importance: 1 });
+    }
     // old trails fade unless herds keep walking them
-    const fade = Math.exp(-0.9 * tau);
+    const fade = Math.exp(-0.08 * tau);
+    if (this.milestoneTimer % 4 === 0 && this.stage === 'animals') this.creatures.seasonalTreks();
     const trail = this.world.trail;
     for (let i = 0; i < trail.length; i++) if (trail[i]! > 0) trail[i] = trail[i]! < 0.01 ? 0 : trail[i]! * fade;
     p.step(this.world, this.climate, this.lifeRng, this.simYear, tau);
@@ -970,13 +1013,41 @@ export class Simulation {
     if (this.milestoneTimer % 16 === 0 && this.shapeLand(tau)) this.terrainDirty = true;
   }
 
+  /** Nudge every random stream, so that a copy of this world takes a different road from here on. */
+  diverge(): void {
+    for (let i = 0; i < 7; i++) { this.rng.next(); this.lifeRng.next(); this.civRng.next(); this.nameRng.next(); }
+  }
+
+  /** A per-cell layer for the overlays: how many kinds of animal live here, or how much oxygen is being made here. 0..1. */
+  layer(kind: 'diversity' | 'oxygen'): Float32Array {
+    const out = new Float32Array(this.grid.count);
+    const reg = this.regions, w = this.world;
+    if (kind === 'diversity') {
+      const cr = this.creatures;
+      const seen = new Set<number>();
+      const perRegion = new Float32Array(reg.count);
+      for (let c = 0; c < cr.high; c++) {
+        if (!cr.alive[c]) continue;
+        const key = cr.region[c]! * 4096 + cr.sp[c]!;
+        if (!seen.has(key)) { seen.add(key); perRegion[cr.region[c]!] = perRegion[cr.region[c]!]! + 1; }
+      }
+      for (let i = 0; i < out.length; i++) out[i] = Math.min(1, perRegion[reg.regionOf[i]!]! / 4);
+    } else {
+      for (let i = 0; i < out.length; i++) {
+        const r = reg.regionOf[i]!;
+        out[i] = w.elevation[i]! > w.seaLevel ? Math.min(1, w.vegetation[i]! * 1.1) : Math.min(1, w.bloom[i]! * 0.7 + this.plants.seaCover[r]! * 0.6);
+      }
+    }
+    return out;
+  }
+
   /** A migrating herd has walked from one region to the next: the ground between is worn a little more. */
   private wearTrail(from: number, to: number, mass: number): void {
     const g = this.grid, w = this.world;
     let cur = this.regions.centre[from]!;
     const target = this.regions.centre[to]!;
     const tx = g.pos[target * 3]!, ty = g.pos[target * 3 + 1]!, tz = g.pos[target * 3 + 2]!;
-    const add = Math.min(0.08, 0.012 + 0.012 * Math.log10(1 + Math.max(0, mass)));
+    const add = Math.min(0.2, 0.03 + 0.03 * Math.log10(1 + Math.max(0, mass)));
     for (let step = 0; step < 24 && cur !== target; step++) {
       if (w.elevation[cur]! > w.seaLevel) w.trail[cur] = Math.min(1, w.trail[cur]! + add);
       let best = cur, bd = g.pos[cur * 3]! * tx + g.pos[cur * 3 + 1]! * ty + g.pos[cur * 3 + 2]! * tz;

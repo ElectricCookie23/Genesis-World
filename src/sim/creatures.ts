@@ -166,6 +166,35 @@ export class Creatures {
     }
   }
 
+  /**
+   * Herds that move with the seasons walk between the neighbouring regions they live in, year after year.
+   * Reports each such walk to `onTrek` (heavier and more restless herds count for more).
+   */
+  seasonalTreks(): void {
+    if (!this.onTrek) return;
+    const reg = this.reg;
+    this.buildRegionLists();
+    for (let c = 0; c < this.high; c++) {
+      if (!this.alive[c]) continue;
+      const g = c * GENE_COUNT;
+      const mig = this.genome[g + G.Migration]!;
+      if (mig < 0.15 || this.genome[g + G.Size]! < 0.2 || this.genome[g + G.Water]! > 0.5 || this.count[c]! < 1000) continue;
+      const r = this.region[c]!;
+      if (reg.land[r]! <= 0.5) continue;
+      for (let k = 0; k < reg.grid.ncount[r]!; k++) {
+        const nb = reg.grid.neighbors[r * 6 + k]!;
+        if (nb < r || reg.land[nb]! <= 0.5) continue;
+        for (let j = this.regionStart[nb]!; j < this.regionStart[nb + 1]!; j++) {
+          const q = this.regionList[j]!;
+          if (this.sp[q] !== this.sp[c]) continue;
+          const herd = Math.min(this.count[c]!, this.count[q]!) * this.phen[c * PHEN_COUNT + P.Mass]!;
+          this.onTrek(r, nb, herd * (0.5 + 2 * mig));
+          break;
+        }
+      }
+    }
+  }
+
   cohortsIn(region: number): Int32Array {
     return this.regionList.subarray(this.regionStart[region]!, this.regionStart[region + 1]!);
   }
@@ -245,7 +274,7 @@ export class Creatures {
         const t = l + s > 0 ? (l * tL + s * tS) / (l + s) : land > 0.5 ? tL : tS;
         // hibernators (slow-living burrowers) sleep through the cold underground and feel far less of it
         let cold = (phen[p + P.TMin]! - t) / 10;
-        if (cold > 0 && genome[g + G.Burrow]! > 0.5 && genome[g + G.Metabolism]! < 0.55) cold *= 0.55;
+        if (cold > 0) cold *= 1 - 0.45 * sat((genome[g + G.Burrow]! - 0.1) * 5) * sat((0.6 - genome[g + G.Metabolism]!) * 5);
         const st = Math.max(0, cold, (t - phen[p + P.TMax]!) / 10);
         stress[i] = st;
         const warm = genome[g + G.WarmBlood]! > 0.5;
@@ -259,7 +288,7 @@ export class Creatures {
         let partner = 1;
         const mate = this.symbiont.get(sp[c]!);
         if (mate !== undefined) for (let j = 0; j < n; j++) if (sp[this.regionList[a + j]!] === mate) { partner = 1.07; break; }
-        const pol = sat((0.32 - genome[g + G.Size]!) * 5) * sat(phen[p + P.Fly]! * 2 + 0.25) * sat(phen[p + P.HerbEff]! * 1.5);
+        const pol = genome[g + G.Water]! < 0.5 ? sat((0.32 - genome[g + G.Size]!) * 5) * sat(phen[p + P.Fly]! * 2 + 0.15) * sat(phen[p + P.HerbEff]! * 1.5) : 0;
         pollVisits += count[c]! * pol;
         const cap = count[c]! * phen[p + P.Forage]! * INTAKE_CAP * act[i]! * partner * (1 + 0.3 * pol * plants.fruit[r]!);
         capacity[i] = cap;
@@ -307,7 +336,7 @@ export class Creatures {
       }
       const availL = plants.landFood[r]! * FOOD_SCALE, availS = plants.seaFood[r]! * FOOD_SCALE;
       if (availL > 0) plants.grazeLand[r] = grazedL / availL;
-      plants.pollinators[r] = sat(pollVisits / 2.5e4);
+      plants.pollinators[r] = sat(pollVisits / 8e5);
       if (availS > 0) plants.grazeSea[r] = grazedS / availS;
       this.carrion[r] = Math.max(0, carr - sumC * shareC);
       // predation: every predator cohort against every possible prey cohort here

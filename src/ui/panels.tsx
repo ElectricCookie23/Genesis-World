@@ -4,7 +4,7 @@ import { CreatureSketch } from './sketch';
 import { G, GENE_NAMES } from '../sim/genetics';
 import type { SimEvent } from '../sim/events';
 import type { SpeciesInfo } from '../shared/protocol';
-import { actions, state, update, useStore, type UIState } from './store';
+import { actions, state, update, useStore, type Relative, type UIState } from './store';
 import { bigNumber, eventColor, eventGlyph, formatYear, hsl, metres, shortYear } from './format';
 import css from './ui.module.css';
 
@@ -190,7 +190,7 @@ export function CreatureCard() {
         <div class={css.gene} key={gi}><span>{GENE_NAMES[gi]}</span><i><b style={{ width: `${sp.genes[gi]! * 100}%` }} /></i></div>
       ))}
       <div style={{ margin: '10px 0 2px' }} class={css.sub}>FAMILY</div>
-      {actions.familyOf(c.key).map((line) => <div key={line}>{line}</div>)}
+      <FamilyTreeView creature={c.key} />
       {lineage.length > 0 && <div style={{ margin: '10px 0 2px' }} class={css.sub}>LINEAGE</div>}
       {lineage.map((p) => <div key={p.id}><button class={css.link} onClick={() => actions.selectSpecies(p.id)}>{p.name}</button></div>)}
       <div style={{ marginTop: 12 }}>
@@ -511,6 +511,86 @@ export function NationLabels() {
   );
 }
 
+/** An individual's family as a small tree: grandparents, parents, itself among its siblings, and its young. Relatives that are out there in the world can be clicked. */
+function FamilyTreeView({ creature }: { creature: number }) {
+  const t = actions.familyTree(creature);
+  if (!t) return <div class={css.sub}>out of sight</div>;
+  const person = (r: Relative, strong = false) => (
+    r.key !== null
+      ? <button key={`${r.name}${r.key}`} class={css.link} style={{ margin: '0 3px', fontWeight: strong ? 700 : 400 }} onClick={() => actions.selectCreatureKey(r.key!)}>{r.name}</button>
+      : <span key={r.name} style={{ margin: '0 4px', opacity: 0.75, fontWeight: strong ? 700 : 400 }}>{r.name}</span>
+  );
+  const row = (label: string, people: preact.JSX.Element[]) => (
+    <div style={{ display: 'flex', gap: '6px', alignItems: 'baseline', margin: '1px 0' }}><span class={css.sub} style={{ width: '5.2em', flex: 'none' }}>{label}</span><span style={{ lineHeight: 1.35 }}>{people}</span></div>
+  );
+  return (
+    <div>
+      {row('grandparents', t.grandparents.map((n) => person({ name: n, key: null })))}
+      {row('parents', t.parents.map((n) => person({ name: n, key: null })))}
+      {row('this one', [<b key="self" style={{ margin: '0 4px' }}>{t.self}</b>])}
+      {t.siblings.length > 0 && row('siblings', t.siblings.map((r) => person(r)))}
+      {t.young.length > 0 && row('young', t.young.map((r) => person(r)))}
+    </div>
+  );
+}
+
+/** The whole history as a thin strip: great events as ticks, rewind points as diamonds you can jump back to. */
+export function TimelineStrip() {
+  const s = useStore();
+  const now = s.stats?.simYear ?? 0;
+  if (now < 1e6) return null;
+  const events = s.chronicle.map((id) => s.events[id]!).filter((e) => e && e.importance >= 2);
+  // keep the strip readable: at most a hundred ticks, the most important first
+  const shown = events.length > 100 ? [...events].sort((a, b) => b.importance - a.importance || b.simYear - a.simYear).slice(0, 100) : events;
+  const x = (year: number) => `${Math.max(0, Math.min(100, (year / now) * 100)).toFixed(2)}%`;
+  return (
+    <div class={css.panel} style={{ position: 'absolute', left: '50%', bottom: '64px', transform: 'translateX(-50%)', width: 'min(720px, 86vw)', height: '22px', padding: '0 10px', pointerEvents: 'auto' }}>
+      <div style={{ position: 'relative', height: '100%' }}>
+        <div style={{ position: 'absolute', left: 0, right: 0, top: '10px', height: '1px', background: 'rgba(236,231,219,0.28)' }} />
+        {shown.map((e) => (
+          <button key={e.id} title={`${formatYear(e.simYear)}: ${e.title}`} onClick={() => update({ whyEvent: e.id })}
+            style={{ position: 'absolute', left: x(e.simYear), top: e.importance >= 3 ? '3px' : '6px', width: '3px', height: e.importance >= 3 ? '15px' : '9px', marginLeft: '-1px', padding: 0, border: 'none', borderRadius: '1px', cursor: 'pointer', background: eventColor(e.type), opacity: e.importance >= 3 ? 1 : 0.7 }} />
+        ))}
+        {s.timeline.map((t) => (
+          <button key={`r${t.index}`} title={`Rewind to ${formatYear(t.simYear).toLowerCase()}: ${t.title}`} onClick={() => { if (confirm(`Rewind to ${formatYear(t.simYear).toLowerCase()} (${t.title})? Everything after it will be lost.`)) actions.rewind(t.index); }}
+            style={{ position: 'absolute', left: x(t.simYear), top: '5px', width: '9px', height: '9px', marginLeft: '-5px', padding: 0, border: '1px solid #ece7db', background: '#11141c', transform: 'rotate(45deg)', cursor: 'pointer' }} />
+        ))}
+        {s.other && <div title="The timeline forked here" style={{ position: 'absolute', left: x(s.other.forkedAt), top: 0, bottom: 0, width: '1px', background: '#9fd0ff' }} />}
+      </div>
+    </div>
+  );
+}
+
+/** Two futures from one fork, side by side: this world and the one that took another road. */
+export function Futures() {
+  const s = useStore();
+  const o = s.other;
+  if (!o) return null;
+  const a = s.stats, b = o.stats;
+  const cell = (v: string) => <b style={{ fontWeight: 400 }}>{v}</b>;
+  const line = (label: string, f: (w: NonNullable<typeof a>) => string) => (<><span class={css.sub}>{label}</span>{cell(a ? f(a) : '')}{cell(b ? f(b) : '...')}</>);
+  return (
+    <div class={css.panel} style={{ position: 'absolute', left: '16px', top: '120px', width: '300px', padding: '12px 14px', pointerEvents: 'auto' }}>
+      <div class={css.sub} style={{ marginBottom: '6px' }}>TWO FUTURES, FORKED {formatYear(o.forkedAt).toUpperCase()}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '6.2em 1fr 1fr', gap: '2px 8px', fontSize: '13px' }}>
+        <span /><span class={css.sub}>this one</span><span class={css.sub}>the other</span>
+        {line('year', (w) => shortYear(w.simYear))}
+        {line('species', (w) => String(w.livingSpecies))}
+        {line('animals', (w) => bigNumber(w.population))}
+        {line('mean temp', (w) => `${w.meanTemp.toFixed(1)} °C`)}
+        {line('ice', (w) => `${(w.iceFraction * 100).toFixed(0)}%`)}
+        {line('settlements', (w) => String(w.settlements))}
+      </div>
+      {o.events.length > 0 && <div class={css.sub} style={{ margin: '8px 0 2px' }}>IN THE OTHER FUTURE</div>}
+      {o.events.slice(-4).map((e) => <div key={e.id} style={{ fontSize: '13px', lineHeight: 1.3, margin: '2px 0' }}><span class={css.sub}>{shortYear(e.simYear)}</span> {e.title}</div>)}
+      <div style={{ marginTop: '9px' }}>
+        <button class={css.link} onClick={() => actions.crossOver()}>cross over to it</button>
+        <button class={css.link} onClick={() => actions.endOtherFuture()}>end the other future</button>
+      </div>
+    </div>
+  );
+}
+
 export function Peoples() {
   const s = useStore();
   const live = s.settlements.filter((x) => x.ruined < 0).sort((a, b) => b.tech * 10 + Math.log(b.pop + 1) - (a.tech * 10 + Math.log(a.pop + 1))).slice(0, 60);
@@ -642,7 +722,7 @@ export function Settings() {
         <div class={css.row}><span>Colour-blind safe overlays</span><button class={css.btn} onClick={() => actions.setColorblind(!s.colorblind)}>{s.colorblind ? 'on' : 'off'}</button></div>
         <div class={css.row}>
           <span>Overlay (O)</span>
-          <span>{(['none', 'temp', 'rain', 'life', 'people', 'fossils', 'nations', 'fungal'] as const).map((o) => <button class={css.btn} style={{ marginLeft: 4, opacity: s.overlay === o ? 1 : 0.55 }} onClick={() => actions.setOverlay(o)}>{o}</button>)}</span>
+          <span>{(['none', 'temp', 'rain', 'life', 'people', 'fossils', 'nations', 'fungal', 'diversity', 'oxygen'] as const).map((o) => <button class={css.btn} style={{ marginLeft: 4, opacity: s.overlay === o ? 1 : 0.55 }} onClick={() => actions.setOverlay(o)}>{o}</button>)}</span>
         </div>
         <div class={css.sub} style={{ margin: '12px 0 2px' }}>CAMERA AND KEEPSAKES</div>
         <div class={css.row}>
@@ -653,7 +733,7 @@ export function Settings() {
         <div class={css.row}><span>Record video</span><button class={css.btn} onClick={() => actions.toggleRecording()}>{s.recording ? 'stop and save' : 'record'}</button></div>
         <div class={css.row}><span>Save a GIF<br /><span class={css.sub}>Three seconds of the view, looping.</span></span><button class={css.btn} onClick={() => actions.saveGif()}>save GIF</button></div>
         <div class={css.row}><span>History of this planet<br /><span class={css.sub}>An illustrated book, saved as a PDF.</span></span><button class={css.btn} onClick={() => actions.exportBook()}>make book</button></div>
-        <div class={css.row}><span>Fork the timeline here<br /><span class={css.sub}>Mark this moment so you can come back and try another future.</span></span><button class={css.btn} onClick={() => actions.fork()}>fork</button></div>
+        <div class={css.row}><span>Fork the timeline here<br /><span class={css.sub}>On a desktop this starts a second future running beside this one; you can compare them and cross over. It is also kept as a rewind point.</span></span><button class={css.btn} onClick={() => actions.fork()}>fork</button></div>
         {s.timeline.length > 0 && <div class={css.sub} style={{ margin: '12px 0 2px' }}>REWIND TO</div>}
         {s.timeline.map((t) => (
           <div class={css.row} key={t.index}><span>{t.title}<br /><span class={css.sub}>{formatYear(t.simYear).toLowerCase()}</span></span><button class={css.btn} onClick={() => actions.rewind(t.index)}>rewind</button></div>

@@ -426,7 +426,7 @@ export class GenesisScene {
     this.planet.colorblind = colorblind;
     if (this.lastCells) this.planet.update(this.lastCells, false);
     this.overlayOn = mode !== 'none';
-    uOverlay.value = this.overlayOn ? 1 : 0;
+    uOverlay.value = this.overlayOn || this.layerOn ? 1 : 0;
     if (this.overlayOn) this.data?.setOverlay(this.planet.cellColors);
   }
   private overlayOn = false;
@@ -507,6 +507,67 @@ export class GenesisScene {
     }
     t.set(list);
   }
+
+  /**
+   * What can be heard around the camera and from which side: the nearest sea, the heaviest cloud and any molten rock,
+   * each as a loudness 0..1 and a place from -1 (left of the view) to 1 (right).
+   */
+  soundscape(): { surf: number; surfPan: number; rain: number; rainPan: number; lava: number; lavaPan: number } {
+    const out = { surf: 0, surfPan: 0, rain: 0, rainPan: 0, lava: 0, lavaPan: 0 };
+    const cells = this.lastCells, grid = this.grid;
+    if (!cells || !grid || this.cam.dist > 0.6) return out;
+    const f = this.cam.focusDir(this.tmpFocus);
+    const cam = this.cam.camera;
+    cam.updateMatrixWorld();
+    const e = cam.matrixWorld.elements;
+    const rx = e[0]!, ry = e[1]!, rz = e[2]!;
+    const reach = Math.min(0.25, 0.03 + this.cam.dist * 0.6);
+    const cosR = Math.cos(reach);
+    let seaL = 0, seaR = 0, rainL = 0, rainR = 0, lavaL = 0, lavaR = 0, n = 0;
+    const { pos, count } = grid;
+    // a sparse sample of the cells around the view is plenty for sound
+    for (let i = (this.soundPhase++ % 5); i < count; i += 5) {
+      const x = pos[i * 3]!, y = pos[i * 3 + 1]!, z = pos[i * 3 + 2]!;
+      const d = x * f.x + y * f.y + z * f.z;
+      if (d < cosR) continue;
+      n++;
+      const side = (x - f.x) * rx + (y - f.y) * ry + (z - f.z) * rz;
+      const near = (d - cosR) / (1 - cosR);
+      const right = side > 0 ? near : 0, left = side > 0 ? 0 : near;
+      if (cells.elevation[i]! <= cells.seaLevel) { seaL += left; seaR += right; }
+      const wet = Math.max(0, cells.cloud[i]! - 0.75) * 4;
+      rainL += left * wet; rainR += right * wet;
+      const hot = cells.lava[i]!;
+      if (hot > 0.2) { lavaL += left * hot; lavaR += right * hot; }
+    }
+    if (!n) return out;
+    const closeness = Math.max(0, 1 - this.cam.dist / 0.5);
+    const pan = (l: number, r: number) => (l + r > 1e-6 ? (r - l) / (l + r) : 0);
+    out.surf = Math.min(1, ((seaL + seaR) / n) * 2.2) * closeness; out.surfPan = pan(seaL, seaR);
+    out.rain = Math.min(1, ((rainL + rainR) / n) * 2.5) * closeness; out.rainPan = pan(rainL, rainR);
+    out.lava = Math.min(1, (lavaL + lavaR) * 0.6) * closeness; out.lavaPan = pan(lavaL, lavaR);
+    return out;
+  }
+  private soundPhase = 0;
+
+  /** Paint a per-cell layer (0..1) over the planet with a dark-to-bright ramp: used for the diversity and oxygen overlays. */
+  setLayerOverlay(values: Float32Array | null, tint: [number, number, number] = [0.2, 1, 0.6]): void {
+    this.layerOn = !!values;
+    if (!values || !this.data) { if (!this.overlayOn) uOverlay.value = 0; return; }
+    const n = values.length;
+    const colors = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const v = Math.max(0, Math.min(1, values[i]!));
+      // deep blue through the tint to pale yellow: readable without relying on red against green
+      const a = Math.min(1, v * 2), b = Math.max(0, v * 2 - 1);
+      colors[i * 3] = (0.02 + (tint[0] - 0.02) * a) * (1 - b) + 1.0 * b;
+      colors[i * 3 + 1] = (0.04 + (tint[1] - 0.04) * a) * (1 - b) + 0.95 * b;
+      colors[i * 3 + 2] = (0.18 + (tint[2] - 0.18) * a) * (1 - b) + 0.55 * b;
+    }
+    this.data.setOverlay(colors);
+    uOverlay.value = 1;
+  }
+  private layerOn = false;
 
   /** A ship leaves the planet from this cell: a light that climbs away and does not come back. */
   launchAt(cell: number): void {

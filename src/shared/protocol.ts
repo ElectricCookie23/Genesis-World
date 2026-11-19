@@ -142,7 +142,9 @@ export type ToWorker =
   | { type: 'save'; name: string; slot: string }
   | { type: 'rewind'; index: number }
   | { type: 'fork' }
-  | { type: 'load'; save: unknown }
+  | { type: 'load'; save: unknown; diverge?: boolean }
+  | { type: 'requestLayer'; kind: 'diversity' | 'oxygen' }
+  | { type: 'rewindLimit'; count: number }
   /** Jump ahead by running the sim flat out (used by automated checks). */
   | { type: 'warp'; years: number };
 
@@ -155,6 +157,7 @@ export type FromWorker =
   | { type: 'plants'; plants: PlantInfo[] }
   | { type: 'herds'; herds: HerdSnapshot }
   | { type: 'saved'; slot: string; save: unknown }
+  | { type: 'layer'; kind: 'diversity' | 'oxygen'; values: Float32Array }
   | { type: 'settlements'; settlements: SettlementInfo[] }
   | { type: 'timeline'; points: TimelinePoint[] }
   | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }
