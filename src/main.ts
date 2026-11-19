@@ -538,7 +538,7 @@ async function boot(): Promise<void> {
     store.set(openedKey, '1');
     scene.ownsFlash = true;
     update({ opening: false, skipVisible: false });
-    setSpeed(3);
+    setSpeed(4);
     window.setTimeout(() => update({ chronicleLine: '' }), 7000);
     // three short hints on a first visit
     if (state.hintStep < 3) {
@@ -552,6 +552,7 @@ async function boot(): Promise<void> {
   };
 
   let lastHud = 0;
+  let heldNoted = false;
   const resetHistory = () => {
     state.events = [];
     state.chronicle = [];
@@ -629,6 +630,11 @@ async function boot(): Promise<void> {
         break;
       case 'stats':
         scene.applyStats(msg.stats);
+        if (msg.stats.historyHeld && !heldNoted) {
+          heldNoted = true;
+          update({ notice: 'History has begun. Time now runs at 25 years a second so it can be followed. Pick a faster speed to skip ahead.' });
+          window.setTimeout(() => update({ notice: '' }), 9000);
+        } else if (!msg.stats.history) heldNoted = false;
         // the HUD refreshes four times a second; the scene gets every update
         if (performance.now() - lastHud > 250) { lastHud = performance.now(); update({ stats: msg.stats, fps: scene.fpsAvg }); } else state.stats = msg.stats;
         {
@@ -652,8 +658,8 @@ async function boot(): Promise<void> {
         update({});
         break;
       case 'settlements':
-        scene.setSettlements(msg.settlements);
-        update({ settlements: msg.settlements });
+        scene.setSettlements(msg.settlements, msg.nations);
+        update({ settlements: msg.settlements, realms: msg.nations ?? state.realms });
         break;
       case 'timeline':
         update({ timeline: msg.points });
@@ -771,7 +777,7 @@ async function boot(): Promise<void> {
     if (e.target instanceof HTMLInputElement || e.metaKey || e.ctrlKey) return;
     const k = e.key.toLowerCase();
     if (e.code === 'Space') { e.preventDefault(); actions.togglePause(); }
-    else if (e.key >= '1' && e.key <= '6') setSpeed(Number(e.key) - 1);
+    else if (e.key >= '1' && e.key <= '7') setSpeed(Number(e.key) - 1);
     else if (k === 'h') update({ uiHidden: !state.uiHidden });
     else if (k === 'c') togglePanel('chronicle');
     else if (k === 't') togglePanel('tree');

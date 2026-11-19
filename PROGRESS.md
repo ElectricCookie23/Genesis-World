@@ -200,11 +200,11 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | Part | Status | Notes |
 |---|---|---|
 | Text generation: languages and template grammar | done | `sim/history/language.ts` (sounds from the speakers' bodies, words built from a family seed, sound changes, daughter languages, place and personal names), `sim/history/grammar.ts` (templates), `sim/history/hash.ts` |
-| Civilization model: nations, cultures, religions, languages as entities in the worker | not started | |
-| Notable people stored for good; citizens generated on demand | not started | |
-| Per-cell history log | not started | |
-| Snapshots at every major era | not started | |
-| Era clock per civilization, on human-scale time | not started | |
+| Civilization model: nations, cultures, religions, languages as entities in the worker | done (religions follow in E24) | `sim/civilization.ts` and `sim/history/model.ts`. A culture and its language are made when a species crosses the threshold. A camp that plants fields founds a nation or joins the one next door; a nation holds only what its era lets it reach, so distant settlers found their own. Nations carry a ruler, a house, stability, a level of knowledge and an era. Sent to the page as `NationInfo`; the renderer groups towns by them and the Peoples panel shows era, ruler and house. Test: "the history engine". |
+| Notable people stored for good; citizens generated on demand | done | rulers and founders are stored with temperament, parentage, reign and fate (`Person`, `Dynasty`); `sim/history/citizens.ts` rebuilds any ordinary citizen from seed, settlement and index (name, birth year, trade, household). Tests: "ordinary people", "the history engine". |
+| Per-cell history log | done | `sim/history/celllog.ts`: biome, owner, settlements founded and abandoned, size class, era and notable events per cell, threaded through shared arrays; `stateAt(cell, year)` rebuilds a place for any year. Test: "the record of a place". |
+| Snapshots at every major era | done | the worker keeps a whole copy of the world at the start of each era alongside the rewind points; they appear on the timeline and are never thinned out (fewer where memory is short). |
+| Era clock per civilization, on human-scale time | done | history advances in yearly ticks from the first fields (`Civilization.advance`), coarser under a fast-forward. Ten eras by level of knowledge (`sim/history/eras.ts`), each nation in its own. A new "History" speed (25 years a second); the simulation holds time there while a history unfolds unless a faster speed is chosen on purpose. Events carry their own year. |
 
 
 ### Section 1. The History Engine

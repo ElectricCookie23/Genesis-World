@@ -6,7 +6,7 @@ import {
 import { dot, float, length, mx_fractal_noise_float, normalize, positionLocal, positionWorld, smoothstep, vec3 } from 'three/tsl';
 import type { Grid } from '../sim/world';
 import { nearestCell } from '../sim/world';
-import type { CellSnapshot, WorldStats, SettlementInfo } from '../shared/protocol';
+import type { CellSnapshot, NationInfo, WorldStats, SettlementInfo } from '../shared/protocol';
 import { hashSeed } from '../sim/rng';
 import { PlanetMesh } from './planet';
 import { OceanSurface } from './gfx/ocean';
@@ -361,8 +361,8 @@ export class GenesisScene {
   private speciesMap = new Map<number, SpeciesInfo>();
   /** Called when the list of nations was rebuilt. */
   onNations?: (nations: Nation[]) => void;
-  setSettlements(list: SettlementInfo[]): void {
-    this.civ?.setSettlements(list);
+  setSettlements(list: SettlementInfo[], known?: NationInfo[]): void {
+    this.civ?.setSettlements(list, known);
   }
   /** A war or plague event at a settlement's cell. */
   civUnrest(cell: number, kind: 'war' | 'plague'): void {

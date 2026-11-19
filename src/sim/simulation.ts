@@ -14,6 +14,7 @@ import { cellsWithin } from './geology';
 import { nameSpecies, plantName } from './naming';
 import { placeName } from './names';
 import { Civilization } from './civilization';
+import { CellLog, Log } from './history/celllog';
 
 /** Sim years covered by one full ecological step (one tick at Epoch speed). */
 export const ECO_YEARS = 15000;
@@ -32,6 +33,9 @@ export class Simulation {
   readonly creatures: Creatures;
   readonly events = new EventLog();
   readonly civ = new Civilization();
+  /** What changed at every cell and when: built in the constructor, once the grid is known. */
+  cellLog!: CellLog;
+  private loggedBiome!: Uint8Array;
   private civRng: RNG;
   simYear = 0;
   moonAngle = 0;
@@ -118,6 +122,8 @@ export class Simulation {
     this.seed = seed;
     this.rng = new RNG(hashSeed(seed));
     this.grid = grid ?? buildGrid(gridN);
+    this.cellLog = new CellLog(this.grid.count, Math.max(60_000, this.grid.count * 30));
+    this.loggedBiome = new Uint8Array(this.grid.count).fill(255);
     this.world = createWorld(this.grid);
     this.geology = generateTerrain(this.world, this.rng.fork('geology'));
     this.climate = createClimate(this.world, this.rng);
@@ -182,16 +188,23 @@ export class Simulation {
     return options[i]!;
   }
 
-  private emit(e: Parameters<EventLog['add']>[1]): SimEvent {
+  emit(e: Parameters<EventLog['add']>[1]): SimEvent {
     const ev = this.events.add(this.simYear, e);
     if (ev.importance > this.bigEvent) this.bigEvent = ev.importance;
+    // what happens at a place becomes part of that place's record
+    if (ev.cellId >= 0 && ev.importance >= 2) this.cellLog.note(ev.cellId, ev.simYear, Log.Event, ev.id);
     return ev;
   }
 
-  private milestone(key: string, title: string, description: string, cell: number, causes: number[], speciesIds?: number[]): void {
+  milestone(key: string, title: string, description: string, cell: number, causes: number[], speciesIds?: number[]): void {
     if (this.milestones.has(key)) return;
     const ev = this.emit({ type: 'milestone', title, description, cellId: cell, causes, importance: 3, speciesIds, data: { key } });
     this.milestones.set(key, ev.id);
+  }
+
+  /** Rebuild what is derived from the saved state rather than saved itself. Call after loading. */
+  refreshDerived(): void {
+    updateRegions(this.regions, this.world, this.climate);
   }
 
   /** Advance the simulation by dt years (fixed timestep chosen by the caller). */
@@ -246,6 +259,8 @@ export class Simulation {
         }
       }
     }
+    // history runs on its own, human clock, every step
+    if (this.stage === 'animals') this.civ.advance(this, this.civRng, dt);
     this.ecoAcc += dt / ECO_YEARS;
     if (this.ecoAcc >= 0.02) {
       const tau = Math.min(1, this.ecoAcc);
@@ -1002,6 +1017,10 @@ export class Simulation {
     const t2 = performance.now();
     this.fires();
     if (this.stage === 'animals') this.civ.step(this, this.civRng, tau);
+    if (this.milestoneTimer % 32 === 0) {
+      const b = this.world.biome, was = this.loggedBiome;
+      for (let i = 0; i < b.length; i++) if (b[i] !== was[i]) { was[i] = b[i]!; this.cellLog.note(i, this.simYear, Log.Biome, b[i]!); }
+    }
     p.paint(this.world, this.climate);
     const t3 = performance.now();
     this.prof.plants += t1 - t0; this.prof.creatures += t2 - t1; this.prof.paint += t3 - t2;

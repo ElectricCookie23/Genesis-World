@@ -1,7 +1,7 @@
 // Tiny observable store shared by the Preact UI and the app.
 import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
-import type { PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
+import type { NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 import type { Nation } from '../render/gfx/nations';
 
 export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section';
@@ -51,6 +51,8 @@ export interface UIState {
   settlements: SettlementInfo[];
   /** Nations derived from the settlements (name, colours, emblem), for the Night Map and the Peoples panel. */
   nations: Nation[];
+  /** Nations as the simulation keeps them: rulers, houses, eras. */
+  realms: NationInfo[];
   timeline: TimelinePoint[];
   /** Set while two futures run side by side. */
   other: OtherFuture | null;
@@ -103,6 +105,7 @@ export const state: UIState = {
   slots: [],
   settlements: [],
   nations: [],
+  realms: [],
   timeline: [],
   other: null,
   overlay: 'none',

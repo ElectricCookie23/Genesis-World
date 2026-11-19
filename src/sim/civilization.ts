@@ -1,9 +1,21 @@
-// Civilization, abstracted: settlements are entities with population, technology and beliefs.
-// They are not individual people. A lineage that crosses the intelligence threshold founds them.
+// Civilization. Two clocks run here.
+//
+// Prehistory runs on the planet's clock: a lineage that stays clever long enough begins to keep what
+// it learns, and its wandering bands make camps. Camps change over many thousands of years.
+//
+// History runs on a human clock. The moment a camp plants its first fields it founds or joins a
+// nation, and from then on that nation is advanced year by year: rulers are born, reign and die,
+// knowledge grows, towns are founded and abandoned, eras turn. Each nation is in its own era.
+// Ordinary citizens are never simulated one by one (see history/citizens.ts); rulers and other
+// people history remembers are stored for good.
 import { G, GENE_COUNT, P, PHEN_COUNT, computePhenotype } from './genetics';
-import { placeName } from './names';
-import type { RNG } from './rng';
+import { hashSeed, type RNG } from './rng';
 import type { Simulation } from './simulation';
+import { Log } from './history/celllog';
+import { ERAS, eraOf } from './history/eras';
+import { hash32 } from './history/hash';
+import { capital, compound, makeLanguage, personName, placeMeanings, word, type Language } from './history/language';
+import { emptyHistory, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role } from './history/model';
 
 export interface Settlement {
   id: number;
@@ -24,11 +36,29 @@ export interface Settlement {
   temple: boolean;
   farms: boolean;
   stars: boolean;
+  /** Nation it belongs to, or -1 while it is still a camp outside history. */
+  nation: number;
+  /** What its name means, so the name can be spoken as the language was in any year. */
+  head: string;
+  modifier: string;
 }
 
 export const INTELLIGENCE_THRESHOLD = 0.5;
 /** A lineage must stay clever this long (years) before it starts keeping what it learns. */
 export const MIND_YEARS = 15e6;
+/** Level of knowledge at which a camp plants fields and history begins for it. */
+export const FARMING = 0.22;
+/** At most this many history ticks in one call: under a fast-forward each tick covers more years. */
+const MAX_TICKS = 300;
+
+const sat = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
+/** How far from its capital a nation of each era can hold a town, counted in regions (the spacing of neighbouring towns). */
+const REACH = [2.5, 3.5, 4.5, 6, 10, 14, 22, 45, 99, 99];
+
+/** Size class of a settlement from its level of knowledge: 0 camp, 1 village, 2 town, 3 city, 4 great city. */
+export function sizeClass(tech: number): number {
+  return tech >= 0.9 ? 4 : tech >= 0.6 ? 3 : tech >= 0.45 ? 2 : tech >= 0.3 ? 1 : 0;
+}
 
 export class Civilization {
   settlements: Settlement[] = [];
@@ -39,13 +69,24 @@ export class Civilization {
   spaceAgeYear = -1;
   departed = false;
   hasMusic = false;
+  /** Nations, cultures, languages and remembered people. */
+  h: HistoryState = emptyHistory();
   private ships = false;
   private industrial = false;
   private occupied = new Map<number, number>(); // region -> settlement id
   private cleverSince = new Map<number, number>();
+  private seedNum = 0;
+
+  /** True while at least one nation exists: the world then has a history worth watching year by year. */
+  get historyActive(): boolean {
+    return this.h.began >= 0 && this.h.nations.some((n) => n.ended < 0);
+  }
+
+  // ------------------------------------------------------------------ prehistory (once per ecology step)
 
   step(sim: Simulation, rng: RNG, tau: number): void {
-    const cr = sim.creatures, reg = sim.regions, w = sim.world;
+    const cr = sim.creatures, reg = sim.regions;
+    if (!this.seedNum) this.seedNum = hashSeed(`history:${sim.seed}`) || 1;
     // a lineage crosses the threshold: clever, social, and numerous enough to keep what it learns
     for (const s of cr.species) {
       if (s.extinctYear >= 0 || this.sapient.includes(s.id) || !s.name) continue;
@@ -57,6 +98,7 @@ export class Civilization {
       if (!this.cleverSince.has(s.id)) this.cleverSince.set(s.id, this.cleverSince.get(s.parent) ?? sim.simYear);
       if (sim.simYear - this.cleverSince.get(s.id)! > MIND_YEARS) {
         this.sapient.push(s.id);
+        this.cultureFor(sim, s.id, sim.simYear);
         sim.civEvent('threshold', s.id, reg.centre[s.home]!, -1);
       }
     }
@@ -66,106 +108,35 @@ export class Civilization {
       const s = cr.species[sid]!;
       if (s.extinctYear >= 0) continue;
       const mine = this.settlements.filter((x) => x.species === sid && x.ruined < 0).length;
-      if (mine === 0 && !this.occupied.has(s.home) && reg.land[s.home]! > 0.3) this.found(sim, rng, sid, s.home, -1);
+      if (mine === 0 && !this.occupied.has(s.home) && reg.land[s.home]! > 0.3) this.found(sim, rng, sid, s.home, -1, sim.simYear);
     }
-    let living = 0, maxTech = 0;
+    // camps outside history: they grow, wander on and learn over thousands of years
     for (const st of this.settlements) {
-      if (st.ruined >= 0) continue;
+      if (st.ruined >= 0 || st.nation >= 0) continue;
       const s = cr.species[st.species]!;
-      const food = sim.plants.landFood[st.region]! + (1 - reg.land[st.region]!) * 0.15;
-      const cold = reg.landTemp[st.region]! < -4 ? 0.3 : 1;
-      // farming and tools raise how many people the land can feed
-      const capacity = (2 + 60 * food) * (1 + 14 * st.tech * st.tech) * cold;
+      if (this.failed(sim, st, s.extinctYear >= 0)) { this.abandon(sim, st, sim.simYear); continue; }
+      const capacity = this.capacity(sim, st);
       st.pop += st.pop * 0.6 * (1 - st.pop / Math.max(0.5, capacity)) * Math.min(1, tau * 2);
-      // knowledge grows with people and neighbours, slowly
       const neighbours = this.neighbourCount(sim, st);
-      const before = st.tech;
-      st.tech = Math.min(1.2, st.tech + tau * 0.00007 * (0.4 + Math.log10(1 + st.pop)) * (1 + 0.35 * neighbours) * (0.6 + s.ref[G.Intelligence]!));
+      st.tech = Math.min(FARMING + 0.001, st.tech + tau * 0.0009 * (0.4 + Math.log10(1 + st.pop)) * (1 + 0.35 * neighbours) * (0.6 + s.ref[G.Intelligence]!));
       if (!st.painted && st.tech > 0.06) {
         st.painted = true;
         // cave paintings show the animals these people really live among
         const prey = this.neighbourSpecies(sim, st, true);
         if (prey >= 0) sim.civEvent('painting', st.species, st.cell, st.id, prey);
       }
-      if (!st.farms && st.tech > 0.22) {
-        st.farms = true;
-        sim.civEvent('farms', st.species, st.cell, st.id);
-        const tame = this.neighbourSpecies(sim, st, false);
-        if (tame >= 0 && cr.species[tame]!.tamedBy < 0) {
-          cr.species[tame]!.tamedBy = st.species;
-          sim.civEvent('tamed', st.species, st.cell, st.id, tame);
-        }
-      }
-      if (!st.temple && st.tech > 0.3 && sim.godEvents.length >= 3) {
-        st.temple = true;
-        sim.civEvent('temple', st.species, st.cell, st.id);
-      }
-      if (st.tech >= 0.3 && before < 0.3) sim.civEvent('village', st.species, st.cell, st.id);
-      if (st.tech >= 0.6 && before < 0.6) sim.civEvent('city', st.species, st.cell, st.id);
-      if (!this.hasMusic && st.tech > 0.35) { this.hasMusic = true; sim.civEvent('music', st.species, st.cell, st.id); }
-      // star lore: villagers name a constellation after a vanished animal whose bones they find
-      if (!st.stars && st.tech > 0.4) {
-        st.stars = true;
-        const gone = cr.species.filter((x) => x.extinctYear >= 0 && x.peakRegions >= 10 && x.name);
-        if (gone.length && rng.chance(0.12)) sim.civEvent('constellation', st.species, st.cell, st.id, rng.pick(gone).id);
-      }
-      // war: neighbours of another kind, or of another faith, sometimes fight
-      if (st.tech > 0.3 && rng.chance(Math.min(0.2, 0.012 * tau))) {
-        for (let j = 0; j < reg.grid.ncount[st.region]!; j++) {
-          const oid = this.occupied.get(reg.grid.neighbors[st.region * 6 + j]!);
-          if (oid === undefined) continue;
-          const o = this.settlements[oid]!;
-          if (o.species === st.species && (o.belief === st.belief || o.belief < 0 || st.belief < 0)) continue;
-          st.pop *= 0.7; o.pop *= 0.65; st.tech = Math.max(0.03, st.tech - 0.02); o.tech = Math.max(0.03, o.tech - 0.02);
-          sim.civEvent('war', st.species, st.cell, st.id, o.id);
-          // with the atom in hand, a war can end the age
-          if (this.spaceAgeYear >= 0 && rng.chance(0.04)) sim.civEvent('nuclear', st.species, st.cell, st.id);
-          break;
-        }
-      }
-      // sickness travels the roads between crowded towns
-      if (st.tech > 0.5 && st.pop > 20 && rng.chance(Math.min(0.2, 0.0012 * tau))) {
-        st.pop *= 0.5;
-        sim.civEvent('city-plague', st.species, st.cell, st.id);
-        for (let j = 0; j < reg.grid.ncount[st.region]!; j++) {
-          const oid = this.occupied.get(reg.grid.neighbors[st.region * 6 + j]!);
-          if (oid !== undefined) this.settlements[oid]!.pop *= 0.7;
-        }
-      }
-      // people move on and found daughter settlements
-      if (st.pop > capacity * 0.7 && rng.chance(Math.min(0.5, 0.05 * tau * (1 + st.tech * 3)))) {
+      // bands split off and make new camps
+      if (st.pop > capacity * 0.7 && rng.chance(Math.min(0.5, 0.05 * tau))) {
         const nb = reg.grid.neighbors[st.region * 6 + rng.int(reg.grid.ncount[st.region]!)]!;
         if (!this.occupied.has(nb) && reg.land[nb]! > 0.3 && reg.ice[nb]! < 0.5) {
-          const d = this.found(sim, rng, st.species, nb, st.id);
+          const d = this.found(sim, rng, st.species, nb, st.id, sim.simYear);
           if (d) { d.tech = st.tech * 0.6; d.belief = st.belief; st.pop *= 0.85; }
         }
       }
-      // abandonment: the people died out, or the place can no longer feed anyone
-      if (s.extinctYear >= 0 || st.pop < 0.05 || w.elevation[st.cell]! <= w.seaLevel) {
-        st.ruined = sim.simYear;
-        this.occupied.delete(st.region);
-        sim.civEvent('ruin', st.species, st.cell, st.id);
-        continue;
-      }
-      living++;
-      if (st.tech > maxTech) maxTech = st.tech;
+      // the first fields: this camp steps into history
+      if (st.tech >= FARMING) this.enterHistory(sim, rng, st, sim.simYear);
     }
-    this.living = living;
-    this.maxTech = maxTech;
-    // industry: burning the buried forests of older ages warms the whole world
-    if (maxTech > 0.85) {
-      if (!this.industrial) { this.industrial = true; sim.civEvent('industry', this.sapient[0]!, -1, -1); }
-      sim.climate.greenhouse = Math.min(9, sim.climate.greenhouse + 0.00006 * tau * living);
-    }
-    if (this.spaceAgeYear < 0 && maxTech >= 1.1 && living >= 12) {
-      this.spaceAgeYear = sim.simYear;
-      sim.civEvent('space', this.sapient[0]!, -1, -1);
-    }
-    // departure: a people that has held the sky for a long age finally leaves
-    if (!this.departed && this.spaceAgeYear >= 0 && sim.simYear - this.spaceAgeYear > 25e6 && living >= 12) {
-      this.departed = true;
-      sim.civEvent('departure', this.sapient[0]!, -1, -1);
-    }
+    this.census();
     // monoliths: animals living beside one grow cleverer, generation by generation
     if (sim.monoliths.length) {
       for (let c = 0; c < cr.high; c++) {
@@ -178,6 +149,356 @@ export class Civilization {
     }
     this.tend(sim, tau);
     this.paint(sim);
+  }
+
+  // ------------------------------------------------------------------ history (every simulation step)
+
+  /**
+   * Advance history by `dt` years. Watched at a human pace this is one tick a year. Under a
+   * fast-forward a tick covers more years (never more than MAX_TICKS ticks in a call), with every rate
+   * scaled to the length of the tick.
+   */
+  advance(sim: Simulation, rng: RNG, dt: number): void {
+    const h = this.h;
+    if (h.began < 0 || !h.nations.some((n) => n.ended < 0)) { h.pending = 0; return; }
+    h.pending += dt;
+    if (h.pending < 1) return;
+    const years = Math.max(1, Math.ceil(h.pending / MAX_TICKS));
+    const ticks = Math.floor(h.pending / years);
+    const start = sim.simYear - h.pending;
+    for (let k = 0; k < ticks; k++) this.tick(sim, rng, years, start + (k + 1) * years);
+    h.pending -= ticks * years;
+    this.census();
+    this.paint(sim);
+  }
+
+  /** One tick of history, `y` years long, ending in year `year`. */
+  private tick(sim: Simulation, rng: RNG, y: number, year: number): void {
+    const h = this.h, cr = sim.creatures;
+    // who belongs to whom
+    const members = new Map<number, Settlement[]>();
+    for (const st of this.settlements) {
+      if (st.ruined >= 0 || st.nation < 0) continue;
+      let list = members.get(st.nation);
+      if (!list) members.set(st.nation, (list = []));
+      list.push(st);
+    }
+    for (const n of h.nations) {
+      // (a country founded during this very tick has its first turn in the next one)
+      if (n.ended >= 0 || n.founded >= year) continue;
+      const towns = members.get(n.id);
+      if (!towns || !towns.length) { this.endNation(sim, n, year); continue; }
+      const sp = cr.species[n.species]!;
+      let pop = 0, big = towns[0]!;
+      for (const st of towns) { pop += st.pop; if (st.pop > big.pop) big = st; }
+      n.pop = pop; n.towns = towns.length;
+      if (n.capital !== big.id && (this.settlements[n.capital]?.ruined ?? 0) >= 0) n.capital = big.id;
+      // ---- the ruler grows old
+      const ruler = h.people[n.ruler];
+      if (ruler && ruler.died < 0) {
+        const span = this.lifespan(sim, n.species);
+        const age = year - ruler.born;
+        const hazard = 0.006 * Math.exp((age - 0.55 * span) / (0.14 * span));
+        if (rng.chance(1 - Math.exp(-hazard * y))) this.succession(sim, rng, n, year, age > span * 0.75 ? 'died of old age' : rng.pick(['died of a fever', 'died in a fall', 'died after a short illness', 'was killed hunting', 'died in the night']));
+      }
+      // ---- knowledge: more people, clever people and neighbours to learn from all speed it; so does what is already known
+      const reach = Math.min(4, towns.length - 1) * 0.08;
+      const quick = 1 + 6 * sat((n.tech - 0.7) / 0.3) ** 2;
+      const rate = 6.5e-5 * (0.45 + Math.log10(1 + pop) / 3) * (0.6 + sp.ref[G.Intelligence]!) * (1 + reach) * quick * (0.6 + 0.4 * n.stability);
+      n.tech = Math.min(1.2, n.tech + rate * y);
+      // ---- how well it holds together (rise and fall proper is expansion system E4)
+      n.stability = sat(n.stability + (0.72 - n.stability) * Math.min(1, 0.02 * y) + (rng.next() - 0.5) * 0.02 * Math.sqrt(y));
+      // ---- a new era
+      const era = eraOf(n.tech);
+      if (era > n.era) {
+        n.era = era;
+        const first = era > h.topEra;
+        if (first) h.topEra = era;
+        const cap = this.settlements[n.capital]!;
+        const ev = sim.emit({
+          type: 'era', year, cellId: cap.cell, title: first ? `The ${ERAS[era]!.name} begins` : `${n.name} enters the ${ERAS[era]!.name}`,
+          description: first ? `In ${n.name} something has changed for good. ${eraLine(era)} No one alive will see the world go back.` : `${n.name} has caught up with the age. ${eraLine(era)}`,
+          causes: [n.eventId].filter((x) => x >= 0), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, era },
+        });
+        sim.cellLog.note(cap.cell, year, Log.Era, era);
+        const now = h.people[n.ruler];
+        if (now) now.events.push(ev.id);
+      }
+      // ---- its towns
+      for (const st of towns) this.town(sim, rng, n, st, st.id === n.capital, y, year);
+    }
+    // industry: burning the buried forests of older ages warms the whole world
+    let living = 0, maxTech = 0;
+    for (const st of this.settlements) { if (st.ruined < 0) { living++; if (st.tech > maxTech) maxTech = st.tech; } }
+    if (maxTech > 0.85) {
+      if (!this.industrial) { this.industrial = true; sim.civEvent('industry', this.sapient[0]!, -1, -1); }
+      sim.climate.greenhouse = Math.min(9, sim.climate.greenhouse + 1.2e-5 * y * living);
+    }
+    if (this.spaceAgeYear < 0 && maxTech >= 1.1 && living >= 12) {
+      this.spaceAgeYear = year;
+      sim.civEvent('space', this.sapient[0]!, -1, -1);
+    }
+    // departure: a people that has held the sky for long enough finally leaves
+    if (!this.departed && this.spaceAgeYear >= 0 && year - this.spaceAgeYear > 1500 && living >= 12) {
+      this.departed = true;
+      sim.civEvent('departure', this.sapient[0]!, -1, -1);
+    }
+  }
+
+  /** One town of a nation, over `y` years. */
+  private town(sim: Simulation, rng: RNG, n: Nation, st: Settlement, isCapital: boolean, y: number, year: number): void {
+    const cr = sim.creatures, reg = sim.regions;
+    const s = cr.species[st.species]!;
+    if (this.failed(sim, st, s.extinctYear >= 0)) { this.abandon(sim, st, year); return; }
+    const capacity = this.capacity(sim, st);
+    // people: a few per cent a year while there is room
+    const grow = 1 - Math.exp(-0.03 * y);
+    st.pop += st.pop * grow * (1 - st.pop / Math.max(0.5, capacity));
+    if (st.pop > capacity * 1.5) st.pop = capacity * 1.5;
+    // what the nation knows reaches its towns within a generation or two; the capital first
+    const before = st.tech;
+    const target = n.tech * (isCapital ? 1 : 0.86);
+    if (target > st.tech) st.tech += (target - st.tech) * (1 - Math.exp(-y / 45));
+    if (!st.painted && st.tech > 0.06) st.painted = true;
+    if (!st.temple && st.tech > 0.3 && sim.godEvents.length >= 3) { st.temple = true; sim.civEvent('temple', st.species, st.cell, st.id); }
+    if (st.tech >= 0.3 && before < 0.3) sim.civEvent('village', st.species, st.cell, st.id);
+    if (st.tech >= 0.6 && before < 0.6) sim.civEvent('city', st.species, st.cell, st.id);
+    if (sizeClass(st.tech) !== sizeClass(before)) sim.cellLog.note(st.cell, year, Log.Size, sizeClass(st.tech));
+    if (!this.hasMusic && st.tech > 0.35) { this.hasMusic = true; sim.civEvent('music', st.species, st.cell, st.id); }
+    // star lore: villagers name a constellation after a vanished animal whose bones they find
+    if (!st.stars && st.tech > 0.4) {
+      st.stars = true;
+      const gone = cr.species.filter((x) => x.extinctYear >= 0 && x.peakRegions >= 10 && x.name);
+      if (gone.length && rng.chance(0.12)) sim.civEvent('constellation', st.species, st.cell, st.id, rng.pick(gone).id);
+    }
+    // war: neighbours of another nation, another kind or another faith sometimes fight (campaigns proper are system E33)
+    if (st.tech > 0.3 && rng.chance(Math.min(0.5, 0.0004 * y))) {
+      for (let j = 0; j < reg.grid.ncount[st.region]!; j++) {
+        const oid = this.occupied.get(reg.grid.neighbors[st.region * 6 + j]!);
+        if (oid === undefined) continue;
+        const o = this.settlements[oid]!;
+        if (o.nation === st.nation && o.species === st.species) continue;
+        if (o.species === st.species && (o.belief === st.belief || o.belief < 0 || st.belief < 0) && !rng.chance(0.35)) continue;
+        st.pop *= 0.7; o.pop *= 0.65; st.tech = Math.max(0.03, st.tech - 0.02); o.tech = Math.max(0.03, o.tech - 0.02);
+        n.stability = sat(n.stability - 0.05);
+        sim.civEvent('war', st.species, st.cell, st.id, o.id);
+        // with the atom in hand, a war can end the age
+        if (this.spaceAgeYear >= 0 && rng.chance(0.04)) sim.civEvent('nuclear', st.species, st.cell, st.id);
+        break;
+      }
+    }
+    // sickness travels the roads between crowded towns
+    if (st.tech > 0.5 && st.pop > 20 && rng.chance(Math.min(0.5, 0.0001 * y))) {
+      st.pop *= 0.5;
+      sim.civEvent('city-plague', st.species, st.cell, st.id);
+      for (let j = 0; j < reg.grid.ncount[st.region]!; j++) {
+        const oid = this.occupied.get(reg.grid.neighbors[st.region * 6 + j]!);
+        if (oid !== undefined) this.settlements[oid]!.pop *= 0.7;
+      }
+    }
+    // people move on and found daughter towns
+    if (st.pop > capacity * 0.7 && rng.chance(Math.min(0.6, 0.004 * y * (1 + st.tech * 3)))) {
+      const nb = reg.grid.neighbors[st.region * 6 + rng.int(reg.grid.ncount[st.region]!)]!;
+      if (!this.occupied.has(nb) && reg.land[nb]! > 0.3 && reg.ice[nb]! < 0.5) {
+        const d = this.found(sim, rng, st.species, nb, st.id, year);
+        if (d) {
+          d.tech = Math.max(FARMING, st.tech * 0.6); d.belief = st.belief; d.farms = true; st.pop *= 0.85;
+          // a country can only hold what its age lets it reach: settlers who go further answer to no one back home
+          const cap = this.settlements[n.capital]!, gp = sim.grid.pos;
+          const cos = gp[cap.cell * 3]! * gp[d.cell * 3]! + gp[cap.cell * 3 + 1]! * gp[d.cell * 3 + 1]! + gp[cap.cell * 3 + 2]! * gp[d.cell * 3 + 2]!;
+          const spacing = Math.sqrt((4 * Math.PI) / reg.count);
+          if (Math.acos(Math.max(-1, Math.min(1, cos))) > REACH[n.era]! * spacing) this.newNation(sim, rng, d, year, n);
+          else { d.nation = n.id; sim.cellLog.note(d.cell, year, Log.Owner, n.id); }
+        }
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------ nations, cultures, people
+
+  /** The culture of a species (made the first time it is asked for). */
+  private cultureFor(sim: Simulation, species: number, year: number): Culture {
+    const h = this.h;
+    const have = h.cultures.find((c) => c.species === species);
+    if (have) return have;
+    if (!this.seedNum) this.seedNum = hashSeed(`history:${sim.seed}`) || 1;
+    const g = sim.creatures.species[species]!.ref;
+    const lang = makeLanguage(h.languages.length, this.seedNum, {
+      size: g[G.Size]!, water: g[G.Water]!, flight: sat((g[G.LimbType]! - 0.7) * 4), hearing: Math.max(g[G.Hearing]!, g[G.Echo]!), harsh: g[G.Aggression]!,
+    }, year);
+    h.languages.push(lang);
+    const c: Culture = {
+      id: h.cultures.length, name: capital(word(lang, 'people')), species, language: lang.id, parent: -1, born: year,
+      war: sat(g[G.Aggression]! * 0.7 + g[G.Territorial]! * 0.4), faith: sat(0.35 + (1 - g[G.Curiosity]!) * 0.4 + g[G.Sociality]! * 0.2),
+      trade: sat(g[G.Sociality]! * 0.5 + g[G.Curiosity]! * 0.5), craft: sat(g[G.Intelligence]! * 0.7 + g[G.Curiosity]! * 0.3), hue: g[G.Glow]! > 0.4 ? g[G.GlowHue]! : g[G.Hue]!,
+    };
+    lang.name = c.name;
+    h.cultures.push(c);
+    return c;
+  }
+
+  languageOf(nation: Nation): Language {
+    return this.h.languages[this.h.cultures[nation.culture]!.language]!;
+  }
+
+  /** Usual length of life of a species, in years. */
+  lifespan(sim: Simulation, species: number): number {
+    return 25 + 60 * sim.creatures.species[species]!.ref[G.Lifespan]!;
+  }
+
+  private person(rng: RNG, n: Nation, role: Role, year: number, age: number, parent: number, dynasty: number): Person {
+    const h = this.h;
+    const elder = parent >= 0 ? h.people[parent] : undefined;
+    const lean = (inherited: number | undefined): number => sat((inherited ?? rng.next()) * 0.5 + rng.next() * 0.5);
+    const p: Person = {
+      id: h.people.length, name: personName(this.languageOf(n), hash32(this.seedNum, h.people.length, 0x9e0)), role, nation: n.id, culture: n.culture,
+      born: year - age, died: -1, dynasty, parent, bold: lean(elder?.bold), wise: lean(elder?.wise), cruel: lean(elder?.cruel), pious: lean(elder?.pious),
+      events: [], fate: '', reignFrom: role === 'ruler' ? year : -1, reignTo: -1,
+    };
+    h.people.push(p);
+    return p;
+  }
+
+  private dynasty(n: Nation, founder: Person, year: number): Dynasty {
+    const h = this.h;
+    const d: Dynasty = { id: h.dynasties.length, name: `House of ${founder.name}`, nation: n.id, founder: founder.id, founded: year, ended: -1, rulers: [founder.id] };
+    h.dynasties.push(d);
+    founder.dynasty = d.id;
+    return d;
+  }
+
+  /** The ruler is gone: an heir of the house follows, or the house falls and another takes its place. */
+  private succession(sim: Simulation, rng: RNG, n: Nation, year: number, fate: string): void {
+    const h = this.h;
+    const old = h.people[n.ruler]!;
+    old.died = year; old.reignTo = year; old.fate = fate;
+    const span = this.lifespan(sim, n.species);
+    const house = h.dynasties[n.dynasty];
+    // an heir is likelier in a steady realm
+    if (house && rng.chance(0.84 + 0.14 * n.stability)) {
+      const next = this.person(rng, n, 'ruler', year, span * (0.25 + rng.next() * 0.3), old.id, house.id);
+      house.rulers.push(next.id);
+      n.ruler = next.id;
+      return;
+    }
+    if (house) house.ended = year;
+    const next = this.person(rng, n, 'ruler', year, span * (0.3 + rng.next() * 0.25), -1, -1);
+    const line = this.dynasty(n, next, year);
+    n.ruler = next.id; n.dynasty = line.id;
+    n.stability = sat(n.stability - 0.12);
+    const cap = this.settlements[n.capital]!;
+    const ev = sim.emit({
+      type: 'dynasty', year, cellId: cap.cell, title: `A new house in ${n.name}`,
+      description: house ? `${old.name} ${fate} and left no heir the great families would follow. ${next.name} takes ${cap.name}, and the ${house.name} is over after ${house.rulers.length} ${house.rulers.length === 1 ? 'reign' : 'reigns'}.` : `${next.name} takes power in ${cap.name}.`,
+      causes: [n.eventId].filter((x) => x >= 0), importance: house && house.rulers.length >= 12 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, person: next.id },
+    });
+    next.events.push(ev.id); old.events.push(ev.id);
+  }
+
+  /** A camp has planted fields. It joins a neighbouring nation of its own people, or founds one. */
+  private enterHistory(sim: Simulation, rng: RNG, st: Settlement, year: number): void {
+    const h = this.h, reg = sim.regions;
+    st.farms = true;
+    sim.civEvent('farms', st.species, st.cell, st.id);
+    const tame = this.neighbourSpecies(sim, st, false);
+    if (tame >= 0 && sim.creatures.species[tame]!.tamedBy < 0) {
+      sim.creatures.species[tame]!.tamedBy = st.species;
+      sim.civEvent('tamed', st.species, st.cell, st.id, tame);
+    }
+    // a nation of the same people next door takes the new farmers in
+    for (let j = 0; j < reg.grid.ncount[st.region]!; j++) {
+      const oid = this.occupied.get(reg.grid.neighbors[st.region * 6 + j]!);
+      if (oid === undefined) continue;
+      const o = this.settlements[oid]!;
+      if (o.nation >= 0 && o.species === st.species && h.nations[o.nation]!.ended < 0) {
+        st.nation = o.nation;
+        sim.cellLog.note(st.cell, year, Log.Owner, o.nation);
+        return;
+      }
+    }
+    this.newNation(sim, rng, st, year, null);
+  }
+
+  /** A town becomes the first of a new country: on its own (the first farmers of a land) or by going beyond the reach of the one it came from. */
+  private newNation(sim: Simulation, rng: RNG, st: Settlement, year: number, from: Nation | null): Nation {
+    const h = this.h;
+    const culture = this.cultureFor(sim, st.species, year);
+    const lang = h.languages[culture.language]!;
+    // named for its first town, in its own tongue
+    let name = compound(lang, 'land', st.modifier || st.head, year);
+    for (let salt = 0; h.nations.some((x) => x.name === name) && salt < 6; salt++) name = compound(lang, ['land', 'people', 'hold', 'march', 'reach', 'home'][salt]!, salt % 2 ? st.head : `${st.head}-${salt}`, year);
+    const n: Nation = {
+      id: h.nations.length, name, culture: culture.id, species: st.species, capital: st.id, founded: year, ended: -1, parent: from ? from.id : -1, government: 'chiefdom',
+      ruler: -1, dynasty: -1, stability: 0.7, tech: Math.max(st.tech, from ? from.tech * 0.8 : 0), era: eraOf(Math.max(st.tech, from ? from.tech * 0.8 : 0)), hue: (culture.hue + ((hash32(this.seedNum, h.nations.length, 7) % 1000) / 1000) * 0.3 + 0.85) % 1, eventId: -1, pop: st.pop, towns: 1,
+    };
+    h.nations.push(n);
+    const span = this.lifespan(sim, st.species);
+    const first = this.person(rng, n, 'founder', year, span * (0.3 + rng.next() * 0.25), -1, -1);
+    first.reignFrom = year;
+    const house = this.dynasty(n, first, year);
+    n.ruler = first.id; n.dynasty = house.id;
+    st.nation = n.id;
+    const dawn = h.began < 0;
+    if (dawn) h.began = year;
+    const sp = sim.creatures.species[st.species]!;
+    const ev = sim.emit({
+      type: 'nation', year, cellId: st.cell, title: dawn ? 'The dawn of history' : `${n.name} is founded`,
+      description: dawn
+        ? `At ${st.name} the people of ${sp.name} have planted fields and stayed to guard them. They call their country ${n.name} and follow ${first.name}. From here on their years are worth counting one by one.`
+        : from
+          ? `${st.name} lies too far from ${this.settlements[from.capital]!.name} for any order to reach it. Its settlers follow ${first.name} now and call their country ${n.name}.`
+          : `The farmers around ${st.name} now answer to ${first.name}. They call their country ${n.name}.`,
+      causes: [st.eventId, from ? from.eventId : -1].filter((x) => x >= 0), importance: dawn ? 3 : 1, speciesIds: [st.species], data: { nation: n.id, person: first.id },
+    });
+    n.eventId = ev.id;
+    first.events.push(ev.id);
+    sim.cellLog.note(st.cell, year, Log.Owner, n.id);
+    sim.cellLog.note(st.cell, year, Log.Era, n.era);
+    return n;
+  }
+
+  private endNation(sim: Simulation, n: Nation, year: number): void {
+    const h = this.h;
+    n.ended = year; n.pop = 0; n.towns = 0;
+    const ruler = h.people[n.ruler];
+    if (ruler && ruler.died < 0) { ruler.died = year; ruler.reignTo = year; ruler.fate = 'died with the country'; }
+    const house = h.dynasties[n.dynasty];
+    if (house && house.ended < 0) house.ended = year;
+    sim.emit({
+      type: 'nation-fall', year, cellId: this.settlements[n.capital]?.cell ?? -1, title: `${n.name} is no more`,
+      description: `The last town of ${n.name} stands empty. It lasted ${Math.round(year - n.founded).toLocaleString('en-US')} years.`,
+      causes: [n.eventId].filter((x) => x >= 0), importance: year - n.founded > 400 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id },
+    });
+  }
+
+  // ------------------------------------------------------------------ shared by both clocks
+
+  private capacity(sim: Simulation, st: Settlement): number {
+    const reg = sim.regions;
+    const food = sim.plants.landFood[st.region]! + (1 - reg.land[st.region]!) * 0.15;
+    const cold = reg.landTemp[st.region]! < -4 ? 0.3 : 1;
+    // farming and tools raise how many people the land can feed
+    return (2 + 60 * food) * (1 + 14 * st.tech * st.tech) * cold;
+  }
+
+  /** The people died out, or the place can no longer feed or hold anyone. */
+  private failed(sim: Simulation, st: Settlement, speciesGone: boolean): boolean {
+    return speciesGone || st.pop < 0.05 || sim.world.elevation[st.cell]! <= sim.world.seaLevel;
+  }
+
+  private abandon(sim: Simulation, st: Settlement, year: number): void {
+    st.ruined = year;
+    this.occupied.delete(st.region);
+    sim.cellLog.note(st.cell, year, Log.Ruined, st.id);
+    sim.cellLog.note(st.cell, year, Log.Owner, -1);
+    sim.civEvent('ruin', st.species, st.cell, st.id);
+  }
+
+  private census(): void {
+    let living = 0, maxTech = 0;
+    for (const st of this.settlements) { if (st.ruined < 0) { living++; if (st.tech > maxTech) maxTech = st.tech; } }
+    this.living = living;
+    this.maxTech = maxTech;
   }
 
   /** A species living beside a settlement: its main prey (largest other animal) or a grazer worth taming. */
@@ -219,6 +540,8 @@ export class Civilization {
       st.pop *= 0.25;
       st.tech *= 0.55;
     }
+    for (const n of this.h.nations) if (n.ended < 0) { n.tech *= 0.55; n.era = eraOf(n.tech); n.stability *= 0.4; }
+    this.h.topEra = this.h.nations.reduce((m, n) => (n.ended < 0 ? Math.max(m, n.era) : m), 0);
     this.spaceAgeYear = -1;
   }
 
@@ -238,7 +561,7 @@ export class Civilization {
     return n;
   }
 
-  private found(sim: Simulation, rng: RNG, species: number, region: number, parent: number): Settlement | null {
+  private found(sim: Simulation, rng: RNG, species: number, region: number, parent: number, year: number): Settlement | null {
     const reg = sim.regions, w = sim.world;
     // a habitable land cell in the region, preferring low ground near water
     let cell = -1, best = -Infinity;
@@ -250,11 +573,19 @@ export class Civilization {
       if (score > best) { best = score; cell = c; }
     }
     if (cell < 0) return null;
+    // named in the people's own language, from what the name means
+    const id = this.settlements.length;
+    const lang = this.h.languages[this.cultureFor(sim, species, year).language]!;
+    let meanings = placeMeanings(hash32(this.seedNum, id));
+    let name = compound(lang, meanings.head, meanings.modifier, year);
+    for (let salt = 1; salt < 6 && this.settlements.some((x) => x.name === name); salt++) { meanings = placeMeanings(hash32(this.seedNum, id, salt)); name = compound(lang, meanings.head, meanings.modifier, year); }
     const st: Settlement = {
-      id: this.settlements.length, name: placeName(rng), cell, region, species, pop: 0.2, tech: 0.03, founded: sim.simYear, belief: -1, eventId: -1, ruined: -1, painted: false, temple: false, farms: false, stars: false,
+      id, name, cell, region, species, pop: 0.2, tech: 0.03, founded: year, belief: -1, eventId: -1, ruined: -1, painted: false, temple: false, farms: false, stars: false,
+      nation: -1, head: meanings.head, modifier: meanings.modifier ?? '',
     };
     this.settlements.push(st);
     this.occupied.set(region, st.id);
+    sim.cellLog.note(cell, year, Log.Settled, st.id);
     // a later people building where an older, different people once lived find what was left behind
     const ruin = this.settlements.find((x) => x.region === region && x.ruined >= 0 && x.species !== species && x.tech > 0.25);
     if (ruin) sim.civEvent('rediscover', species, cell, st.id, ruin.id);
@@ -343,4 +674,20 @@ export class Civilization {
       }
     }
   }
+}
+
+/** One line on what changes when an era begins. */
+function eraLine(era: number): string {
+  return [
+    'They wander and make camp.',
+    'They plant, they wait, and they stay where the harvest is.',
+    'Clay goes into the fire and comes out as jars, bricks and tallies that outlast the hand that made them.',
+    'Stone is piled on stone until a town can shut its gates.',
+    'Ships leave sight of land on purpose, and come back.',
+    'What one person writes can now be read by thousands who never met them.',
+    'Fire is put to work. It pulls, it pumps, and it never tires.',
+    'Voices and pictures cross the world faster than any messenger.',
+    'They have put their own machines above the sky.',
+    'They are doing things their grandparents had no words for.',
+  ][era] ?? '';
 }

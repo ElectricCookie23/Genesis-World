@@ -5,8 +5,9 @@ import { G, P, PHEN_COUNT, sizeMetres } from './genetics';
 import { nearestCell } from './world';
 import { loadSimulation, saveSimulation, type SaveState } from './snapshot';
 import {
-  SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
+  HISTORY_SPEED, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
 } from '../shared/protocol';
+import { ERAS } from './history/eras';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 const TICK_HZ = 20;
@@ -24,15 +25,22 @@ let slowUntil = 0;
 let speciesVersion = -1;
 let plantVersion = -1;
 const sentExtinct = new Set<number>();
-const rewinds: { simYear: number; title: string; save: SaveState }[] = [];
+const rewinds: { simYear: number; title: string; save: SaveState; era?: boolean }[] = [];
+/** While a history is unfolding, time is held at the pace of history unless the user picks a faster speed on purpose. */
+const HISTORY_YPS = SPEEDS[HISTORY_SPEED]!.yearsPerSecond;
+let historyOverride = false;
+let wasHistory = false;
+/** Highest era a snapshot has been kept for. */
+let snapshotEra = 0;
 /** How many rewind points to keep (each is a whole copy of the world). */
 let rewindLimit = 12;
 /** When there are too many, drop the one that sits closest in time to the point before it, so the rest stay spread over history. */
 function thinRewinds(): void {
-  while (rewinds.length > rewindLimit) {
+  while (rewinds.filter((r) => !r.era).length > rewindLimit) {
     let drop = 1, gap = Infinity;
     for (let i = 1; i < rewinds.length - 1; i++) {
-      if (rewinds[i]!.title === 'Fork point') continue;
+      // the start of each era is always kept
+      if (rewinds[i]!.title === 'Fork point' || rewinds[i]!.era) continue;
       const g = rewinds[i]!.simYear - rewinds[i - 1]!.simYear;
       if (g < gap) { gap = g; drop = i; }
     }
@@ -115,9 +123,27 @@ function snapshotCells(s: Simulation): { cells: CellSnapshot; transfer: Transfer
   return { cells, transfer };
 }
 
+/** True when time is being held at the pace of history. */
+function historyHeld(): boolean {
+  return !!sim && sim.civ.historyActive && !historyOverride && SPEEDS[speedIndex]!.yearsPerSecond > HISTORY_YPS;
+}
+
 function currentYps(): number {
-  const yps = SPEEDS[speedIndex]!.yearsPerSecond;
+  const yps = historyHeld() ? HISTORY_YPS : SPEEDS[speedIndex]!.yearsPerSecond;
   return performance.now() < slowUntil ? Math.min(yps, SLOW_YPS) : yps;
+}
+
+function nationList(s: Simulation): NationInfo[] {
+  const h = s.civ.h;
+  return h.nations.map((n) => {
+    const ruler = h.people[n.ruler], house = h.dynasties[n.dynasty], culture = h.cultures[n.culture]!;
+    return {
+      id: n.id, name: n.name, species: n.species, capital: n.capital, founded: n.founded, ended: n.ended, parent: n.parent, government: n.government,
+      stability: n.stability, tech: n.tech, era: n.era, eraName: ERAS[n.era]!.name, hue: n.hue, pop: n.pop, towns: n.towns,
+      culture: culture.name, language: h.languages[culture.language]!.name, ruler: ruler ? ruler.name : '', rulerSince: ruler ? ruler.reignFrom : -1,
+      house: house ? house.name : '', houseReigns: house ? house.rulers.length : 0, eventId: n.eventId,
+    };
+  });
 }
 
 function stats(s: Simulation): WorldStats {
@@ -133,6 +159,10 @@ function stats(s: Simulation): WorldStats {
     moonAngle: s.moonAngle,
     speedIndex,
     yearsPerSecond: currentYps(),
+    history: s.civ.historyActive,
+    historyHeld: historyHeld(),
+    historyBegan: s.civ.h.began,
+    topEra: s.civ.h.topEra,
     tickMs,
     stage: s.stage,
     era: s.era.kind,
@@ -204,6 +234,20 @@ function tick(): void {
   const start = performance.now();
   const yps = currentYps();
   if (yps > 0) s.step(yps / TICK_HZ);
+  // history has begun (or ended): the hold on time starts afresh each time
+  const active = s.civ.historyActive;
+  if (active !== wasHistory) { wasHistory = active; historyOverride = false; }
+  // a whole copy of the world is kept at the start of every era, for replays and what-ifs
+  if (s.civ.h.topEra > snapshotEra) {
+    snapshotEra = s.civ.h.topEra;
+    const title = `Start of the ${ERAS[snapshotEra]!.name}`;
+    rewinds.push({ simYear: s.simYear, title, save: saveSimulation(s, title), era: true });
+    // where memory is short only the most recent eras are kept
+    const eraLimit = Math.max(3, rewindLimit - 2);
+    while (rewinds.filter((r) => r.era).length > eraLimit) rewinds.splice(rewinds.findIndex((r) => r.era), 1);
+    rewinds.sort((a, b) => a.simYear - b.simYear);
+    post({ type: 'timeline', points: rewinds.map((r, index) => ({ index, simYear: r.simYear, title: r.title })) });
+  }
   // slow time for a few seconds around big events so they can be seen
   if (slowOnEvents && s.bigEvent >= 2 && SPEEDS[speedIndex]!.yearsPerSecond > SLOW_YPS) slowUntil = start + (s.bigEvent >= 3 ? 5000 : 3000);
   const fresh = s.events.drainFresh();
@@ -235,7 +279,7 @@ function tick(): void {
     lastSpecies = now;
     post({ type: 'species', species: speciesList(s) });
     if (s.civ.settlements.length) {
-      post({ type: 'settlements', settlements: s.civ.settlements.map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, belief: t.belief, eventId: t.eventId, ruined: t.ruined, temple: t.temple, farms: t.farms })) });
+      post({ type: 'settlements', settlements: s.civ.settlements.map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, belief: t.belief, eventId: t.eventId, nation: t.nation, ruined: t.ruined, temple: t.temple, farms: t.farms })) , nations: nationList(s) });
     }
     speciesVersion = s.creatures.version;
     if (s.plants.version !== plantVersion) {
@@ -270,6 +314,8 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
       }
       case 'speed':
         speedIndex = Math.max(0, Math.min(SPEEDS.length - 1, msg.index));
+        // choosing a faster speed while history runs is a decision to skip ahead: it lifts the hold
+        historyOverride = !!sim && sim.civ.historyActive && SPEEDS[speedIndex]!.yearsPerSecond > HISTORY_YPS;
         slowUntil = 0;
         break;
       case 'requestCells':
@@ -294,6 +340,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         sim = new Simulation(save.seed, save.gridN);
         loadSimulation(sim, save);
         if (msg.diverge) sim.diverge();
+        snapshotEra = sim.civ.h.topEra; wasHistory = sim.civ.historyActive; historyOverride = false;
         sim.events.drainFresh();
         sentExtinct.clear();
         speciesVersion = -1;
@@ -322,6 +369,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         if (!point) break;
         sim = new Simulation(point.save.seed, point.save.gridN);
         loadSimulation(sim, point.save);
+        snapshotEra = sim.civ.h.topEra; wasHistory = sim.civ.historyActive; historyOverride = false;
         sim.events.drainFresh();
         sentExtinct.clear();
         plantVersion = -1;

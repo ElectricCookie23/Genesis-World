@@ -611,6 +611,17 @@ export function Peoples() {
               <div style={{ minWidth: 0 }}>
                 <div class={css.what} style={{ color: '#ece7db' }}>{n.name}</div>
                 <div class={css.when} style={{ color: '#cfc9bd' }}>{n.members.length} {n.members.length === 1 ? 'settlement' : 'settlements'}, {bigNumber(n.pop * 1000)} {sp ? sp.name : 'people'}. Capital: {cap ? cap.name : 'unknown'}. <span style={{ color: css3(n.color, 1.1) }}>●</span> its lights</div>
+                {(() => {
+                  // what the simulation knows of this nation: its age, its ruler and the house that ruler belongs to
+                  const realm = s.realms.find((r) => r.ended < 0 && r.capital === n.capital) ?? s.realms.find((r) => r.ended < 0 && r.name === n.name);
+                  if (!realm) return null;
+                  const year = s.stats?.simYear ?? 0;
+                  return (
+                    <div class={css.when} style={{ color: '#a9a498' }}>
+                      {realm.eraName}. {realm.ruler} of the {realm.house} has ruled {Math.max(1, Math.round(year - realm.rulerSince)).toLocaleString('en-US')} {Math.round(year - realm.rulerSince) === 1 ? 'year' : 'years'} ({realm.houseReigns} {realm.houseReigns === 1 ? 'reign' : 'reigns'} of that house). Founded {Math.round(year - realm.founded).toLocaleString('en-US')} years ago. They speak {realm.language}.
+                    </div>
+                  );
+                })()}
               </div>
               {cap && <button class={css.link} style={{ marginLeft: 'auto' }} onClick={() => { actions.setOverlay('nations'); actions.flyToCell(cap.cell, 1.2); }}>map</button>}
             </div>
