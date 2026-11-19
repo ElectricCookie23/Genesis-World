@@ -551,6 +551,10 @@ export function Settings() {
           <span>Music</span>
           <input type="range" min="0" max="1" step="0.05" value={s.musicVolume} onInput={(e) => actions.setMusicVolume(Number((e.target as HTMLInputElement).value))} />
         </div>
+        <div class={css.row}>
+          <span>Sound</span>
+          <input type="range" min="0" max="1" step="0.05" value={s.soundVolume} onInput={(e) => actions.setSoundVolume(Number((e.target as HTMLInputElement).value))} />
+        </div>
         <div class={css.row}><span>Slow down on big events</span><button class={css.btn} onClick={() => actions.setSlowOnEvents(!s.slowOnEvents)}>{s.slowOnEvents ? 'on' : 'off'}</button></div>
         <div class={css.row}><span>Documentary director<br /><span class={css.sub}>The camera flies to whatever just happened.</span></span><button class={css.btn} onClick={() => update({ director: !s.director })}>{s.director ? 'on' : 'off'}</button></div>
         <div class={css.row}><span>Colour-blind safe overlays</span><button class={css.btn} onClick={() => actions.setColorblind(!s.colorblind)}>{s.colorblind ? 'on' : 'off'}</button></div>

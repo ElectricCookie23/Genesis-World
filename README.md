@@ -45,12 +45,17 @@ Useful URL options: `?seed=amber-reef-101` picks the world, `&skip` skips the op
 | Drag | Orbit the planet |
 | Scroll or pinch | Zoom, in one range from deep space to the ground |
 | Right-drag or two-finger drag | Turn and tilt near the surface |
-| Click a creature | Select it. Double-click or F follows it |
+| Click a creature | Select it (you hear its call). Double-click or F follows it |
+| V | First-person view from the followed creature |
+| U | Allow the camera to dive under the sea |
 | Space | Pause or play |
 | 1 to 6 | Speed: pause, 1x, 10x, 100x, 1000x, Epoch |
 | C | Chronicle |
 | T | Tree of life |
-| G | God tools (meteor) |
+| G | God tools |
+| M | Flat map (click it to fly there) |
+| X | Cross-section of the ground under the view |
+| O | Overlays: temperature, rain, life, people, fossils |
 | P | Postcard mode |
 | H | Hide or show the interface |
 | Esc | Close panels, stop following |
@@ -59,12 +64,13 @@ Useful URL options: `?seed=amber-reef-101` picks the world, `&skip` skips the op
 ## A short tour
 
 - **The opening.** A dust disc collapses into a molten planet, the moon is struck off, the crust cools, rain falls and the seas fill. The planet that forms is the real seeded one.
-- **Epoch speed (key 6).** A whole history, about 500 million years, in roughly half an hour. Life starts in the sea, oxygen builds, plants take the land, animals follow.
+- **Epoch speed (key 6).** A whole history, about 500 million years, in roughly half an hour. Life starts in the sea, oxygen builds, plants take the land, animals follow. Continents drift, ice ages come and go.
 - **The chronicle (C).** A calm documentary voice narrates what happens. Click any line to open "Why did this happen?" and walk the chain of causes backward.
-- **The tree of life (T).** Every named species as a glowing branch. Click one to meet it and fly to where it lives.
-- **Down on the ground.** Zoom in on a green coast. Trees, shrubs and grass grow from the genes of the local plant species; creatures are built from their genomes, with legs, fins, wings, necks, horns, shells and patterns. Click one to see its name, age and what it is doing.
-- **The meteor (G).** Aim, click, and watch an impact winter change the tree of life.
-- **Seeds.** The World panel copies a link that replays this exact world.
+- **The tree of life (T) and field guide.** Every named species as a glowing branch, a card for each living one, and a memorial for those that are gone.
+- **Down on the ground.** Trees, shrubs, grass and mushrooms grow from the genes of the local plants; creatures are built from their genomes. Hunters chase, herds bolt, night animals sleep by day, the young of some species look nothing like their parents.
+- **Peoples.** In some worlds a lineage grows clever. Then come fire, cave paintings of real animals, villages, farms, tamed herds, faiths founded on real eclipses and eruptions, cities whose lights show from orbit, wars, ships, and sometimes a space age and a departure. In other worlds nobody ever lights a fire.
+- **God tools (G).** Meteor, lightning, plague, raise mountains, flood, ice age, heat wave, gene ray, shield dome, monolith, summon a comet, tilt the axis, rain of life, shatter the moon into a ring, or design a species and set it down. Use them often enough and the villagers build temples that face the sky. Hands-off mode locks them all.
+- **Keepsakes.** Photo filters and PNG export, video recording, a printable illustrated history of your planet, ten save slots, rewind points at every great event, and a seed link that replays the same world.
 
 ## How it works
 

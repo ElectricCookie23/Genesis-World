@@ -130,12 +130,17 @@ export class Music {
     } catch { /* ignore */ }
   }
 
+  /** Volume of sound effects (ambience, calls, thunder), separate from the music. */
+  sfx = 0.7;
+
   /** Ambient bed: wind up high, surf near the sea, rain under storms. Each 0..1. */
   ambience(wind: number, surf: number, rain: number): void {
     if (!this.windGain) return;
-    this.windGain.gain.rampTo(wind * 0.16, 1.2);
-    this.surfGain.gain.rampTo(surf * 0.2, 1.2);
-    this.rainGain.gain.rampTo(rain * 0.24, 1.2);
+    this.windGain.gain.rampTo(wind * 0.16 * this.sfx, 1.2);
+    this.surfGain.gain.rampTo(surf * 0.2 * this.sfx, 1.2);
+    this.rainGain.gain.rampTo(rain * 0.24 * this.sfx, 1.2);
+    if (this.voice) this.voice.volume.value = this.sfx <= 0.01 ? -80 : -12 + 20 * Math.log10(this.sfx);
+    if (this.rumble) this.rumble.volume.value = this.sfx <= 0.01 ? -80 : -8 + 20 * Math.log10(this.sfx);
   }
 
   /** Distant thunder. */

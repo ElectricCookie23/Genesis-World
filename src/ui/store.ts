@@ -38,6 +38,7 @@ export interface UIState {
   mobile: boolean;
   quality: 'low' | 'medium' | 'high' | 'ultra';
   musicVolume: number;
+  soundVolume: number;
   reducedMotion: boolean;
   slots: SlotInfo[];
   settlements: SettlementInfo[];
@@ -86,6 +87,7 @@ export const state: UIState = {
   mobile: false,
   quality: 'high',
   musicVolume: 0.6,
+  soundVolume: 0.7,
   reducedMotion: false,
   slots: [],
   settlements: [],
@@ -136,6 +138,7 @@ export const actions = {
   followCreature: (_on: boolean) => {},
   setQuality: (_q: UIState['quality']) => {},
   setMusicVolume: (_v: number) => {},
+  setSoundVolume: (_v: number) => {},
   setReducedMotion: (_on: boolean) => {},
   saveSlot: (_name: string) => {},
   loadSlot: (_slot: number) => {},

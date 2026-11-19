@@ -9,12 +9,11 @@ Read this first when resuming. Then BRIEF.md, PROGRESS.md, DECISIONS.md and `git
 - Stop and show the owner only at points that are worth showing.
 
 ## Where things stand
-- Stage 1 (setup, sim core, worker, protocol, tests, CI): done.
-- Stage 2 (rendering, opening sequence): mostly done. Leftovers: river ribbons, auroras, real shadows, ambient occlusion, adaptive quality, depth of field.
-- Stages 3 to 5, simulation: done and tuned headless (eras, sea level, eruptions, impacts, fires, erosion, plants, creature populations, genetics, speciation, naming, extinctions with causes, mass extinctions, milestones).
-- Stages 4 and 5, visuals: done. Instanced vegetation from plant genes; creature bodies from genomes with shader animation; individuals near the camera drawn from real cohorts; select and follow.
-- Stage 6, UI: chronicle, narration line, Why panel, milestone toasts, tree of life, species card, creature card, time controls, meteor god tool, seed link, help, first-visit hints, auto-hiding UI.
-- Tier 1 still open: #28 storm cells and lightning, #37 auroras, #38 music, #39 postcard camera paths, river ribbons (#1), sim-side tides (#7), reliable flight (#19), persistent predators and pack hunting (#15, #17), saving and settings (BRIEF 7.5), mobile check, performance pass, README screenshots.
+- The original brief is built through all three tiers. PROGRESS.md lists every feature as done or simplified (with what is missing). Nothing is "not started".
+- Verified in a headless browser: opening, planet, plants, creatures, UI panels, particles, ring, city lights, music start, autosave and resume, crash recovery, save slots. All 11 tests pass.
+- NOT verified: frame rate on a real GPU, mobile layout on a real phone, the live site (Pages is off).
+- Deferred to the graphics overhaul: real shadow maps, ambient occlusion, LOD levels for plants and creatures.
+- NEXT: the owner's graphics overhaul brief (alien art direction, high-fidelity rendering). Its text is in `docs/GRAPHICS_BRIEF.md`. Start with its PROCESS step 1 (eight "before" screenshots), then follow its order.
 
 ## What exists
 - `src/sim`: rng, world (fine grid n=63), geology, climate, events (cause graph), regions (coarse eco grid n=21), plants, genetics, creatures (cohorts, food web, speciation), naming, names, simulation (orchestration), worker.

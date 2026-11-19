@@ -151,6 +151,7 @@ async function boot(): Promise<void> {
     music.setVolume(v);
     void music.start();
   };
+  actions.setSoundVolume = (v) => { update({ soundVolume: v }); store.set('genesis:sound', String(v)); music.sfx = v; void music.start(); };
   actions.setReducedMotion = (on) => {
     update({ reducedMotion: on });
     store.set('genesis:motion', on ? '1' : '0');
@@ -162,6 +163,8 @@ async function boot(): Promise<void> {
     musicVolume: Number(store.get('genesis:music') ?? 0.6),
     reducedMotion: store.get('genesis:motion') ? store.get('genesis:motion') === '1' : reducedMotion,
   });
+  update({ soundVolume: Number(store.get('genesis:sound') ?? 0.7) });
+  music.sfx = state.soundVolume;
   music.setVolume(state.musicVolume);
   const startMusic = () => { void music.start(); window.removeEventListener('pointerdown', startMusic); window.removeEventListener('keydown', startMusic); };
   window.addEventListener('pointerdown', startMusic);
