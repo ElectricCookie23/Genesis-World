@@ -27,6 +27,8 @@ export interface CellSnapshot {
   lava: Float32Array;
   lights: Float32Array;
   fields: Float32Array;
+  reef: Float32Array;
+  bloom: Float32Array;
   canopy: Float32Array;
   flora: Int32Array;
   flow: Float32Array;
@@ -65,6 +67,12 @@ export interface WorldStats {
   /** Arms race: mean toxicity of land plants and mean toxin resistance of animals. */
   plantToxin: number;
   toxinResist: number;
+  moons: number;
+  ring: boolean;
+  binary: boolean;
+  oldestTreeCell: number;
+  civMusic: boolean;
+  monoliths: number[];
 }
 
 /** One animal species, as shown in the tree of life and info cards. */
@@ -124,6 +132,7 @@ export type ToWorker =
   | { type: 'settings'; slowOnEvents?: boolean }
   | { type: 'save'; name: string; slot: string }
   | { type: 'rewind'; index: number }
+  | { type: 'fork' }
   | { type: 'load'; save: unknown }
   /** Jump ahead by running the sim flat out (used by automated checks). */
   | { type: 'warp'; years: number };

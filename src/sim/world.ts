@@ -177,11 +177,12 @@ export const enum Biome {
   Alpine = 14,
   Volcanic = 15,
   SeaIce = 16,
+  SaltFlat = 17,
 }
-export const BIOME_COUNT = 17;
+export const BIOME_COUNT = 18;
 export const BIOME_NAMES = [
   'deep ocean', 'ocean', 'shallows', 'beach', 'ice sheet', 'tundra', 'taiga', 'temperate forest',
-  'grassland', 'shrubland', 'desert', 'savanna', 'rainforest', 'wetland', 'alpine', 'volcanic waste', 'sea ice',
+  'grassland', 'shrubland', 'desert', 'savanna', 'rainforest', 'wetland', 'alpine', 'volcanic waste', 'sea ice', 'salt flat',
 ];
 
 export interface Plate {
@@ -210,6 +211,8 @@ export interface World {
   lava: Float32Array; // 0..1 glowing lava / fire heat
   lights: Float32Array; // 0..1 firelight and city light
   fields: Float32Array; // 0..1 farmland
+  reef: Float32Array; // 0..1 living coral, negative when bleached
+  bloom: Float32Array; // 0..1 plankton in the water
   canopy: Float32Array; // 0..1 height of the plant canopy
   flora: Int32Array; // dominant plant species id, -1 for none
   windE: Float32Array; // eastward wind component
@@ -239,6 +242,8 @@ export function createWorld(grid: Grid): World {
     lava: new Float32Array(c),
     lights: new Float32Array(c),
     fields: new Float32Array(c),
+    reef: new Float32Array(c),
+    bloom: new Float32Array(c),
     canopy: new Float32Array(c),
     flora: new Int32Array(c).fill(-1),
     windE: new Float32Array(c),

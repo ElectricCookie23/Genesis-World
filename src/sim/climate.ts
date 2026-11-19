@@ -30,6 +30,8 @@ export interface ClimateState {
   scratch: Float32Array;
   /** Solar brightness multiplier (rises in the far future). */
   solar: number;
+  /** Cooling under the shadow of a ring system, deg C at the equator. */
+  ringShadow: number;
   /** Static per-cell values: sin(latitude), rain band and cloud band factors. */
   sinLat: Float32Array;
   rainBand: Float32Array;
@@ -65,6 +67,7 @@ export function createClimate(world: World, rng: RNG): ClimateState {
     meanT: new Float32Array(count),
     scratch: new Float32Array(count),
     solar: 1,
+    ringShadow: 0,
     sinLat: new Float32Array(count),
     rainBand: new Float32Array(count),
     cloudBand: new Float32Array(count),
@@ -155,7 +158,11 @@ export function updateTemperature(world: World, state: ClimateState, simYear: nu
     let s = 0;
     const nc = ncount[i]!;
     for (let j = 0; j < nc; j++) s += scratch[neighbors[i * 6 + j]!]!;
-    const t = scratch[i]! * 0.7 + (s / nc) * 0.3;
+    let t = scratch[i]! * 0.7 + (s / nc) * 0.3;
+    // ocean currents: the wind drags surface water along, carrying its warmth or cold with it
+    if (elevation[i]! <= seaLevel) t += (scratch[state.upwind[i]!]! - t) * 0.35;
+    // a ring system casts a cold stripe of shadow along the equator
+    if (state.ringShadow > 0) { const sl = state.sinLat[i]!; t -= state.ringShadow * Math.exp(-(sl * sl) / 0.006); }
     temperature[i] = t;
     sum += t;
     // slow-moving annual mean for biome classification
@@ -241,12 +248,13 @@ export function classifyBiomes(world: World, state: ClimateState): void {
       else if (m > 0.5) b = Biome.TemperateForest;
       else if (m > 0.27) b = Biome.Grassland;
       else if (m > 0.13) b = Biome.Shrubland;
-      else b = Biome.Desert;
+      else b = h < 0.12 && t > 14 ? Biome.SaltFlat : Biome.Desert;
     } else if (m > 0.85 && h < 0.12) b = Biome.Wetland;
     else if (m > 0.6) b = Biome.Rainforest;
     else if (m > 0.3) b = Biome.Savanna;
     else if (m > 0.14) b = Biome.Shrubland;
-    else b = Biome.Desert;
+    // hot dry lowlands are the beds of dried-up seas: salt flats
+    else b = h < 0.12 ? Biome.SaltFlat : Biome.Desert;
     biome[i] = b;
   }
 }

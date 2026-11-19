@@ -1,5 +1,9 @@
 // Scene orchestration: owns the renderer, every visual layer, and per-frame updates.
-import { Scene, Vector3, WebGPURenderer, type Mesh, type Vector4 } from 'three/webgpu';
+import {
+  BoxGeometry, ConeGeometry, DoubleSide, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshBasicNodeMaterial, Quaternion, RingGeometry, Scene, Vector3,
+  WebGPURenderer, type Vector4,
+} from 'three/webgpu';
+import { dot, float, length, mx_fractal_noise_float, normalize, positionLocal, positionWorld, smoothstep, vec3 } from 'three/tsl';
 import type { Grid } from '../sim/world';
 import { nearestCell } from '../sim/world';
 import type { CellSnapshot, WorldStats } from '../shared/protocol';
@@ -8,7 +12,7 @@ import { PlanetMesh } from './planet';
 import { OceanMesh } from './ocean';
 import { CloudLayer } from './clouds';
 import { createAtmosphere, createMoon, createSky } from './atmosphere';
-import { createDustDisc } from './effects';
+import { createDustDisc, ParticleSystem } from './effects';
 import { OrbitCamera } from './camera';
 import { PostFX } from './postfx';
 import { Vegetation } from './vegetation';
@@ -16,7 +20,7 @@ import { CreatureLayer, type Individual } from './creatures';
 import { Rivers } from './rivers';
 import { createAuroras } from './aurora';
 import type { HerdSnapshot, PlantInfo, SpeciesInfo } from '../shared/protocol';
-import { EXAG, MOON_DISTANCE, uBolts, uFlash, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime } from './common';
+import { EXAG, MOON_DISTANCE, uBolts, uFlash, uRing, uSun2, uSun2Dir, uUnderwater, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime } from './common';
 
 export type Quality = 'low' | 'medium' | 'high' | 'ultra';
 
@@ -42,6 +46,19 @@ export class GenesisScene {
   vegetation?: Vegetation;
   creatures?: CreatureLayer;
   rivers?: Rivers;
+  particles?: ParticleSystem;
+  private moon2?: Mesh;
+  private ringMesh?: Mesh;
+  private monolithMesh?: InstancedMesh;
+  private boneMesh?: InstancedMesh;
+  private oldTree?: Mesh;
+  private boneCells: number[] = [];
+  showFossils = false;
+  /** Let the camera dive below the sea surface. */
+  underwater = false;
+  /** Look out through the eyes of the followed creature. */
+  firstPerson = false;
+  moons = 1;
   /** Cells under storms, where lightning may flash. */
   stormCells: number[] = [];
   private boltTimer = 0;
@@ -115,6 +132,40 @@ export class GenesisScene {
     this.scene.add(this.planet.mesh, this.ocean.mesh, this.clouds.mesh);
     this.vegetation = new Vegetation(grid, this.plantBudget);
     for (const m of this.vegetation.meshes) this.scene.add(m);
+    this.particles = new ParticleSystem(grid);
+    this.scene.add(this.particles.sprite);
+    // a captured second moon, hidden until the sim says it exists
+    this.moon2 = createMoon(777);
+    this.moon2.scale.setScalar(0.45);
+    this.moon2.visible = false;
+    // ring system (after the moon is shattered)
+    const ringMat = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: DoubleSide });
+    const rr = length(positionLocal.xy);
+    const bands = mx_fractal_noise_float(vec3(rr.mul(38), 0.3, 0.7), 4, 2.3, 0.6).mul(0.5).add(0.5);
+    const lit = dot(normalize(positionWorld), uSunDir).mul(0.25).add(0.85);
+    ringMat.colorNode = vec3(0.86, 0.8, 0.7).mul(bands.mul(0.6).add(0.5)).mul(lit);
+    ringMat.opacityNode = smoothstep(1.42, 1.5, rr).mul(smoothstep(2.3, 2.15, rr)).mul(bands.mul(0.8).add(0.15)).mul(0.75);
+    this.ringMesh = new Mesh(new RingGeometry(1.4, 2.3, 160, 6), ringMat);
+    this.ringMesh.rotation.x = -Math.PI / 2;
+    this.ringMesh.visible = false;
+    this.ringMesh.renderOrder = 4;
+    // monoliths, and bones of the dead
+    const dark = new MeshBasicNodeMaterial();
+    dark.colorNode = vec3(0.012, 0.012, 0.016);
+    this.monolithMesh = new InstancedMesh(new BoxGeometry(0.004, 0.011, 0.0013).translate(0, 0.0055, 0), dark, 16);
+    this.monolithMesh.count = 0;
+    const boneMat = new MeshBasicNodeMaterial();
+    boneMat.colorNode = vec3(0.86, 0.82, 0.7).mul(dot(normalize(positionWorld), uSunDir).mul(0.5).add(0.6).max(float(0.12)));
+    const rib = new ConeGeometry(0.25, 1.4, 4).rotateZ(1.2).translate(0, 0.3, 0);
+    this.boneMesh = new InstancedMesh(rib, boneMat, 256);
+    this.boneMesh.count = 0;
+    // the oldest tree on the planet stands apart: taller, with a pale gold crown
+    const treeMat = new MeshBasicNodeMaterial();
+    treeMat.colorNode = vec3(0.75, 0.62, 0.22).mul(dot(normalize(positionWorld), uSunDir).mul(0.5).add(0.6).max(float(0.1)));
+    this.oldTree = new Mesh(new IcosahedronGeometry(0.5, 1).scale(1, 1.25, 1).translate(0, 1.2, 0), treeMat);
+    this.oldTree.add(new Mesh(new ConeGeometry(0.16, 1.1, 6).translate(0, 0.5, 0), dark));
+    this.oldTree.visible = false;
+    for (const m of [this.moon2, this.ringMesh, this.monolithMesh, this.boneMesh, this.oldTree]) { m.frustumCulled = false; this.scene.add(m); }
     this.rivers = new Rivers(grid);
     this.scene.add(this.rivers.mesh);
     for (const a of createAuroras()) this.scene.add(a);
@@ -167,7 +218,7 @@ export class GenesisScene {
   surfaceRadius(x: number, y: number, z: number): number {
     if (!this.grid || !this.lastElevation) return 1;
     this.lastCell = nearestCell(this.grid, x, y, z, this.lastCell);
-    const e = Math.max(this.lastElevation[this.lastCell]!, uSeaKm.value);
+    const e = this.underwater ? this.lastElevation[this.lastCell]! : Math.max(this.lastElevation[this.lastCell]!, uSeaKm.value);
     return 1 + e * EXAG;
   }
 
@@ -207,6 +258,39 @@ export class GenesisScene {
     return null;
   }
 
+  private placeOnSurface(m: Matrix4, cell: number, scale: number, jitter = 0): void {
+    const g = this.grid!.pos;
+    const up = new Vector3(g[cell * 3]!, g[cell * 3 + 1]!, g[cell * 3 + 2]!);
+    if (jitter) up.add(new Vector3(Math.sin(cell * 3.1) * jitter, Math.sin(cell * 7.7) * jitter, Math.sin(cell * 1.3) * jitter)).normalize();
+    const r = this.surfaceRadius(up.x, up.y, up.z);
+    const q = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), up);
+    m.compose(up.clone().multiplyScalar(r), q, new Vector3(scale, scale, scale));
+  }
+
+  /** Bones where extinct species made their last stand. */
+  setFossils(cells: number[], show: boolean): void {
+    this.boneCells = cells.slice(-256);
+    this.showFossils = show;
+    this.layoutMarkers();
+  }
+
+  private layoutMarkers(): void {
+    if (!this.boneMesh || !this.grid) return;
+    const m = new Matrix4();
+    // bones lie small on the ground; the fossil view makes them large enough to find from orbit
+    const size = this.showFossils ? 0.012 + Math.min(0.03, this.cam.dist * 0.02) : 0.0018;
+    this.boneCells.forEach((c, i) => { this.placeOnSurface(m, c, size, 0.004); this.boneMesh!.setMatrixAt(i, m); });
+    this.boneMesh.count = this.boneCells.length;
+    this.boneMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  /** Meteor debris and fireball at a cell. */
+  impactAt(cell: number): void {
+    if (!this.grid) return;
+    const g = this.grid.pos;
+    this.particles?.impact(new Vector3(g[cell * 3]!, g[cell * 3 + 1]!, g[cell * 3 + 2]!));
+  }
+
   /** Brief white flash (impacts). */
   flash(amount: number): void {
     this.flashLevel = Math.max(this.flashLevel, amount);
@@ -227,6 +311,27 @@ export class GenesisScene {
     this.eraWarmth = Math.max(-1, Math.min(1, (stats.meanTemp - 14.5) / 7));
     this.eraHazeTarget = stats.era === 'winter' ? 1 : 0;
     this.stormCells = stats.storms;
+    this.moons = stats.moons;
+    this.moon.visible = stats.moons >= 1 && this.moon.visible;
+    if (stats.moons === 0) this.moon.visible = false;
+    if (this.moon2) this.moon2.visible = stats.moons >= 2;
+    if (this.ringMesh) this.ringMesh.visible = stats.ring;
+    uRing.value = stats.ring ? 1 : 0;
+    uSun2.value = stats.binary ? 1 : 0;
+    if (this.monolithMesh && this.grid && this.monolithMesh.count !== stats.monoliths.length) {
+      const m = new Matrix4();
+      stats.monoliths.slice(0, 16).forEach((c, i) => { this.placeOnSurface(m, c, 1 + Math.min(4, this.cam.dist * 8)); this.monolithMesh!.setMatrixAt(i, m); });
+      this.monolithMesh.count = Math.min(16, stats.monoliths.length);
+      this.monolithMesh.instanceMatrix.needsUpdate = true;
+    }
+    if (this.oldTree && this.grid) {
+      this.oldTree.visible = stats.oldestTreeCell >= 0 && this.cam.dist < 1.2;
+      if (stats.oldestTreeCell >= 0) {
+        const m = new Matrix4();
+        this.placeOnSurface(m, stats.oldestTreeCell, 0.006 * (1 + Math.min(2.2, this.cam.dist * 4)));
+        m.decompose(this.oldTree.position, this.oldTree.quaternion, this.oldTree.scale);
+      }
+    }
   }
 
   frame(dt: number): void {
@@ -241,6 +346,12 @@ export class GenesisScene {
     const md = (uMoonDir.value as Vector3).set(Math.cos(this.moonAngle), Math.sin(mi) * Math.sin(this.moonAngle), Math.sin(this.moonAngle)).normalize();
     this.moon.position.copy(md).multiplyScalar(this.moonDistance);
     this.moon.rotation.y = -this.moonAngle;
+    if (this.moon2?.visible) {
+      const a2 = this.moonAngle * 2.3 + 1;
+      this.moon2.position.set(Math.cos(a2) * 3.4, Math.sin(0.4) * Math.sin(a2) * 3.4, Math.sin(a2) * 3.4 * Math.cos(0.4));
+    }
+    // the companion sun trails the main one by a wide angle
+    (uSun2Dir.value as Vector3).set(cd * Math.cos(this.dayAngle + 0.9), Math.sin(this.declination) + 0.15, cd * Math.sin(this.dayAngle + 0.9)).normalize();
 
     // era colour grade
     const w = this.eraWarmth;
@@ -272,7 +383,7 @@ export class GenesisScene {
     this.eraHaze += (this.eraHazeTarget - this.eraHaze) * Math.min(1, dt * 0.5);
     this.cam.update(dt);
     if (this.creatures) {
-      this.creatures.update(this.time, this.cam.dist);
+      this.creatures.update(this.time, this.cam.dist, uSunDir.value as Vector3);
       if (this.following !== null) {
         const ind = this.creatures.byKey(this.following);
         if (ind) {
@@ -281,6 +392,23 @@ export class GenesisScene {
         }
       }
     }
+    this.particles?.update(dt, this.time, this.lastCells, this.cam.focusDir(this.tmpFocus), this.cam.dist, this.stormCells);
+    // first-person: ride on the followed creature's head
+    if (this.firstPerson && this.following !== null && this.creatures) {
+      const ind = this.creatures.byKey(this.following);
+      if (ind) {
+        const up = ind.pos.clone().normalize();
+        const eye = ind.pos.clone().addScaledVector(up, ind.size * 2.2).addScaledVector(ind.fwd, ind.size * 0.8);
+        const cam1 = this.cam.camera;
+        cam1.position.copy(eye);
+        cam1.up.copy(up);
+        cam1.lookAt(eye.clone().addScaledVector(ind.fwd, 0.01).addScaledVector(up, -0.0008));
+        cam1.near = 0.00008;
+      }
+    }
+    const camR = this.cam.camera.position.length();
+    uUnderwater.value = this.underwater && camR < 1 + uSeaKm.value * EXAG ? 1 : 0;
+    if (this.vegetation) this.vegetation.autumn = this.tilt > 0 ? this.declination / this.tilt : 0;
     this.vegetation?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist);
     const c = this.cam.camera;
     const far = c.position.length() + this.moonDistance + 4;

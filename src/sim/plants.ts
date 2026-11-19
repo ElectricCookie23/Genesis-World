@@ -78,6 +78,13 @@ export class Plants {
   readonly groundHue: Float32Array;
   /** Oxygen level 0..1 (0.21 is today's Earth). Land is deadly until an ozone layer forms. */
   oxygen = 0.005;
+  /** 0..1 damage to the ozone layer (after a supernova). Heals slowly. */
+  ozoneHole = 0;
+  /** Regions with hydrothermal vents: food that needs no sunlight. */
+  vents = new Set<number>();
+  /** How long each region has been continuously forested, in steps. */
+  readonly forestAge: Float32Array;
+  oldestForest = -1;
   totalLandCover = 0;
   totalSeaCover = 0;
   private scratch = new Float32Array(PLANT_GENES);
@@ -105,6 +112,7 @@ export class Plants {
     this.grazeSea = new Float32Array(R);
     this.dominant = new Int32Array(R).fill(-1);
     this.groundHue = new Float32Array(R).fill(0.09);
+    this.forestAge = new Float32Array(R);
   }
 
   addSpecies(genes: Float32Array, parent: number, year: number): PlantSpecies {
@@ -172,7 +180,7 @@ export class Plants {
     const land = reg.land[r]!;
     if (land <= 0) return 0;
     // without an ozone layer the land surface is sterilised by ultraviolet light
-    const uv = sat((this.oxygen - 0.06) / 0.05);
+    const uv = sat((this.oxygen - 0.06) / 0.05) * (1 - this.ozoneHole * 0.8);
     return land * (1 - reg.ice[r]!) * (0.55 + 0.45 * reg.fertility[r]!) * landSuitability(sp.genes, reg.landTemp[r]!, reg.moisture[r]!) * uv;
   }
 
@@ -288,6 +296,8 @@ export class Plants {
       this.seaCover[r] = seaCover;
       this.landFood[r] = landFood;
       this.seaFood[r] = seaFood;
+      if (landCover > 0.45 && landCover > 0 && canopy / landCover > 0.5 && !fire) this.forestAge[r] = this.forestAge[r]! + tau;
+      else this.forestAge[r] = 0;
       this.canopy[r] = landCover > 0 ? canopy / landCover : 0;
       this.toxicity[r] = landCover > 0 ? tox / landCover : 0;
       this.fruit[r] = landCover > 0 ? fruit / landCover : 0;
@@ -297,6 +307,15 @@ export class Plants {
       landTotal += landCover;
       seaTotal += seaCover;
     }
+    // vents on the deep sea floor feed a little life that needs no sun at all
+    for (const v of this.vents) {
+      this.seaFood[v] = this.seaFood[v]! + 0.06;
+      this.seaBins[v * 3] = this.seaBins[v * 3]! + 0.06;
+    }
+    this.ozoneHole *= Math.exp(-0.01 * tau);
+    let oldest = -1, age = 60;
+    for (let r = 0; r < R; r++) if (this.forestAge[r]! > age) { age = this.forestAge[r]!; oldest = r; }
+    this.oldestForest = oldest;
     this.totalLandCover = landTotal;
     this.totalSeaCover = seaTotal;
     // photosynthesis fills the air with oxygen; rock weathering and fire slowly remove it
@@ -340,7 +359,21 @@ export class Plants {
     const canopy = world.canopy;
     const flora = world.flora;
     for (let i = 0; i < world.grid.count; i++) {
-      if (elevation[i]! <= seaLevel) { vegetation[i] = 0; canopy[i] = 0; flora[i] = -1; continue; }
+      if (elevation[i]! <= seaLevel) {
+        vegetation[i] = 0; canopy[i] = 0; flora[i] = -1;
+        // sea life: plankton everywhere it grows, coral in warm clear shallows (bleached white by heat)
+        const rs = reg.regionOf[i]!;
+        const sea = Math.max(0.2, 1 - reg.land[rs]!);
+        const cover = this.seaCover[rs]! / sea;
+        const patch = 0.55 + 0.45 * Math.sin(i * 12.9898 + rs * 4.1);
+        world.bloom[i] = Math.min(1, cover * 1.6 * patch);
+        const depth = seaLevel - elevation[i]!;
+        const t = meanT[i]!;
+        const coral = depth < 0.3 && cover > 0.05 ? sat((t - 19) / 4) * sat(cover * 4) : 0;
+        world.reef[i] = t > 30.5 ? -coral : coral;
+        continue;
+      }
+      world.bloom[i] = 0; world.reef[i] = 0;
       const r = reg.regionOf[i]!;
       const base = r * SLOTS;
       const land = Math.max(0.15, reg.land[r]!);

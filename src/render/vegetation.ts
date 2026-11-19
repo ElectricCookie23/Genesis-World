@@ -33,6 +33,9 @@ function merge(parts: { geo: BufferGeometry; color: [number, number, number]; sw
   return g;
 }
 
+const AUTUMN_GOLD = new Color(0.62, 0.42, 0.06);
+const AUTUMN_RED = new Color(0.55, 0.14, 0.05);
+const AUTUMN_BROWN = new Color(0.25, 0.17, 0.1);
 const TRUNK: [number, number, number] = [0.32, 0.22, 0.15];
 const LEAF: [number, number, number] = [1, 1, 1];
 
@@ -72,7 +75,14 @@ function tuft(): BufferGeometry {
   return merge(parts);
 }
 
-const KINDS = ['conifer', 'broadleaf', 'succulent', 'shrub', 'tuft'] as const;
+function mushroom(): BufferGeometry {
+  return merge([
+    { geo: new CylinderGeometry(0.09, 0.13, 0.75, 6).translate(0, 0.37, 0), color: [0.85, 0.82, 0.74], sway: 0.1 },
+    { geo: new ConeGeometry(0.62, 0.42, 8).translate(0, 0.92, 0), color: LEAF, sway: 0.25 },
+  ]);
+}
+
+const KINDS = ['conifer', 'broadleaf', 'succulent', 'shrub', 'tuft', 'mushroom'] as const;
 type Kind = (typeof KINDS)[number];
 
 function hash(n: number): number {
@@ -94,11 +104,13 @@ export class Vegetation {
   private lastBuild = 0;
   private triCentre: Float32Array;
   maxInstances: number;
+  /** Season signal: sun declination over axial tilt, -1..1 (0 when seasons are not shown). */
+  autumn = 0;
 
   constructor(private grid: Grid, maxInstances: number) {
     this.maxInstances = maxInstances;
-    const geos: Record<Kind, BufferGeometry> = { conifer: conifer(), broadleaf: broadleaf(), succulent: succulent(), shrub: shrub(), tuft: tuft() };
-    const share: Record<Kind, number> = { conifer: 0.22, broadleaf: 0.22, succulent: 0.06, shrub: 0.2, tuft: 0.3 };
+    const geos: Record<Kind, BufferGeometry> = { conifer: conifer(), broadleaf: broadleaf(), succulent: succulent(), shrub: shrub(), tuft: tuft(), mushroom: mushroom() };
+    const share: Record<Kind, number> = { conifer: 0.2, broadleaf: 0.2, succulent: 0.06, shrub: 0.2, tuft: 0.28, mushroom: 0.06 };
     for (const kind of KINDS) {
       const cap = Math.max(64, Math.floor(maxInstances * share[kind]));
       const material = new MeshBasicNodeMaterial();
@@ -215,6 +227,8 @@ export class Vegetation {
         let kind: Kind;
         if (hv < 0.16) kind = 'tuft';
         else if (hv < 0.36) kind = 'shrub';
+        // glowing, shade-loving giants grow as mushrooms rather than trees
+        else if (genes && genes[PG.Glow]! > 0.5 && genes[PG.WaterNeed]! > 0.55) kind = 'mushroom';
         else kind = leaf < 0.33 ? 'conifer' : leaf > 0.74 ? 'succulent' : 'broadleaf';
         const slot = this.byKind.get(kind)!;
         const n = counts.get(kind)!;
@@ -237,6 +251,12 @@ export class Vegetation {
         const flower = genes && fruit > 0.45 && hash(t * 97 + k * 13) < 0.25;
         if (flower) color.setHSL(genes![PG.FlowerHue]!, 0.75, 0.6);
         else color.setHSL(hue + (hash(t + k * 5) - 0.5) * 0.04, 0.5 + 0.2 * (1 - leaf), kind === 'tuft' ? 0.36 : 0.22 + 0.12 * hash(t * 11 + k));
+        // autumn: where the cold season is coming, broad leaves turn gold and red, then brown
+        if (kind === 'broadleaf' && this.autumn !== 0) {
+          const lat = up.y;
+          const fall = Math.max(0, Math.min(1, -this.autumn * Math.sign(lat) * Math.min(1, Math.abs(lat) * 2.2)));
+          if (fall > 0.15) { const tone = hash(t * 5 + k * 3); color.lerp(tone < 0.5 ? AUTUMN_GOLD : AUTUMN_RED, Math.min(1, fall * 1.4)); if (fall > 0.85) color.lerp(AUTUMN_BROWN, 0.6); }
+        }
         slot.mesh.setColorAt(n, color);
         slot.glow.setXY(n, genes && genes[PG.Glow]! > 0.5 ? genes[PG.Glow]! : 0, size);
         counts.set(kind, n + 1);

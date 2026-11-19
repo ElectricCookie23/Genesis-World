@@ -1,7 +1,7 @@
 // The whole deterministic simulation. Runs in the worker and in headless tests.
 import { RNG, hashSeed } from './rng';
 import { BIOME_NAMES, buildGrid, createWorld, GRID_N, type Grid, type World } from './world';
-import { carveFjords, computeDrainage, erode, erupt, uplift, generateTerrain, impact, type GeologyState, type VolcanoSite } from './geology';
+import { carveFjords, computeDrainage, countContinents, driftPlates, erode, erupt, uplift, generateTerrain, impact, type GeologyState, type VolcanoSite } from './geology';
 import { classifyBiomes, createClimate, updateMoisture, updateSnow, updateTemperature, type ClimateState } from './climate';
 import { EventLog, type SimEvent } from './events';
 import { buildRegions, updateRegions, type Regions } from './regions';
@@ -86,6 +86,18 @@ export class Simulation {
   /** Regions holding a monolith. */
   monoliths: number[] = [];
   private sunNoted = false;
+  private driftAcc = 0;
+  private continentTimer = 0;
+  private superContinent = false;
+  /** Moons in the sky (0 after the moon is shattered into a ring). */
+  moons = 1;
+  ring = false;
+  /** This world circles two suns. */
+  binary = false;
+  private bleachNoted = false;
+  private notedOnce = new Set<string>();
+  /** Fine cell of the oldest living forest, or -1. */
+  oldestTreeCell = -1;
   private snowballNoted = false;
   private richAirNoted = false;
   /** Storm cells: dense rain cloud with lightning, drifting with the wind. */
@@ -122,6 +134,9 @@ export class Simulation {
     this.nameRng = this.rng.fork('names');
     this.weatherRng = this.rng.fork('weather');
     this.eternalHome = this.weatherRng.int(this.grid.count);
+    this.binary = this.rng.fork('suns').chance(0.14);
+    // hydrothermal vents: undersea volcanic sites
+    for (const v of this.geology.volcanoes) if (this.world.elevation[v.cell]! < -0.5) this.plants.vents.add(this.regions.regionOf[v.cell]!);
     this.civRng = this.rng.fork('civilization');
     this.cometPeriod = this.lifeRng.range(18e6, 34e6);
     this.cometNext = this.cometPeriod * this.lifeRng.range(0.4, 1);
@@ -206,6 +221,24 @@ export class Simulation {
     this.weather(dt);
     this.updateEras(dt);
     this.geologyEvents(dt);
+    // continents drift: slow enough that it only shows at high time speeds
+    this.driftAcc += dt;
+    if (this.driftAcc >= 2e6) {
+      driftPlates(w, this.driftAcc);
+      this.driftAcc = 0;
+      this.terrainDirty = true;
+      computeDrainage(w);
+      if (++this.continentTimer % 4 === 0) {
+        const land = countContinents(w);
+        if (!this.superContinent && land.largestShare > 0.78) {
+          this.superContinent = true;
+          this.emit({ type: 'supercontinent', title: 'A supercontinent forms', description: 'The drifting lands have run together into one vast continent. Its heart is far from any sea and turns to desert.', importance: 2 });
+        } else if (this.superContinent && land.largestShare < 0.55) {
+          this.superContinent = false;
+          this.emit({ type: 'supercontinent', title: 'The supercontinent breaks apart', description: 'Rifts open across the great land and the sea floods in. Its pieces begin to drift away from one another, each carrying its own cargo of life.', causes: this.events.last('supercontinent') ? [this.events.last('supercontinent')!.id] : [], importance: 2 });
+        }
+      }
+    }
     this.ecoAcc += dt / ECO_YEARS;
     if (this.ecoAcc >= 0.02) {
       const tau = Math.min(1, this.ecoAcc);
@@ -622,6 +655,14 @@ export class Simulation {
       }
       ev = note('Fire from a clear sky', 'A bolt falls from a cloudless sky and the land below it burns.');
     }
+    else if (tool === 'shatter') {
+      if (this.moons > 0) {
+        this.moons = 0;
+        this.ring = true;
+        c.ringShadow = 5;
+        ev = note('The moon is broken', 'The moon comes apart in silence. Within an age its wreckage has spread into a bright ring, and a band of permanent shadow lies along the equator.');
+      }
+    }
     else if (tool === 'generay') { this.creatures.irradiate(region, this.lifeRng, 4); ev = note('A strange light', 'A beam of unseen light sweeps the land. Everything born there afterwards is a little different from its parents.'); }
     else if (tool === 'comet') { this.cometNext = this.simYear; ev = note('A comet is called', 'A new light with a long tail swings in from the dark, as if summoned.'); }
     else if (tool === 'tilt') { c.tilt = c.tilt > 0.6 ? 0.12 : c.tilt + 0.17; ev = note('The world tips', 'The axis of the world leans to a new angle. The seasons will never be what they were.'); }
@@ -695,7 +736,8 @@ export class Simulation {
     }
     if (r.chance(Math.min(0.1, 0.00012 * tau))) {
       cr.mutationBoost = 4;
-      const ev = this.emit({ type: 'supernova', title: 'A new star blazes', description: 'A nearby star dies in a blast brighter than the moon. Its light is visible by day for a season, and its unseen rays burn through the high air.', importance: 3 });
+      this.plants.ozoneHole = 0.75;
+      const ev = this.emit({ type: 'supernova', title: 'A new star blazes', description: 'A nearby star dies in a blast brighter than the moon. Its light is visible by day for a season, and its unseen rays strip away the ozone veil. Until it heals, the land lies open to the sun.', importance: 3 });
       const all: number[] = [], kill: number[] = [];
       for (let k = 0; k < this.regions.count; k++) if (this.regions.land[k]! > 0.3) { all.push(k); kill.push(0.14); }
       cr.disaster({ regions: all, kill, eventId: ev.id });
@@ -714,6 +756,61 @@ export class Simulation {
           this.emit({ type: 'invasion', cellId: this.regions.centre[sp.home]!, title: `${sp.name} invades`, description: `The fallen seas have opened a land bridge, and ${sp.name} is pouring across it into country that has never known anything like it.`, causes: [this.seaEvent, sp.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [sp.id] });
         }
         this.lastRanges.set(sp.id, sp.regions);
+      }
+    }
+    const once = (key: string) => { if (this.notedOnce.has(key)) return false; this.notedOnce.add(key); return true; };
+    // a wandering body is captured as a second moon
+    if (this.moons === 1 && r.chance(Math.min(0.05, 0.00018 * tau))) {
+      this.moons = 2;
+      const ev = this.emit({ type: 'second-moon', title: 'A second moon', description: 'A wandering lump of rock strays too close and cannot leave. From now on two moons cross the night, and the tides keep a more complicated time.', importance: 3 });
+      this.civ.omen(this, ev.id, this.civRng);
+    }
+    // coral bleaches when the water gets too hot
+    if (this.milestoneTimer % 16 === 0) {
+      let bleached = 0, alive = 0;
+      const reef = this.world.reef;
+      for (let i = 0; i < reef.length; i += 3) { if (reef[i]! < -0.2) bleached++; else if (reef[i]! > 0.2) alive++; }
+      if (alive > 20 && once('reefs')) this.emit({ type: 'reef', title: 'The first reefs', description: 'In warm clear shallows, small animals and the plants that live inside them build stone, layer on layer. Reefs ring the tropical coasts.', causes: this.algaeEvent >= 0 ? [this.algaeEvent] : [], importance: 2 });
+      if (!this.bleachNoted && bleached > 30 && bleached > alive * 0.5) {
+        this.bleachNoted = true;
+        this.emit({ type: 'bleaching', title: 'The reefs turn white', description: 'The sea is too warm. The reefs spit out the living colour inside them and stand bone-white under the water.', causes: this.era.eventId >= 0 ? [this.era.eventId] : [], importance: 1 });
+      } else if (this.bleachNoted && bleached < 5) this.bleachNoted = false;
+      // the oldest forest on the planet
+      const old = this.plants.oldestForest;
+      this.oldestTreeCell = old >= 0 ? this.regions.centre[old]! : -1;
+      if (old >= 0 && once('oldest-tree')) this.emit({ type: 'old-tree', cellId: this.oldestTreeCell, title: 'The oldest tree', description: 'In one valley the forest has never burned and never frozen. Somewhere in it stands the oldest living thing on the planet.', importance: 1 });
+    }
+    if (this.milestoneTimer % 32 === 0) {
+      for (const sp of cr.species) {
+        if (sp.extinctYear >= 0 || !sp.name || sp.pop < 2000) continue;
+        const g = sp.ref, cell = this.regions.centre[sp.home]!, c0 = sp.eventId >= 0 ? [sp.eventId] : [];
+        // cave dwellers: burrowers of the dark that have given up their eyes and colour
+        if (g[G.Burrow]! > 0.62 && g[G.Nocturnal]! > 0.55 && g[G.EyeCount]! < 0.12 && once(`cave-${sp.id}`)) {
+          this.emit({ type: 'cave', cellId: cell, title: `${sp.name} goes under`, description: `${sp.name} lives its whole life in caves now. It is pale and blind, and it does not need to be anything else.`, causes: c0, importance: 1, speciesIds: [sp.id] });
+        }
+        // vent life: deep-sea animals living off the planet's own heat
+        if (this.plants.vents.has(sp.home) && g[G.Water]! > 0.8 && once(`vent-${sp.id}`) && once('vent-first')) {
+          this.emit({ type: 'vent', cellId: cell, title: 'Life at the vents', description: `Far below the reach of sunlight, ${sp.name} crowds around cracks where hot, mineral-black water pours from the sea floor. If the sun went out, it would not notice.`, causes: c0, importance: 1, speciesIds: [sp.id] });
+        }
+        // mass hatchings: glowing sea animals that breed all at once
+        if (g[G.Water]! > 0.7 && g[G.Offspring]! > 0.75 && g[G.Glow]! > 0.4 && once(`hatch-${sp.id}`)) {
+          this.emit({ type: 'hatching', cellId: cell, title: `The ${sp.name.split(' ')[0]} hatching`, description: `On one night of the year every egg of ${sp.name} hatches together. For a few hours the sea is lit from below, coast to coast.`, causes: c0, importance: 1, speciesIds: [sp.id] });
+        }
+      }
+      // symbiosis: a big animal and a small one that are always found together
+      const big = cr.species.filter((x) => x.extinctYear < 0 && x.name && x.ref[G.Size]! > 0.6 && x.pop > 2000);
+      const small = cr.species.filter((x) => x.extinctYear < 0 && x.name && x.ref[G.Size]! < 0.25 && x.ref[G.Diet]! > 0.3 && x.ref[G.Diet]! < 0.7);
+      for (const a of big) for (const b of small) {
+        if (a.home !== b.home || Math.abs(a.ref[G.Water]! - b.ref[G.Water]!) > 0.3 || !once(`sym-${a.id}-${b.id}`)) continue;
+        this.emit({ type: 'symbiosis', cellId: this.regions.centre[a.home]!, title: 'An unlikely pair', description: `${b.name} spends its days picking pests from the hide of ${a.name}. One gets a meal, the other gets clean, and neither would do as well alone.`, causes: [a.eventId, b.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [a.id, b.id] });
+        break;
+      }
+      // meat-eating plants where the soil gives them nothing
+      for (const pl of this.plants.species) {
+        if (pl.extinctYear >= 0 || !pl.established || pl.aquatic) continue;
+        if (pl.genes[PG.Thorns]! > 0.65 && pl.genes[PG.Toxicity]! > 0.5 && pl.genes[PG.Growth]! < 0.4 && once(`carn-${pl.id}`)) {
+          this.emit({ type: 'carnivorous-plant', title: `${pl.name} learns to eat`, description: `On soil too poor to live on, ${pl.name} has turned its spines and poisons into traps. It feeds on whatever crawls into it.`, causes: pl.eventId >= 0 ? [pl.eventId] : [], importance: 1 });
+        }
       }
     }
     if (!this.richAirNoted && this.plants.oxygen > 0.3) {
@@ -1150,6 +1247,10 @@ export class Simulation {
     } else if (kind === 'city') {
       const ev = this.emit({ type: 'settlement', cellId: cell, title: `${st!.name} becomes a city`, description: `${st!.name} is home to more people than any of them could ever know by name.`, causes: [st!.eventId], importance: 2, speciesIds: [speciesId] });
       this.milestone('first-city', 'First city', `From orbit, a new light shows on the night side. It does not flicker like a fire. It is ${st!.name}, the first city.`, cell, [ev.id], [speciesId]);
+    } else if (kind === 'music') {
+      this.emit({ type: 'music', cellId: cell, title: `Music at ${st!.name}`, description: `At ${st!.name}, ${sp.name} has begun to make sounds for no reason but the pleasure of them, and to make them together, in time.`, causes: [st!.eventId], importance: 2, speciesIds: [speciesId] });
+    } else if (kind === 'trade') {
+      this.emit({ type: 'trade', cellId: cell, title: 'The first ships', description: `Boats put out from ${st!.name} carrying more than fishermen. Across the water, another city is waiting for what they bring.`, causes: [st!.eventId], importance: 2, speciesIds: [speciesId] });
     } else if (kind === 'constellation') {
       const gone = this.creatures.species[cause]!;
       const why = this.extinctEventOf.get(gone.id);
@@ -1183,7 +1284,8 @@ export class Simulation {
       this.emit({ type: 'rediscovery', cellId: cell, title: `The ruins under ${st!.name}`, description: `Digging foundations at ${st!.name}, ${sp.name} break into walls no one of their kind ever built. ${elder.name} lived here once, ${Math.round((this.simYear - ruin.ruined) / 1e6 * 10) / 10} million years ago.`, causes: [st!.eventId, ruin.eventId].filter((x) => x >= 0), importance: 2, speciesIds: [speciesId, elder.id] });
     } else if (kind === 'painting') {
       const prey = this.creatures.species[cause]!;
-      this.emit({ type: 'painting', cellId: cell, title: `Paintings at ${st!.name}`, description: `On a cave wall near ${st!.name}, in ochre and soot, someone has painted ${prey.name}. The animals are running.`, causes: [st!.eventId, prey.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [speciesId, prey.id] });
+      this.emit({ type: 'painting', cellId: cell, title: `Paintings at ${st!.name}`, description: `On a cave wall near ${st!.name}, in ochre and soot, someone has painted ${prey.name}. The animals are running.`, causes: [st!.eventId, prey.eventId].filter((x) => x >= 0), importance: this.notedOnce.has('painting') ? 0 : 1, speciesIds: [speciesId, prey.id] });
+      this.notedOnce.add('painting');
     } else if (kind === 'farms') {
       const ev = this.emit({ type: 'settlement', cellId: cell, title: `Fields at ${st!.name}`, description: `The people of ${st!.name} no longer only gather seeds. They plant them, and wait.`, causes: [st!.eventId], importance: 0, speciesIds: [speciesId] });
       this.milestone('first-farm', 'First farms', `Around ${st!.name} the wild growth gives way to rows. For the first time, a species decides what will grow.`, cell, [ev.id], [speciesId]);

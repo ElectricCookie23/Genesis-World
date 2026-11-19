@@ -31,6 +31,8 @@ export class Music {
   private surfGain: any = null;
   private rainGain: any = null;
   private rumble: any = null;
+  private civMusic = false;
+  private civTimer = 0;
   private timer = 0;
   private mood: Mood = { stage: 'barren', era: 'none', life: 0, hush: false };
   private volume = 0.6;
@@ -99,6 +101,22 @@ export class Music {
     if (!this.master) return;
     const db = this.volume <= 0.001 ? -80 : -30 + 30 * this.volume;
     this.master.volume.rampTo(db, 1.5);
+  }
+
+  /** Once a people makes music of its own, a simple melody in their scale joins the score. */
+  setCivMusic(on: boolean, seed: number): void {
+    if (on === this.civMusic || !this.tone || !this.voice) { this.civMusic = on && !!this.tone; return; }
+    this.civMusic = on;
+    window.clearInterval(this.civTimer);
+    if (!on) return;
+    const scale = ['D4', 'E4', 'G4', 'A4', 'B4', 'D5', 'E5'];
+    let s = (seed >>> 0) || 7;
+    const motif = Array.from({ length: 6 }, () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return scale[s % scale.length]!; });
+    this.civTimer = window.setInterval(() => {
+      if (this.mood.hush) return;
+      const t = this.tone.now();
+      motif.forEach((n, i) => { try { this.voice.triggerAttackRelease(n, 0.35, t + i * 0.42, 0.22); } catch { /* ignore */ } });
+    }, 19000);
   }
 
   /** A creature's call: big bodies rumble, small ones chirp. size is the size gene 0..1. */

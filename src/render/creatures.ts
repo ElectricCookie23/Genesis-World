@@ -125,6 +125,17 @@ export function buildCreatureGeometry(g: Float32Array): BufferGeometry {
     const geo = new BoxGeometry(L * 0.6, H * 0.04, W * 2.2).translate(0, bodyY - H * 0.1, 0);
     parts.push({ geo, kind: 0, weight: noWeight, phase: 0, tint: 1 });
   }
+  // gas-bladder drifters: slow winged bodies carry a great pale float above them
+  if (hasLimbs && kind === Limb.Wings && g[G.Metabolism]! < 0.3 && g[G.Size]! > 0.45) {
+    parts.push({ geo: new IcosahedronGeometry(0.5, 1).scale(L * 1.1, H * 2.2, W * 2.2).translate(0, bodyY + H * 1.7, 0), kind: 0, weight: noWeight, phase: 0, tint: 2 });
+  }
+  // living islands and walking forests: giants that carry a grove on their backs
+  if (g[G.Size]! > 0.85 && (g[G.Water]! > 0.7 ? g[G.Armor]! > 0.25 : g[G.ColorChange]! > 0.6)) {
+    for (let t = 0; t < 5; t++) {
+      const tx = -L * 0.3 + t * L * 0.15, tz = (t % 2 ? 1 : -1) * W * 0.18;
+      parts.push({ geo: new ConeGeometry(H * 0.22, H * 0.9, 5).translate(tx, bodyY + H * 0.85, tz), kind: 0, weight: noWeight, phase: 0, tint: 6 });
+    }
+  }
   if (g[G.Ornament]! > 0.4) {
     const ch = H * 1.6 * g[G.Ornament]!;
     const crest = new ConeGeometry(L * 0.3, ch, 3).scale(1, 1, 0.08).translate(-0.05, bodyY + H * 0.45 + ch * 0.45, 0);
@@ -143,7 +154,7 @@ export function buildCreatureGeometry(g: Float32Array): BufferGeometry {
   const eyeC = new Color(0.03, 0.03, 0.04);
   const hornC = new Color(0.85, 0.8, 0.68);
   const glowC = new Color().setHSL(g[G.GlowHue]!, 0.9, 0.55);
-  const glows = g[G.Glow]! > 0.5;
+  const glows = g[G.Glow]! > 0.5 || (g[G.Electric]! > 0.6 && g[G.Water]! > 0.6);
   const pattern = Math.min(3, Math.floor(g[G.PatternType]! * 4));
   const pScale = 4 + 18 * g[G.PatternScale]!;
   const c = new Color();
@@ -164,6 +175,7 @@ export function buildCreatureGeometry(g: Float32Array): BufferGeometry {
       } else if (p.tint === 2) c.copy(second).multiplyScalar(1.3);
       else if (p.tint === 3) c.copy(shellC);
       else if (p.tint === 4) c.copy(eyeC);
+      else if (p.tint === 6) c.setRGB(0.12, 0.42, 0.16);
       else c.copy(hornC);
       const lit = (glows && (marked || p.tint === 2)) || p.glow;
       for (let k = 0; k < 3; k++, o++) {
@@ -208,8 +220,12 @@ export interface Individual {
   fed: number;
   /** Current world position and whether it is moving, updated every frame. */
   pos: Vector3;
+  fwd: Vector3;
   moving: number;
   cell: number;
+  /** 0..1 how much it sleeps by day (nocturnal) */
+  night: number;
+  larva: boolean;
 }
 
 let sharedMaterial: MeshBasicNodeMaterial | null = null;
@@ -296,14 +312,22 @@ export class CreatureLayer {
   private slot(id: number): Slot | undefined {
     let s = this.slots.get(id);
     if (s) return s;
-    const info = this.species.get(id);
+    const larval = id < 0;
+    const info = this.species.get(larval ? -id - 1 : id);
     if (!info) return undefined;
     const iPos = new InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
     const iQuat = new InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
     const iData = new InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
     const iTint = new InstancedBufferAttribute(new Float32Array(CAP), 1);
     for (const a of [iPos, iQuat, iData, iTint]) a.setUsage(DynamicDrawUsage);
-    const geo = buildCreatureGeometry(info.genes);
+    let genes = info.genes;
+    if (larval) {
+      // the young of a metamorphosing species look nothing like the adults: a soft, limbless grub
+      genes = info.genes.slice();
+      genes[G.LimbPairs] = 0; genes[G.Neck] = 0; genes[G.Horn] = 0; genes[G.Armor] = 0; genes[G.Ornament] = 0; genes[G.Tail] = 0.15;
+      genes[G.Segments] = 1; genes[G.BodyRatio] = 0.8; genes[G.EyeCount] = 0.2; genes[G.Hue] = (genes[G.Hue]! + 0.12) % 1; genes[G.PatternType] = 0.3;
+    }
+    const geo = buildCreatureGeometry(genes);
     geo.setAttribute('iPos', iPos);
     geo.setAttribute('iQuat', iQuat);
     geo.setAttribute('iData', iData);
@@ -363,7 +387,8 @@ export class CreatureLayer {
         list.push({
           key, species: h.species[i]!, region: r, medium, home, e1, e2, h: hash(key * 31 + 5),
           size: 0.0006 + 0.0038 * Math.pow(info.genes[G.Size]!, 1.3), social: info.genes[G.Sociality]!, fed: h.fed[i]!,
-          pos: home.clone(), moving: 0, cell,
+          pos: home.clone(), fwd: e1.clone(), moving: 0, cell, night: info.genes[G.Nocturnal]!,
+          larva: info.genes[G.Metamorphosis]! > 0.6 && hash(key * 53 + 7) < 0.35,
         });
       }
     }
@@ -414,7 +439,7 @@ export class CreatureLayer {
   prune(): InstancedMesh[] {
     const gone: InstancedMesh[] = [];
     for (const [id, s] of this.slots) {
-      const info = this.species.get(id);
+      const info = this.species.get(id < 0 ? -id - 1 : id);
       if (!info || info.extinctYear >= 0) {
         gone.push(s.mesh);
         s.mesh.geometry.dispose();
@@ -483,7 +508,7 @@ export class CreatureLayer {
   }
 
   /** Move everyone and fill the instance buffers. */
-  update(time: number, dist: number): void {
+  update(time: number, dist: number, sunDir: Vector3): void {
     if (!this.cells) return;
     for (const s of this.slots.values()) s.used = 0;
     if (dist > 1.25 || !this.individuals.length) {
@@ -495,7 +520,7 @@ export class CreatureLayer {
     const sea = 1 + uSeaKm.value * EXAG;
     const boost = 1 + Math.min(2.6, dist * 5);
     for (const ind of this.individuals) {
-      const slot = this.slot(ind.species);
+      const slot = this.slot(ind.larva ? -ind.species - 1 : ind.species);
       if (!slot || slot.used >= CAP) continue;
       this.place(ind, time, a);
       this.place(ind, time + 0.4, b);
@@ -506,13 +531,17 @@ export class CreatureLayer {
       if (fwd.lengthSq() < 1e-14) fwd.copy(ind.e1);
       fwd.normalize();
       right.crossVectors(fwd, up).normalize();
-      const size = ind.size * boost;
+      // nocturnal animals lie low by day, and day animals by night
+      const sun = a.x * sunDir.x + a.y * sunDir.y + a.z * sunDir.z;
+      const asleep = ind.night > 0.6 ? sun > 0.1 : ind.night < 0.3 ? sun < -0.15 : false;
+      const size = ind.size * boost * (ind.larva ? 0.5 : 1);
+      ind.fwd.copy(fwd);
       let r: number;
       if (ind.medium === 1) r = Math.max(this.groundRadius(ind, a), sea);
       else if (ind.medium === 0) r = sea - size * (0.5 + 0.8 * ind.h);
-      else r = Math.max(this.groundRadius(ind, a), sea) + 0.0035 + size * 1.5 + 0.0012 * Math.sin(time * 0.6 + ind.h * 30);
+      else r = Math.max(this.groundRadius(ind, a), sea) + (asleep ? size * 0.2 : 0.0035 + size * 1.5 + 0.0012 * Math.sin(time * 0.6 + ind.h * 30));
       ind.pos.copy(a).multiplyScalar(r);
-      ind.moving = Math.min(1, speed / (ind.medium === 2 ? 0.0009 : 0.00035));
+      ind.moving = asleep && ind.medium !== 0 ? 0 : Math.min(1, speed / (ind.medium === 2 ? 0.0009 : 0.00035));
       m.makeBasis(fwd, up, right);
       q.setFromRotationMatrix(m);
       const i = slot.used++;

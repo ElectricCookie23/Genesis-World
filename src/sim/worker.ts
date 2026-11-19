@@ -81,6 +81,8 @@ function snapshotCells(s: Simulation): { cells: CellSnapshot; transfer: Transfer
     lava: w.lava.slice(),
     lights: w.lights.slice(),
     fields: w.fields.slice(),
+    reef: w.reef.slice(),
+    bloom: w.bloom.slice(),
     canopy: w.canopy.slice(),
     flora: w.flora.slice(),
     flow: w.flow.slice(),
@@ -92,7 +94,7 @@ function snapshotCells(s: Simulation): { cells: CellSnapshot; transfer: Transfer
   s.terrainDirty = false;
   const transfer = [
     cells.elevation.buffer, cells.temperature.buffer, cells.moisture.buffer, cells.biome.buffer,
-    cells.vegetation.buffer, cells.snow.buffer, cells.cloud.buffer, cells.ash.buffer, cells.lava.buffer, cells.lights.buffer, cells.fields.buffer,
+    cells.vegetation.buffer, cells.snow.buffer, cells.cloud.buffer, cells.ash.buffer, cells.lava.buffer, cells.lights.buffer, cells.fields.buffer, cells.reef.buffer, cells.bloom.buffer,
     cells.canopy.buffer, cells.flora.buffer, cells.flow.buffer, cells.downhill.buffer, cells.windE.buffer, cells.windN.buffer,
   ];
   return { cells, transfer };
@@ -126,6 +128,12 @@ function stats(s: Simulation): WorldStats {
     population: s.creatures.totalPop,
     landCover: s.plants.totalLandCover / Math.max(1, s.regions.count),
     storms: s.storms.map((x) => x.cell),
+    moons: s.moons,
+    ring: s.ring,
+    binary: s.binary,
+    oldestTreeCell: s.oldestTreeCell,
+    civMusic: s.civ.hasMusic,
+    monoliths: s.monoliths.map((r) => s.regions.centre[r]!),
     plantToxin: meanToxin(s),
     toxinResist: meanResist(s),
     settlements: s.civ.living,
@@ -277,6 +285,13 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         post({ type: 'loaded', cells, stats: stats(sim), events: sim.events.events }, transfer);
         break;
       }
+      case 'fork':
+        if (sim) {
+          rewinds.push({ simYear: sim.simYear, title: 'Fork point', save: saveSimulation(sim, 'fork') });
+          if (rewinds.length > 6) rewinds.shift();
+          post({ type: 'timeline', points: rewinds.map((r, index) => ({ index, simYear: r.simYear, title: r.title })) });
+        }
+        break;
       case 'rewind': {
         const point = rewinds[msg.index];
         if (!point) break;

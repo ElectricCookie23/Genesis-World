@@ -42,10 +42,18 @@ export const cloudDensity = Fn(([dir, cover]: [N, N]) => {
   return smoothstep(threshold, threshold.add(0.34), n);
 });
 
+/** A cheap stand-in for cloud density (one drift phase, three octaves), good enough for shadows. */
+const cloudDensityCheap = Fn(([dir, cover]: [N, N]) => {
+  const n = mx_fractal_noise_float(advect(dir, fract(uTime.mul(0.012)).sub(0.5)).mul(3.4), 3, 2.1, 0.5);
+  const amount = cover.mul(0.95).add(0.05).mul(uCloudAmount).add(uSteam);
+  const threshold = float(0.5).sub(amount.mul(0.7));
+  return smoothstep(threshold, threshold.add(0.34), n);
+});
+
 /** Light reaching the ground at world position p (1 = full sun). */
 export const cloudShadowAt = Fn(([p, cover]: [N, N]) => {
   const dir = normalize(normalize(p).add(uSunDir.mul(0.02)));
-  return float(1).sub(cloudDensity(dir, cover).mul(0.62));
+  return float(1).sub(cloudDensityCheap(dir, cover).mul(0.62));
 });
 
 export class CloudLayer {
@@ -71,7 +79,7 @@ export class CloudLayer {
     const sunHeight = dot(dir, L);
     const day = smoothstep(-0.2, 0.25, sunHeight);
     // cheap self-shadowing: denser toward the sun means darker here
-    const toward = cloudDensity(normalize(dir.add(L.mul(0.035))), cover);
+    const toward = cloudDensityCheap(normalize(dir.add(L.mul(0.035))), cover);
     const shade = float(1).sub(toward.mul(0.55)).mul(mix(0.55, 1.0, max(sunHeight, 0)));
     const sunColor = mix(vec3(1.0, 0.42, 0.2), vec3(1.0, 0.98, 0.96), smoothstep(-0.05, 0.35, sunHeight));
     // storm cells: very dense cloud turns grey underneath

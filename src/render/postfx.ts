@@ -2,7 +2,7 @@
 import { ACESFilmicToneMapping, RenderPipeline, type Camera, type Scene, type WebGPURenderer } from 'three/webgpu';
 import { float, fract, length, mix, pass, renderOutput, screenUV, sin, dot, smoothstep, uniform, vec2, vec3, vec4 } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
-import { uFlash, uGradeTint, uTime } from './common';
+import { uFlash, uGradeTint, uTime, uUnderwater } from './common';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export const uBloomStrength = uniform(0.5);
@@ -36,6 +36,8 @@ export class PostFX {
       hdr = color.add((glow as any).mul(uBloomStrength));
     }
     hdr = hdr.mul(vec4(vec3(uGradeTint), 1));
+    // under water: light is absorbed toward blue-green
+    hdr = mix(hdr, hdr.mul(vec4(0.22, 0.55, 0.72, 1)).add(vec4(0.0, 0.035, 0.07, 0)), uUnderwater);
     this.pipeline.outputColorTransform = false;
     const mapped: any = renderOutput(hdr);
     const uv = screenUV;

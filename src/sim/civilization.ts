@@ -36,6 +36,8 @@ export class Civilization {
   maxTech = 0;
   spaceAgeYear = -1;
   departed = false;
+  hasMusic = false;
+  private ships = false;
   private industrial = false;
   private occupied = new Map<number, number>(); // region -> settlement id
 
@@ -91,11 +93,12 @@ export class Civilization {
       }
       if (st.tech >= 0.3 && before < 0.3) sim.civEvent('village', st.species, st.cell, st.id);
       if (st.tech >= 0.6 && before < 0.6) sim.civEvent('city', st.species, st.cell, st.id);
+      if (!this.hasMusic && st.tech > 0.35) { this.hasMusic = true; sim.civEvent('music', st.species, st.cell, st.id); }
       // star lore: villagers name a constellation after a vanished animal whose bones they find
       if (!st.stars && st.tech > 0.4) {
         st.stars = true;
         const gone = cr.species.filter((x) => x.extinctYear >= 0 && x.peakRegions >= 10 && x.name);
-        if (gone.length) sim.civEvent('constellation', st.species, st.cell, st.id, rng.pick(gone).id);
+        if (gone.length && rng.chance(0.12)) sim.civEvent('constellation', st.species, st.cell, st.id, rng.pick(gone).id);
       }
       // war: neighbours of another kind, or of another faith, sometimes fight
       if (st.tech > 0.3 && rng.chance(Math.min(0.2, 0.012 * tau))) {
@@ -112,7 +115,7 @@ export class Civilization {
         }
       }
       // sickness travels the roads between crowded towns
-      if (st.tech > 0.5 && st.pop > 20 && rng.chance(Math.min(0.2, 0.004 * tau))) {
+      if (st.tech > 0.5 && st.pop > 20 && rng.chance(Math.min(0.2, 0.0012 * tau))) {
         st.pop *= 0.5;
         sim.civEvent('city-plague', st.species, st.cell, st.id);
         for (let j = 0; j < reg.grid.ncount[st.region]!; j++) {
@@ -285,6 +288,27 @@ export class Civilization {
             const n2 = g.neighbors[nb * 6 + k]!;
             if (elevation[n2]! > seaLevel) fields[n2] = Math.max(fields[n2]!, 0.6);
           }
+        }
+      }
+      // sea trade: lamp-lit ships between cities that face the same water
+      if (st.tech > 0.7 && this.settlements.length > 3) {
+        const other = this.settlements[(st.id * 7 + 3) % this.settlements.length]!;
+        const ax = g.pos[st.cell * 3]!, ay = g.pos[st.cell * 3 + 1]!, az = g.pos[st.cell * 3 + 2]!;
+        const tx = g.pos[other.cell * 3]!, ty = g.pos[other.cell * 3 + 1]!, tz = g.pos[other.cell * 3 + 2]!;
+        if (other.ruined < 0 && other.id !== st.id && other.tech > 0.5 && ax * tx + ay * ty + az * tz > 0.8) {
+          let cur = st.cell, wet = 0;
+          for (let step = 0; step < 40 && cur !== other.cell; step++) {
+            let best = cur, bd = g.pos[cur * 3]! * tx + g.pos[cur * 3 + 1]! * ty + g.pos[cur * 3 + 2]! * tz;
+            for (let k = 0; k < g.ncount[cur]!; k++) {
+              const nb = g.neighbors[cur * 6 + k]!;
+              const d = g.pos[nb * 3]! * tx + g.pos[nb * 3 + 1]! * ty + g.pos[nb * 3 + 2]! * tz;
+              if (d > bd) { bd = d; best = nb; }
+            }
+            if (best === cur) break;
+            cur = best;
+            if (elevation[cur]! <= seaLevel) { lights[cur] = Math.max(lights[cur]!, 0.14); wet++; }
+          }
+          if (wet > 2 && !this.ships) { this.ships = true; sim.civEvent('trade', st.species, st.cell, st.id); }
         }
       }
       // roads: lit ways between neighbouring towns

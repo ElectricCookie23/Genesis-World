@@ -6,7 +6,7 @@ import {
   Fn, Loop, attribute, cameraPosition, cos, dot, exp, float, floor, fract, length, max, min, mix, mx_fractal_noise_float, normalWorld, normalize,
   positionLocal, positionWorld, pow, select, sin, smoothstep, sqrt, vec3,
 } from 'three/tsl';
-import { ATMO_RADIUS, MOON_RADIUS, uAtmo, uGradeTint, uHazeTint, uSkyAngle, uSunDir, uTime } from './common';
+import { ATMO_RADIUS, MOON_RADIUS, uAtmo, uGradeTint, uHazeTint, uSkyAngle, uSun2, uSun2Dir, uSunDir, uTime } from './common';
 import { RNG } from '../sim/rng';
 import { makeNoise, fbm } from '../sim/noise';
 
@@ -114,7 +114,10 @@ export function createSky(): Mesh {
     .add(vec3(0.55, 0.5, 0.62).mul(band).mul(0.022).mul(n1.add(0.4)));
   const mu = dot(dir, uSunDir);
   const sun = vec3(1.0, 0.93, 0.8).mul(smoothstep(0.99955, 0.9998, mu).mul(60).add(pow(max(mu, 0), 900).mul(3)).add(pow(max(mu, 0), 40).mul(0.12)));
-  material.colorNode = stars.add(nebula).add(sun);
+  // binary systems: a smaller, bluer companion sun
+  const mu2 = dot(dir, uSun2Dir);
+  const sun2 = vec3(0.75, 0.86, 1.0).mul(smoothstep(0.99975, 0.9999, mu2).mul(40).add(pow(max(mu2, 0), 1400).mul(2))).mul(uSun2);
+  material.colorNode = stars.add(nebula).add(sun).add(sun2);
   const mesh = new Mesh(new SphereGeometry(400, 48, 32), material);
   mesh.frustumCulled = false;
   mesh.renderOrder = -10;

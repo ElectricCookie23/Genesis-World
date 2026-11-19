@@ -37,3 +37,13 @@ export function radiusForElevation(km: number): number {
 
 /** Lightning bolts: xyz = unit direction of the strike, w = brightness (decays in a blink). */
 export const uBolts = [0, 1, 2, 3].map(() => uniform(new Vector4(0, 1, 0, 0)));
+
+/** A second sun for binary systems: direction and strength (0 when there is only one). */
+export const uSun2Dir = uniform(new Vector3(-1, 0, 0));
+export const uSun2 = uniform(0);
+/** 1 when the planet has a ring: a band of shadow lies along the equator. */
+export const uRing = uniform(0);
+/** How strongly sea life glows at night, 0..1. */
+export const uSeaGlow = uniform(0.35);
+/** 1 when the camera is under water. */
+export const uUnderwater = uniform(0);

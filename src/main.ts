@@ -11,6 +11,8 @@ import { SPEEDS, type FromWorker, type ToWorker } from './shared/protocol';
 import { App } from './ui/App';
 import { closeAll } from './ui/panels';
 import { describeIndividual } from './render/creatures';
+import { placeName } from './sim/names';
+import { RNG } from './sim/rng';
 import { nearestCell } from './sim/world';
 import { GENE_COUNT, G } from './sim/genetics';
 import { formatYear } from './ui/format';
@@ -133,6 +135,8 @@ async function boot(): Promise<void> {
     scene.post.setBloom(q.bloom && adaptive < 1);
     if (scene.vegetation) scene.vegetation.maxInstances = Math.min(mobile ? 15000 : 60000, q.plants * cut);
     if (scene.creatures) scene.creatures.budget = Math.min(mobile ? 1500 : 5000, q.creatures * cut);
+    // blurred glass panels are costly on weak GPUs: use plain dark panels below the high preset
+    document.documentElement.classList.toggle('lite', state.quality === 'low' || state.quality === 'medium' || adaptive >= 1);
   };
   actions.setQuality = (q) => {
     adaptive = 0;
@@ -186,8 +190,62 @@ async function boot(): Promise<void> {
   };
   window.setInterval(() => { if (!state.opening && state.speedIndex > 0) send({ type: 'save', name: 'autosave', slot: 'auto' }); }, 120000);
 
-  actions.setOverlay = (o) => { update({ overlay: o }); scene.setOverlay(o, state.colorblind); };
-  actions.setColorblind = (on) => { update({ colorblind: on }); store.set('genesis:cb', on ? '1' : '0'); scene.setOverlay(state.overlay, on); };
+  const fossilCells = () => [...state.species.values()].filter((x) => x.extinctYear >= 0 && x.peakPop > 2e4).map((x) => x.homeCell);
+  actions.setOverlay = (o) => {
+    update({ overlay: o });
+    scene.setOverlay(o === 'fossils' ? 'none' : o, state.colorblind);
+    scene.setFossils(fossilCells(), o === 'fossils');
+  };
+  actions.setColorblind = (on) => { update({ colorblind: on }); store.set('genesis:cb', on ? '1' : '0'); scene.setOverlay(state.overlay === 'fossils' ? 'none' : state.overlay, on); };
+  actions.fork = () => { send({ type: 'fork' }); update({ notice: 'Fork point saved. Rewind to it from this panel.' }); window.setTimeout(() => update({ notice: '' }), 3000); };
+  // a small invented family for an individual, stable for as long as it is on screen
+  actions.familyOf = (key) => {
+    const r = new RNG((key * 40503) >>> 0);
+    const mother = placeName(r), father = placeName(r);
+    return [`mother ${mother}, father ${father}`, `grandmothers ${placeName(r)} and ${placeName(r)}`, `${1 + r.int(5)} siblings, ${r.int(4)} young`];
+  };
+  // cross-section: a west-to-east slice through the ground under the centre of the view
+  actions.drawSection = (cv) => {
+    const cells = scene.vegetationCells();
+    const ctx = cv.getContext('2d');
+    if (!cells || !ctx) return;
+    const W = cv.width, H = cv.height;
+    scene.cam.focusDir(focusVec);
+    const east = new Vector3(-focusVec.z, 0, focusVec.x).normalize();
+    const span = Math.min(0.5, 0.06 + scene.cam.dist * 0.25);
+    const yOf = (km: number) => H * 0.52 - km * (H / 16);
+    ctx.fillStyle = '#0b0e16'; ctx.fillRect(0, 0, W, H);
+    // sky
+    const sky = ctx.createLinearGradient(0, 0, 0, yOf(0)); sky.addColorStop(0, '#10182c'); sky.addColorStop(1, '#3b5f8f');
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, yOf(cells.seaLevel));
+    let c = scene.cellAt(focusVec.x, focusVec.y, focusVec.z);
+    const p = new Vector3();
+    const col: { e: number; veg: number; snow: number; canopy: number; lava: number }[] = [];
+    for (let x = 0; x < W; x += 2) {
+      p.copy(focusVec).addScaledVector(east, (x / W - 0.5) * 2 * span).normalize();
+      c = nearestCell(grid, p.x, p.y, p.z, c);
+      col.push({ e: cells.elevation[c]!, veg: cells.vegetation[c]!, snow: cells.snow[c]!, canopy: cells.canopy[c]!, lava: cells.lava[c]! });
+    }
+    // water
+    ctx.fillStyle = '#1b4f7a'; ctx.fillRect(0, yOf(cells.seaLevel), W, H);
+    col.forEach((k, i) => {
+      const x = i * 2, top = yOf(k.e);
+      // rock strata: bands that follow the surface loosely, darker with depth
+      const layers = ['#8b7355', '#6f5d4a', '#5a4b40', '#463c36', '#352e2c', '#5b2a1c'];
+      layers.forEach((color, li) => { ctx.fillStyle = color; const y0 = top + li * 22 + Math.sin(i * 0.05 + li) * 5 * li; ctx.fillRect(x, li === 0 ? top : y0, 2, H); });
+      // caves: hollows in the second layer
+      if (k.e > cells.seaLevel && Math.sin(i * 0.37) * Math.sin(i * 0.11 + 2) > 0.72) { ctx.fillStyle = '#14100e'; ctx.fillRect(x, top + 30 + Math.sin(i * 0.2) * 6, 2, 7); }
+      if (k.lava > 0.3) { ctx.fillStyle = '#ff7a2a'; ctx.fillRect(x, top, 2, 40); }
+      if (k.e > cells.seaLevel) {
+        // soil, roots and what grows on top
+        if (k.veg > 0.05) { ctx.fillStyle = '#3d2f22'; ctx.fillRect(x, top, 2, 3 + k.veg * 4); ctx.fillStyle = '#6d5a3a'; if (i % 5 === 0) ctx.fillRect(x, top + 2, 1, 4 + k.canopy * 18); }
+        if (k.veg > 0.1) { ctx.fillStyle = k.canopy > 0.45 ? '#2f7a3c' : '#7fae4a'; ctx.fillRect(x, top - 2 - k.canopy * 16 * k.veg, 2, 2 + k.canopy * 16 * k.veg); }
+        if (k.snow > 1) { ctx.fillStyle = '#eef4fb'; ctx.fillRect(x, top - Math.min(14, k.snow * 0.5), 2, Math.min(14, k.snow * 0.5)); }
+      }
+    });
+    ctx.fillStyle = '#ece7dbaa'; ctx.font = '11px JetBrains Mono, monospace';
+    ctx.fillText('west', 8, 16); ctx.fillText('east', W - 38, 16); ctx.fillText('sea level', 8, yOf(cells.seaLevel) - 4);
+  };
   actions.rewind = (index) => send({ type: 'rewind', index });
   update({ colorblind: store.get('genesis:cb') === '1' });
 
@@ -335,7 +393,7 @@ async function boot(): Promise<void> {
       if (ev.importance >= 3) toasts.push(ev);
       // documentary director: cut to wherever something notable just happened
       if ((state.director || state.postcard) && ev.importance >= 2 && ev.cellId >= 0 && scene.following === null) actions.flyToCell(ev.cellId, 0.9);
-      if (ev.type === 'impact') scene.flash(0.9);
+      if (ev.type === 'impact') { scene.flash(0.9); scene.impactAt(ev.cellId); }
       else if (ev.type === 'super-eruption') scene.flash(0.35);
       else if (ev.type === 'mass-extinction') hushUntil = performance.now() + 45000;
     }
@@ -369,6 +427,8 @@ async function boot(): Promise<void> {
         started = true;
         progress(1);
         window.setTimeout(() => bootEl.classList.add('gone'), 250);
+        // once faded, take the overlay out of the page entirely so it costs nothing to composite
+        window.setTimeout(() => { bootEl.style.display = 'none'; }, 2200);
         window.setTimeout(() => update({ skipVisible: true }), 2000);
         break;
       }
@@ -387,6 +447,7 @@ async function boot(): Promise<void> {
             if (h.length > 480) h.splice(0, h.length - 480);
           }
         }
+        music.setCivMusic(msg.stats.civMusic && msg.stats.settlements > 0, seed.length * 7919 + seed.charCodeAt(0));
         music.setMood({ stage: msg.stats.stage, era: msg.stats.era, life: Math.min(1, msg.stats.livingSpecies / 30), hush: performance.now() < hushUntil });
         break;
       case 'events':
@@ -395,6 +456,7 @@ async function boot(): Promise<void> {
       case 'species':
         for (const sp of msg.species) state.species.set(sp.id, sp);
         scene.setSpecies(state.species);
+        scene.setFossils(fossilCells(), state.overlay === 'fossils');
         update({});
         break;
       case 'settlements':
@@ -516,7 +578,10 @@ async function boot(): Promise<void> {
     else if (e.key === '?' || k === '/') togglePanel('help');
     else if (k === 'p') { update({ postcard: !state.postcard }); scene.cam.idle = state.postcard ? 100 : 0; }
     else if (k === 'm') togglePanel('map');
-    else if (k === 'o') { const order = ['none', 'temp', 'rain', 'life', 'people'] as const; actions.setOverlay(order[(order.indexOf(state.overlay) + 1) % order.length]!); }
+    else if (k === 'x') togglePanel('section');
+    else if (k === 'u') { scene.underwater = !scene.underwater; update({ notice: scene.underwater ? 'Diving allowed: zoom in over the sea to go under.' : '' }); window.setTimeout(() => update({ notice: '' }), 2500); }
+    else if (k === 'v') scene.firstPerson = !scene.firstPerson;
+    else if (k === 'o') { const order = ['none', 'temp', 'rain', 'life', 'people', 'fossils'] as const; actions.setOverlay(order[(order.indexOf(state.overlay) + 1) % order.length]!); }
     else if (k === 'f') { if (state.creature) actions.followCreature(!state.creature.following); }
     else if (k === 'escape' && scene.following !== null) actions.followCreature(false);
     else if (k === 'escape') { if (state.postcard) update({ postcard: false }); else closeAll(); }

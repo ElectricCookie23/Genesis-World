@@ -2,7 +2,7 @@
 import { RNG } from './rng';
 import { fbm, makeNoise, ridged } from './noise';
 import { placeName } from './names';
-import type { Plate, World } from './world';
+import { nearestCell, type Plate, type World } from './world';
 
 export interface Hotspot {
   x: number; y: number; z: number;
@@ -304,7 +304,8 @@ export function computeDrainage(world: World): void {
     }
   }
   // order is from the coast inland, so walk it backwards to accumulate downstream
-  for (let k = 0; k < landCount; k++) flow[order[k]!] = moisture[order[k]!]!;
+  // rain plus meltwater: snowfields on warm-enough ground feed the rivers below them
+  for (let k = 0; k < landCount; k++) { const c = order[k]!; flow[c] = moisture[c]! + (world.snow[c]! > 0.5 && world.temperature[c]! > -4 ? Math.min(0.6, world.snow[c]! * 0.08) : 0); }
   for (let k = landCount - 1; k >= 0; k--) {
     const c = order[k]!;
     const d = downhill[c]!;
@@ -417,4 +418,57 @@ export function erode(world: World, amount: number): boolean {
     }
   }
   return changed;
+}
+
+/**
+ * Continental drift. Plate outlines stay fixed in space and the crust slides across them like a conveyor:
+ * each cell takes the terrain that was upstream of it. Where the upstream point lies on another plate,
+ * the plates are pulling apart there and fresh ocean floor wells up.
+ * years is the time step; returns nothing but rewrites elevation.
+ */
+export function driftPlates(world: World, years: number): void {
+  const { grid, elevation, plates, plate } = world;
+  const { pos, count } = grid;
+  const next = new Float32Array(count);
+  const my = years / 1e6;
+  for (let i = 0; i < count; i++) {
+    const p = plates[plate[i]!]!;
+    const a = -p.speed * my; // rotate backwards to find where this crust came from
+    const x = pos[i * 3]!, y = pos[i * 3 + 1]!, z = pos[i * 3 + 2]!;
+    const c = Math.cos(a), s = Math.sin(a), d = (p.ax * x + p.ay * y + p.az * z) * (1 - c);
+    const qx = x * c + (p.ay * z - p.az * y) * s + p.ax * d;
+    const qy = y * c + (p.az * x - p.ax * z) * s + p.ay * d;
+    const qz = z * c + (p.ax * y - p.ay * x) * s + p.az * d;
+    const j = nearestCell(grid, qx, qy, qz, i);
+    if (j === i) next[i] = elevation[i]!;
+    else if (plate[j] === plate[i]) next[i] = elevation[i]! * 0.35 + elevation[j]! * 0.65;
+    else next[i] = Math.min(elevation[i]!, -2.6) * 0.5 + -2.6 * 0.5 + (elevation[i]! > 0 ? elevation[i]! * 0.25 : 0);
+  }
+  elevation.set(next);
+}
+
+/** Number of separate large landmasses, and the share of all land held by the biggest. */
+export function countContinents(world: World): { count: number; largestShare: number } {
+  const { grid, elevation, seaLevel } = world;
+  const seen = new Uint8Array(grid.count);
+  let total = 0, largest = 0, continents = 0;
+  const stack: number[] = [];
+  for (let i = 0; i < grid.count; i++) {
+    if (seen[i] || elevation[i]! <= seaLevel) continue;
+    let size = 0;
+    stack.push(i);
+    seen[i] = 1;
+    while (stack.length) {
+      const c = stack.pop()!;
+      size++;
+      for (let j = 0; j < grid.ncount[c]!; j++) {
+        const nb = grid.neighbors[c * 6 + j]!;
+        if (!seen[nb] && elevation[nb]! > seaLevel) { seen[nb] = 1; stack.push(nb); }
+      }
+    }
+    total += size;
+    if (size > largest) largest = size;
+    if (size > grid.count * 0.012) continents++;
+  }
+  return { count: continents, largestShare: total ? largest / total : 0 };
 }

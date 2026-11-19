@@ -187,6 +187,8 @@ export function CreatureCard() {
       {SHOWN_GENES.slice(0, 8).map((gi) => (
         <div class={css.gene} key={gi}><span>{GENE_NAMES[gi]}</span><i><b style={{ width: `${sp.genes[gi]! * 100}%` }} /></i></div>
       ))}
+      <div style={{ margin: '10px 0 2px' }} class={css.sub}>FAMILY</div>
+      {actions.familyOf(c.key).map((line) => <div key={line}>{line}</div>)}
       {lineage.length > 0 && <div style={{ margin: '10px 0 2px' }} class={css.sub}>LINEAGE</div>}
       {lineage.map((p) => <div key={p.id}><button class={css.link} onClick={() => actions.selectSpecies(p.id)}>{p.name}</button></div>)}
       <div style={{ marginTop: 12 }}>
@@ -269,7 +271,7 @@ export function Help() {
   const keys: [string, string][] = [
     ['drag', 'orbit the planet'], ['scroll / pinch', 'zoom, from deep space to the ground'], ['right-drag', 'turn and tilt near the surface'],
     ['Space', 'pause or play'], ['1 – 6', 'time speed'], ['C', 'chronicle'], ['T', 'tree of life'], ['G', 'god tools'],
-    ['M', 'flat map'], ['O', 'overlays'], ['F', 'follow the selected creature'], ['P', 'postcard mode'], ['H', 'hide the interface'], ['Esc', 'close panels'], ['?', 'this list'],
+    ['M', 'flat map'], ['X', 'cross-section'], ['U', 'dive under water'], ['V', 'first-person view while following'], ['O', 'overlays'], ['F', 'follow the selected creature'], ['P', 'postcard mode'], ['H', 'hide the interface'], ['Esc', 'close panels'], ['?', 'this list'],
   ];
   return (
     <div class={`${css.panel} ${css.side}`}>
@@ -328,6 +330,25 @@ export function Designer() {
           }}>{s.godTool === 'species' ? 'cancel' : 'release'}</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** A slice through the world under the camera: rock layers, sea, ice, roots and caves. */
+export function CrossSection() {
+  const s = useStore();
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const draw = () => { if (ref.current) actions.drawSection(ref.current); };
+    draw();
+    const t = window.setInterval(draw, 700);
+    return () => window.clearInterval(t);
+  }, []);
+  void s;
+  return (
+    <div class={`${css.panel} ${css.side} ${css.wide}`} style={{ bottom: 'auto' }}>
+      <div class={css.head}><h2>Cross-section</h2><span class={css.sub}>the ground under the centre of the view, west to east</span><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
+      <div style={{ padding: '0 14px 14px' }}><canvas ref={ref} width={720} height={300} style={{ width: '100%', borderRadius: 8, display: 'block' }} /></div>
     </div>
   );
 }
@@ -535,7 +556,7 @@ export function Settings() {
         <div class={css.row}><span>Colour-blind safe overlays</span><button class={css.btn} onClick={() => actions.setColorblind(!s.colorblind)}>{s.colorblind ? 'on' : 'off'}</button></div>
         <div class={css.row}>
           <span>Overlay (O)</span>
-          <span>{(['none', 'temp', 'rain', 'life', 'people'] as const).map((o) => <button class={css.btn} style={{ marginLeft: 4, opacity: s.overlay === o ? 1 : 0.55 }} onClick={() => actions.setOverlay(o)}>{o}</button>)}</span>
+          <span>{(['none', 'temp', 'rain', 'life', 'people', 'fossils'] as const).map((o) => <button class={css.btn} style={{ marginLeft: 4, opacity: s.overlay === o ? 1 : 0.55 }} onClick={() => actions.setOverlay(o)}>{o}</button>)}</span>
         </div>
         <div class={css.sub} style={{ margin: '12px 0 2px' }}>CAMERA AND KEEPSAKES</div>
         <div class={css.row}>
@@ -545,6 +566,7 @@ export function Settings() {
         <div class={css.row}><span>Save a photo</span><button class={css.btn} onClick={() => actions.savePhoto()}>save PNG</button></div>
         <div class={css.row}><span>Record video</span><button class={css.btn} onClick={() => actions.toggleRecording()}>{s.recording ? 'stop and save' : 'record'}</button></div>
         <div class={css.row}><span>History of this planet<br /><span class={css.sub}>An illustrated book you can print or save as PDF.</span></span><button class={css.btn} onClick={() => actions.exportBook()}>make book</button></div>
+        <div class={css.row}><span>Fork the timeline here<br /><span class={css.sub}>Mark this moment so you can come back and try another future.</span></span><button class={css.btn} onClick={() => actions.fork()}>fork</button></div>
         {s.timeline.length > 0 && <div class={css.sub} style={{ margin: '12px 0 2px' }}>REWIND TO</div>}
         {s.timeline.map((t) => (
           <div class={css.row} key={t.index}><span>{t.title}<br /><span class={css.sub}>{formatYear(t.simYear).toLowerCase()}</span></span><button class={css.btn} onClick={() => actions.rewind(t.index)}>rewind</button></div>

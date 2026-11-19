@@ -1,14 +1,15 @@
 // Ocean surface: depth colour, fresnel sky reflection, sun glint, coastal foam, tides.
-import { BufferAttribute, BufferGeometry, Mesh, MeshBasicNodeMaterial } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, DoubleSide, Mesh, MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   attribute, cameraPosition, dot, exp, float, max, mix, mx_noise_float, mx_noise_vec3, normalize, positionLocal, positionWorld, pow, reflect, sin,
   smoothstep, vec3, varying,
 } from 'three/tsl';
 import type { Grid } from '../sim/world';
 import type { CellSnapshot } from '../shared/protocol';
-import { EXAG, uMoonDir, uOceanFill, uSeaKm, uSunDir, uTideKm, uTime, uHazeTint } from './common';
+import { EXAG, uMoonDir, uOceanFill, uSeaGlow, uSeaKm, uSunDir, uTideKm, uTime, uHazeTint } from './common';
 import { cloudShadowAt } from './clouds';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export class OceanMesh {
   readonly mesh: Mesh;
   private readonly geometry: BufferGeometry;
@@ -16,6 +17,7 @@ export class OceanMesh {
   private readonly ice: Float32Array;
   private readonly wind: Float32Array;
   private readonly cloud: Float32Array;
+  private readonly life: Float32Array;
 
   constructor(private readonly grid: Grid) {
     const g = new BufferGeometry();
@@ -24,14 +26,17 @@ export class OceanMesh {
     this.ice = new Float32Array(grid.count);
     this.wind = new Float32Array(grid.count);
     this.cloud = new Float32Array(grid.count);
+    this.life = new Float32Array(grid.count * 2);
     g.setAttribute('depth', new BufferAttribute(this.depth, 1));
     g.setAttribute('ice', new BufferAttribute(this.ice, 1));
     g.setAttribute('wind', new BufferAttribute(this.wind, 1));
     g.setAttribute('cloudCover', new BufferAttribute(this.cloud, 1));
+    // x = plankton bloom, y = ship lamps
+    g.setAttribute('sealife', new BufferAttribute(this.life, 2));
     g.setIndex(new BufferAttribute(grid.tris, 1));
     this.geometry = g;
 
-    const material = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
+    const material = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: DoubleSide });
     const dirL = normalize(positionLocal);
     // The moon raises two tidal bulges; the sea also drains away during the opening sequence.
     const tide = pow(dot(dirL, uMoonDir), 2).sub(1 / 3).mul(uTideKm);
@@ -56,6 +61,9 @@ export class OceanMesh {
     const deep = vec3(0.003, 0.022, 0.1);
     let water = mix(shallow, mid, float(1).sub(exp(depthNow.mul(-3.2))));
     water = mix(water, deep, float(1).sub(exp(depthNow.mul(-0.55))));
+    // plankton blooms stain the water green; by night they glow where the waves stir them
+    const life: any = attribute('sealife', 'vec2');
+    water = mix(water, vec3(0.05, 0.36, 0.22), life.x.mul(0.5));
     const sunColor = mix(vec3(1.0, 0.36, 0.13), vec3(1.0, 0.95, 0.88), smoothstep(-0.05, 0.4, sunHeight));
     const shadow = cloudShadowAt(P, attribute('cloudCover', 'float'));
     const diffuse = max(dot(N, L), 0).mul(0.75).add(0.25).mul(day).mul(shadow);
@@ -73,6 +81,10 @@ export class OceanMesh {
     color = color.add(vec3(1, 1, 1).mul(foam).mul(day.mul(0.9).add(0.03)).mul(shadow));
     const iceColor = vec3(0.86, 0.92, 0.98).mul(sunColor.mul(max(dot(up, L), 0).mul(0.9).add(0.1).mul(day)).mul(1.15).add(0.02));
     color = mix(color, iceColor, smoothstep(0.35, 0.65, ice));
+    const nightAmt = float(1).sub(day);
+    const stir = mx_noise_float(P.mul(90).add(vec3(t.mul(0.4), 0, t.mul(0.3)))).mul(0.5).add(0.5);
+    color = color.add(vec3(0.05, 0.75, 0.95).mul(life.x).mul(pow(stir, 3)).mul(nightAmt).mul(uSeaGlow).mul(1.3));
+    color = color.add(vec3(2.4, 1.5, 0.6).mul(life.y).mul(nightAmt));
     material.colorNode = color;
     // see through to the sand in the shallows
     material.opacityNode = smoothstep(-0.005, 0.11, depthNow).mul(0.5).add(smoothstep(0.0, 0.9, depthNow).mul(0.5)).mul(0.985).max(foam.mul(0.8)).max(smoothstep(0.35, 0.65, ice))
@@ -91,11 +103,13 @@ export class OceanMesh {
       this.ice[i] = target;
       this.wind[i] = Math.min(1.5, Math.hypot(cells.windE[i]!, cells.windN[i]!));
     }
+    for (let i = 0; i < count; i++) { this.life[i * 2] = cells.bloom[i]!; this.life[i * 2 + 1] = cells.elevation[i]! <= cells.seaLevel ? cells.lights[i]! : 0; }
     this.cloud.set(cells.cloud);
     const a = this.geometry.attributes;
     a.depth!.needsUpdate = true;
     a.ice!.needsUpdate = true;
     a.wind!.needsUpdate = true;
     a.cloudCover!.needsUpdate = true;
+    a.sealife!.needsUpdate = true;
   }
 }

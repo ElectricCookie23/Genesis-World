@@ -3,8 +3,8 @@ import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
 import type { PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map';
-export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section';
+export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils';
 
 export interface UIState {
   stats: WorldStats | null;
@@ -149,6 +149,9 @@ export const actions = {
   savePhoto: () => {},
   toggleRecording: () => {},
   exportBook: () => {},
+  drawSection: (_canvas: HTMLCanvasElement) => {},
+  familyOf: (_key: number): string[] => [],
+  fork: () => {},
 };
 
 export function togglePanel(p: Panel): void {

@@ -1,12 +1,12 @@
 // Faceted terrain mesh, coloured per vertex by biome, snow, vegetation and ash.
 import { BufferAttribute, BufferGeometry, Color, Mesh, MeshBasicNodeMaterial } from 'three/webgpu';
 import {
-  attribute, cameraPosition, dot, float, max, mix, mx_fractal_noise_float, normalWorld, normalize, positionWorld, pow, smoothstep, vec3,
+  attribute, cameraPosition, dot, float, max, mix, mx_fractal_noise_float, normalWorld, normalize, positionWorld, pow, sin, smoothstep, vec3,
 } from 'three/tsl';
 import type { Grid } from '../sim/world';
 import { Biome, BIOME_COUNT } from '../sim/world';
 import type { CellSnapshot } from '../shared/protocol';
-import { EXAG, uHazeAmount, uHazeTint, uMolten, uSunDir, uTime } from './common';
+import { EXAG, uHazeAmount, uHazeTint, uMolten, uRing, uSun2, uSun2Dir, uSunDir, uTime } from './common';
 import { cloudShadowAt } from './clouds';
 
 const hex = (h: number) => new Color(h);
@@ -36,6 +36,7 @@ setBiome(Biome.Wetland, 0x4f8f62, 0x6d6a55);
 setBiome(Biome.Alpine, 0x8a8a8f, 0x85827f);
 setBiome(Biome.Volcanic, 0x2a2526, 0x2a2526);
 setBiome(Biome.SeaIce, 0x4a5a5e, 0x4a5a5e);
+setBiome(Biome.SaltFlat, 0xeeeadf, 0xf1eee6);
 
 const SNOW = hex(0xf4f8ff);
 const ASH = hex(0x2b2728);
@@ -92,9 +93,14 @@ export class PlanetMesh {
     const skyAmbient = vec3(0.3, 0.45, 0.75).mul(0.2).mul(day).mul(dot(N, up).mul(0.5).add(0.5));
     // faint moonlight so the night side is dark but not blind
     const nightAmbient = vec3(0.02, 0.03, 0.058).mul(dot(N, up).mul(0.5).add(0.5));
-    let lit = albedo.mul(sunColor.mul(diffuse).mul(shadow).mul(1.2).add(skyAmbient).add(nightAmbient));
+    // the shadow of a ring falls as a dark band along the equator
+    const ringShade = float(1).sub(uRing.mul(smoothstep(0.085, 0.02, up.y.abs())).mul(0.55));
+    // a second, smaller sun adds its own cooler light from another direction
+    const second = max(dot(N, uSun2Dir).mul(0.8).add(0.2), 0).mul(smoothstep(-0.1, 0.25, dot(up, uSun2Dir))).mul(uSun2).mul(0.45);
+    let lit = albedo.mul(sunColor.mul(diffuse).mul(shadow).mul(ringShade).mul(1.2).add(vec3(0.7, 0.8, 1.0).mul(second)).add(skyAmbient).add(nightAmbient));
     // Molten surface for the opening sequence: glowing cracks between dark crust plates.
-    const crust = mx_fractal_noise_float(P.mul(7).add(vec3(0, uTime.mul(0.02), 0)), 4, 2.1, 0.55);
+    // only two octaves once the crust has cooled: the detail is invisible then and costs every pixel
+    const crust = mx_fractal_noise_float(P.mul(7).add(vec3(0, uTime.mul(0.02), 0)), 2, 2.1, 0.55);
     const cracks = smoothstep(0.12, -0.1, crust.abs().sub(uMolten.mul(uMolten).mul(0.34)));
     const lava = mix(vec3(0.035, 0.012, 0.01), vec3(2.3, 0.5, 0.05), cracks).add(vec3(1.4, 0.8, 0.2).mul(pow(cracks, 8)).mul(uMolten));
     lit = mix(lit, lava, smoothstep(0, 0.6, uMolten));
@@ -107,11 +113,11 @@ export class PlanetMesh {
     lit = mix(lit, hazeColor, rim.mul(0.3).mul(far).add(uHazeAmount).clamp(0, 0.9).mul(float(1).sub(uMolten)));
     // lava and wildfire glow (bright enough to bloom, flickering)
     const heat = attribute('glow', 'float');
-    const flicker = mx_fractal_noise_float(P.mul(60).add(vec3(0, uTime.mul(0.6), 0)), 2, 2.0, 0.5).mul(0.35).add(0.75);
+    const flicker = sin(uTime.mul(9).add(P.x.mul(700)).add(P.z.mul(500))).mul(0.2).add(0.8);
     lit = lit.add(vec3(3.2, 0.75, 0.08).mul(heat.mul(heat)).mul(flicker));
     // firelight and city light: warm points that only show on the night side
     const town = attribute('lights', 'float');
-    const sparkle = mx_fractal_noise_float(P.mul(260), 2, 2.0, 0.5).mul(0.5).add(0.5);
+    const sparkle = mx_fractal_noise_float(P.mul(260), 1, 2.0, 0.5).mul(0.5).add(0.5);
     // a steady glow that reads from orbit, with brighter specks that resolve as you come closer
     const lamp = pow(town, 1.2).mul(smoothstep(0.3, 0.8, sparkle).mul(1.6).add(0.45)).mul(float(1).sub(day));
     lit = lit.add(vec3(2.6, 1.55, 0.55).mul(lamp));
@@ -175,6 +181,10 @@ export class PlanetMesh {
         const fr = patch === 0 ? 0.74 : patch === 1 ? 0.5 : 0.62, fg = patch === 0 ? 0.62 : patch === 1 ? 0.6 : 0.5, fb = patch === 0 ? 0.2 : patch === 1 ? 0.18 : 0.22;
         r += (fr - r) * fl * 0.75; g += (fg - g) * fl * 0.75; bl += (fb - bl) * fl * 0.75;
       }
+      // coral reefs colour the shallows; bleached reef shows bone white through the water
+      const rf = cells.reef[i]!;
+      if (rf > 0.05) { const pk = ((i * 2246822519) >>> 0) % 2; r += ((pk ? 0.95 : 0.2) - r) * rf * 0.7; g += ((pk ? 0.45 : 0.8) - g) * rf * 0.7; bl += ((pk ? 0.5 : 0.7) - bl) * rf * 0.7; }
+      else if (rf < -0.05) { r += (0.95 - r) * -rf * 0.8; g += (0.95 - g) * -rf * 0.8; bl += (0.92 - bl) * -rf * 0.8; }
       const a = Math.min(1, ash[i]!);
       if (a > 0) { r += (ASH.r - r) * a; g += (ASH.g - g) * a; bl += (ASH.b - bl) * a; }
       // snow sticks less to steep faces
