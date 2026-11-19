@@ -35,30 +35,30 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 13 | Mutation, with natural selection emerging on its own. | done | mutation plus selection from food, predation and climate only; no fitness score |
 | 14 | Speciation detection, with each new species given a generated Latin-style name. | done | lineage speciation with Latin-style names from trait and place roots |
 | 15 | Herbivores, predators and scavengers in a live food web. | done | herbivores, hunters and scavengers share food pools per region; hunters and packs emerge but do not always persist |
-| 16 | Herds, flocks and fish schools. | in progress | individuals move as herds, flocks and schools around a drifting centre (render side) |
-| 17 | Pack hunting, and prey that flee. | in progress | pack hunting emerges (milestone seen); fleeing behaviour of individuals to come |
+| 16 | Herds, flocks and fish schools. | done | individuals move as herds, flocks and schools around a drifting centre |
+| 17 | Pack hunting, and prey that flee. | done | hunters and prey sharing a region are paired: hunters close in, the prey herd bolts, and cards say chasing or fleeing; pack hunting emerges in the sim |
 | 18 | Life starts in the sea and moves onto land over time. | done | life starts in the sea; oxygen opens the land; first land animals emerge around 85 My |
 | 19 | Flight evolves gradually, starting with gliding. | done | legs to gliding membrane to wings; powered flight has now appeared in a test run (not yet in every seed) |
 | 20 | The cause graph: every event stores its causes and effects. | done | every event stores causes with weights and effects |
 | 21 | "Why did this happen?" panel on any event. | done | panel walks the cause graph backward as a vertical story with a glyph thumbnail per step |
 | 22 | One continuous camera zoom from deep space down to the ground. | done | one zoom from deep space to the ground, tilting to the horizon as it descends |
-| 23 | Follow mode: click a creature and the camera tracks it, with an info card (name, species, age, genes, lineage, current action). | in progress | click selects a creature, double-click or F follows it; card shows name, species, age, action, genes, lineage. Depth of field to come |
+| 23 | Follow mode: click a creature and the camera tracks it, with an info card (name, species, age, genes, lineage, current action). | done | click selects, double-click or F follows; card with name, species, age, action, genes, family, lineage; depth of field while following |
 | 24 | Time controls from paused to Epoch speed (see section 7.2). | done | pause, 1x, 10x, 100x, 1000x, Epoch; slows around big events |
 | 25 | A live, glowing tree of life. Clicking a branch flies the camera to that species. | in progress | live glowing tree; click a branch to open the species and fly to its range |
 | 26 | A chronicle narrated like a nature documentary. | done | chronicle panel and a narration line, calm documentary voice, no template repeats twice in a row |
 | 27 | Milestone pop-ups: "First eye," "First flight," "First fire," "First city." | done | milestone pop-ups for first life, eye, hunter, steps on land, flight, forest and more |
 | 28 | Storm cells with lightning, and rain that drives plant growth. | done | storm cells drift with the wind as dense grey cloud; lightning flickers inside them; rain (moisture) drives plant growth |
-| 29 | Lightning starts wildfires, followed by regrowth (grass, then shrubs, then forest). | in progress | at 1x and 10x lightning starts fires that spread cell by cell and leave scorch that regrows; statistical at high speed; flame and smoke particles to come |
+| 29 | Lightning starts wildfires, followed by regrowth (grass, then shrubs, then forest). | done | lightning fires spread cell by cell at low speed with smoke and embers; scorch regrows grass first, then canopy |
 | 30 | Ice ages and warm eras, with biomes migrating as the climate changes. | done | long climate cycles drive ice ages and warm eras; biomes follow |
 | 31 | Sea level rises and falls, opening and closing land bridges. | in progress | sea level follows ice volume; land-bridge effects on life to verify |
-| 32 | Volcanic eruptions with lava, ash and fertile ground afterward. | in progress | eruptions build land, ash, fertility, cooling, lava glow; cones erode; ash plume particles to come |
-| 33 | Meteor strike god tool: shockwave, crater, impact winter. | in progress | meteor god tool works (click to strike, flash, crater, impact winter); particle effects to come |
+| 32 | Volcanic eruptions with lava, ash and fertile ground afterward. | done | eruptions build land, ash, fertility, cooling, lava glow, smoke and embers; cones erode |
+| 33 | Meteor strike god tool: shockwave, crater, impact winter. | done | meteor tool: entry streak, flash, debris, crater, impact winter |
 | 34 | Mass extinctions, each logged with its causes. | done | detected from extinction rate, logged with weighted causes |
 | 35 | Adaptive radiation that refills empty niches after extinctions. | done | empty worlds speciate faster; radiation event after a mass extinction |
 | 36 | Night side: bioluminescent plants and creatures. | done | glowing plants and creatures light up at night and bloom |
 | 37 | Auroras over the poles. | in progress | ribbon curtains over both poles on the night side; solar events to come |
 | 38 | Generative ambient music that shifts with the planet's state. | in progress | generative ambient music (Tone.js) that shifts with stage, era and life, near silence after a mass extinction |
-| 39 | Postcard mode: UI hidden, slow cinematic camera. | in progress | P hides the UI and speeds the camera drift; depth of field to come |
+| 39 | Postcard mode: UI hidden, slow cinematic camera. | done | P hides the UI; the camera drifts and breathes in and out with depth of field up close |
 | 40 | Seed codes: a shared code replays the same world exactly. | done | seed in the URL replays the world; copy-link button in the World panel |
 | 41 | An intelligence threshold any lineage can cross. | done | any lineage that is clever, social, numerous and on land crosses the threshold; intelligence now pays its way in social species |
 | 42 | Campfires appearing on the night side. | done | camps show as faint firelight on the night side; First fire milestone |
@@ -82,11 +82,11 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 60 | Hurricanes with a visible eye. | simplified | strong storms over warm sea become hurricanes with a clear eye in the cloud field and damage at landfall |
 | 61 | Snow that builds up and melts, feeding the rivers. | done | snow builds and melts with temperature, and meltwater adds to river flow |
 | 62 | Oxygen level tracked, with a giant-insect era when it spikes. | done | oxygen tracked, limits body size and activity; an age of giants is declared when it passes 30% |
-| 63 | Seasonal migrations that wear trails into the land. | not started |  |
+| 63 | Seasonal migrations that wear trails into the land. | simplified | at 1x and 10x wandering herds shift toward the summer hemisphere; no worn trails |
 | 64 | Hibernation, and day versus night species. | simplified | night animals lie low by day and day animals by night (drawn individuals); no hibernation |
 | 65 | Camouflage evolving to match each biome. | done | prey whose hue matches the ground cover of its region is harder for hunters to detect, so colour is under selection |
 | 66 | Sexual selection: mating displays and ornaments. | done | ornaments raise breeding success but cost energy and concealment |
-| 67 | Nests and parental care. | simplified | parental care is a gene with a milestone; no nest models |
+| 67 | Nests and parental care. | simplified | species with strong parental care get a small nest mound at each group's home |
 | 68 | Disease outbreaks spreading through herds. | done | plagues strike crowded, sociable species and spread to neighbouring regions |
 | 69 | Symbiosis pairs. | simplified | a large and a small species sharing a home are recorded as a pair (event); no fitness effect |
 | 70 | Flowers co-evolving with pollinators. | simplified | fruiting plants spread faster where animals eat them; no dedicated pollinator trait |
@@ -95,10 +95,10 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 73 | Island dwarfism and gigantism. | done | isolated island populations that shrink or grow are flagged as dwarfs or giants |
 | 74 | Flight lost on predator-free islands. | done | a winged lineage whose descendants lose their wings is recorded |
 | 75 | Land species returning to the sea as ocean giants. | done | land lineages that return to the sea are recorded with a milestone |
-| 76 | Echolocation shown as ripples. | not started |  |
+| 76 | Echolocation shown as ripples. | done | echolocating animals near the camera send out expanding ripples |
 | 77 | Electric fish with visible arcs. | simplified | electric sea species carry glowing patches; no arc effect |
 | 78 | Metamorphosis, with larval and adult forms that look completely different. | done | young of metamorphosing species are drawn as limbless grubs unlike the adults |
-| 79 | Hive species with growing mounds. | not started |  |
+| 79 | Hive species with growing mounds. | done | small, highly social species raise tall mounds at each colony |
 | 80 | Keystone species whose loss collapses an ecosystem. | done | when a widespread species dies and three more follow within 1.5 My, an ecosystem collapse is logged |
 | 81 | Invasive species crossing land bridges. | done | land species that surge across new land bridges when the seas fall are logged as invasions |
 | 82 | Living fossils flagged when a species stays unchanged for eons. | done | species unchanged for 60 My are flagged |
@@ -136,7 +136,7 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 114 | Fire tornadoes in big wildfires. | simplified | the same funnel burns orange over fire |
 | 115 | Dust storms that fertilize the ocean. | simplified | strong wind lifts dust from deserts and salt flats; no ocean fertilising |
 | 116 | Acid rain after eruptions. | done | large eruptions bring acid rain that thins plant cover downwind |
-| 117 | Valley fog, rainbows and heat shimmer. | not started |  |
+| 117 | Valley fog, rainbows and heat shimmer. | simplified | low damp ground near the dawn line lies under mist; no rainbows or heat shimmer |
 | 118 | The ozone layer, and what happens when it's stripped. | done | a supernova strips the ozone layer; land plants suffer until it heals |
 | 119 | A snowball-planet event. | done | snowball event when ice covers more than 55% of the planet |
 | 120 | Permafrost thaw speeding up warming. | done | thawing at the end of an ice age adds greenhouse forcing |

@@ -1,6 +1,6 @@
 // Special effects. For now: the protoplanetary dust disc of the opening sequence.
 import { AdditiveBlending, DoubleSide, Mesh, MeshBasicNodeMaterial, RingGeometry } from 'three/webgpu';
-import { atan, exp, float, length, mx_fractal_noise_float, positionLocal, pow, smoothstep, uniform, uv, vec3 } from 'three/tsl';
+import { atan, exp, float, length, mix, mx_fractal_noise_float, positionLocal, pow, smoothstep, uniform, uv, vec3 } from 'three/tsl';
 import { uTime } from './common';
 
 export const uDiscOpacity = uniform(0);
@@ -67,12 +67,15 @@ export class ParticleSystem {
     const age = uTime.sub(d.x);
     const k = age.div(d.y).clamp(0, 1);
     // drift with its velocity, and rise (or fall) along the local vertical
-    material.positionNode = s.add(v.mul(age)).add(normalize(s).mul(d.w).mul(age).mul(age));
+    // a lift above 50 marks a sound ripple: it stays put and is drawn as a thin expanding ring
+    const ripple = d.w.greaterThan(50).select(1, 0);
+    material.positionNode = s.add(v.mul(age)).add(normalize(s).mul(d.w.mul(float(1).sub(ripple))).mul(age).mul(age));
     const alive = smoothstep(0.0, 0.08, k).mul(smoothstep(1.0, 0.55, k)).mul(age.greaterThan(0).and(age.lessThan(d.y)).select(1, 0));
     material.scaleNode = d.z.mul(k.mul(1.6).add(0.5)).mul(alive.greaterThan(0).select(1, 0));
     material.colorNode = vec3(c.x, c.y, c.z);
     // soft round puffs rather than squares
-    const round = smoothstep(0.5, 0.15, length(uv().sub(0.5)));
+    const rd = length(uv().sub(0.5));
+    const round = mix(smoothstep(0.5, 0.15, rd), smoothstep(0.36, 0.44, rd).mul(smoothstep(0.5, 0.45, rd)), ripple);
     material.opacityNode = c.w.mul(alive).mul(round);
     this.sprite = new Sprite(material);
     (this.sprite as any).count = MAX_PARTICLES;
@@ -88,6 +91,11 @@ export class ParticleSystem {
     this.data.setXYZW(i, this.time, life, size, lift);
     this.tint.setXYZW(i, r, g, b, a);
     this.dirty = true;
+  }
+
+  /** A ripple of sound spreading from a calling animal. */
+  ripple(p: V3, size: number): void {
+    this.emit(p, 0, 0, 0, 1.3, size, 99, 0.75, 0.95, 1.0, 0.55);
   }
 
   /** Debris, fireball and dust from a meteor strike at a unit direction. */

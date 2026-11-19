@@ -111,6 +111,10 @@ export class PlanetMesh {
     // haze builds with distance through the air, so nearby ground stays crisp
     const far = smoothstep(0.03, 0.9, cameraPosition.sub(P).length());
     lit = mix(lit, hazeColor, rim.mul(0.3).mul(far).add(uHazeAmount).clamp(0, 0.9).mul(float(1).sub(uMolten)));
+    // morning mist: low, damp ground near the dawn line lies under a pale haze
+    const lowGround = smoothstep(1 + 0.7 * EXAG, 1 + 0.05 * EXAG, P.length());
+    const dawn = smoothstep(-0.02, 0.1, sunHeight).mul(smoothstep(0.34, 0.12, sunHeight));
+    lit = mix(lit, vec3(0.8, 0.84, 0.9).mul(day.mul(0.9).add(0.05)), lowGround.mul(dawn).mul(smoothstep(0.35, 0.8, attribute('cloudCover', 'float'))).mul(0.45).mul(float(1).sub(uMolten)));
     // lava and wildfire glow (bright enough to bloom, flickering)
     const heat = attribute('glow', 'float');
     const flicker = sin(uTime.mul(9).add(P.x.mul(700)).add(P.z.mul(500))).mul(0.2).add(0.8);

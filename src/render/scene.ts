@@ -54,6 +54,8 @@ export class GenesisScene {
   private oldTree?: Mesh;
   private boneCells: number[] = [];
   showFossils = false;
+  /** Postcard mode: slow cinematic camera with depth of field. */
+  cinematic = false;
   /** Let the camera dive below the sea surface. */
   underwater = false;
   /** Look out through the eyes of the followed creature. */
@@ -383,7 +385,12 @@ export class GenesisScene {
     this.eraHaze += (this.eraHazeTarget - this.eraHaze) * Math.min(1, dt * 0.5);
     this.cam.update(dt);
     if (this.creatures) {
+      this.creatures.season = this.tilt > 0 ? this.declination / this.tilt : 0;
       this.creatures.update(this.time, this.cam.dist, uSunDir.value as Vector3);
+      // echolocation shown as ripples of sound
+      if (this.particles && this.cam.dist < 0.3 && Math.random() < dt * 4) for (const e of this.creatures.echoers(2)) this.particles.ripple(e.pos, e.size * 9);
+      // depth of field while following a creature
+      this.post.setFocus(this.following !== null || this.cinematic, this.cam.dist);
       if (this.following !== null) {
         const ind = this.creatures.byKey(this.following);
         if (ind) {

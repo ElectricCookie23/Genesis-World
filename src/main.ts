@@ -73,7 +73,7 @@ async function boot(): Promise<void> {
   const send = (m: ToWorker) => worker.postMessage(m);
   const music = new Music();
   let hushUntil = 0;
-  let lastRecovery = 0;
+  let lastRecovery = -Infinity;
   const autoKey = `genesis:auto:${seed}`;
   // a save to load as soon as the world is ready: a named slot (?slot=n) or this seed's autosave
   let pendingLoad: unknown = null;
@@ -133,6 +133,7 @@ async function boot(): Promise<void> {
     const cut = adaptive >= 2 ? 0.5 : 1;
     scene.setPixelRatio(Math.max(0.75, q.ratio - (adaptive >= 3 ? 0.5 : 0) - (adaptive >= 4 ? 0.5 : 0)));
     scene.post.setBloom(q.bloom && adaptive < 1);
+    scene.post.allowDof = state.quality !== 'low' && adaptive < 2;
     if (scene.vegetation) scene.vegetation.maxInstances = Math.min(mobile ? 15000 : 60000, q.plants * cut);
     if (scene.creatures) scene.creatures.budget = Math.min(mobile ? 1500 : 5000, q.creatures * cut);
     // blurred glass panels are costly on weak GPUs: use plain dark panels below the high preset
@@ -412,6 +413,8 @@ async function boot(): Promise<void> {
         if (recovering) {
           // the scene already exists: just reload state and carry on at the same speed
           recovering = false;
+          // with no autosave to fall back on, the world starts over: clear the old history from the panels
+          if (!pendingLoad) { resetHistory(); scene.applyCells(msg.cells, true); }
           if (pendingLoad) send({ type: 'load', save: pendingLoad });
           pendingLoad = null;
           send({ type: 'speed', index: state.speedIndex });
@@ -590,6 +593,7 @@ async function boot(): Promise<void> {
 
   let lastFocus = 0;
   let slowFor = 0;
+  let postcardBase = 0;
   const focusVec = new Vector3();
   let last = performance.now();
   const loop = (now: number) => {
@@ -624,6 +628,13 @@ async function boot(): Promise<void> {
         if (slowFor > 2 && adaptive < 4) { adaptive++; slowFor = 0; applyQuality(); }
       } else slowFor = 0;
       scene.cam.autoOrbit = state.reducedMotion ? 0 : state.postcard ? 0.035 : 0.012;
+      // postcard mode: a slow cinematic drift in and out, with depth of field up close
+      scene.cinematic = state.postcard;
+      if (state.postcard && !state.reducedMotion && scene.following === null) {
+        if (postcardBase === 0) postcardBase = scene.cam.dist;
+        scene.cam.zoomTo(postcardBase * (1 + 0.28 * Math.sin(now / 9000)));
+        scene.cam.idle = 100;
+      } else postcardBase = 0;
       const busy = state.panel !== 'none' || state.whyEvent >= 0 || state.selectedSpecies >= 0;
       if (!state.uiHidden && !state.opening && !busy && now - lastActivity > 4000) update({ uiHidden: true });
     }
@@ -634,7 +645,7 @@ async function boot(): Promise<void> {
   // hooks for automated visual checks
   // grab the 3D canvas straight after a render (cheap way to capture frames in automated checks)
   const grab = () => { scene.frame(0); return canvas.toDataURL('image/jpeg', 0.9); };
-  (window as unknown as { __genesis: unknown }).__genesis = { scene, state, setSpeed, update, actions, send, grab, skip: () => opening?.skip(), opening: () => opening };
+  (window as unknown as { __genesis: unknown }).__genesis = { scene, state, setSpeed, update, actions, send, grab, music, skip: () => opening?.skip(), opening: () => opening };
 }
 
 boot().catch((err) => {

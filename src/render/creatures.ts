@@ -226,6 +226,11 @@ export interface Individual {
   /** 0..1 how much it sleeps by day (nocturnal) */
   night: number;
   larva: boolean;
+  /** Direction of the herd this one chases (hunters) or flees (prey), or null. */
+  rival: Vector3 | null;
+  hunter: boolean;
+  migrate: number;
+  echo: boolean;
 }
 
 let sharedMaterial: MeshBasicNodeMaterial | null = null;
@@ -279,6 +284,11 @@ export class CreatureLayer {
   budget: number;
   onMesh?: (mesh: InstancedMesh) => void;
   private herdSig = '';
+  /** -1..1 season signal for migration (0 at high time speeds). */
+  season = 0;
+  private chase = 0;
+  mounds?: InstancedMesh;
+  private moundData: { ind: Individual; size: number }[] = [];
   private cellTriStart: Int32Array;
   private cellTriList: Int32Array;
 
@@ -389,9 +399,24 @@ export class CreatureLayer {
           size: 0.0006 + 0.0038 * Math.pow(info.genes[G.Size]!, 1.3), social: info.genes[G.Sociality]!, fed: h.fed[i]!,
           pos: home.clone(), fwd: e1.clone(), moving: 0, cell, night: info.genes[G.Nocturnal]!,
           larva: info.genes[G.Metamorphosis]! > 0.6 && hash(key * 53 + 7) < 0.35,
+          rival: null, hunter: info.genes[G.Diet]! > 0.6, migrate: info.genes[G.Migration]!, echo: info.genes[G.Echo]! > 0.6,
         });
       }
     }
+    // hunters and prey that share a region are paired: the chase is on now and then
+    const byRegion = new Map<number, Individual[]>();
+    for (const ind of list) { const l = byRegion.get(ind.region) ?? []; l.push(ind); byRegion.set(ind.region, l); }
+    for (const group of byRegion.values()) {
+      const hunter = group.find((x) => x.hunter && x.medium !== 2);
+      if (!hunter) continue;
+      const prey = group.find((x) => !x.hunter && x.medium === hunter.medium && x.size < hunter.size * 2.5);
+      if (!prey) continue;
+      for (const ind of group) {
+        if (ind.species === hunter.species) ind.rival = prey.home;
+        else if (ind.species === prey.species) ind.rival = hunter.home;
+      }
+    }
+    this.layoutMounds(list);
     this.individuals = list;
     this.herdSig = sig;
   }
@@ -428,6 +453,36 @@ export class CreatureLayer {
     const region: number[] = [], sp: number[] = [], count: number[] = [], land: number[] = [], fly: number[] = [], fed: number[] = [];
     for (const r of rs) for (const [id, info] of species) { region.push(r); sp.push(id); count.push(3e4); land.push(info.land); fly.push(info.fly); fed.push(1); }
     this.setHerds({ region: Int32Array.from(region), species: Int32Array.from(sp), count: Float32Array.from(count), land: Float32Array.from(land), fly: Float32Array.from(fly), fed: Float32Array.from(fed) });
+  }
+
+  /** Nests of caring parents and the mounds of hive species, one per group. */
+  private layoutMounds(list: Individual[]): void {
+    if (!this.mounds) {
+      const material = new MeshBasicNodeMaterial();
+      material.colorNode = (attribute('color', 'vec3') as any).mul(surfaceLight(normalize(normalLocal), positionWorld) as any);
+      const geo = new ConeGeometry(0.5, 1, 7).translate(0, 0.5, 0).toNonIndexed();
+      const col = new Float32Array(geo.attributes.position!.count * 3);
+      for (let i = 0; i < col.length; i += 3) { col[i] = 0.36; col[i + 1] = 0.26; col[i + 2] = 0.17; }
+      geo.setAttribute('color', new BufferAttribute(col, 3));
+      geo.computeVertexNormals();
+      this.mounds = new InstancedMesh(geo, material, 256);
+      this.mounds.frustumCulled = false;
+      this.mounds.count = 0;
+      this.onMesh?.(this.mounds);
+    }
+    const seen = new Set<number>();
+    this.moundData = [];
+    for (const ind of list) {
+      const key = ind.region * 1000 + ind.species;
+      if (seen.has(key) || ind.medium !== 1 || this.moundData.length >= 256) continue;
+      const info = this.species.get(ind.species);
+      if (!info) continue;
+      const hive = info.genes[G.Sociality]! > 0.8 && info.genes[G.Size]! < 0.3;
+      const nest = info.genes[G.Care]! > 0.55;
+      if (!hive && !nest) continue;
+      seen.add(key);
+      this.moundData.push({ ind, size: hive ? 0.004 : 0.0012 });
+    }
   }
 
   clear(): void {
@@ -504,7 +559,16 @@ export class CreatureLayer {
     const ang = ind.h * 6.283 + 0.07 * tw * (ind.h > 0.5 ? 1 : -1);
     const rad = spread * (0.35 + 0.65 * hash(ind.key * 3 + 1));
     const x = hx + Math.cos(ang) * rad, y = hy + Math.sin(ang) * rad;
-    out.copy(ind.home).addScaledVector(ind.e1, x).addScaledVector(ind.e2, y).normalize();
+    // seasonal migration: wandering species follow the summer toward the pole and back
+    out.copy(ind.home).addScaledVector(ind.e1, x).addScaledVector(ind.e2, y + (ind.migrate > 0.5 ? this.season * 0.012 * ind.migrate : 0));
+    if (ind.rival) {
+      // every so often the hunters close in and the prey herd bolts the other way
+      const pulse = Math.pow(Math.max(0, Math.sin(0.045 * t + herd * 9)), 4);
+      this.chase = pulse;
+      const k = ind.hunter ? 0.75 * pulse : -0.5 * pulse;
+      out.addScaledVector(ind.rival, k).addScaledVector(ind.home, -k);
+    }
+    out.normalize();
   }
 
   /** Move everyone and fill the instance buffers. */
@@ -551,6 +615,20 @@ export class CreatureLayer {
       const gait = (ind.medium === 2 ? 7 : 5.5) * (1.6 - ind.size * 120) * (0.6 + 0.4 * ind.moving);
       slot.iData.setXYZW(i, size, ind.h * 60, ind.medium === 1 ? ind.moving : 0.4 + 0.6 * ind.moving, Math.max(1.5, gait));
     }
+    if (this.mounds) {
+      const mm = new Matrix4(), mq = new Quaternion(), mp = new Vector3(), ms = new Vector3(), Y = new Vector3(0, 1, 0);
+      this.moundData.forEach((d, i) => {
+        mp.copy(d.ind.home);
+        const r = this.groundRadius(d.ind, mp);
+        mq.setFromUnitVectors(Y, mp);
+        const sc = d.size * boost;
+        ms.set(sc, sc * (d.size > 0.002 ? 1.6 : 0.5), sc);
+        mm.compose(mp.clone().multiplyScalar(r), mq, ms);
+        this.mounds!.setMatrixAt(i, mm);
+      });
+      this.mounds.count = this.moundData.length;
+      this.mounds.instanceMatrix.needsUpdate = true;
+    }
     for (const s of this.slots.values()) {
       s.mesh.count = s.used;
       if (s.used) {
@@ -576,6 +654,13 @@ export class CreatureLayer {
     return best;
   }
 
+  /** A few echolocating animals near the camera, for drawing their sound as ripples. */
+  echoers(max: number): Individual[] {
+    const out: Individual[] = [];
+    for (const ind of this.individuals) { if (ind.echo && out.length < max && hash(ind.key + ((performance.now() / 900) | 0)) < 0.08) out.push(ind); }
+    return out;
+  }
+
   byKey(key: number): Individual | undefined {
     return this.individuals.find((i) => i.key === key);
   }
@@ -592,6 +677,7 @@ export function describeIndividual(ind: Individual, info: SpeciesInfo): { name: 
   let action: string;
   if (ind.medium === 2) action = ind.moving > 0.5 ? 'soaring' : 'circling';
   else if (ind.medium === 0) action = ind.moving > 0.6 ? (hunter ? 'chasing prey' : 'swimming') : hunter ? 'lying in wait' : 'grazing the shallows';
+  else if (ind.rival && ind.moving > 0.8) action = hunter ? 'chasing prey' : 'fleeing a hunter';
   else if (ind.moving > 0.65) action = hunter ? 'stalking' : ind.fed < 0.8 ? 'searching for food' : 'walking with the herd';
   else action = hunter ? 'resting' : 'grazing';
   void sizeMetres;
