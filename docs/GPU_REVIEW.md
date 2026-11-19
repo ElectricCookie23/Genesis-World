@@ -108,6 +108,18 @@ Creature meshes carry **14 vertex attributes** (`position, normal, color, rig, r
 - Source to read: `GenesisScene.applyCells` in `src/render/scene.ts`, `src/render/gfx/planetdata.ts`, `src/render/gfx/terrain.ts`, and the `load` path in `src/main.ts`.
 - **Plants ignore it.** They are lit by `surfaceLight` in `src/render/lighting.ts`, which takes only the sun direction.
 
+**State recorded while the surface was black** (added after the review, in answer to a question from the fixing session; nothing new was captured for this):
+
+- **No notice text was recorded.** The UI layer was hidden for almost every capture and `state.notice` was never logged, so I cannot say whether "The simulation stumbled. Restored from the last autosave." appeared. Not checked, rather than checked and absent.
+- **The cell snapshot was older than the sim clock.** In a slot-loaded WebGPU world, paused: `state.stats.simYear` 150375825 but `scene.vegetationCells().simYear` 150369825 (6,000 years behind). After running at 1x for 6 s both read 150375825.017, and the surface was still black.
+- `scene` fields in that state (WebGPU, High, slot load, coast camera): `time` 30.76, `dayAngle` 3.08, `moonAngle` 2.355, `declination` 0, `tilt` 0.4195, `daySpeed` 0, `eraWarmth` 0.0444, `eraHaze` 0, `eraHazeTarget` 0, `flashLevel` 0, `solar` 1, `moons` 2, `moonDistance` 5.5, `underwater` false, `overlayOn` false, `erosionPerFrame` 6, `shadowSteps` 8, `dataSize` 256, `erosionSize` 512, `erosionIterations` 320, `builtWith` "high", `lastCell` 1537, `seaCell` 1603, `weatherCell` 11519.
+- `scene.post`: `autoExposure` true, `target` 3.6, `measured` 0.051, `lumBusy` true, `first` false, `dofEnabled` false, `allowDof` false; options `{ taa: false, ao: false, bloom: false, fringe: true }` (step-downs had run).
+- `scene.look`: star "yellow", `starSize` 1, sky "lavender (thin nitrogen-argon air)", `airDensity` 0.602, ocean "milk turquoise", pigment "indigo to magenta", moon "rust".
+- `stats`: `oxygen` 0.1746, `meanTemp` 14.81, `iceFraction` 0.182, `seaLevel` 0.0303, `oceanFraction` 0.684, `stage` "animals", `era` "warm", `plantToxin` 0.143.
+- Visibility flags: `sky`, `atmosphere`, `ocean.sphere`, `terrain.sphere` all visible; `planet.mesh.visible` false (it was also false in a healthy fresh world, so that is normal).
+- In the WebGL2 session where it happened mid-capture: `scene.time` was about 440 s, High, `pr` 2, with all of taa/ao/bloom on, `shadowSteps` 8, `clouds.steps` 22, `cloudLightSteps` 4, luminance 0.018 before and after re-applying the preset.
+- Shader uniform values (`uSunDir`, `uSeaKm`, `uOverlay`, `uOceanFill`, `uAtmo` and so on) were **not** read. `gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE)` on WebGL2 was not read either; it needs a browser session.
+
 ### C4. WebGL2: white glare at the planet's limb
 
 - A blown-out white body with a wide halo sits at the right limb in the orbit day view. In one world it covered about a third of the frame and hid half the planet (`diag-webgl-fresh-orbit.jpg`, young world); in the clean warped world it is smaller but still the brightest thing on screen (`webgl-1-space-day.jpg`). WebGPU from the same camera shows a small hard-edged white half-disc there with no halo (`1-space-day.png`). Camera `(-1.46, 0.1, 2.6)`, sun +0.5, High.
