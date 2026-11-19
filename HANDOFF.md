@@ -16,7 +16,7 @@ The last batch of the "simplified" pass: timeline strip with thinned rewind poin
 
 Checked in the headless browser: two futures run and cross over, young animals follow parents, the family tree links real herd-mates and young, the field guide shows sketch cards. Not yet seen in a browser frame: trails on the ground, the rainbow, the timeline strip, the GIF and PDF buttons (the UI hides itself after four seconds without input, which empties page screenshots).
 
-A card "Review Genesis live site on a real GPU" was left in the owner's desktop app. If they run it, its findings arrive as `docs/GPU_REVIEW.md` and `docs/screenshots/gpu/` on main: pull and tune from them.
+The real-GPU review has been run (Apple M3 Pro, Chrome, WebGPU and WebGL2): read `docs/GPU_REVIEW.md` with its screenshots in `docs/screenshots/gpu/`. A second session fixed the things that were not drawn at all; see "GPU review: fixed and still open" below before touching any of it. Those fixes were checked here in software only and are waiting for a re-test on the owner's machine.
 
 ## Work queue, in the owner's order
 1. Original brief: built (every feature in PROGRESS.md is done or simplified).
@@ -39,8 +39,18 @@ Everything reads the planet from cube-map textures baked from the simulation's c
 - `scene.ts`: `PRESETS` (Low, Medium, High, Ultra), `presetForBuild` (sizes fixed at load) and `presetLive`.
 - Old modules no longer drawn but still imported in places: `planet.ts` (kept for the flat map colours and overlays), `ocean.ts`, `vegetation.ts`, `rivers.ts`, `aurora.ts`, most of `clouds.ts`. Safe to delete once nothing imports them.
 
+## GPU review: fixed and still open
+Fixed (commits "plants and animals share vertex buffers", "plain counted meshes", "land and sea no longer go black"):
+- **WebGPU allows 8 vertex buffers per draw.** Every separate `BufferAttribute` is one buffer, so plants (10), animals (14) and buildings (9) were never drawn there. Per-vertex extras and per-copy data are now packed into shared buffers with `packAttributes` (`gfx/packed.ts`); plants and animals bind 4, buildings 5. `tests/render.test.ts` holds the limit for every plant form and many animal shapes. **Any new model must stay within 8 buffers and 16 attributes: pack its attributes the same way.**
+- **Self-placed copies are `Copies`, not `InstancedMesh`** (`gfx/packed.ts`): a plain mesh with a `count`. `InstancedMesh` adds a matrix per copy, which three sends as a uniform buffer or, past the uniform limit, as four more attributes. With a 16 KB uniform limit that pushed animals to 18 attributes and their shader failed to compile on WebGL2 (reproduced here by forcing the limit); a group with room for no copies asked WebGPU for an empty buffer (the Low preset error). The quadtree patches, mounds, monoliths and bones still use `InstancedMesh`.
+- **The surface was black on real GPUs whenever no meteor strike was under way** (review C3). `uImpact.w` is -1 then, and the ring took its square root: not a number, which multiplying by zero does not clear. The software renderer here hides this. The age is now clamped first, in `gfx/terrain.ts` and `gfx/ocean.ts`. The young-world screenshots in the review (a featureless lilac ball) are this bug, and so is part of the "washed out" day side. **Never take a root, a logarithm or a power of something that can be negative in a shader, even behind a `step` mask; write squares as `pow2()`.**
+
+Not verified on a GPU yet: all three of the above. WebGPU cannot run in the build container (the software adapter loses its device at once).
+
+Still open from the review, nothing started: frame rate (only Low holds its settings; clouds are over half the frame at Medium and above), the aurora as a solid wall seen in daylight, two moons drawn as flat white discs and the WebGL2 glare at the limb, nest mounds far too large, depth of field blurring half the coast view with nothing followed, the milestone title backlog after a warp, the empty sea bed, blocky imposters with the trunk above the crown, the jungle tree imposter drawn upside down on WebGPU (C5), no nations by 150 My in ten worlds of this seed, and how animals really look once they draw (the WebGL2 captures showed an arch and stretched panels, on the old build).
+
 ## Graphics: still open
-- Nothing has been seen on a real GPU. Frame rate, shader compile time and final look are unverified. The owner checks the deployed site; expect tuning of colours, exposure, cloud density, city light brightness and preset costs after that.
+- The first real-GPU review is in (see above). Colours, exposure, cloud cost, aurora and preset costs still need tuning from it.
 - Not built: screen-space reflections on water, parallax occlusion mapping, footprints, lens flare, ground fog, canopy texture on far terrain, glow cast on the ground by glowing plants, a WebGPU compute path (WebGL2-style passes run on both backends instead).
 - The eight "after" screenshots are in `docs/screenshots/after/` (software rendering, 800x500).
 - GitHub Pages is on (repo public, source GitHub Actions): every push to main deploys to https://electriccookie23.github.io/Genesis-World/ after the tests pass (about six minutes).
