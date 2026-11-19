@@ -204,12 +204,13 @@ export class GenesisScene {
 
   /**
    * Everything that can change while running: march steps, level of detail, how many plants and animals, post effects.
-   * cut 0..1 scales the counts down further when the frame rate sags.
+   * cut 0..1 scales the counts down further when the frame rate sags; march 0..1 does the same for the cloud and
+   * aurora ray-march steps (never below what still reads as cloud).
    */
-  presetLive(name: Preset, cut = 1, post = true): void {
+  presetLive(name: Preset, cut = 1, post = true, march = 1): void {
     const p = PRESETS[name];
-    if (this.clouds) { this.clouds.steps.value = p.cloudSteps; this.clouds.detail.value = p.cloudDetail; }
-    if (this.aurora) this.aurora.steps.value = p.auroraSteps;
+    if (this.clouds) { this.clouds.steps.value = Math.max(Math.min(p.cloudSteps, 8), Math.round(p.cloudSteps * march)); this.clouds.detail.value = p.cloudDetail; }
+    if (this.aurora) this.aurora.steps.value = Math.max(Math.min(p.auroraSteps, 10), Math.round(p.auroraSteps * march));
     if (this.terrain) this.terrain.maxLevel = p.maxLevel;
     if (this.ocean) { this.ocean.maxLevel = p.maxLevel; this.ocean.fftEvery = p.fftEvery; }
     if (this.vegetation) { this.vegetation.maxInstances = Math.round(p.plants * cut); this.vegetation.modelBudget = Math.round(p.models * cut); this.vegetation.grassBudget = Math.round(p.grass * cut); }

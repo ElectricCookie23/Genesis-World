@@ -138,14 +138,21 @@ async function boot(): Promise<void> {
   let adaptive = 0;
   const applyQuality = () => {
     const q = PRESETS[state.quality];
-    const cut = adaptive >= 2 ? 0.5 : 1;
-    // dynamic resolution: the last two steps lower the resolution to hold the frame rate
-    scene.setPixelRatio(Math.max(0.75, q.ratio - (adaptive >= 3 ? 0.5 : 0) - (adaptive >= 4 ? 0.5 : 0)));
-    scene.presetLive(state.quality, cut, false);
-    scene.post.set({ bloom: q.bloom && adaptive < 1, taa: q.taa && adaptive < 2, ao: q.ao && adaptive < 1, fringe: q.fringe });
-    scene.post.allowDof = state.quality !== 'low' && adaptive < 2;
+    // Step-downs in the order that costs the picture least. Measured on a real GPU (docs/GPU_REVIEW.md): the cloud
+    // march is over half the frame above Low, and at a pixel ratio of 2 everything else alone misses the target, so
+    // the first steps thin the march and take half a step of resolution, and anti-aliasing is the last thing to go.
+    //   1 fewer cloud and aurora steps   2 resolution down half a step   3 fewer steps still, half the plants and animals
+    //   4 no bloom or ambient occlusion   5 no anti-aliasing, resolution down again
+    const march = adaptive >= 3 ? 0.45 : adaptive >= 1 ? 0.65 : 1;
+    const cut = adaptive >= 3 ? 0.5 : 1;
+    // start from what the screen can show: a preset that asks for more than the display has must still step down
+    const ratio = Math.min(window.devicePixelRatio || 1, q.ratio);
+    scene.setPixelRatio(Math.max(0.75, ratio - (adaptive >= 2 ? 0.5 : 0) - (adaptive >= 5 ? 0.5 : 0)));
+    scene.presetLive(state.quality, cut, false, march);
+    scene.post.set({ bloom: q.bloom && adaptive < 4, taa: q.taa && adaptive < 5, ao: q.ao && adaptive < 4, fringe: q.fringe });
+    scene.post.allowDof = state.quality !== 'low' && adaptive < 4;
     // blurred glass panels are costly on weak GPUs: use plain dark panels below the high preset
-    document.documentElement.classList.toggle('lite', state.quality === 'low' || state.quality === 'medium' || adaptive >= 1);
+    document.documentElement.classList.toggle('lite', state.quality === 'low' || state.quality === 'medium' || adaptive >= 4);
   };
   actions.setQuality = (q) => {
     adaptive = 0;
@@ -564,6 +571,10 @@ async function boot(): Promise<void> {
       else if (ev.type === 'super-eruption') scene.flash(0.35);
       else if (ev.type === 'mass-extinction') hushUntil = performance.now() + 45000;
     }
+    // After a fast-forward, or at the fastest speeds, hundreds of thousands of years of milestones arrive at once.
+    // Shown one after another for seven seconds each they covered the planet for minutes, so only the latest few
+    // are announced; the rest are still in the chronicle.
+    if (toasts.length > 3) toasts.splice(0, toasts.length - 3);
     update({});
   };
 
@@ -800,11 +811,11 @@ async function boot(): Promise<void> {
         if ((state.overlay === 'diversity' || state.overlay === 'oxygen') && now - lastLayer > 4000) { lastLayer = now; send({ type: 'requestLayer', kind: state.overlay }); }
         if (rain > 0.2 && near > 0.2 && Math.random() < 0.12) music.thunder();
       }
-      // adaptive quality: two seconds under target steps down bloom, then instance counts, then resolution
+      // adaptive quality: two seconds under target takes the next step down (the order is in applyQuality)
       const target = mobile ? 26 : 50;
       if (!state.opening && scene.fpsAvg < target && document.visibilityState === 'visible') {
         slowFor += dt;
-        if (slowFor > 2 && adaptive < 4) { adaptive++; slowFor = 0; applyQuality(); }
+        if (slowFor > 2 && adaptive < 5) { adaptive++; slowFor = 0; applyQuality(); }
       } else slowFor = 0;
       scene.cam.autoOrbit = state.reducedMotion ? 0 : state.postcard ? 0.035 : 0.012;
       // postcard mode: a slow cinematic drift in and out, with depth of field up close
