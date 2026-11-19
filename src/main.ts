@@ -136,7 +136,8 @@ async function boot(): Promise<void> {
     const q = QUALITY[state.quality];
     const cut = adaptive >= 2 ? 0.5 : 1;
     scene.setPixelRatio(Math.max(0.75, q.ratio - (adaptive >= 3 ? 0.5 : 0) - (adaptive >= 4 ? 0.5 : 0)));
-    scene.post.setBloom(q.bloom && adaptive < 1);
+    const fine = state.quality === 'high' || state.quality === 'ultra';
+    scene.post.set({ bloom: q.bloom && adaptive < 1, taa: fine && adaptive < 2, ao: fine && adaptive < 1, fringe: state.quality !== 'low' });
     scene.post.allowDof = state.quality !== 'low' && adaptive < 2;
     if (scene.vegetation) scene.vegetation.maxInstances = Math.min(mobile ? 15000 : 60000, q.plants * cut);
     if (scene.creatures) scene.creatures.budget = Math.min(mobile ? 1500 : 5000, q.creatures * cut);

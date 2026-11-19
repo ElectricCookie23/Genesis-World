@@ -55,3 +55,7 @@ export const uImpact = uniform(new Vector4(0, 1, 0, -1));
 export const uPlumes = [0, 1, 2, 3].map(() => uniform(new Vector4(0, 1, 0, 0)));
 /** Per plume: xyz = which way the wind carries it (a tangent, in radians of lean), w = 1 for volcanic ash, 0 for wood smoke. */
 export const uPlumeWind = [0, 1, 2, 3].map(() => uniform(new Vector4(0, 0, 0, 1)));
+/** Changes every frame while temporal anti-aliasing is on, so dithered effects average out over time; 0 otherwise. */
+export const uDitherFrame = uniform(0);
+/** Scene brightness multiplier chosen by the auto exposure. */
+export const uExposure = uniform(1);

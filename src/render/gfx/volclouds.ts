@@ -10,7 +10,7 @@ import {
   Break, Fn, If, Loop, abs, cameraFar, cameraNear, cameraPosition, cos, dot, exp, float, int, length, max, min, mix, normalize, perspectiveDepthToViewZ,
   positionView, positionWorld, pow, screenCoordinate, select, sin, smoothstep, sqrt, texture3D, uniform, vec3, vec4, viewportDepthTexture, atan, log,
 } from 'three/tsl';
-import { EXAG, uBolts, uCloudAmount, uHazeTint, uMoonDir, uPlumeWind, uPlumes, uSteam, uSunDir, uTime } from '../common';
+import { EXAG, uDitherFrame, uBolts, uCloudAmount, uHazeTint, uMoonDir, uPlumeWind, uPlumes, uSteam, uSunDir, uTime } from '../common';
 import { uLook } from './look';
 import { samplePlanet } from './planetdata';
 
@@ -231,7 +231,7 @@ export class VolumetricClouds {
       const ds = span.div(float(this.steps));
       // a per-pixel offset hides the banding of the steps
       const sc: N = screenCoordinate;
-      const jitter = sc.x.mul(0.06711056).add(sc.y.mul(0.00583715)).fract().mul(52.9829189).fract();
+      const jitter = sc.x.add(uDitherFrame).mul(0.06711056).add(sc.y.add(uDitherFrame).mul(0.00583715)).fract().mul(52.9829189).fract();
       const T = float(1).toVar();
       const C = vec3(0).toVar();
       const mu = dot(rd, L);

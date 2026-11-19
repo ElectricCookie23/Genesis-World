@@ -6,7 +6,7 @@ import {
   Fn, Loop, attribute, cameraPosition, cos, dot, exp, float, floor, fract, length, max, min, mix, mx_fractal_noise_float, normalWorld, normalize,
   positionLocal, positionWorld, pow, select, sin, smoothstep, sqrt, vec3, cameraFar, cameraNear, perspectiveDepthToViewZ, positionView, viewportDepthTexture, uniform,
 } from 'three/tsl';
-import { ATMO_RADIUS, MOON_RADIUS, uAtmo, uGradeTint, uHazeTint, uSkyAngle, uSun2, uSun2Dir, uSunDir, uTime } from './common';
+import { ATMO_RADIUS, MOON_RADIUS, uExposure, uAtmo, uGradeTint, uHazeTint, uSkyAngle, uSun2, uSun2Dir, uSunDir, uTime } from './common';
 import { RNG } from '../sim/rng';
 import { uLook } from './gfx/look';
 import { makeNoise, fbm } from '../sim/noise';
@@ -124,7 +124,9 @@ export function createSky(): Mesh {
   const mu = dot(dir, uSunDir);
   // the star: its colour and apparent size depend on what kind of star it is
   const edge = float(1).sub(float(0.00045).mul(uLook.starSize).mul(uLook.starSize));
-  const sun = vec3(uLook.star).mul(smoothstep(edge, edge.add(0.00025), mu).mul(60).add(pow(max(mu, 0), float(900).div(uLook.starSize)).mul(3)).add(pow(max(mu, 0), 40).mul(0.12)));
+  // the star's disc is as bright as it is; its wide glare is held back when the exposure opens up at night
+  const glare = float(1).div(max(uExposure, 0.5));
+  const sun = vec3(uLook.star).mul(smoothstep(edge, edge.add(0.00025), mu).mul(60).add(pow(max(mu, 0), float(900).div(uLook.starSize)).mul(3).mul(glare)).add(pow(max(mu, 0), 40).mul(0.12).mul(glare)));
   // binary systems: a smaller, bluer companion sun
   const mu2 = dot(dir, uSun2Dir);
   const sun2 = vec3(0.75, 0.86, 1.0).mul(smoothstep(0.99975, 0.9999, mu2).mul(40).add(pow(max(mu2, 0), 1400).mul(2))).mul(uSun2);
@@ -135,7 +137,9 @@ export function createSky(): Mesh {
     const edge = float(1).sub((sib.dir as any).w.mul((sib.dir as any).w).mul(0.5));
     siblings = siblings.add(vec3(sib.color).mul(smoothstep(edge, edge.add(0.0000015), d).mul(2.2).add(pow(max(d, 0), 60000).mul(0.9))));
   }
-  material.colorNode = stars.add(nebula).add(sun).add(sun2).add(siblings);
+  // the background stays as dark as it is, however far the exposure opens up for a night scene
+  const keepDark = float(1).div(max(uExposure, 0.5));
+  material.colorNode = stars.mul(pow(keepDark, 0.6)).add(nebula.mul(keepDark)).add(sun).add(sun2).add(siblings.mul(pow(keepDark, 0.6)));
   const mesh = new Mesh(new SphereGeometry(400, 48, 32), material);
   mesh.frustumCulled = false;
   mesh.renderOrder = -10;

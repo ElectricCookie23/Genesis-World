@@ -13,7 +13,7 @@ import {
 import type { Grid } from '../../sim/world';
 import type { CellSnapshot, PlantInfo } from '../../shared/protocol';
 import { PG } from '../../sim/genetics';
-import { EXAG, uMoonDir, uSunDir, uTime } from '../common';
+import { EXAG, uDitherFrame, uMoonDir, uSunDir, uTime } from '../common';
 import { faceDirection } from './cubebake';
 import { Pass, makeTarget } from './gpu';
 import { uLook } from './look';
@@ -76,7 +76,7 @@ function plantLight(albedo: N, Nrm: N, P: N, thin: N, ao: N, shadow: N): N {
     .add(albedo.mul(mix(vec3(1, 1, 1), albedo.div(max(max(albedo.x, albedo.y), albedo.z).max(0.05)), 0.6)).mul(sunColor).mul(through).mul(sunVis).mul(1.6));
 }
 
-const ign = (): N => { const sc: N = screenCoordinate; return sc.x.mul(0.06711056).add(sc.y.mul(0.00583715)).fract().mul(52.9829189).fract(); };
+const ign = (): N => { const sc: N = screenCoordinate; return sc.x.add(uDitherFrame).mul(0.06711056).add(sc.y.add(uDitherFrame).mul(0.00583715)).fract().mul(52.9829189).fract(); };
 
 interface FullSlot { mesh: InstancedMesh; iDir: InstancedBufferAttribute; iQuat: InstancedBufferAttribute; iData: InstancedBufferAttribute; iTint: InstancedBufferAttribute; iTint2: InstancedBufferAttribute; cap: number; n: number; }
 

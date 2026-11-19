@@ -621,7 +621,7 @@ export class GenesisScene {
     c.updateProjectionMatrix();
     this.sky.position.copy(c.position);
     this.sky.scale.setScalar((far * 0.9) / 400);
-    this.post.render();
+    this.post.render(dt);
     if (dt > 0) this.fpsAvg += (1 / dt - this.fpsAvg) * 0.05;
   }
 }

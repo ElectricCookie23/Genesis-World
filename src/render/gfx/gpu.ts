@@ -1,7 +1,7 @@
 // Render-to-texture helpers. Passes are full-screen quads with node materials, so the same code
 // runs on the WebGL2 and WebGPU backends.
 import {
-  ClampToEdgeWrapping, HalfFloatType, LinearFilter, NearestFilter, NodeMaterial, QuadMesh, RGBAFormat, RenderTarget, RepeatWrapping,
+  ClampToEdgeWrapping, HalfFloatType, LinearFilter, LinearMipmapLinearFilter, NearestFilter, NodeMaterial, QuadMesh, RGBAFormat, RenderTarget, RepeatWrapping,
   type Texture, type TextureDataType, type WebGPURenderer,
 } from 'three/webgpu';
 import { vec4 } from 'three/tsl';
@@ -15,13 +15,26 @@ export function makeTarget(width: number, height: number, o: TargetOptions = {})
     type: o.type ?? HalfFloatType,
     format: RGBAFormat,
     magFilter: o.linear ? LinearFilter : NearestFilter,
-    minFilter: o.linear ? LinearFilter : NearestFilter,
+    minFilter: o.mipmaps ? LinearMipmapLinearFilter : o.linear ? LinearFilter : NearestFilter,
     wrapS: o.repeat ? RepeatWrapping : ClampToEdgeWrapping,
     wrapT: o.repeat ? RepeatWrapping : ClampToEdgeWrapping,
     depthBuffer: false,
     generateMipmaps: !!o.mipmaps,
   });
   return rt;
+}
+
+let mipsBroken = false;
+/** Rebuild the mip chain of a render target after drawing into it. */
+export function refreshMipmaps(renderer: WebGPURenderer, target: RenderTarget): void {
+  if (mipsBroken) return;
+  try {
+    (renderer.backend as any).generateMipmaps(target.texture);
+  } catch {
+    // a backend that cannot do it: fall back to plain filtering everywhere from now on
+    mipsBroken = true;
+  }
+  if (mipsBroken) { target.texture.minFilter = LinearFilter; target.texture.needsUpdate = true; }
 }
 
 /** One full-screen pass writing a vec4 node into a target. */
@@ -42,6 +55,8 @@ export class Pass {
     renderer.setRenderTarget(target);
     this.quad.render(renderer);
     renderer.setRenderTarget(prev);
+    // render targets do not rebuild their mip chain by themselves
+    if (target.texture.generateMipmaps) refreshMipmaps(renderer, target);
   }
 }
 

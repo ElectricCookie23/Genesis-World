@@ -6,7 +6,7 @@ import {
   Fn, If, Loop, abs, cameraFar, cameraNear, cameraPosition, dot, exp, float, int, length, max, min, mix, normalize, perspectiveDepthToViewZ, positionView,
   positionWorld, screenCoordinate, select, sin, smoothstep, sqrt, texture3D, uniform, vec3, viewportDepthTexture,
 } from 'three/tsl';
-import { EXAG, uSunDir, uTime } from '../common';
+import { EXAG, uDitherFrame, uSunDir, uTime } from '../common';
 import { uLook } from './look';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -48,7 +48,7 @@ export class AuroraVolume {
       const span = max(end.sub(start), 0).mul(select(discT.greaterThan(0).and(tT1.greaterThan(0)), 1, 0));
       const ds = span.div(float(this.steps));
       const sc: N = screenCoordinate;
-      const jitter = sc.x.mul(0.06711056).add(sc.y.mul(0.00583715)).fract().mul(52.9829189).fract();
+      const jitter = sc.x.add(uDitherFrame).mul(0.06711056).add(sc.y.add(uDitherFrame).mul(0.00583715)).fract().mul(52.9829189).fract();
       const sum = vec3(0).toVar();
       const pole: N = uMagneticPole;
       const t = uTime;
