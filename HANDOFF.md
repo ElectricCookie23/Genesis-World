@@ -85,7 +85,17 @@ A collection of CC0 models, textures and sounds is being gathered on the owner's
 
 Not bugs, for the record: `stats.stage` stays "animals" by design once life is complex (the UI takes the age of fires, villages and cities from the settlement stats), and the "town of 503" in the re-test is 503 thousand people (`pop` is in thousands). But `civ.settlements` held 6,000 to 8,000 entries at 150 My, ruins included, and the whole list is posted to the page every 700 ms: worth thinning on the sim side.
 
-Still open from the second re-test, for whoever gets to it: conifer fronds as flat cards, the river draped over hills through a town, no streets or cleared ground in towns and buildings half-sunk on rough ground, Night Map label overlap and labels on the far limb, hexagon-stepped borders, evolved land animals over water (5 to 6 in 100 to 170), ball feet hovering and a flat pink rectangle on an evolved animal, a very dark night side from orbit, Ultra at 14 to 25 fps before it steps down, and whether the dotted lines across the sea on the Night Map are shipping lanes.
+**Check of 6766d4a on the GPU** (top of `docs/GPU_REVIEW.md`): sky at altitude fixed on WebGPU (not verified on WebGL2), far trees at mid distance fixed (real models with clean edges from 0.055), Ultra no longer steps down while loading, a middling town looks right for its size, a large town at night from the ground is lit by its windows. Not fixed there: painted glow patches from low over a town at night, and villages unlit.
+
+**Fourth batch from the fix session**, software-checked only (`scripts/checks/towncheck.js` renders made-up towns, `labelcheck.js` the Night Map labels, `atlascheck.js` all twelve plant forms):
+- Painted city and road glow is gone below about a tenth of a radius and returns with height; huts have a cooking fire and houses have windows, so a village at night is points of light.
+- Ground around a town is tinted as worked earth.
+- Night Map labels are placed largest first and one that would overlap is left out; labels appear only well clear of the limb.
+- Trees: thinner trunks that flare at the ground, tapering boughs, twigs that run to a point, grooved bark.
+- Land animals stand on the bottom in the shallows and are left out where their herd's path crosses deeper water (an evolved animal was seen walking on the sea).
+- The gliding flap on would-be fliers is a drooping flank of skin, not a flat rectangle.
+
+Still open, for whoever gets to it: conifer and broadleaf leaves as flat cards (some hanging edge-on as spikes), the river draped over hills through a town, no streets in towns and buildings tilted or overlapping on slopes, hexagon-stepped borders, ball feet on small animals, a very dark night side from orbit, harsh snow-and-shadow speckle at 5 km, the white fog smudge over tree lines, the sea's diamond-grid pattern from 0.3, the flat looking-down view under water and plain-tube reef plants, bare ground under trees, Ultra's cost in a warped world, whether the dotted lines across the sea on the Night Map are shipping lanes, and the sky at altitude on WebGL2.
 
 ## Graphics: still open
 - The first real-GPU review is in (see above). Colours, exposure, cloud cost, aurora and preset costs still need tuning from it.
