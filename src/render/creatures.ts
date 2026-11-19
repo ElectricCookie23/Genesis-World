@@ -2,6 +2,7 @@
 // and placed near the camera from the real populations around it.
 import {
   BoxGeometry, BufferAttribute, BufferGeometry, Color, ConeGeometry, DynamicDrawUsage, IcosahedronGeometry, InstancedBufferAttribute,
+  type InterleavedBufferAttribute,
   InstancedMesh, Matrix4, MeshBasicNodeMaterial, OctahedronGeometry, Quaternion, Vector3, type PerspectiveCamera, type Texture,
 } from 'three/webgpu';
 import {
@@ -17,7 +18,7 @@ import type { CellSnapshot, HerdSnapshot, SpeciesInfo } from '../shared/protocol
 import { EXAG, uSeaKm, uTime } from './common';
 import { dayAmount, surfaceLight } from './lighting';
 import type { GroundSampler } from './gfx/ground';
-import { buildCreatureModel } from './gfx/creaturemesh';
+import { addCreatureInstanceData, buildCreatureModel } from './gfx/creaturemesh';
 import { makeCreatureMaterial } from './gfx/creatureskin';
 import type { PlanetData } from './gfx/planetdata';
 import { eclipseAt } from './gfx/eclipse';
@@ -34,7 +35,7 @@ function hash(n: number): number {
 
 const CAP = 384;
 
-interface Slot { mesh: InstancedMesh; iPos: InstancedBufferAttribute; iQuat: InstancedBufferAttribute; iData: InstancedBufferAttribute; iTint: InstancedBufferAttribute; used: number; }
+interface Slot { mesh: InstancedMesh; iPos: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; used: number; }
 
 /** True for the rare golden individuals. */
 export function isGolden(key: number): boolean {
@@ -117,11 +118,6 @@ export class CreatureLayer {
     const larval = id < 0;
     const info = this.species.get(larval ? -id - 1 : id);
     if (!info) return undefined;
-    const iPos = new InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
-    const iQuat = new InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
-    const iData = new InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
-    const iTint = new InstancedBufferAttribute(new Float32Array(CAP), 1);
-    for (const a of [iPos, iQuat, iData, iTint]) a.setUsage(DynamicDrawUsage);
     let genes = info.genes;
     if (larval) {
       // the young of a metamorphosing species look nothing like the adults: a soft, limbless grub
@@ -131,16 +127,8 @@ export class CreatureLayer {
     }
     const model = buildCreatureModel(genes);
     const geo = model.geometry;
-    geo.setAttribute('iPos', iPos);
-    geo.setAttribute('iQuat', iQuat);
-    geo.setAttribute('iData', iData);
-    geo.setAttribute('iTint', iTint);
-    // the species' skin settings ride along as instance data so that every species can share one material
-    for (const [name, value] of [['iSkinA', model.skinA], ['iSkinB', model.skinB], ['iSkinC', model.skinC]] as [string, number[]][]) {
-      const arr = new Float32Array(CAP * 4);
-      for (let i = 0; i < CAP; i++) arr.set(value, i * 4);
-      geo.setAttribute(name, new InstancedBufferAttribute(arr, 4));
-    }
+    // all per-animal data shares one buffer (WebGPU allows 8 vertex buffers per draw)
+    const { iPos, iQuat, iData, iTint } = addCreatureInstanceData(model, CAP);
     const mesh = new InstancedMesh(geo, this.material, CAP);
     const m = new Matrix4();
     for (let i = 0; i < CAP; i++) mesh.setMatrixAt(i, m);
@@ -416,10 +404,7 @@ export class CreatureLayer {
     for (const s of this.slots.values()) {
       s.mesh.count = s.used;
       if (s.used) {
-        s.iPos.needsUpdate = true;
-        s.iQuat.needsUpdate = true;
-        s.iData.needsUpdate = true;
-        s.iTint.needsUpdate = true;
+        s.iPos.needsUpdate = true; // one shared buffer: this uploads all of the instance data
       }
     }
   }

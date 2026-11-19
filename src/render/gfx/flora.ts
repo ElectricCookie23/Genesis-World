@@ -4,7 +4,8 @@
 // plants. Which form grows where comes from the genes of the local plant species.
 import {
   BufferGeometry, Color, DataTexture, DoubleSide, DynamicDrawUsage, InstancedBufferAttribute, InstancedMesh, LinearFilter, Mesh, MeshBasicNodeMaterial,
-  OrthographicCamera, PlaneGeometry, Quaternion, RGBAFormat, RenderTarget, Scene, UnsignedByteType, Vector3, type Texture, type WebGPURenderer,
+  OrthographicCamera, PlaneGeometry, Quaternion, RGBAFormat, RenderTarget, Scene, UnsignedByteType, Vector3, type InterleavedBufferAttribute, type Texture,
+  type WebGPURenderer,
 } from 'three/webgpu';
 import {
   abs, atan, attribute, cameraPosition, cos, cross, dot, float, fract, length, max, mix, normalGeometry, normalize, positionGeometry, positionWorld, pow,
@@ -18,7 +19,7 @@ import { faceDirection } from './cubebake';
 import { Pass, makeTarget } from './gpu';
 import { uLook } from './look';
 import type { PlanetData } from './planetdata';
-import { FORMS, PART, buildPlant, type Form } from './plantmesh';
+import { FORMS, PART, addPlantInstanceData, buildPlant, type Form } from './plantmesh';
 import { groundRadiusNode } from './terrain';
 import { eclipseLight } from './eclipse';
 
@@ -79,7 +80,7 @@ function plantLight(albedo: N, Nrm: N, P: N, thin: N, ao: N, shadow: N): N {
 
 const ign = (): N => { const sc: N = screenCoordinate; return sc.x.add(uDitherFrame).mul(0.06711056).add(sc.y.add(uDitherFrame).mul(0.00583715)).fract().mul(52.9829189).fract(); };
 
-interface FullSlot { mesh: InstancedMesh; iDir: InstancedBufferAttribute; iQuat: InstancedBufferAttribute; iData: InstancedBufferAttribute; iTint: InstancedBufferAttribute; iTint2: InstancedBufferAttribute; cap: number; n: number; }
+interface FullSlot { mesh: InstancedMesh; iDir: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; iTint2: InterleavedBufferAttribute; cap: number; n: number; }
 
 export class Flora {
   readonly meshes: (InstancedMesh | Mesh)[] = [];
@@ -125,13 +126,8 @@ export class Flora {
       this.geos.set(form, geo);
       const cap = Math.max(48, Math.floor(fullCap / (form === 'tuft' || form === 'fern' || form === 'shrub' ? 2.5 : 4)));
       const g = geo.clone();
-      const iDir = new InstancedBufferAttribute(new Float32Array(cap * 3), 3);
-      const iQuat = new InstancedBufferAttribute(new Float32Array(cap * 4), 4);
-      const iData = new InstancedBufferAttribute(new Float32Array(cap * 4), 4);
-      const iTint = new InstancedBufferAttribute(new Float32Array(cap * 3), 3);
-      const iTint2 = new InstancedBufferAttribute(new Float32Array(cap * 3), 3);
-      for (const a of [iDir, iQuat, iData, iTint, iTint2]) a.setUsage(DynamicDrawUsage);
-      g.setAttribute('iDir', iDir); g.setAttribute('iQuat', iQuat); g.setAttribute('iData', iData); g.setAttribute('iTint', iTint); g.setAttribute('iTint2', iTint2);
+      // per-plant data in one shared buffer (WebGPU allows 8 vertex buffers per draw)
+      const { iDir, iQuat, iData, iTint, iTint2 } = addPlantInstanceData(g, cap);
       const material = new MeshBasicNodeMaterial({ side: DoubleSide });
       material.alphaTest = 0.5;
       const aDir: N = attribute('iDir', 'vec3'), aQuat: N = attribute('iQuat', 'vec4'), aData: N = attribute('iData', 'vec4'); // size, glow, wind, seed
@@ -536,7 +532,7 @@ export class Flora {
     }
     for (const s of this.full.values()) {
       s.mesh.count = s.n;
-      s.iDir.needsUpdate = s.iQuat.needsUpdate = s.iData.needsUpdate = s.iTint.needsUpdate = s.iTint2.needsUpdate = true;
+      s.iDir.needsUpdate = true; // one shared buffer: this uploads all of the instance data
     }
     far.mesh.count = farN;
     far.iDir.needsUpdate = far.iData.needsUpdate = far.iTint.needsUpdate = far.iTint2.needsUpdate = true;

@@ -3,8 +3,9 @@
 // fur. Every vertex carries what the skin shader needs to animate it (which part it belongs to and
 // how strongly it follows that part's motion) and to shade it (a skin uv and a material zone).
 // Local frame: +X forward, +Y up, torso length 1, feet on y = 0.
-import { BufferAttribute, BufferGeometry, Color } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, Color, type InterleavedBufferAttribute } from 'three/webgpu';
 import { G, Limb, limbKind } from '../../sim/genetics';
+import { packAttributes } from './packed';
 
 export const ZONE = { skin: 0, limb: 1, membrane: 2, bone: 3, eye: 4, bladder: 5, grove: 6 } as const;
 export const COVER = { hide: 0, scales: 1, fur: 2, feathers: 3, chitin: 4 } as const;
@@ -115,11 +116,11 @@ class Mesh {
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(new Float32Array(this.pos), 3));
     g.setAttribute('normal', new BufferAttribute(new Float32Array(this.nrm), 3));
-    g.setAttribute('color', new BufferAttribute(new Float32Array(this.col), 3));
-    g.setAttribute('rig', new BufferAttribute(new Float32Array(this.rig), 4));
-    g.setAttribute('rig2', new BufferAttribute(new Float32Array(this.rig2), 4));
-    g.setAttribute('skin', new BufferAttribute(new Float32Array(this.skin), 4));
-    g.setAttribute('emissive', new BufferAttribute(new Float32Array(this.emi), 3));
+    // one shared buffer: WebGPU allows 8 vertex buffers per draw and the instance data needs room too
+    packAttributes(g, [
+      { name: 'color', size: 3, data: this.col }, { name: 'rig', size: 4, data: this.rig }, { name: 'rig2', size: 4, data: this.rig2 },
+      { name: 'skin', size: 4, data: this.skin }, { name: 'emissive', size: 3, data: this.emi },
+    ], this.pos.length / 3);
     g.setIndex(this.idx);
     return g;
   }
@@ -410,4 +411,17 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
     skinB: [cover, aquatic ? 1 : 0, Math.max(0, g[G.ColorChange]! - 0.45) * 1.8, 4 + 18 * g[G.PatternScale]!],
     skinC: [glowC.r, glowC.g, glowC.b, glows ? 1 : 0],
   };
+}
+
+export interface CreatureInstanceData { iPos: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute }
+
+/**
+ * Per-animal data (place, facing, size and gait, golden tint), all in one shared buffer. The species'
+ * skin settings ride along as instance data too, so that every species can share one material.
+ */
+export function addCreatureInstanceData(model: CreatureModel, cap: number): CreatureInstanceData {
+  return packAttributes(model.geometry, [
+    { name: 'iPos', size: 3 }, { name: 'iQuat', size: 4 }, { name: 'iData', size: 4 }, { name: 'iTint', size: 1 },
+    { name: 'iSkinA', size: 4, data: model.skinA }, { name: 'iSkinB', size: 4, data: model.skinB }, { name: 'iSkinC', size: 4, data: model.skinC },
+  ], cap, { instanced: true, dynamic: true }) as unknown as CreatureInstanceData;
 }
