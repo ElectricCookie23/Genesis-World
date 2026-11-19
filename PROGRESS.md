@@ -90,10 +90,10 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 48 | Agriculture that turns land into fields. | done | settlements with farming paint field patchwork around them |
 | 49 | Roads that follow ancient migration trails. | simplified | lit roads join neighbouring towns by the direct route, not along old migration trails |
 | 50 | Ruins that forests overgrow, later found by a second intelligent species. | done | ruins are logged and listed; a later, different people building on the same ground rediscover them (event) |
-| 51 | Plate tectonics with drifting continents. | simplified | plate outlines stay fixed and the crust slides across them every 2 My, carrying continents; new sea floor forms where plates part |
-| 52 | Mountain building at plate collisions, creating rain-shadow deserts. | simplified | land rises slowly where plates collide and erosion wears it down; rain shadows come from the moisture model; plates themselves do not drift |
+| 51 | Plate tectonics with drifting continents. | done | `sim/tectonics.ts`: every plate carries its crust forward around its pole, so the outlines of the plates move; gaps behind a plate fill with new sea floor at a ridge, and continental crust is conserved. A single continent breaks into several over a few hundred million years |
+| 52 | Mountain building at plate collisions, creating rain-shadow deserts. | done | where two plates arrive in the same place the lighter crust rides up and a range grows (capped near 7.5 km) with foothills beside it; plate stress is recomputed after every move, erosion wears ranges down, and rain shadows come from the moisture model |
 | 53 | Earthquakes and tsunamis. | done | earthquakes at plate boundaries; undersea ones raise tsunamis that scour coasts and are witnessed |
-| 54 | Hotspots that build island chains. | simplified | hotspots shift cell by cell over time, so repeated eruptions leave island chains |
+| 54 | Hotspots that build island chains. | done | hotspots stay fixed in the deep rock while the plates slide over them, so repeated eruptions leave chains of islands |
 | 55 | Erosion that carves canyons and grows deltas. | simplified | peaks erode and glaciers carve coastal valleys; no canyon or delta modelling |
 | 56 | Ocean currents that carry heat. | simplified | sea temperature is carried along the wind-driven surface flow |
 | 57 | Rafting: creatures ride storm debris to colonize islands. | done | storms occasionally raft shore animals to a far coast, where they found new populations |
@@ -123,7 +123,7 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 81 | Invasive species crossing land bridges. | done | land species that surge across new land bridges when the seas fall are logged as invasions |
 | 82 | Living fossils flagged when a species stays unchanged for eons. | done | species unchanged for 60 My are flagged |
 | 83 | Fossil layer: see-through ground showing bones where extinct species died. | simplified | fossils overlay shows large bone markers where extinct species last lived; no see-through ground |
-| 84 | Auto-generated field guide with a sketch-style card for every species. | simplified | field guide lists every living species with a description; no sketch cards yet |
+| 84 | Auto-generated field guide with a sketch-style card for every species. | done | field guide shows every living species as a paper card with an ink sketch drawn from its genes (`ui/sketch.tsx`: body, legs, wings, fins, horns, sail, plates, markings, hand-drawn wobble) and a description |
 | 85 | Extinction memorial. | done | memorial section lists extinct species; click one for why it died |
 | 86 | Rewind timeline with snapshots and major events marked. | simplified | up to six rewind points at milestone events, listed in settings |
 | 87 | God tools: ice age, heat wave, raise mountains, flood, plague, lightning. | done | meteor, lightning, plague, raise mountains, flood, ice age, heat wave |
@@ -188,5 +188,5 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 146 | Near silence after a mass extinction. | done | music falls near silent for 45 seconds after a mass extinction |
 | 147 | More god tools: gene ray, shield dome, summon comet, tilt axis, rain of life. | done | gene ray, shield dome, summon comet, tilt axis, rain of life |
 | 148 | Hands-off mode that locks all god tools. | done | hands-off mode locks every god tool |
-| 149 | GIF and video recording. | simplified | records the 3D view to a WebM video; no GIF |
-| 150 | Export a planet's history as an illustrated PDF book. | simplified | opens an illustrated history (planet image plus major events) ready to print or save as PDF |
+| 149 | GIF and video recording. | done | records the 3D view to a WebM video, or saves a three second looping GIF (`util/gif.ts`, own encoder, checked against an independent decoder) |
+| 150 | Export a planet's history as an illustrated PDF book. | done | saves a real PDF (`util/pdf.ts`, own writer, checked with an independent reader): cover with the planet portrait, every great event in order, and a page of nations |

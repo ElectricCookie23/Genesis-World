@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Nation } from '../render/gfx/nations';
+import { CreatureSketch } from './sketch';
 import { G, GENE_NAMES } from '../sim/genetics';
 import type { SimEvent } from '../sim/events';
 import type { SpeciesInfo } from '../shared/protocol';
@@ -423,10 +424,10 @@ export function Guide() {
       <div class={css.scroll}>
         {living.length === 0 && <p class={css.sub}>No animals yet.</p>}
         {living.map((sp) => (
-          <button class={css.entry} key={sp.id} onClick={() => actions.selectSpecies(sp.id)} style={{ color: hsl(sp.genes[G.Hue]!) }}>
-            <i class={css.dot} />
-            <div class={css.what} style={{ color: '#ece7db', fontStyle: 'italic' }}>{sp.name}</div>
-            <div class={css.when} style={{ color: '#ece7db' }}>{describe(sp)} {metres(sp.metres)}, {bigNumber(sp.pop)} alive.</div>
+          <button key={sp.id} onClick={() => actions.selectSpecies(sp.id)} style={{ display: 'block', width: '100%', textAlign: 'left', margin: '0 0 12px', padding: '10px 12px 9px', border: 'none', borderRadius: '5px', cursor: 'pointer', background: '#efe6d2', color: '#3a2e24', boxShadow: '0 1px 6px rgba(0,0,0,0.35)', fontFamily: "'Cormorant Garamond', 'Cormorant', Georgia, serif" }}>
+            <CreatureSketch genes={sp.genes} width={236} seed={sp.id + 1} />
+            <div style={{ fontStyle: 'italic', fontSize: '17px', marginTop: '6px', borderTop: '1px solid rgba(58,46,36,0.3)', paddingTop: '5px' }}>{sp.name}</div>
+            <div style={{ fontSize: '13px', lineHeight: 1.3 }}>{describe(sp)} {metres(sp.metres)}, {bigNumber(sp.pop)} alive.</div>
           </button>
         ))}
         {gone.length > 0 && <div class={css.sub} style={{ margin: '14px 0 4px' }}>IN MEMORY</div>}
@@ -650,7 +651,8 @@ export function Settings() {
         </div>
         <div class={css.row}><span>Save a photo</span><button class={css.btn} onClick={() => actions.savePhoto()}>save PNG</button></div>
         <div class={css.row}><span>Record video</span><button class={css.btn} onClick={() => actions.toggleRecording()}>{s.recording ? 'stop and save' : 'record'}</button></div>
-        <div class={css.row}><span>History of this planet<br /><span class={css.sub}>An illustrated book you can print or save as PDF.</span></span><button class={css.btn} onClick={() => actions.exportBook()}>make book</button></div>
+        <div class={css.row}><span>Save a GIF<br /><span class={css.sub}>Three seconds of the view, looping.</span></span><button class={css.btn} onClick={() => actions.saveGif()}>save GIF</button></div>
+        <div class={css.row}><span>History of this planet<br /><span class={css.sub}>An illustrated book, saved as a PDF.</span></span><button class={css.btn} onClick={() => actions.exportBook()}>make book</button></div>
         <div class={css.row}><span>Fork the timeline here<br /><span class={css.sub}>Mark this moment so you can come back and try another future.</span></span><button class={css.btn} onClick={() => actions.fork()}>fork</button></div>
         {s.timeline.length > 0 && <div class={css.sub} style={{ margin: '12px 0 2px' }}>REWIND TO</div>}
         {s.timeline.map((t) => (

@@ -30,7 +30,7 @@ export function driftPlatesMoving(world: World, years: number): DriftResult {
   const steps = new Float32Array(plates.length);
   let any = false;
   for (let p = 0; p < plates.length; p++) {
-    const pl = plates[p]! as (typeof plates)[number] & { acc?: number };
+    const pl = plates[p]!;
     pl.acc = (pl.acc ?? 0) + pl.speed * my;
     const whole = Math.trunc(pl.acc / CELL);
     if (whole !== 0) { steps[p] = Math.max(-3, Math.min(3, whole)) * CELL; pl.acc -= whole * CELL; any = true; }

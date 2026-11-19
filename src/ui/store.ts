@@ -155,6 +155,7 @@ export const actions = {
   setPhotoFilter: (_f: string) => {},
   savePhoto: () => {},
   toggleRecording: () => {},
+  saveGif: () => {},
   exportBook: () => {},
   drawSection: (_canvas: HTMLCanvasElement) => {},
   familyOf: (_key: number): string[] => [],

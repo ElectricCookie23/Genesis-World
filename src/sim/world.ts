@@ -190,6 +190,8 @@ export interface Plate {
   /** Rotation axis (unit) and angular speed in radians per million years. */
   ax: number; ay: number; az: number;
   speed: number;
+  /** Motion saved up until the plate has moved a whole cell (radians). */
+  acc?: number;
 }
 
 /** All per-cell world state. Elevation is in km relative to the reference datum (not sea level). */

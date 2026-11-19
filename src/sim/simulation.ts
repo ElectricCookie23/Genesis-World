@@ -1,7 +1,8 @@
 // The whole deterministic simulation. Runs in the worker and in headless tests.
 import { RNG, hashSeed } from './rng';
 import { BIOME_NAMES, buildGrid, createWorld, GRID_N, type Grid, type World } from './world';
-import { carveFjords, computeDrainage, countContinents, driftPlates, erode, erupt, uplift, generateTerrain, impact, type GeologyState, type VolcanoSite } from './geology';
+import { driftPlatesMoving } from './tectonics';
+import { carveFjords, computeConvergence, computeDrainage, countContinents, erode, erupt, uplift, generateTerrain, impact, type GeologyState, type VolcanoSite } from './geology';
 import { classifyBiomes, createClimate, updateMoisture, updateSnow, updateTemperature, type ClimateState } from './climate';
 import { EventLog, type SimEvent } from './events';
 import { buildRegions, updateRegions, type Regions } from './regions';
@@ -224,7 +225,9 @@ export class Simulation {
     // continents drift: slow enough that it only shows at high time speeds
     this.driftAcc += dt;
     if (this.driftAcc >= 2e6) {
-      driftPlates(w, this.driftAcc);
+      // the plates themselves move: their outlines shift, they collide and pull apart, and the stress along their edges is worked out afresh
+      const drift = driftPlatesMoving(w, this.driftAcc * 0.6);
+      if (drift.moved > 0) computeConvergence(w, this.geology.convergence);
       this.driftAcc = 0;
       this.terrainDirty = true;
       computeDrainage(w);
@@ -498,15 +501,7 @@ export class Simulation {
       for (let tries = 0; tries < 30 && cell < 0; tries++) { const c = r.int(this.grid.count); if (Math.abs(conv[c]!) > 0.4) cell = c; }
       if (cell >= 0) this.earthquake(cell, r.range(0.3, 1));
     }
-    // the crust slides over each hotspot, so its fire breaks out a little further along: island chains
-    if (vol.length && r.chance(Math.min(0.5, dt / 2.5e6))) {
-      const hot = vol.filter((v) => v.hotspot);
-      if (hot.length) {
-        const site = r.pick(hot);
-        const k = (site.name.charCodeAt(0) + site.name.length) % this.grid.ncount[site.cell]!;
-        site.cell = this.grid.neighbors[site.cell * 6 + k]!;
-      }
-    }
+    // hotspots stay where they are in the deep rock while the plates slide over them, so their eruptions leave chains of islands
     // meteors fall on their own now and then
     if (r.chance(Math.min(0.3, dt / 90e6))) this.meteor(r.int(this.grid.count), r.range(0.55, 1), false);
   }

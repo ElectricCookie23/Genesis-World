@@ -3,6 +3,8 @@ import '@fontsource/cormorant-garamond/500-italic.css';
 import '@fontsource/jetbrains-mono/400.css';
 import { h, render } from 'preact';
 import { GenesisScene, PRESETS, type Preset } from './render/scene';
+import { encodeGif } from './util/gif';
+import { PdfDoc, wrapText } from './util/pdf';
 import { Opening } from './render/opening';
 import { buildGrid } from './sim/world';
 import { randomSeedCode } from './sim/rng';
@@ -15,7 +17,7 @@ import { placeName } from './sim/names';
 import { RNG } from './sim/rng';
 import { nearestCell } from './sim/world';
 import { GENE_COUNT, G } from './sim/genetics';
-import { formatYear } from './ui/format';
+import { formatYear, bigNumber } from './ui/format';
 import { Vector3 } from 'three/webgpu';
 import { del, get, set } from 'idb-keyval';
 import { Music } from './audio/music';
@@ -333,22 +335,95 @@ async function boot(): Promise<void> {
       update({ recording: true });
     } catch { update({ notice: 'This browser cannot record video here.' }); window.setTimeout(() => update({ notice: '' }), 3500); }
   };
+  // a short looping GIF: three seconds at ten frames a second, about 480 pixels wide
+  let gifBusy = false;
+  actions.saveGif = () => {
+    if (gifBusy) return;
+    gifBusy = true;
+    const w = 480, h = Math.max(2, Math.round((w * canvas.height) / Math.max(1, canvas.width) / 2) * 2);
+    const small = document.createElement('canvas');
+    small.width = w; small.height = h;
+    const ctx = small.getContext('2d', { willReadFrequently: true })!;
+    const frames: Uint8ClampedArray[] = [];
+    update({ notice: 'Recording a three second GIF...' });
+    const timer = window.setInterval(() => {
+      scene.frame(0);
+      ctx.filter = FILTERS[state.photoFilter] ?? 'none';
+      ctx.drawImage(canvas, 0, 0, w, h);
+      frames.push(ctx.getImageData(0, 0, w, h).data);
+      if (frames.length >= 30) {
+        window.clearInterval(timer);
+        const bytes = encodeGif(frames, w, h, 10);
+        download(URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'image/gif' })), `genesis-${seed}.gif`);
+        gifBusy = false;
+        update({ notice: 'GIF saved.' });
+        window.setTimeout(() => update({ notice: '' }), 2500);
+      }
+    }, 100);
+  };
+  // the history of the planet as a real PDF: a cover with its portrait, then every great event in order
   actions.exportBook = () => {
-    const esc = (t: string) => t.replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[ch]!);
+    const doc = new PdfDoc();
+    const W = doc.width, margin = 62;
+    const ink: [number, number, number] = [0.11, 0.1, 0.09], soft: [number, number, number] = [0.42, 0.4, 0.36];
+    const paper = () => doc.background(0.965, 0.945, 0.9);
+    const jpegOf = (source: HTMLCanvasElement, maxW: number): { data: Uint8Array; w: number; h: number } => {
+      const sc = Math.min(1, maxW / source.width);
+      const c = document.createElement('canvas');
+      c.width = Math.round(source.width * sc); c.height = Math.round(source.height * sc);
+      c.getContext('2d')!.drawImage(source, 0, 0, c.width, c.height);
+      const b64 = c.toDataURL('image/jpeg', 0.86).split(',')[1]!;
+      const bin = atob(b64);
+      const data = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) data[i] = bin.charCodeAt(i);
+      return { data, w: c.width, h: c.height };
+    };
+    scene.frame(0);
+    const portrait = jpegOf(canvas, 1400);
     const chapters = state.chronicle.map((id) => state.events[id]!).filter((e) => e.importance >= 2);
     const living = [...state.species.values()].filter((x) => x.extinctYear < 0).length;
-    const rows = chapters.map((e) => `<section class="${e.importance >= 3 ? 'big' : ''}"><div class="when">${esc(formatYear(e.simYear))}</div><h2>${esc(e.title)}</h2><p>${esc(e.description)}</p></section>`).join('');
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>A history of ${esc(seed)}</title><style>
-      body{font:17px/1.55 'Cormorant Garamond',Georgia,serif;color:#1c1a17;max-width:38em;margin:3em auto;padding:0 1.5em}
-      h1{font-size:2.6em;letter-spacing:.06em;margin:.2em 0 0}h2{font-size:1.25em;margin:.1em 0}.when{font:11px monospace;letter-spacing:.1em;color:#7a7468;text-transform:uppercase}
-      section{margin:1.4em 0;break-inside:avoid}section.big h2{font-size:1.7em}img{width:100%;border-radius:6px;margin:1.2em 0}p{margin:.2em 0}.lead{font-style:italic;color:#4d483f}
-    </style></head><body><h1>GENESIS</h1><p class="lead">A history of the world called ${esc(seed)}, from its forming to ${esc(formatYear(state.stats?.simYear ?? 0).toLowerCase())}. ${state.species.size} kinds of animal are named in it; ${living} are still alive.</p>
-    <img src="${snapshot()}" alt="The planet">${rows}<p class="lead">Every event in this book happened on its own. Nothing was scripted.</p></body></html>`;
-    const w = window.open('', '_blank');
-    if (!w) { download(URL.createObjectURL(new Blob([html], { type: 'text/html' })), `genesis-${seed}-history.html`); return; }
-    w.document.write(html);
-    w.document.close();
-    w.setTimeout(() => w.print(), 600);
+    // cover
+    paper();
+    doc.text('GENESIS', W / 2, 150, 44, 'serif', ink, 'centre');
+    doc.text(`A history of the world called ${seed}`, W / 2, 182, 15, 'italic', soft, 'centre');
+    const iw = W - margin * 2, ih = (iw * portrait.h) / portrait.w;
+    doc.jpeg(portrait.data, portrait.w, portrait.h, margin, 220, iw, ih);
+    let y = 220 + ih + 34;
+    y = doc.paragraph(`From its forming to ${formatYear(state.stats?.simYear ?? 0).toLowerCase()}. ${state.species.size} kinds of animal are named in these pages; ${living} are still alive. ${state.nations.length ? `${state.nations.length} nations light its night side.` : ''}`, margin, y, 13, iw, 'serif', ink);
+    doc.paragraph('Every event in this book happened on its own. Nothing was scripted.', margin, y + 8, 12, iw, 'italic', soft);
+    // chapters
+    doc.addPage(); paper();
+    y = 84;
+    const bottom = doc.height - 70;
+    for (const e of chapters) {
+      const big = e.importance >= 3;
+      const titleSize = big ? 19 : 14;
+      const bodyLines = wrapText(e.description, 11.5, iw).length;
+      const need = 14 + titleSize * 1.3 + bodyLines * 11.5 * 1.35 + 20;
+      if (y + need > bottom) { doc.text(String(doc.pageCount), W / 2, doc.height - 40, 9, 'sans', soft, 'centre'); doc.addPage(); paper(); y = 84; }
+      doc.text(formatYear(e.simYear).toUpperCase(), margin, y, 8, 'sans', soft);
+      y += 8 + titleSize;
+      doc.text(e.title, margin, y, titleSize, big ? 'bold' : 'serif', ink);
+      y += 6 + 11.5;
+      y = doc.paragraph(e.description, margin, y, 11.5, iw, 'serif', ink) + 14;
+    }
+    doc.text(String(doc.pageCount), W / 2, doc.height - 40, 9, 'sans', soft, 'centre');
+    // the nations, if any
+    if (state.nations.length) {
+      doc.addPage(); paper();
+      doc.text('The nations', margin, 96, 22, 'serif', ink);
+      y = 130;
+      for (const n of [...state.nations].sort((p1, p2) => p2.pop - p1.pop).slice(0, 24)) {
+        const lin = (v: number) => Math.pow(Math.max(0, Math.min(1, v)), 1 / 2.2);
+        doc.rect(margin, y - 9, 16, 11, lin(n.signature[0] * 0.85), lin(n.signature[1] * 0.85), lin(n.signature[2] * 0.85));
+        doc.text(n.name, margin + 24, y, 13, 'serif', ink);
+        const cap = state.settlements.find((x) => x.id === n.capital);
+        doc.text(`${n.members.length} ${n.members.length === 1 ? 'settlement' : 'settlements'}, about ${bigNumber(n.pop * 1000)} people${cap ? `. Capital: ${cap.name}` : ''}`, margin + 24, y + 14, 10, 'italic', soft);
+        y += 36;
+        if (y > bottom) { doc.addPage(); paper(); y = 84; }
+      }
+    }
+    download(URL.createObjectURL(doc.save()), `genesis-${seed}-history.pdf`);
   };
 
   // milestone pop-ups play one after another
