@@ -94,8 +94,9 @@ export class QuadSphere {
    * Choose the patches to draw for a camera position (in the planet's own space).
    * @param split a patch splits when the camera is closer than split x its width
    * @param maxLevel deepest quadtree level
+   * @param keep optional test that can drop a leaf patch (for example sea patches that lie wholly inland)
    */
-  update(camera: Vector3, split: number, maxLevel: number): void {
+  update(camera: Vector3, split: number, maxLevel: number, keep?: (face: number, x0: number, y0: number, size: number) => boolean): void {
     this.count = 0;
     this.deepest = 0;
     const camR = camera.length();
@@ -120,6 +121,7 @@ export class QuadSphere {
         visit(face, x0 + h, y0 + h, h, level + 1);
         return;
       }
+      if (keep && !keep(face, x0, y0, size)) return;
       if (level > this.deepest) this.deepest = level;
       this.patch.setXYZW(this.count++, x0, y0, size, face);
     };

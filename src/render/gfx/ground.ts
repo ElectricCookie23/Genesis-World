@@ -6,6 +6,8 @@ import { DataUtils, type WebGPURenderer } from 'three/webgpu';
 import type { Grid } from '../../sim/world';
 import { EXAG } from '../common';
 import type { ErosionBake } from './erosion';
+import { uv, vec4 } from 'three/tsl';
+import { Pass, makeTarget } from './gpu';
 
 const TILE_COARSE = 9;
 const TILE_FINE = 70;
@@ -19,6 +21,7 @@ export class GroundSampler {
   private detail: Float32Array | null = null;
   private detailSize = 0;
   private requested = false;
+  flipped = false;
 
   constructor(private grid: Grid) {
     const { tris, count } = grid;
@@ -47,7 +50,17 @@ export class GroundSampler {
       const raw = (await renderer.readRenderTargetPixelsAsync(erosion.result, 0, 0, n, n)) as unknown as ArrayLike<number>;
       const out = new Float32Array(n * n);
       const half = raw instanceof Uint16Array;
-      for (let i = 0; i < n * n; i++) out[i] = half ? DataUtils.fromHalfFloat(raw[i * 4]!) : raw[i * 4]!;
+      // backends differ on whether the first row read back is the top or the bottom of the texture: measure it
+      const probe = makeTarget(1, 4);
+      new Pass(vec4(uv().y, 0, 0, 1)).render(renderer, probe);
+      const pr = (await renderer.readRenderTargetPixelsAsync(probe, 0, 0, 1, 4)) as unknown as ArrayLike<number>;
+      const flipped = pr[0]! > pr[12]!;
+      probe.dispose();
+      for (let y = 0; y < n; y++) {
+        const row = flipped ? n - 1 - y : y;
+        for (let x = 0; x < n; x++) { const v = raw[(row * n + x) * 4]!; out[y * n + x] = half ? DataUtils.fromHalfFloat(v) : v; }
+      }
+      this.flipped = flipped;
       this.detail = out;
       this.detailSize = n;
     } catch {

@@ -28,7 +28,7 @@ export class TerrainSurface {
   maxLevel = 11;
   split = 5;
 
-  constructor(data: PlanetData, erosion: ErosionBake, rivers: RiverMap, segments = 32, maxPatches = 800, private shadowSteps = 8) {
+  constructor(data: PlanetData, erosion: ErosionBake, rivers: RiverMap, segments = 32, maxPatches = 800, private shadowSteps = 8, caustics?: { node: N; tile: number }) {
     const material = new MeshBasicNodeMaterial();
     const eros = erosion.texture;
 
@@ -176,7 +176,17 @@ export class TerrainSurface {
     // hollows see less sky
     const hollow = hE.add(hW).add(hN).add(hS).mul(0.25).sub(A.r);
     const ao: N = float(1).sub(hollow.mul(1.1).clamp(0, 0.55)).mul(mix(float(0.62), float(1), smoothstep(0.25, 0.6, e1.r))).mul(mix(float(1), e2.r.mul(0.5).add(0.72).min(1), fineFade));
-    const direct = max(dot(Nrm, L), 0).mul(smoothstep(-0.1, 0.14, sunH)).mul(shadow).mul(ringShade).mul(terrainShadow);
+    // sunlight focused by the waves dances on the shallow sea bed
+    let causticLight: N = float(1);
+    if (caustics) {
+      const T = caustics.tile;
+      const drift = vec3(uTime.mul(0.00002), 0, uTime.mul(0.000013));
+      const cj = (s: number): N => { const q: N = dir.mul(s).add(drift); return caustics.node.sample(q.zy.div(T)).a.mul(w.x).add(caustics.node.sample(q.xz.div(T)).a.mul(w.y)).add(caustics.node.sample(q.xy.div(T)).a.mul(w.z)); };
+      const focus = pow(float(1.22).sub(cj(1)).clamp(0, 1.2), 3).add(pow(float(1.22).sub(cj(2.7)).clamp(0, 1.2), 3)).mul(1.6);
+      const wet = smoothstep(0.0, -0.03, above).mul(float(1).sub(smoothstep(0.12, 0.5, above.negate())));
+      causticLight = mix(float(1), focus.add(0.72), wet);
+    }
+    const direct = max(dot(Nrm, L), 0).mul(smoothstep(-0.1, 0.14, sunH)).mul(shadow).mul(ringShade).mul(terrainShadow).mul(causticLight);
     const skyLight = mix(vec3(uLook.sky), vec3(0.6, 0.6, 0.6), 0.4).mul(0.2).mul(day).mul(dot(Nrm, dir).mul(0.4).add(0.6)).mul(ao);
     // the moon lights the night side in its own tint; airglow and starlight keep the rest from going black
     const moonUp = smoothstep(-0.1, 0.25, dot(dir, M));

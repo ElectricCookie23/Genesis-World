@@ -9,7 +9,8 @@ import { nearestCell } from '../sim/world';
 import type { CellSnapshot, WorldStats } from '../shared/protocol';
 import { hashSeed } from '../sim/rng';
 import { PlanetMesh } from './planet';
-import { OceanMesh } from './ocean';
+import { OceanSurface } from './gfx/ocean';
+import { faceDirection } from './gfx/cubebake';
 import { setCloudShadow } from './clouds';
 import { VolumetricClouds } from './gfx/volclouds';
 import { createAtmosphere, createMoon, createSky } from './atmosphere';
@@ -28,7 +29,7 @@ import { GroundSampler } from './gfx/ground';
 import { RiverMap } from './gfx/rivermap';
 import { hashSeed as seedHash } from '../sim/rng';
 import type { HerdSnapshot, PlantInfo, SpeciesInfo } from '../shared/protocol';
-import { EXAG, MOON_DISTANCE, uBolts, uFlash, uRing, uSun2, uSun2Dir, uUnderwater, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime } from './common';
+import { EXAG, MOON_DISTANCE, uBolts, uFlash, uRing, uSun2, uSun2Dir, uUnderwater, uGradeTint, uHazeAmount, uHazeTint, uMoonDir, uSeaKm, uSkyAngle, uSunDir, uTime, uOceanFill } from './common';
 
 export type Quality = 'low' | 'medium' | 'high' | 'ultra';
 
@@ -49,7 +50,8 @@ export class GenesisScene {
   readonly moon: Mesh;
   readonly disc: Mesh;
   planet?: PlanetMesh;
-  ocean?: OceanMesh;
+  ocean?: OceanSurface;
+  oceanResolution = 256;
   clouds?: VolumetricClouds;
   cloudNoiseSize = 64;
   vegetation?: Vegetation;
@@ -61,6 +63,7 @@ export class GenesisScene {
   ground?: GroundSampler;
   riverMap?: RiverMap;
   riverSize = 512;
+  shadowSteps = 8;
   /** Resolution of the baked planet maps per cube face, and of the erosion bake. Set before setGrid. */
   dataSize = 256;
   erosionSize = 512;
@@ -164,11 +167,11 @@ export class GenesisScene {
     this.clouds = new VolumetricClouds(this.data.life, seedHash(`clouds:${seed}`), this.cloudNoiseSize);
     setCloudShadow(this.clouds.shadow);
     this.riverMap = new RiverMap(grid, this.riverSize);
-    this.terrain = new TerrainSurface(this.data, this.erosion, this.riverMap);
+    this.ocean = new OceanSurface(this.data, this.clouds.shadow, this.erosion.texture, this.oceanResolution, seedHash(`ocean:${seed}`));
+    this.terrain = new TerrainSurface(this.data, this.erosion, this.riverMap, 32, 800, this.shadowSteps, { node: this.ocean.causticNode, tile: this.ocean.causticTile });
     this.scene.add(this.terrain.sphere.mesh);
     this.planet.mesh.visible = false;
-    this.ocean = new OceanMesh(grid);
-    this.scene.add(this.planet.mesh, this.ocean.mesh, this.clouds.mesh);
+    this.scene.add(this.planet.mesh, this.ocean.sphere.mesh, this.clouds.mesh);
     this.vegetation = new Vegetation(grid, this.plantBudget);
     this.vegetation.ground = this.ground;
     this.vegetation.pigmentA = this.look.pigmentA;
@@ -225,13 +228,30 @@ export class GenesisScene {
     this.ground?.setCells(cells.elevation, cells.seaLevel);
     this.riverMap?.update(cells, performance.now(), first);
     this.planet.update(cells, first);
-    this.ocean.update(cells);
     this.vegetation?.setCells(cells);
     this.creatures?.setCells(cells);
     this.rivers?.update(cells, performance.now(), first || cells.terrainChanged);
     this.lastElevation = cells.elevation;
     uSeaKm.value = cells.seaLevel;
   }
+
+  private seaProbe: [number, number, number] = [0, 0, 0];
+  private seaCell = 0;
+  /** Sea patches that lie wholly on dry land are not drawn. Only small patches are tested, densely enough not to miss an inlet. */
+  private keepSeaPatch = (face: number, x0: number, y0: number, size: number): boolean => {
+    const g = this.ground, el = this.lastElevation;
+    if (!g || !el || size > 0.032 || uOceanFill.value < 1) return true;
+    const limit = uSeaKm.value + 0.4;
+    const d = this.seaProbe;
+    for (let j = 0; j <= 4; j++) {
+      for (let i = 0; i <= 4; i++) {
+        faceDirection(face, (x0 + (size * i) / 4) * 2 - 1, (y0 + (size * j) / 4) * 2 - 1, d);
+        this.seaCell = g.cellAt(d[0], d[1], d[2], this.seaCell);
+        if (el[this.seaCell]! < limit) return true;
+      }
+    }
+    return false;
+  };
 
   setSpecies(species: Map<number, SpeciesInfo>): void {
     if (!this.creatures) return;
@@ -467,6 +487,7 @@ export class GenesisScene {
     if (this.erosion && !this.erosion.finished) this.erosion.step(this.renderer, this.erosionPerFrame);
     else if (this.erosion && this.ground) void this.ground.readDetail(this.renderer, this.erosion);
     this.terrain?.update(this.cam.camera.position);
+    this.ocean?.update(this.renderer, this.cam.camera.position, this.time, this.keepSeaPatch);
     this.vegetation?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist);
     const c = this.cam.camera;
     const far = c.position.length() + this.moonDistance + 4;
