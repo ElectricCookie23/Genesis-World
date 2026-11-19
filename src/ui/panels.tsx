@@ -482,15 +482,27 @@ export function NationLabels() {
   const top = [...s.nations].sort((a, b) => b.pop - a.pop).slice(0, 14);
   useEffect(() => {
     let raf = 0;
+    // Sizes are measured once per render, not every frame. Labels are placed largest nation first, and one that
+    // would lie over a label already placed is left out: names used to pile on top of each other where capitals
+    // stand close together.
+    const sizes: [number, number][] = [];
+    if (ref.current) for (let i = 0; i < ref.current.children.length; i++) { const el = ref.current.children[i] as HTMLElement; sizes.push([el.offsetWidth, el.offsetHeight]); }
+    const placed: [number, number, number, number][] = [];
     const tick = () => {
       const host = ref.current;
       if (host) {
+        placed.length = 0;
         for (let i = 0; i < host.children.length; i++) {
           const el = host.children[i] as HTMLElement;
           const n = top[i];
           if (!n) continue;
           const [x, y, vis] = actions.project(n.dir[0], n.dir[1], n.dir[2]);
-          el.style.opacity = String(vis);
+          const [w, h] = sizes[i] ?? [120, 22];
+          const x0 = x - w / 2 - 6, y0 = y - h * 1.3 - 3, x1 = x + w / 2 + 6, y1 = y - h * 0.3 + 3;
+          let free = vis > 0.02;
+          if (free) for (const r of placed) if (x0 < r[2] && x1 > r[0] && y0 < r[3] && y1 > r[1]) { free = false; break; }
+          if (free) placed.push([x0, y0, x1, y1]);
+          el.style.opacity = free ? String(vis) : '0';
           el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -130%)`;
         }
       }

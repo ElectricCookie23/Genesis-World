@@ -387,7 +387,9 @@ export class GenesisScene {
     const facing = (x * cam.position.x + y * cam.position.y + z * cam.position.z) / camR;
     const p = this.projTmp.set(x, y, z).project(cam);
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
-    const vis = p.z < 1 && Math.abs(p.x) < 1.05 && Math.abs(p.y) < 1.05 ? Math.max(0, Math.min(1, (facing - 1 / camR) * 6)) : 0;
+    // a label appears only once its place is well clear of the limb: right at the edge of the disc the ground is seen
+    // edge-on and names hung over the rim of the planet for places that could not be made out
+    const vis = p.z < 1 && Math.abs(p.x) < 1.05 && Math.abs(p.y) < 1.05 ? Math.max(0, Math.min(1, (facing - 1 / camR - 0.1) * 6)) : 0;
     return [(p.x * 0.5 + 0.5) * w, (-p.y * 0.5 + 0.5) * h, vis];
   }
   setNightMap(on: boolean): void {
