@@ -173,6 +173,11 @@ export class GenesisScene {
 
   private lastCells?: CellSnapshot;
 
+  /** The latest per-cell snapshot from the simulation. */
+  vegetationCells(): CellSnapshot | undefined {
+    return this.lastCells;
+  }
+
   setOverlay(mode: 'none' | 'temp' | 'rain' | 'life' | 'people', colorblind: boolean): void {
     if (!this.planet) return;
     this.planet.overlay = mode;

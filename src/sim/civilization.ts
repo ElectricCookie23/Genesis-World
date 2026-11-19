@@ -23,9 +23,10 @@ export interface Settlement {
   painted: boolean;
   temple: boolean;
   farms: boolean;
+  stars: boolean;
 }
 
-export const INTELLIGENCE_THRESHOLD = 0.57;
+export const INTELLIGENCE_THRESHOLD = 0.53;
 
 export class Civilization {
   settlements: Settlement[] = [];
@@ -33,6 +34,9 @@ export class Civilization {
   sapient: number[] = [];
   living = 0;
   maxTech = 0;
+  spaceAgeYear = -1;
+  departed = false;
+  private industrial = false;
   private occupied = new Map<number, number>(); // region -> settlement id
 
   step(sim: Simulation, rng: RNG, tau: number): void {
@@ -87,6 +91,35 @@ export class Civilization {
       }
       if (st.tech >= 0.3 && before < 0.3) sim.civEvent('village', st.species, st.cell, st.id);
       if (st.tech >= 0.6 && before < 0.6) sim.civEvent('city', st.species, st.cell, st.id);
+      // star lore: villagers name a constellation after a vanished animal whose bones they find
+      if (!st.stars && st.tech > 0.4) {
+        st.stars = true;
+        const gone = cr.species.filter((x) => x.extinctYear >= 0 && x.peakRegions >= 10 && x.name);
+        if (gone.length) sim.civEvent('constellation', st.species, st.cell, st.id, rng.pick(gone).id);
+      }
+      // war: neighbours of another kind, or of another faith, sometimes fight
+      if (st.tech > 0.3 && rng.chance(Math.min(0.2, 0.012 * tau))) {
+        for (let j = 0; j < reg.grid.ncount[st.region]!; j++) {
+          const oid = this.occupied.get(reg.grid.neighbors[st.region * 6 + j]!);
+          if (oid === undefined) continue;
+          const o = this.settlements[oid]!;
+          if (o.species === st.species && (o.belief === st.belief || o.belief < 0 || st.belief < 0)) continue;
+          st.pop *= 0.7; o.pop *= 0.65; st.tech = Math.max(0.03, st.tech - 0.02); o.tech = Math.max(0.03, o.tech - 0.02);
+          sim.civEvent('war', st.species, st.cell, st.id, o.id);
+          // with the atom in hand, a war can end the age
+          if (this.spaceAgeYear >= 0 && rng.chance(0.04)) sim.civEvent('nuclear', st.species, st.cell, st.id);
+          break;
+        }
+      }
+      // sickness travels the roads between crowded towns
+      if (st.tech > 0.5 && st.pop > 20 && rng.chance(Math.min(0.2, 0.004 * tau))) {
+        st.pop *= 0.5;
+        sim.civEvent('city-plague', st.species, st.cell, st.id);
+        for (let j = 0; j < reg.grid.ncount[st.region]!; j++) {
+          const oid = this.occupied.get(reg.grid.neighbors[st.region * 6 + j]!);
+          if (oid !== undefined) this.settlements[oid]!.pop *= 0.7;
+        }
+      }
       // people move on and found daughter settlements
       if (st.pop > capacity * 0.7 && rng.chance(Math.min(0.5, 0.05 * tau * (1 + st.tech * 3)))) {
         const nb = reg.grid.neighbors[st.region * 6 + rng.int(reg.grid.ncount[st.region]!)]!;
@@ -107,6 +140,30 @@ export class Civilization {
     }
     this.living = living;
     this.maxTech = maxTech;
+    // industry: burning the buried forests of older ages warms the whole world
+    if (maxTech > 0.85) {
+      if (!this.industrial) { this.industrial = true; sim.civEvent('industry', this.sapient[0]!, -1, -1); }
+      sim.climate.greenhouse = Math.min(9, sim.climate.greenhouse + 0.00006 * tau * living);
+    }
+    if (this.spaceAgeYear < 0 && maxTech >= 1.1 && living >= 12) {
+      this.spaceAgeYear = sim.simYear;
+      sim.civEvent('space', this.sapient[0]!, -1, -1);
+    }
+    // departure: a people that has held the sky for a long age finally leaves
+    if (!this.departed && this.spaceAgeYear >= 0 && sim.simYear - this.spaceAgeYear > 25e6 && living >= 12) {
+      this.departed = true;
+      sim.civEvent('departure', this.sapient[0]!, -1, -1);
+    }
+    // monoliths: animals living beside one grow cleverer, generation by generation
+    if (sim.monoliths.length) {
+      for (let c = 0; c < cr.high; c++) {
+        if (!cr.alive[c] || !sim.monoliths.includes(cr.region[c]!)) continue;
+        const g = c * GENE_COUNT;
+        cr.genome[g + G.Intelligence] = Math.min(1, cr.genome[g + G.Intelligence]! + 0.01 * Math.min(1, tau * 4));
+        cr.genome[g + G.Curiosity] = Math.min(1, cr.genome[g + G.Curiosity]! + 0.01 * Math.min(1, tau * 4));
+        computePhenotype(cr.genome, g, cr.phen, c * PHEN_COUNT);
+      }
+    }
     this.tend(sim, tau);
     this.paint(sim);
   }
@@ -143,6 +200,16 @@ export class Civilization {
     }
   }
 
+  /** The worst war: most people die and much knowledge is lost. */
+  devastate(): void {
+    for (const st of this.settlements) {
+      if (st.ruined >= 0) continue;
+      st.pop *= 0.25;
+      st.tech *= 0.55;
+    }
+    this.spaceAgeYear = -1;
+  }
+
   /** A sight in the sky that every young culture sees: some will build a faith on it. */
   omen(sim: Simulation, eventId: number, rng: RNG): void {
     for (const st of this.settlements) {
@@ -172,10 +239,13 @@ export class Civilization {
     }
     if (cell < 0) return null;
     const st: Settlement = {
-      id: this.settlements.length, name: placeName(rng), cell, region, species, pop: 0.2, tech: 0.03, founded: sim.simYear, belief: -1, eventId: -1, ruined: -1, painted: false, temple: false, farms: false,
+      id: this.settlements.length, name: placeName(rng), cell, region, species, pop: 0.2, tech: 0.03, founded: sim.simYear, belief: -1, eventId: -1, ruined: -1, painted: false, temple: false, farms: false, stars: false,
     };
     this.settlements.push(st);
     this.occupied.set(region, st.id);
+    // a later people building where an older, different people once lived find what was left behind
+    const ruin = this.settlements.find((x) => x.region === region && x.ruined >= 0 && x.species !== species && x.tech > 0.25);
+    if (ruin) sim.civEvent('rediscover', species, cell, st.id, ruin.id);
     sim.civEvent(parent < 0 ? 'camp' : 'daughter', species, cell, st.id);
     return st;
   }

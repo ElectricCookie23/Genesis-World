@@ -11,6 +11,9 @@ import { SPEEDS, type FromWorker, type ToWorker } from './shared/protocol';
 import { App } from './ui/App';
 import { closeAll } from './ui/panels';
 import { describeIndividual } from './render/creatures';
+import { nearestCell } from './sim/world';
+import { GENE_COUNT, G } from './sim/genetics';
+import { formatYear } from './ui/format';
 import { Vector3 } from 'three/webgpu';
 import { del, get, set } from 'idb-keyval';
 import { Music } from './audio/music';
@@ -188,6 +191,96 @@ async function boot(): Promise<void> {
   actions.rewind = (index) => send({ type: 'rewind', index });
   update({ colorblind: store.get('genesis:cb') === '1' });
 
+  // flat map: an equirectangular picture of the planet as it is painted right now
+  let mapCells: Int32Array | null = null;
+  actions.drawMap = (cv) => {
+    const colors = scene.planet?.cellColors;
+    const ctx = cv.getContext('2d');
+    if (!colors || !ctx) return;
+    const W = cv.width, H = cv.height;
+    if (!mapCells) {
+      mapCells = new Int32Array(W * H);
+      let c = 0;
+      for (let y = 0; y < H; y++) {
+        const lat = (0.5 - (y + 0.5) / H) * Math.PI;
+        for (let x = 0; x < W; x++) {
+          const lon = ((x + 0.5) / W) * Math.PI * 2 - Math.PI;
+          c = nearestCell(grid, Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon), c);
+          mapCells[y * W + x] = c;
+        }
+      }
+    }
+    const img = ctx.createImageData(W, H);
+    const sea = state.stats?.seaLevel ?? 0;
+    const elev = scene.planet!.elevation;
+    for (let i = 0; i < W * H; i++) {
+      const c = mapCells[i]!;
+      const wet = elev[c]! <= sea && state.overlay === 'none';
+      // linear to display, with the sea drawn in blue by depth
+      const r = wet ? 0.02 : colors[c * 3]!, g = wet ? 0.1 + Math.max(0, 0.25 + elev[c]! * 0.06) : colors[c * 3 + 1]!, b = wet ? 0.3 + Math.max(0, 0.3 + elev[c]! * 0.06) : colors[c * 3 + 2]!;
+      img.data[i * 4] = Math.pow(Math.min(1, r), 0.45) * 255;
+      img.data[i * 4 + 1] = Math.pow(Math.min(1, g), 0.45) * 255;
+      img.data[i * 4 + 2] = Math.pow(Math.min(1, b), 0.45) * 255;
+      img.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    // settlements as warm dots
+    ctx.fillStyle = '#ffd27a';
+    for (const st of state.settlements) {
+      if (st.ruined >= 0) continue;
+      const x = ((grid.lon[st.cell]! + Math.PI) / (Math.PI * 2)) * W, y = (0.5 - grid.lat[st.cell]! / Math.PI) * H;
+      ctx.fillRect(x - 1, y - 1, st.tech > 0.6 ? 3 : 2, st.tech > 0.6 ? 3 : 2);
+    }
+  };
+  actions.mapClick = (u, v) => {
+    scene.cam.flyTo(u * Math.PI * 2 - Math.PI, (0.5 - v) * Math.PI, Math.min(scene.cam.dist, 1.4));
+    scene.cam.idle = 0;
+  };
+
+  // photo mode, video recording and the history book
+  const FILTERS: Record<string, string> = { none: 'none', vivid: 'saturate(1.45) contrast(1.08)', faded: 'saturate(0.6) contrast(0.9) brightness(1.08)', sepia: 'sepia(0.75) contrast(1.05)', noir: 'grayscale(1) contrast(1.25)' };
+  const download = (url: string, name: string) => { const a = document.createElement('a'); a.href = url; a.download = name; a.click(); };
+  const snapshot = (): string => {
+    scene.frame(0);
+    const out = document.createElement('canvas');
+    out.width = canvas.width; out.height = canvas.height;
+    const ctx = out.getContext('2d')!;
+    ctx.filter = FILTERS[state.photoFilter] ?? 'none';
+    ctx.drawImage(canvas, 0, 0);
+    return out.toDataURL('image/png');
+  };
+  actions.setPhotoFilter = (f) => { update({ photoFilter: f }); canvas.style.filter = FILTERS[f] ?? 'none'; };
+  actions.savePhoto = () => download(snapshot(), `genesis-${seed}-${Math.round((state.stats?.simYear ?? 0) / 1e6)}My.png`);
+  let recorder: MediaRecorder | null = null;
+  actions.toggleRecording = () => {
+    if (recorder) { recorder.stop(); return; }
+    try {
+      const chunks: Blob[] = [];
+      recorder = new MediaRecorder(canvas.captureStream(30), { mimeType: 'video/webm' });
+      recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      recorder.onstop = () => { download(URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })), `genesis-${seed}.webm`); recorder = null; update({ recording: false }); };
+      recorder.start();
+      update({ recording: true });
+    } catch { update({ notice: 'This browser cannot record video here.' }); window.setTimeout(() => update({ notice: '' }), 3500); }
+  };
+  actions.exportBook = () => {
+    const esc = (t: string) => t.replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[ch]!);
+    const chapters = state.chronicle.map((id) => state.events[id]!).filter((e) => e.importance >= 2);
+    const living = [...state.species.values()].filter((x) => x.extinctYear < 0).length;
+    const rows = chapters.map((e) => `<section class="${e.importance >= 3 ? 'big' : ''}"><div class="when">${esc(formatYear(e.simYear))}</div><h2>${esc(e.title)}</h2><p>${esc(e.description)}</p></section>`).join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>A history of ${esc(seed)}</title><style>
+      body{font:17px/1.55 'Cormorant Garamond',Georgia,serif;color:#1c1a17;max-width:38em;margin:3em auto;padding:0 1.5em}
+      h1{font-size:2.6em;letter-spacing:.06em;margin:.2em 0 0}h2{font-size:1.25em;margin:.1em 0}.when{font:11px monospace;letter-spacing:.1em;color:#7a7468;text-transform:uppercase}
+      section{margin:1.4em 0;break-inside:avoid}section.big h2{font-size:1.7em}img{width:100%;border-radius:6px;margin:1.2em 0}p{margin:.2em 0}.lead{font-style:italic;color:#4d483f}
+    </style></head><body><h1>GENESIS</h1><p class="lead">A history of the world called ${esc(seed)}, from its forming to ${esc(formatYear(state.stats?.simYear ?? 0).toLowerCase())}. ${state.species.size} kinds of animal are named in it; ${living} are still alive.</p>
+    <img src="${snapshot()}" alt="The planet">${rows}<p class="lead">Every event in this book happened on its own. Nothing was scripted.</p></body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { download(URL.createObjectURL(new Blob([html], { type: 'text/html' })), `genesis-${seed}-history.html`); return; }
+    w.document.write(html);
+    w.document.close();
+    w.setTimeout(() => w.print(), 600);
+  };
+
   // milestone pop-ups play one after another
   const toasts: SimEvent[] = [];
   let toastUntil = 0;
@@ -290,7 +383,7 @@ async function boot(): Promise<void> {
           const st = msg.stats, h = state.history;
           const lastYear = h.length ? h[h.length - 1]!.year : -1;
           if (st.simYear - lastYear > Math.max(2e5, st.simYear / 240)) {
-            h.push({ year: st.simYear, temp: st.meanTemp, oxygen: st.oxygen, species: st.livingSpecies, pop: st.population, land: st.landCover });
+            h.push({ year: st.simYear, temp: st.meanTemp, oxygen: st.oxygen, species: st.livingSpecies, pop: st.population, land: st.landCover, toxin: st.plantToxin, resist: st.toxinResist });
             if (h.length > 480) h.splice(0, h.length - 480);
           }
         }
@@ -384,6 +477,7 @@ async function boot(): Promise<void> {
       if (ind && info) {
         const d = describeIndividual(ind, info);
         update({ creature: { key: ind.key, species: ind.species, ...d, following: double }, selectedSpecies: -1, whyEvent: -1 });
+        music.call(info.genes[G.Size]!);
         if (double) scene.follow(ind.key);
         return;
       }
@@ -391,7 +485,8 @@ async function boot(): Promise<void> {
     if (state.godTool && !state.handsOff) {
       const hit = scene.pick(x, y);
       if (hit) {
-        send({ type: 'god', tool: state.godTool, cell: scene.cellAt(hit.x, hit.y, hit.z), power: 0.8 });
+        const genes = state.godTool === 'species' ? Array.from({ length: GENE_COUNT }, (_, i) => state.design[i] ?? 0.3) : undefined;
+        send({ type: 'god', tool: state.godTool, cell: scene.cellAt(hit.x, hit.y, hit.z), power: 0.8, genes });
         update({ godTool: '', panel: 'none' });
       }
     }
@@ -420,6 +515,7 @@ async function boot(): Promise<void> {
     else if (k === 'g') togglePanel('god');
     else if (e.key === '?' || k === '/') togglePanel('help');
     else if (k === 'p') { update({ postcard: !state.postcard }); scene.cam.idle = state.postcard ? 100 : 0; }
+    else if (k === 'm') togglePanel('map');
     else if (k === 'o') { const order = ['none', 'temp', 'rain', 'life', 'people'] as const; actions.setOverlay(order[(order.indexOf(state.overlay) + 1) % order.length]!); }
     else if (k === 'f') { if (state.creature) actions.followCreature(!state.creature.following); }
     else if (k === 'escape' && scene.following !== null) actions.followCreature(false);
@@ -447,6 +543,14 @@ async function boot(): Promise<void> {
         scene.cam.focusDir(focusVec);
         send({ type: 'focus', x: focusVec.x, y: focusVec.y, z: focusVec.z, altitude: scene.cam.dist });
         refreshCreature();
+        // ambient sound: wind aloft, surf near water, rain under storm cloud
+        const here = scene.cellAt(focusVec.x, focusVec.y, focusVec.z);
+        const cellsNow = scene.vegetationCells();
+        const near = Math.max(0, 1 - scene.cam.dist / 0.5);
+        const wet = cellsNow ? cellsNow.elevation[here]! <= cellsNow.seaLevel + 0.05 : false;
+        const rain = cellsNow ? Math.max(0, cellsNow.cloud[here]! - 0.75) * 4 : 0;
+        music.ambience(Math.min(1, scene.cam.dist) * 0.5 + 0.1, wet ? near : near * 0.2, Math.min(1, rain) * near);
+        if (rain > 0.2 && near > 0.2 && Math.random() < 0.12) music.thunder();
       }
       // adaptive quality: two seconds under target steps down bloom, then instance counts, then resolution
       const target = mobile ? 26 : 50;

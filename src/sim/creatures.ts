@@ -90,6 +90,10 @@ export class Creatures {
   newSpecies: { species: Species; reason: string; isolated: boolean }[] = [];
   extinctions: Species[] = [];
   version = 0;
+  /** Multiplier on mutation (meteor showers, supernovae, the gene ray). Decays back to 1. */
+  mutationBoost = 1;
+  /** Land animals carried across the sea on storm debris, for the chronicle. */
+  rafted: { species: number; region: number }[] = [];
 
   constructor(private reg: Regions, private plants: Plants) {
     const R = reg.count;
@@ -223,6 +227,7 @@ export class Creatures {
       const land = reg.land[r]!, sea = 1 - land;
       const tL = reg.landTemp[r]!, tS = Math.max(-1.5, reg.temp[r]!);
       const ptox = plants.toxicity[r]!;
+      const groundHue = plants.groundHue[r]!;
       const b3 = r * 3;
       let sumC = 0;
       binSum.fill(0);
@@ -315,7 +320,11 @@ export class Creatures {
           let pursuit = 0.5 + (0.5 * px) / (1 + Math.abs(px));
           if (phen[qp + P.Fly]! > 0.3 && pFly < 0.3) pursuit *= 0.3;
           const night = Math.abs(phen[p + P.NightUse]! - phen[qp + P.NightUse]!);
-          const detect = sat(0.7 + phen[p + P.Sense]! * 0.9 - phen[qp + P.Conceal]! * 0.6) * (1 - 0.5 * night);
+          // camouflage: prey whose colour matches the ground it lives on is harder to spot
+          let hueGap = Math.abs(genome[qg + G.Hue]! - (fl[j]! > fs[j]! ? groundHue : 0.58));
+          if (hueGap > 0.5) hueGap = 1 - hueGap;
+          const blend = Math.max(0, 1 - hueGap * 6) * 0.22;
+          const detect = sat(0.7 + phen[p + P.Sense]! * 0.9 - phen[qp + P.Conceal]! * 0.6 - blend) * (1 - 0.5 * night);
           const def = 1 - phen[qp + P.Defense]! * 0.75 * (1 - phen[p + P.Attack]! * 0.6);
           const tox = 1 - sat(genome[qg + G.Toxicity]! - genome[c * GENE_COUNT + G.ToxinResist]!);
           const k = Math.min(1, overlap * 1.4) * sizeFit * pursuit * detect * def * tox * meat;
@@ -412,6 +421,18 @@ export class Creatures {
     }
   }
 
+  /** Scramble the genes of everything in a region (the gene ray). */
+  irradiate(region: number, rng: RNG, scale: number): void {
+    const tmp = new Float32Array(GENE_COUNT);
+    for (let c = 0; c < this.high; c++) {
+      if (!this.alive[c] || this.region[c] !== region) continue;
+      const g = c * GENE_COUNT;
+      mutateInto(this.genome, g, tmp, 0, rng, scale);
+      this.genome.set(tmp, g);
+      computePhenotype(this.genome, g, this.phen, c * PHEN_COUNT);
+    }
+  }
+
   /** Find a cohort of the same species in a region with a close genome. */
   private findKin(region: number, species: number, src: Float32Array, so: number, maxDist: number): number {
     const list = this.cohortsIn(region);
@@ -477,7 +498,18 @@ export class Creatures {
         }
       }
       // mutation in place: a variant line splits off and competes with its parents
-      if (rng.chance(Math.min(0.5, 0.15 * t4)) && count[c]! > 40) {
+      // rafting: now and then a storm carries shore animals across open water to a far coast
+      if (phen[p + P.LandUse]! > 0.5 && reg.land[r]! < 0.85 && count[c]! > 200 && rng.chance(0.0012 * t4)) {
+        const far = rng.int(reg.count);
+        if (far !== r && reg.land[far]! > 0.15 && occupancy[far]! < REGION_CAP && this.fitLand(c, reg.land[far]!) > 0.2) {
+          mutateInto(genome, g, tmp, 0, rng, 1.5);
+          if (this.spawn(this.sp[c]!, far, Math.max(20, count[c]! * 0.02), tmp, 0) >= 0) {
+            occupancy[far] = occupancy[far]! + 1;
+            if (this.rafted.length < 4) this.rafted.push({ species: this.sp[c]!, region: far });
+          }
+        }
+      }
+      if (rng.chance(Math.min(0.6, 0.15 * t4 * this.mutationBoost)) && count[c]! > 40) {
         mutateInto(genome, g, tmp, 0, rng, 1.6);
         const part = count[c]! * 0.1;
         if (occupancy[r]! < REGION_CAP || this.makeRoom(r, part * phen[p + P.Mass]!)) {

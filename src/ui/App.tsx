@@ -1,7 +1,7 @@
 import { SPEEDS } from '../shared/protocol';
 import { actions, togglePanel, useStore } from './store';
 import { bigNumber, formatYear } from './format';
-import { Chronicle, CreatureCard, GodTools, Graphs, Guide, Help, Num, Peoples, Settings, SpeciesCard, Tree, Why } from './panels';
+import { Chronicle, CreatureCard, Designer, FlatMap, GodTools, Graphs, Guide, Help, Num, Peoples, Settings, SpeciesCard, Tree, Why } from './panels';
 import css from './ui.module.css';
 
 const STAGE: Record<string, string> = { barren: 'lifeless', microbes: 'microbes', algae: 'algae seas', animals: 'living world' };
@@ -42,6 +42,8 @@ export function App() {
           {s.panel === 'help' && <Help />}
           {s.panel === 'god' && <GodTools />}
           {s.panel === 'settings' && <Settings />}
+          {s.panel === 'designer' && <Designer />}
+          {s.panel === 'map' && <FlatMap />}
           {s.panel === 'guide' && <Guide />}
           {s.panel === 'peoples' && <Peoples />}
           {s.panel === 'graphs' && <Graphs />}

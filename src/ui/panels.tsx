@@ -269,7 +269,7 @@ export function Help() {
   const keys: [string, string][] = [
     ['drag', 'orbit the planet'], ['scroll / pinch', 'zoom, from deep space to the ground'], ['right-drag', 'turn and tilt near the surface'],
     ['Space', 'pause or play'], ['1 – 6', 'time speed'], ['C', 'chronicle'], ['T', 'tree of life'], ['G', 'god tools'],
-    ['P', 'postcard mode'], ['H', 'hide the interface'], ['Esc', 'close panels'], ['?', 'this list'],
+    ['M', 'flat map'], ['O', 'overlays'], ['F', 'follow the selected creature'], ['P', 'postcard mode'], ['H', 'hide the interface'], ['Esc', 'close panels'], ['?', 'this list'],
   ];
   return (
     <div class={`${css.panel} ${css.side}`}>
@@ -290,7 +290,69 @@ const GOD_TOOLS: [string, string, string][] = [
   ['flood', 'Flood', 'Raise the seas. Lowlands drown.'],
   ['iceage', 'Ice age', 'Drain the warmth from the world.'],
   ['heat', 'Heat wave', 'Set the air alight.'],
+  ['generay', 'Gene ray', 'Scramble the genes of everything living there.'],
+  ['shield', 'Shield dome', 'Keep disasters out of one region for three million years.'],
+  ['monolith', 'Monolith', 'Animals living beside it grow clever.'],
+  ['comet', 'Summon comet', 'Call a comet into the sky. Peoples will remember it.'],
+  ['tilt', 'Tilt the axis', 'Change the seasons for good.'],
+  ['life', 'Rain of life', 'Seed the world: start life early, or scatter every plant.'],
 ];
+
+const DESIGN_GENES: [number, string, number][] = [
+  [G.Size, 'size', 0.4], [G.LimbType, 'fins · legs · wings', 0.6], [G.LimbPairs, 'limb pairs', 0.5], [G.LimbLength, 'limb length', 0.5],
+  [G.Neck, 'neck', 0.2], [G.Tail, 'tail', 0.4], [G.Horn, 'horns', 0.1], [G.Armor, 'armour', 0.1], [G.Water, 'water or land', 0.05],
+  [G.Diet, 'plants or meat', 0.1], [G.Sociality, 'herding', 0.6], [G.Intelligence, 'intelligence', 0.15], [G.WarmBlood, 'warm blood', 0.3],
+  [G.Hue, 'colour', 0.5], [G.Hue2, 'second colour', 0.1], [G.PatternType, 'pattern', 0.4], [G.Glow, 'glow', 0.1], [G.EyeCount, 'eyes', 0.34],
+];
+
+/** Design a species by hand, then click the planet to release it. */
+export function Designer() {
+  const s = useStore();
+  const value = (gi: number, def: number) => s.design[gi] ?? def;
+  return (
+    <div class={`${css.panel} ${css.side}`}>
+      <div class={css.head}><h2>Design a species</h2><button class={css.close} onClick={() => update({ panel: 'god', godTool: '' })}>✕</button></div>
+      <div class={css.scroll}>
+        {DESIGN_GENES.map(([gi, label, def]) => (
+          <div class={css.row} key={gi} style={{ padding: '3px 0' }}>
+            <span>{label}</span>
+            <input type="range" min="0" max="1" step="0.01" value={value(gi, def)} onInput={(e) => update({ design: { ...s.design, [gi]: Number((e.target as HTMLInputElement).value) } })} />
+          </div>
+        ))}
+        <div class={css.row}>
+          <span class={css.sub}>{s.godTool === 'species' ? 'Now click the planet where it should live.' : 'Animals must already exist for a new one to survive.'}</span>
+          <button class={css.btn} onClick={() => {
+            const design: Record<number, number> = {};
+            for (const [gi, , def] of DESIGN_GENES) design[gi] = value(gi, def);
+            update({ design, godTool: s.godTool === 'species' ? '' : 'species' });
+          }}>{s.godTool === 'species' ? 'cancel' : 'release'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Flat map of the whole world. Click anywhere to fly there. */
+export function FlatMap() {
+  const s = useStore();
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const draw = () => { if (ref.current) actions.drawMap(ref.current); };
+    draw();
+    const t = window.setInterval(draw, 1500);
+    return () => window.clearInterval(t);
+  }, [s.overlay]);
+  return (
+    <div class={`${css.panel} ${css.side} ${css.wide}`} style={{ bottom: 'auto' }}>
+      <div class={css.head}><h2>Map of the world</h2><span class={css.sub}>click to fly there</span><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
+      <div style={{ padding: '0 14px 14px' }}>
+        <canvas ref={ref} width={720} height={360} style={{ width: '100%', borderRadius: 8, cursor: 'crosshair', display: 'block' }}
+          onClick={(e) => { const r = (e.target as HTMLCanvasElement).getBoundingClientRect(); actions.mapClick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); }} />
+      </div>
+    </div>
+  );
+}
+
 
 export function GodTools() {
   const s = useStore();
@@ -308,6 +370,12 @@ export function GodTools() {
             <button class={css.btn} style={{ opacity: s.godTool === id ? 1 : 0.8 }} onClick={() => update({ godTool: s.godTool === id ? '' : id })}>{s.godTool === id ? 'cancel' : 'aim'}</button>
           </div>
         ))}
+        {!s.handsOff && (
+          <div class={css.row}>
+            <span>Design a species<br /><span class={css.sub}>Shape a creature and set it down.</span></span>
+            <button class={css.btn} onClick={() => update({ panel: 'designer' })}>open</button>
+          </div>
+        )}
         {s.godTool && <p class={css.sub}>Click a spot on the planet to use it there.</p>}
       </div>
     </div>
@@ -420,6 +488,8 @@ export function Graphs() {
         <Spark label="Oxygen" values={h.map((x) => x.oxygen * 100)} color="#a8e6ff" format={(n) => `${n.toFixed(1)}%`} />
         <Spark label="Plant cover on land" values={h.map((x) => x.land * 100)} color="#b7e07a" format={(n) => `${n.toFixed(1)}%`} />
         <Spark label="Living animal species" values={h.map((x) => x.species)} color="#8fe3a0" format={(n) => n.toFixed(0)} />
+        <Spark label="Arms race: plant toxins" values={h.map((x) => x.toxin * 100)} color="#d58cff" format={(n) => `${n.toFixed(0)}%`} />
+        <Spark label="Arms race: animal resistance" values={h.map((x) => x.resist * 100)} color="#ff9d9d" format={(n) => `${n.toFixed(0)}%`} />
         <Spark label="Animals alive (log scale)" values={h.map((x) => Math.log10(x.pop + 1))} color="#e9e4d8" format={(n) => bigNumber(Math.pow(10, n))} />
       </div>
     </div>
@@ -467,6 +537,14 @@ export function Settings() {
           <span>Overlay (O)</span>
           <span>{(['none', 'temp', 'rain', 'life', 'people'] as const).map((o) => <button class={css.btn} style={{ marginLeft: 4, opacity: s.overlay === o ? 1 : 0.55 }} onClick={() => actions.setOverlay(o)}>{o}</button>)}</span>
         </div>
+        <div class={css.sub} style={{ margin: '12px 0 2px' }}>CAMERA AND KEEPSAKES</div>
+        <div class={css.row}>
+          <span>Photo filter</span>
+          <span>{['none', 'vivid', 'faded', 'sepia', 'noir'].map((f) => <button class={css.btn} style={{ marginLeft: 4, opacity: s.photoFilter === f ? 1 : 0.55 }} onClick={() => actions.setPhotoFilter(f)}>{f}</button>)}</span>
+        </div>
+        <div class={css.row}><span>Save a photo</span><button class={css.btn} onClick={() => actions.savePhoto()}>save PNG</button></div>
+        <div class={css.row}><span>Record video</span><button class={css.btn} onClick={() => actions.toggleRecording()}>{s.recording ? 'stop and save' : 'record'}</button></div>
+        <div class={css.row}><span>History of this planet<br /><span class={css.sub}>An illustrated book you can print or save as PDF.</span></span><button class={css.btn} onClick={() => actions.exportBook()}>make book</button></div>
         {s.timeline.length > 0 && <div class={css.sub} style={{ margin: '12px 0 2px' }}>REWIND TO</div>}
         {s.timeline.map((t) => (
           <div class={css.row} key={t.index}><span>{t.title}<br /><span class={css.sub}>{formatYear(t.simYear).toLowerCase()}</span></span><button class={css.btn} onClick={() => actions.rewind(t.index)}>rewind</button></div>

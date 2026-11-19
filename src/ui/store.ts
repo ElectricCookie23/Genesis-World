@@ -3,7 +3,7 @@ import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
 import type { PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people';
 
 export interface UIState {
@@ -49,7 +49,11 @@ export interface UIState {
   /** Documentary director: the camera flies to whatever just happened. */
   director: boolean;
   /** Samples of world history for the graphs. */
-  history: { year: number; temp: number; oxygen: number; species: number; pop: number; land: number }[];
+  history: { year: number; temp: number; oxygen: number; species: number; pop: number; land: number; toxin: number; resist: number }[];
+  /** Genes of the species being designed (index -> value), merged over defaults. */
+  design: Record<number, number>;
+  photoFilter: string;
+  recording: boolean;
 }
 
 export interface SlotInfo { slot: number; name: string; seed: string; simYear: number; savedAt: number; }
@@ -91,6 +95,9 @@ export const state: UIState = {
   handsOff: false,
   director: false,
   history: [],
+  design: {},
+  photoFilter: 'none',
+  recording: false,
 };
 
 const listeners = new Set<() => void>();
@@ -136,6 +143,12 @@ export const actions = {
   setOverlay: (_o: Overlay) => {},
   setColorblind: (_on: boolean) => {},
   rewind: (_index: number) => {},
+  drawMap: (_canvas: HTMLCanvasElement) => {},
+  mapClick: (_u: number, _v: number) => {},
+  setPhotoFilter: (_f: string) => {},
+  savePhoto: () => {},
+  toggleRecording: () => {},
+  exportBook: () => {},
 };
 
 export function togglePanel(p: Panel): void {

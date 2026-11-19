@@ -149,7 +149,9 @@ export function computePhenotype(g: Float32Array, o: number, out: Float32Array, 
   out[p + P.TMax] = centre + half - ins * 7 - size * 5 + 4;
   // life history: many small offspring versus few cared-for ones
   const off = g[o + G.Offspring]!, care = g[o + G.Care]!;
-  out[p + P.RMax] = (0.35 + 1.1 * off) * (0.45 + 0.55 * care + 0.35 * (1 - off)) * (1.25 - 0.5 * g[o + G.Maturity]!) * (1.2 - 0.4 * size);
+  out[p + P.RMax] = (0.35 + 1.1 * off) * (0.45 + 0.55 * care + 0.35 * (1 - off)) * (1.25 - 0.5 * g[o + G.Maturity]!) * (1.2 - 0.4 * size)
+    // showy mates breed more, though ornaments cost energy and draw predators
+    * (1 + 0.22 * g[o + G.Ornament]!);
   out[p + P.Death] = 0.34 - 0.2 * g[o + G.Lifespan]! + 0.1 * metab * 0.5;
   out[p + P.GenYears] = 0.3 + 28 * g[o + G.Maturity]! * (0.2 + size) + 3 * size;
   out[p + P.Attack] = sat(0.2 + g[o + G.Aggression]! * 0.3 + g[o + G.Venom]! * 0.35 + g[o + G.Horn]! * 0.1 + g[o + G.Head]! * 0.15 + brain * 0.3);

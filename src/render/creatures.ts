@@ -186,7 +186,12 @@ export function buildCreatureGeometry(g: Float32Array): BufferGeometry {
 
 const CAP = 384;
 
-interface Slot { mesh: InstancedMesh; iPos: InstancedBufferAttribute; iQuat: InstancedBufferAttribute; iData: InstancedBufferAttribute; used: number; }
+interface Slot { mesh: InstancedMesh; iPos: InstancedBufferAttribute; iQuat: InstancedBufferAttribute; iData: InstancedBufferAttribute; iTint: InstancedBufferAttribute; used: number; }
+
+/** True for the rare golden individuals. */
+export function isGolden(key: number): boolean {
+  return hash(key * 977 + 13) < 0.0015;
+}
 
 export interface Individual {
   key: number;
@@ -234,7 +239,9 @@ function makeMaterial(): MeshBasicNodeMaterial {
   const rotate = (v: any) => v.add(cross(iq.xyz, cross(iq.xyz, v).add(v.mul(iq.w))).mul(2));
   material.positionNode = rotate(local).add(ip);
   const nW = varying(normalize(rotate(normalLocal)));
-  const albedo: any = attribute('color', 'vec3');
+  // one in a great many is born golden
+  const gold: any = attribute('iTint', 'float');
+  const albedo: any = (attribute('color', 'vec3') as any).mul(gold.oneMinus()).add((vec3 as any)(1.0, 0.72, 0.18).mul(gold));
   const light: any = surfaceLight(nW, positionWorld);
   const V = normalize(cameraPosition.sub(positionWorld));
   const day: any = dayAmount(positionWorld);
@@ -294,17 +301,19 @@ export class CreatureLayer {
     const iPos = new InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
     const iQuat = new InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
     const iData = new InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
-    for (const a of [iPos, iQuat, iData]) a.setUsage(DynamicDrawUsage);
+    const iTint = new InstancedBufferAttribute(new Float32Array(CAP), 1);
+    for (const a of [iPos, iQuat, iData, iTint]) a.setUsage(DynamicDrawUsage);
     const geo = buildCreatureGeometry(info.genes);
     geo.setAttribute('iPos', iPos);
     geo.setAttribute('iQuat', iQuat);
     geo.setAttribute('iData', iData);
+    geo.setAttribute('iTint', iTint);
     const mesh = new InstancedMesh(geo, makeMaterial(), CAP);
     const m = new Matrix4();
     for (let i = 0; i < CAP; i++) mesh.setMatrixAt(i, m);
     mesh.count = 0;
     mesh.frustumCulled = false;
-    s = { mesh, iPos, iQuat, iData, used: 0 };
+    s = { mesh, iPos, iQuat, iData, iTint, used: 0 };
     this.slots.set(id, s);
     this.onMesh?.(mesh);
     return s;
@@ -509,6 +518,7 @@ export class CreatureLayer {
       const i = slot.used++;
       slot.iPos.setXYZ(i, ind.pos.x, ind.pos.y, ind.pos.z);
       slot.iQuat.setXYZW(i, q.x, q.y, q.z, q.w);
+      slot.iTint.setX(i, isGolden(ind.key) ? 1 : 0);
       const gait = (ind.medium === 2 ? 7 : 5.5) * (1.6 - ind.size * 120) * (0.6 + 0.4 * ind.moving);
       slot.iData.setXYZW(i, size, ind.h * 60, ind.medium === 1 ? ind.moving : 0.4 + 0.6 * ind.moving, Math.max(1.5, gait));
     }
@@ -518,6 +528,7 @@ export class CreatureLayer {
         s.iPos.needsUpdate = true;
         s.iQuat.needsUpdate = true;
         s.iData.needsUpdate = true;
+        s.iTint.needsUpdate = true;
       }
     }
   }
@@ -555,5 +566,6 @@ export function describeIndividual(ind: Individual, info: SpeciesInfo): { name: 
   else if (ind.moving > 0.65) action = hunter ? 'stalking' : ind.fed < 0.8 ? 'searching for food' : 'walking with the herd';
   else action = hunter ? 'resting' : 'grazing';
   void sizeMetres;
+  if (isGolden(ind.key)) action += ' (a rare golden one)';
   return { name, age, action };
 }

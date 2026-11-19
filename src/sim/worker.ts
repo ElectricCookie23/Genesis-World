@@ -126,9 +126,23 @@ function stats(s: Simulation): WorldStats {
     population: s.creatures.totalPop,
     landCover: s.plants.totalLandCover / Math.max(1, s.regions.count),
     storms: s.storms.map((x) => x.cell),
+    plantToxin: meanToxin(s),
+    toxinResist: meanResist(s),
     settlements: s.civ.living,
     maxTech: s.civ.maxTech,
   };
+}
+
+function meanToxin(s: Simulation): number {
+  let t = 0, w = 0;
+  for (const sp of s.plants.species) if (sp.extinctYear < 0 && !sp.aquatic) { t += sp.genes[6]! * sp.cover; w += sp.cover; }
+  return w > 0 ? t / w : 0;
+}
+
+function meanResist(s: Simulation): number {
+  let t = 0, w = 0;
+  for (const sp of s.creatures.species) if (sp.extinctYear < 0) { const k = Math.log10(sp.pop + 10); t += sp.ref[G.ToxinResist]! * k; w += k; }
+  return w > 0 ? t / w : 0;
 }
 
 function speciesList(s: Simulation): SpeciesInfo[] {
@@ -241,7 +255,8 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         break;
       case 'god':
         if (sim) {
-          sim.god(msg.tool, msg.cell, msg.power ?? 0.8);
+          if (msg.tool === 'species' && msg.genes) sim.designSpecies(msg.cell, msg.genes);
+          else sim.god(msg.tool, msg.cell, msg.power ?? 0.8);
           slowUntil = performance.now() + 6000;
           cellsRequested = true;
         }

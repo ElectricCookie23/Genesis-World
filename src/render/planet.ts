@@ -120,6 +120,11 @@ export class PlanetMesh {
     this.mesh.frustumCulled = false;
   }
 
+  /** Linear RGB per cell, as last painted (for the flat map). */
+  get cellColors(): Float32Array {
+    return this.cellColor;
+  }
+
   /** Radius of the terrain surface at a cell. */
   radiusAt(cell: number): number {
     return 1 + this.elevation[cell]! * EXAG;

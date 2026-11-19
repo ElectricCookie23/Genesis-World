@@ -62,6 +62,9 @@ export interface WorldStats {
   storms: number[];
   settlements: number;
   maxTech: number;
+  /** Arms race: mean toxicity of land plants and mean toxin resistance of animals. */
+  plantToxin: number;
+  toxinResist: number;
 }
 
 /** One animal species, as shown in the tree of life and info cards. */
@@ -117,7 +120,7 @@ export type ToWorker =
   | { type: 'speed'; index: number }
   | { type: 'focus'; x: number; y: number; z: number; altitude: number }
   | { type: 'requestCells' }
-  | { type: 'god'; tool: string; cell: number; power?: number }
+  | { type: 'god'; tool: string; cell: number; power?: number; genes?: number[] }
   | { type: 'settings'; slowOnEvents?: boolean }
   | { type: 'save'; name: string; slot: string }
   | { type: 'rewind'; index: number }

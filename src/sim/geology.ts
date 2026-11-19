@@ -379,6 +379,27 @@ export function impact(world: World, cell: number, size: number): { cells: numbe
   return { cells, dist, radius };
 }
 
+/** Mountain building: land rises where plates collide. Erosion keeps it in check. */
+export function uplift(world: World, convergence: Float32Array, amount: number): void {
+  const { grid, elevation, plates, plate } = world;
+  for (let i = 0; i < grid.count; i++) {
+    const c = convergence[i]!;
+    if (c > 0.35 && plates[plate[i]!]!.continental && elevation[i]! < 6.5) elevation[i] = elevation[i]! + c * amount;
+  }
+}
+
+/** Glaciers grind coastal valleys below sea level; when the ice goes, the sea floods in as fjords. */
+export function carveFjords(world: World, amount: number): void {
+  const { grid, elevation, seaLevel, snow } = world;
+  for (let i = 0; i < grid.count; i++) {
+    const h = elevation[i]! - seaLevel;
+    if (h <= 0 || h > 0.9 || snow[i]! < 10) continue;
+    for (let j = 0; j < grid.ncount[i]!; j++) {
+      if (elevation[grid.neighbors[i * 6 + j]!]! <= seaLevel) { elevation[i] = elevation[i]! - amount; break; }
+    }
+  }
+}
+
 /** Slow erosion: sharp peaks wear down toward their surroundings. Returns true if anything moved. */
 export function erode(world: World, amount: number): boolean {
   const { grid, elevation, seaLevel } = world;

@@ -26,6 +26,11 @@ export class Music {
   private pad: any = null;
   private bell: any = null;
   private master: any = null;
+  private voice: any = null;
+  private windGain: any = null;
+  private surfGain: any = null;
+  private rainGain: any = null;
+  private rumble: any = null;
   private timer = 0;
   private mood: Mood = { stage: 'barren', era: 'none', life: 0, hush: false };
   private volume = 0.6;
@@ -60,6 +65,18 @@ export class Music {
         modulationEnvelope: { attack: 0.01, decay: 0.6, sustain: 0, release: 1 },
         volume: -26,
       }).connect(reverb);
+      this.voice = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'triangle' }, envelope: { attack: 0.02, decay: 0.15, sustain: 0.3, release: 0.4 }, volume: -12 }).connect(reverb);
+      // three noise layers make the ambient bed
+      const layer = (type: 'pink' | 'brown' | 'white', freq: number, kind: 'lowpass' | 'bandpass' | 'highpass') => {
+        const gain = new Tone.Gain(0).connect(this.master);
+        const filter = new Tone.Filter(freq, kind).connect(gain);
+        new Tone.Noise(type).connect(filter).start();
+        return gain;
+      };
+      this.windGain = layer('pink', 500, 'bandpass');
+      this.surfGain = layer('brown', 380, 'lowpass');
+      this.rainGain = layer('white', 3200, 'highpass');
+      this.rumble = new Tone.NoiseSynth({ noise: { type: 'brown' }, envelope: { attack: 0.05, decay: 1.4, sustain: 0, release: 1.2 }, volume: -8 }).connect(new Tone.Filter(160, 'lowpass').connect(reverb));
       this.applyVolume();
       this.seed = (Date.now() & 0xffff) | 1;
       this.schedule(600);
@@ -82,6 +99,31 @@ export class Music {
     if (!this.master) return;
     const db = this.volume <= 0.001 ? -80 : -30 + 30 * this.volume;
     this.master.volume.rampTo(db, 1.5);
+  }
+
+  /** A creature's call: big bodies rumble, small ones chirp. size is the size gene 0..1. */
+  call(size: number): void {
+    if (!this.tone || !this.voice) return;
+    try {
+      const f = 55 * Math.pow(2, (1 - size) * 5.2);
+      const now = this.tone.now();
+      this.voice.triggerAttackRelease(f, 0.12 + size * 0.5, now, 0.5);
+      this.voice.triggerAttackRelease(f * (size > 0.5 ? 0.8 : 1.3), 0.1 + size * 0.4, now + 0.16 + size * 0.3, 0.4);
+    } catch { /* ignore */ }
+  }
+
+  /** Ambient bed: wind up high, surf near the sea, rain under storms. Each 0..1. */
+  ambience(wind: number, surf: number, rain: number): void {
+    if (!this.windGain) return;
+    this.windGain.gain.rampTo(wind * 0.16, 1.2);
+    this.surfGain.gain.rampTo(surf * 0.2, 1.2);
+    this.rainGain.gain.rampTo(rain * 0.24, 1.2);
+  }
+
+  /** Distant thunder. */
+  thunder(): void {
+    if (!this.tone || !this.rumble) return;
+    try { this.rumble.triggerAttackRelease(1.6 + this.rand()); } catch { /* ignore */ }
   }
 
   private schedule(ms: number): void {

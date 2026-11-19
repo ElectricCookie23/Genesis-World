@@ -69,65 +69,65 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 47 | Domestication: tamed species start evolving in new directions. | done | farming peoples tame a real grazer; tamed herds grow calmer, more sociable and more numerous each generation |
 | 48 | Agriculture that turns land into fields. | done | settlements with farming paint field patchwork around them |
 | 49 | Roads that follow ancient migration trails. | simplified | lit roads join neighbouring towns by the direct route, not along old migration trails |
-| 50 | Ruins that forests overgrow, later found by a second intelligent species. | in progress | abandoned settlements are logged as ruins and listed; overgrowth visuals and rediscovery by a second people to come |
+| 50 | Ruins that forests overgrow, later found by a second intelligent species. | done | ruins are logged and listed; a later, different people building on the same ground rediscover them (event) |
 | 51 | Plate tectonics with drifting continents. | not started | |
-| 52 | Mountain building at plate collisions, creating rain-shadow deserts. | not started | |
+| 52 | Mountain building at plate collisions, creating rain-shadow deserts. | simplified | land rises slowly where plates collide and erosion wears it down; rain shadows come from the moisture model; plates themselves do not drift |
 | 53 | Earthquakes and tsunamis. | done | earthquakes at plate boundaries; undersea ones raise tsunamis that scour coasts and are witnessed |
-| 54 | Hotspots that build island chains. | not started | |
-| 55 | Erosion that carves canyons and grows deltas. | not started | |
+| 54 | Hotspots that build island chains. | simplified | hotspots shift cell by cell over time, so repeated eruptions leave island chains |
+| 55 | Erosion that carves canyons and grows deltas. | simplified | peaks erode and glaciers carve coastal valleys; no canyon or delta modelling |
 | 56 | Ocean currents that carry heat. | not started | |
-| 57 | Rafting: creatures ride storm debris to colonize islands. | not started | |
+| 57 | Rafting: creatures ride storm debris to colonize islands. | done | storms occasionally raft shore animals to a far coast, where they found new populations |
 | 58 | Coral reefs and atolls, with bleaching in heat waves. | not started | |
 | 59 | Plankton blooms visible from orbit, and bioluminescent waves at night. | not started | |
-| 60 | Hurricanes with a visible eye. | not started | |
+| 60 | Hurricanes with a visible eye. | simplified | strong storms over warm sea become hurricanes with a clear eye in the cloud field and damage at landfall |
 | 61 | Snow that builds up and melts, feeding the rivers. | not started | |
 | 62 | Oxygen level tracked, with a giant-insect era when it spikes. | done | oxygen tracked, limits body size and activity; an age of giants is declared when it passes 30% |
 | 63 | Seasonal migrations that wear trails into the land. | not started | |
 | 64 | Hibernation, and day versus night species. | not started | |
-| 65 | Camouflage evolving to match each biome. | not started | |
-| 66 | Sexual selection: mating displays and ornaments. | not started | |
+| 65 | Camouflage evolving to match each biome. | done | prey whose hue matches the ground cover of its region is harder for hunters to detect, so colour is under selection |
+| 66 | Sexual selection: mating displays and ornaments. | done | ornaments raise breeding success but cost energy and concealment |
 | 67 | Nests and parental care. | not started | |
 | 68 | Disease outbreaks spreading through herds. | done | plagues strike crowded, sociable species and spread to neighbouring regions |
 | 69 | Symbiosis pairs. | not started | |
-| 70 | Flowers co-evolving with pollinators. | not started | |
-| 71 | Toxin versus resistance arms races, shown on a chart. | not started | |
+| 70 | Flowers co-evolving with pollinators. | simplified | fruiting plants spread faster where animals eat them; no dedicated pollinator trait |
+| 71 | Toxin versus resistance arms races, shown on a chart. | done | mean plant toxicity and mean animal toxin resistance are tracked and charted |
 | 72 | Convergent evolution detector ("Two unrelated lineages have both evolved into crab-like forms"). | done | detector for unrelated lineages with the same body plan |
-| 73 | Island dwarfism and gigantism. | not started | |
-| 74 | Flight lost on predator-free islands. | not started | |
-| 75 | Land species returning to the sea as ocean giants. | not started | |
+| 73 | Island dwarfism and gigantism. | done | isolated island populations that shrink or grow are flagged as dwarfs or giants |
+| 74 | Flight lost on predator-free islands. | done | a winged lineage whose descendants lose their wings is recorded |
+| 75 | Land species returning to the sea as ocean giants. | done | land lineages that return to the sea are recorded with a milestone |
 | 76 | Echolocation shown as ripples. | not started | |
 | 77 | Electric fish with visible arcs. | not started | |
 | 78 | Metamorphosis, with larval and adult forms that look completely different. | not started | |
 | 79 | Hive species with growing mounds. | not started | |
-| 80 | Keystone species whose loss collapses an ecosystem. | not started | |
-| 81 | Invasive species crossing land bridges. | not started | |
+| 80 | Keystone species whose loss collapses an ecosystem. | done | when a widespread species dies and three more follow within 1.5 My, an ecosystem collapse is logged |
+| 81 | Invasive species crossing land bridges. | done | land species that surge across new land bridges when the seas fall are logged as invasions |
 | 82 | Living fossils flagged when a species stays unchanged for eons. | done | species unchanged for 60 My are flagged |
 | 83 | Fossil layer: see-through ground showing bones where extinct species died. | not started | |
 | 84 | Auto-generated field guide with a sketch-style card for every species. | simplified | field guide lists every living species with a description; no sketch cards yet |
 | 85 | Extinction memorial. | done | memorial section lists extinct species; click one for why it died |
 | 86 | Rewind timeline with snapshots and major events marked. | simplified | up to six rewind points at milestone events, listed in settings |
 | 87 | God tools: ice age, heat wave, raise mountains, flood, plague, lightning. | done | meteor, lightning, plague, raise mountains, flood, ice age, heat wave |
-| 88 | Custom species designer. | not started | |
-| 89 | A monolith that speeds up intelligence nearby. | not started | |
+| 88 | Custom species designer. | done | designer panel with 18 gene sliders; click the planet to release the species |
+| 89 | A monolith that speeds up intelligence nearby. | done | monolith god tool raises intelligence and curiosity of animals living beside it |
 | 90 | Overlays: temperature, rain, population, genetic diversity, oxygen. | simplified | temperature, rain, life and people overlays with a colour-blind safe ramp; genetic diversity and oxygen overlays not built |
 | 91 | Graphs of population, biomass and atmosphere over time. | done | graphs of temperature, oxygen, plant cover, species count and population |
 | 92 | First-person creature view. | not started | |
-| 93 | Creature calls generated from body size. | not started | |
-| 94 | Spatial sound: wind, rain, thunder, waves, lava. | not started | |
+| 93 | Creature calls generated from body size. | done | selecting a creature plays a call pitched by its body size |
+| 94 | Spatial sound: wind, rain, thunder, waves, lava. | simplified | ambient wind, surf and rain layers follow altitude, coast and storm cloud; thunder under storms; not positional |
 | 95 | Documentary director: an auto-camera that cuts to whatever is most interesting right now. | done | optional director flies the camera to notable events; always on in postcard mode |
 | 96 | Solar eclipses that make creatures go quiet. | simplified | eclipses happen as events that peoples witness; no shadow on the planet yet |
 | 97 | Comets that return on a long cycle and become myths. | done | a seeded comet returns on a fixed period, each return linked to the last, and becomes myth |
-| 98 | Meteor showers that trigger mutation bursts. | not started | |
+| 98 | Meteor showers that trigger mutation bursts. | done | meteor showers raise mutation rates for a while |
 | 99 | A rare captured second moon. | not started | |
 | 100 | Shattering the moon into a ring system. | not started | |
 | 101 | Ring shadow creating a cold stripe biome. | not started | |
-| 102 | A nearby supernova with a radiation spike. | not started | |
-| 103 | The sun brightening over the far future. | not started | |
-| 104 | Constellations named after extinct species. | not started | |
+| 102 | A nearby supernova with a radiation spike. | done | rare supernova: radiation kill on land and a mutation burst; peoples take it as an omen |
+| 103 | The sun brightening over the far future. | done | after 380 My the star slowly brightens and warms the world |
+| 104 | Constellations named after extinct species. | done | villages name constellations after extinct species whose bones they find |
 | 105 | Binary-sun seeds with double shadows. | not started | |
 | 106 | The supercontinent cycle. | not started | |
 | 107 | Supervolcano ash winters. | not started | |
-| 108 | Glaciers carving fjords. | not started | |
+| 108 | Glaciers carving fjords. | simplified | ice near the coast carves valleys below sea level, which flood as fjords when it melts |
 | 109 | Cave networks with blind, pale species. | not started | |
 | 110 | Hydrothermal vent ecosystems. | not started | |
 | 111 | Geysers and hot springs. | not started | |
@@ -135,18 +135,18 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 113 | Tornadoes. | not started | |
 | 114 | Fire tornadoes in big wildfires. | not started | |
 | 115 | Dust storms that fertilize the ocean. | not started | |
-| 116 | Acid rain after eruptions. | not started | |
+| 116 | Acid rain after eruptions. | done | large eruptions bring acid rain that thins plant cover downwind |
 | 117 | Valley fog, rainbows and heat shimmer. | not started | |
 | 118 | The ozone layer, and what happens when it's stripped. | not started | |
-| 119 | A snowball-planet event. | not started | |
-| 120 | Permafrost thaw speeding up warming. | not started | |
-| 121 | Civilizations burning ancient swamp coal and warming the planet. | not started | |
-| 122 | Plagues traveling along trade routes. | not started | |
+| 119 | A snowball-planet event. | done | snowball event when ice covers more than 55% of the planet |
+| 120 | Permafrost thaw speeding up warming. | done | thawing at the end of an ice age adds greenhouse forcing |
+| 121 | Civilizations burning ancient swamp coal and warming the planet. | done | cities past a technology level add greenhouse forcing in proportion to their number |
+| 122 | Plagues traveling along trade routes. | done | plagues strike large towns and spread to neighbouring settlements |
 | 123 | Trade boats crossing the seas. | not started | |
-| 124 | Tribal wars and borders. | not started | |
-| 125 | A space age with satellites and a radio signal. | not started | |
-| 126 | Possible nuclear winter. | not started | |
-| 127 | Departure: a civilization leaves the planet as a light rising into space. | not started | |
+| 124 | Tribal wars and borders. | simplified | neighbouring settlements of different peoples or faiths go to war and lose people and knowledge; no drawn borders |
+| 125 | A space age with satellites and a radio signal. | simplified | space age milestone with satellites and radio in the narration; no satellite models |
+| 126 | Possible nuclear winter. | done | after the space age a war can become nuclear: winter, dieback, most people and knowledge lost |
+| 127 | Departure: a civilization leaves the planet as a light rising into space. | simplified | after 25 My of space age the people depart (milestone); no rising light effect yet |
 | 128 | Giant mushrooms and glowing fungal networks, shown in an x-ray view. | not started | |
 | 129 | Carnivorous plants in poor soil. | not started | |
 | 130 | Autumn colors. | not started | |
@@ -156,17 +156,17 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 134 | Walking forests. | not started | |
 | 135 | Mass hatchings that light up the ocean. | not started | |
 | 136 | Bone graveyards. | not started | |
-| 137 | A rare golden mutant. | not started | |
-| 138 | An eternal storm sitting over one spot. | not started | |
+| 137 | A rare golden mutant. | done | about 1 in 700 individuals is drawn golden and noted on its card |
+| 138 | An eternal storm sitting over one spot. | done | one storm per world never ends |
 | 139 | A full underwater exploration view. | not started | |
 | 140 | Cross-section slice showing rock layers, caves and roots. | not started | |
-| 141 | Flat map view. | not started | |
-| 142 | Photo mode with film filters. | not started | |
+| 141 | Flat map view. | done | M opens a flat map; click to fly there; overlays and settlements show on it |
+| 142 | Photo mode with film filters. | done | five photo filters and save-as-PNG |
 | 143 | Timeline fork that runs two futures side by side. | not started | |
 | 144 | Full family tree of any individual creature. | not started | |
 | 145 | Intelligent species developing their own music. | not started | |
 | 146 | Near silence after a mass extinction. | not started | |
-| 147 | More god tools: gene ray, shield dome, summon comet, tilt axis, rain of life. | not started | |
+| 147 | More god tools: gene ray, shield dome, summon comet, tilt axis, rain of life. | done | gene ray, shield dome, summon comet, tilt axis, rain of life |
 | 148 | Hands-off mode that locks all god tools. | done | hands-off mode locks every god tool |
-| 149 | GIF and video recording. | not started | |
-| 150 | Export a planet's history as an illustrated PDF book. | not started | |
+| 149 | GIF and video recording. | simplified | records the 3D view to a WebM video; no GIF |
+| 150 | Export a planet's history as an illustrated PDF book. | simplified | opens an illustrated history (planet image plus major events) ready to print or save as PDF |

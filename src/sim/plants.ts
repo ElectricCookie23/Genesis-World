@@ -74,6 +74,8 @@ export class Plants {
   readonly grazeSea: Float32Array;
   /** Dominant land plant per region, -1 if none. */
   readonly dominant: Int32Array;
+  /** Hue of the ground cover per region (for camouflage). */
+  readonly groundHue: Float32Array;
   /** Oxygen level 0..1 (0.21 is today's Earth). Land is deadly until an ozone layer forms. */
   oxygen = 0.005;
   totalLandCover = 0;
@@ -102,6 +104,7 @@ export class Plants {
     this.grazeLand = new Float32Array(R);
     this.grazeSea = new Float32Array(R);
     this.dominant = new Int32Array(R).fill(-1);
+    this.groundHue = new Float32Array(R).fill(0.09);
   }
 
   addSpecies(genes: Float32Array, parent: number, year: number): PlantSpecies {
@@ -259,7 +262,9 @@ export class Plants {
         }
         // spread to a neighbouring region, sometimes as a mutant
         const disp = sp.genes[PG.Dispersal]!;
-        if (c > 0.012 && rng.chance(Math.min(0.9, (0.2 + 0.5 * disp) * tau * 2))) {
+        // fruiting plants spread faster where animals eat them and carry the seeds
+        const carried = sp.aquatic ? 0 : 0.35 * sp.genes[PG.Fruit]! * Math.min(1, grazeL);
+        if (c > 0.012 && rng.chance(Math.min(0.9, (0.2 + 0.5 * disp + carried) * tau * 2))) {
           let nb = reg.grid.neighbors[r * 6 + rng.int(reg.grid.ncount[r]!)]!;
           // wind-blown and animal-carried seeds can jump further
           if (disp > 0.3 && rng.chance(0.4)) nb = reg.grid.neighbors[nb * 6 + rng.int(reg.grid.ncount[nb]!)]!;
@@ -287,6 +292,8 @@ export class Plants {
       this.toxicity[r] = landCover > 0 ? tox / landCover : 0;
       this.fruit[r] = landCover > 0 ? fruit / landCover : 0;
       this.dominant[r] = best;
+      // bare ground is tan; a leafy region takes the hue of its main plant
+      this.groundHue[r] = best >= 0 ? 0.09 + (0.2 + species[best]!.genes[PG.LeafHue]! * 0.22 - 0.09) * Math.min(1, landCover * 1.5) : 0.09;
       landTotal += landCover;
       seaTotal += seaCover;
     }
