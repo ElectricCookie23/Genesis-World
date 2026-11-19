@@ -9,6 +9,18 @@ Read this first when resuming. Then PROGRESS.md, DECISIONS.md and `git log`.
 - Stop and show the owner only at points that are worth showing.
 - Graphics rules (owner): full techniques on WebGL2 (FFT ocean, GPU erosion, TAA with a history buffer), quadtree LOD terrain, WebGPU optional, screenshots here check correctness only, push every step.
 
+## Paused here (owner asked for a pause; resume from this list)
+State at the pause: everything is committed and pushed, the type check is clean, no background jobs are running.
+
+1. **Re-render three of the "after" screenshots.** `docs/screenshots/after/2-space-night.jpg` and `4-night-map.jpg` were taken before the far-off sea glow was fixed (they show a teal blocky pattern on the night sea that is now gone in the code), and `8-underwater.jpg` was taken from above the surface. The capture script is not in the repo (the scratch folder is lost between sessions): rebuild it from the recipe under "How to check visuals here". Camera for view 8: `scene.underwater = true`, `cam.setImmediate(lon, lat, 0.0009)` over a sea cell 80 to 500 m deep, `cam.tiltOffset = cam.tTilt = -1.1`. A full run of eight views takes about 30 minutes here (6 minutes of warp to 150 My, then about 17 seconds a frame).
+2. **Then start the "simplified" pass** (work queue item 3). Three standalone pieces are already written and type-checked but not wired in yet:
+   - `src/util/gif.ts` (`encodeGif(frames, w, h, delay)`) for feature 149: capture about 3 seconds of canvas frames at 10 fps, scaled to about 480 px wide, and offer the file as a download next to the WebM recorder in `main.ts`.
+   - `src/util/pdf.ts` (`PdfDoc`: `background`, `rect`, `text`, `paragraph`, `jpeg`, `addPage`, `save`) for feature 150: replace the print view in `actions.exportBook` with a real PDF (cover with the planet image from `__genesis.grab()`, then the major events).
+   - `src/ui/sketch.tsx` (`CreatureSketch({ genes, width, seed })`) for feature 84: use it in the field guide (`Guide` in `src/ui/panels.tsx`) as a paper-coloured card per species.
+   Not yet looked at in a browser: check each once wired.
+3. Items in PROGRESS.md still marked simplified that the new renderer already covers and only need their notes brought up to date: 49 (roads now follow valleys, rivers and coasts), 123 (sea lanes with moving ship lights), 132 to 134 (bladder and grove are real models now), 139 (caustics and the view from below exist; no light shafts).
+4. Planned for the rest of that pass (nothing started): settlement buildings, temples and boats as models (46, 123), a rising light at departure (127), worn migration trails that roads follow (49, 63), hibernation (64), young beside nests (67), symbiosis and pollinators with real effects (69, 70), electric arcs (77), see-through fossil view (83), a timeline strip with more rewind points (86), genetic diversity and oxygen overlays (90), positional sound (94), the moon's shadow in a solar eclipse (96), double shadows under two suns (105), cave mouths (109), hot spring pools (111), tornado funnels (113, 114), dust fertilising the sea (115), fog, rainbows and heat shimmer (117), fungal network view (128), mass hatching glow (135), better bone graveyards (136), two futures running side by side (143), real ancestry in the family tree (144), canyon and delta erosion (55), atolls (58), and plates whose outlines drift (51, 52, 54).
+
 ## Work queue, in the owner's order
 1. Original brief: built (every feature in PROGRESS.md is done or simplified).
 2. **Graphics overhaul** (`docs/GRAPHICS_BRIEF.md`): all twelve steps have a first pass, see the table at the top of PROGRESS.md. What is still open is listed below under "Graphics: still open".
@@ -33,7 +45,7 @@ Everything reads the planet from cube-map textures baked from the simulation's c
 ## Graphics: still open
 - Nothing has been seen on a real GPU. Frame rate, shader compile time and final look are unverified. The owner checks the deployed site; expect tuning of colours, exposure, cloud density, city light brightness and preset costs after that.
 - Not built: screen-space reflections on water, parallax occlusion mapping, footprints, lens flare, ground fog, canopy texture on far terrain, glow cast on the ground by glowing plants, a WebGPU compute path (WebGL2-style passes run on both backends instead).
-- The eight "after" screenshots are in `docs/screenshots/after/` (software rendering, 800x500).
+- The eight "after" screenshots are in `docs/screenshots/after/` (software rendering, 800x500). Three of them need retaking, see "Paused here".
 - GitHub Pages is still off: the repo must be public and Settings, Pages, Source set to "GitHub Actions" by the owner.
 
 ## How to check visuals here
@@ -41,6 +53,7 @@ Everything reads the planet from cube-map textures baked from the simulation's c
 - `window.__genesis` exposes `scene`, `state`, `setSpeed(i)`, `update(patch)`, `actions`, `send(msg)`, `grab()`.
 - The build container renders in software at about one frame per second. Do not use page screenshots for the canvas: step frames by hand with `scene.frame(dt)` and read the canvas with `__genesis.grab()`.
 - The worker keeps sending cell snapshots even when paused: after injecting test data with `scene.applyCells(c, true)`, set `scene.applyCells = () => {}` (and `scene.applyStats = () => {}`) or it is overwritten.
+- Capture recipe: launch Playwright Chromium with `--use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist`, viewport 800x500, open the dev URL, wait for `__genesis.scene.planet`, shrink the canvas (`scene.renderer.setSize(64, 40, false)`), `send({ type: 'warp', years: 150e6 })` and poll `state.stats.simYear`, then `setSpeed(0)`, `scene.resize()`, `scene.daySpeed = 0`, `cam.autoOrbit = 0`, hide the UI (`update({ uiHidden: true, hintStep: 9 })`). For each view set `cam.setImmediate(lon, lat, dist)` and `scene.dayAngle = lon + sunOffset`, step about 12 frames with `scene.frame(0.25)` and a 40 ms pause between them (auto exposure and TAA need them), then save `__genesis.grab()`. Views: orbit day (2.6, +0.5), orbit night (2.6, +2.8), terminator (2.6, +1.55), night map (1.9, +2.9, `actions.setOverlay('nations')`), coast (0.3, +0.6), forest ground (0.02, +0.6, tilt -0.5), ground night (0.02, +2.9), under water.
 - `scene.creatures.debugSpawn(dir)` drops sample species; made-up settlements go in through `scene.setSettlements(list)` then `scene.civ.update(scene.lastCells, new Map(), performance.now(), 0.05, true)`.
 - Never run a browser check and a history script at the same time (the container was killed for memory), and do not edit files under `src` while a browser check runs (Vite reloads the page).
 - TSL notes: with InstancedMesh, `positionLocal` inside `positionNode` is already instanced, so custom instancing uses named instanced attributes and `positionGeometry`. `patch` is a reserved word in GLSL. Cube lookups go through `samplePlanet` (x is mirrored). Texture reads inside loops need `.level(0)`. Render-target read-backs come back flipped on WebGL2: probe the orientation (see `gfx/ground.ts`). Mixed `any` and typed nodes often need `(fn as any)(...)` casts.
