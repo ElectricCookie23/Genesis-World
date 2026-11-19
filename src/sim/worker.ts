@@ -5,7 +5,7 @@ import { G, P, PHEN_COUNT, sizeMetres } from './genetics';
 import { nearestCell } from './world';
 import { loadSimulation, saveSimulation, type SaveState } from './snapshot';
 import {
-  HISTORY_SPEED, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type NationDetail, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
+  HISTORY_SPEED, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type NationDetail, type PersonInfo, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
 } from '../shared/protocol';
 import { ERAS, earthNote, eraOf } from './history/eras';
 import { compound } from './history/language';
@@ -150,7 +150,18 @@ function nationDetail(s: Simulation, id: number): NationDetail | null {
     };
   });
   const rulers = h.people.filter((p) => p.nation === id && p.reignFrom >= 0).map((p) => ({ name: p.name, from: p.reignFrom, to: p.reignTo, fate: p.fate, house: h.dynasties[p.dynasty]?.name ?? '' }));
-  return { id, name: n.name, land: n.land.slice(), tech, rulers: rulers.slice(-60) };
+  const info = (p: (typeof h.people)[number]): PersonInfo => {
+    const ev = s.events.events[p.events[0] ?? -1];
+    return {
+      id: p.id, name: p.name, role: p.role, born: p.born, died: p.died, fate: p.fate, bold: p.bold, wise: p.wise, cruel: p.cruel, pious: p.pious, era: p.era ?? n.era,
+      patron: h.people[p.patron]?.name ?? '', rival: h.people[p.rival]?.name ?? '', house: h.dynasties[p.dynasty]?.name ?? '', deed: ev ? ev.title : '', eventId: ev ? ev.id : -1,
+    };
+  };
+  const mine = h.people.filter((p) => p.nation === id);
+  const first = mine.find((p) => p.role === 'founder'), now = h.people[n.ruler];
+  const others = mine.filter((p) => p.role !== 'ruler' && p.role !== 'founder').reverse().slice(0, 40);
+  const people = [...new Set([now, first, ...others].filter((p): p is NonNullable<typeof p> => !!p && p.nation === id))].map(info);
+  return { id, name: n.name, land: n.land.slice(), species: n.species, people, tech, rulers: rulers.slice(-60) };
 }
 
 function nationList(s: Simulation): NationInfo[] {

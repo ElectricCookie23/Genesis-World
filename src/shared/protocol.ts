@@ -159,9 +159,33 @@ export interface TechCell {
   key: boolean;
 }
 
+/** One of the people on a nation's record. */
+export interface PersonInfo {
+  id: number; name: string;
+  /** 'ruler', 'founder', 'inventor', 'prophet', 'general', 'explorer', 'artist' or 'scholar'. */
+  role: string;
+  born: number;
+  /** Year of death, or -1 while alive. */
+  died: number;
+  fate: string;
+  /** Temperament, each 0..1. */
+  bold: number; wise: number; cruel: number; pious: number;
+  /** The age their nation was in when they rose: it sets the style of the portrait. */
+  era: number;
+  /** The ruler they served and a rival, by name ('' if none). */
+  patron: string; rival: string;
+  house: string;
+  /** What they are remembered for: the title and id of the first event they are tied to. */
+  deed: string; eventId: number;
+}
+
 /** Everything about one nation that is too big to send all the time. */
 export interface NationDetail {
   id: number; name: string; land: string[];
+  /** The species of its people. */
+  species: number;
+  /** Its people on record: the reigning ruler and the founder first, then the others, latest first. */
+  people: PersonInfo[];
   tech: TechCell[];
   /** Its rulers on record, oldest first. */
   rulers: { name: string; from: number; to: number; fate: string; house: string }[];

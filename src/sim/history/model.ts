@@ -22,7 +22,7 @@ export interface Culture {
   hue: number;
 }
 
-export type Role = 'ruler' | 'founder' | 'inventor' | 'prophet' | 'general' | 'explorer' | 'artist';
+export type Role = 'ruler' | 'founder' | 'inventor' | 'prophet' | 'general' | 'explorer' | 'artist' | 'scholar';
 
 /** Someone history remembers. Ordinary people are never stored: see citizens.ts. */
 export interface Person {
@@ -50,6 +50,13 @@ export interface Person {
   /** Years of rule, for rulers: from..to (to = -1 while reigning). */
   reignFrom: number;
   reignTo: number;
+  /** The ruler they served or rose under, and a rival (the general on the other side, the claimant they fought), or -1. */
+  patron: number;
+  rival: number;
+  /** The year they made their name. */
+  rose: number;
+  /** The age their nation was in when they rose (it sets the style of their portrait). */
+  era: number;
 }
 
 export interface Dynasty {
@@ -113,6 +120,8 @@ export interface Nation {
   fatigue: number;
   /** Recent blows to the nation (wars, plagues, disasters, a fallen house), newest last: what a collapse is blamed on. */
   woes: { kind: string; eventId: number; year: number }[];
+  /** Every nation this one has ever met. */
+  met?: number[];
   /** The year it was at its greatest extent, and how many towns it then held. */
   peakYear: number;
   peakTowns: number;
@@ -131,10 +140,14 @@ export interface HistoryState {
   began: number;
   /** Highest era any nation has reached. */
   topEra: number;
+  /** The highest age ever reached in this history, which a great ruin does not lower. */
+  peakEra?: number;
   /** For each slot of the tech web, whether anyone has yet discovered it (1) in this history. */
   firsts: number[];
+  /** People on record who are not rulers and are still alive: their lives are followed to their end (system E6). */
+  notables: number[];
 }
 
 export function emptyHistory(): HistoryState {
-  return { cultures: [], languages: [], nations: [], people: [], dynasties: [], pending: 0, began: -1, topEra: 0, firsts: [] };
+  return { cultures: [], languages: [], nations: [], people: [], dynasties: [], pending: 0, began: -1, topEra: 0, firsts: [], notables: [] };
 }

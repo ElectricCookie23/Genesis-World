@@ -338,7 +338,10 @@ describe('era progression (E2)', () => {
     const s = worldWithHistory('amber-reef-101');
     expect(s).not.toBeNull();
     for (let y = 0; y < 8000; y++) s!.step(1);
-    const firsts = s!.events.events.filter((e) => e.type === 'era' && e.importance >= 2);
+    // (an age climbed back to after a great ruin is announced as coming again, and is not a first)
+    const eras = s!.events.events.filter((e) => e.type === 'era' && e.importance >= 2);
+    const firsts = eras.filter((e) => !e.data!.again);
+    for (const e of eras.filter((x) => x.data!.again)) { expect(e.title).toMatch(/^The Age .+ comes again$/); expect(firsts.some((f) => f.data!.era === e.data!.era && f.simYear < e.simYear)).toBe(true); }
     expect(firsts.length).toBeGreaterThanOrEqual(6);
     expect(new Set(firsts.map((e) => e.title)).size).toBe(firsts.length);
     for (const e of firsts) {
@@ -525,4 +528,105 @@ describe('dark ages (E5)', () => {
     expect(lost).toBeGreaterThanOrEqual(1);
     expect(regained).toBeGreaterThanOrEqual(1);
   }, 900000);
+});
+
+import { ART_NAMES, Portrait, artStyle } from '../src/ui/portrait';
+import { GENE_COUNT } from '../src/sim/genetics';
+
+/** Everything a drawn portrait is made of, as one string, so two portraits can be compared. */
+function drawn(node: unknown): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (Array.isArray(node)) return node.map(drawn).join('');
+  if (typeof node !== 'object') return String(node);
+  const v = node as { type: unknown; props: Record<string, unknown> };
+  if (typeof v.type === 'function') return drawn((v.type as (p: unknown) => unknown)(v.props));
+  return `<${String(v.type)} ${Object.entries(v.props).filter(([k, x]) => k !== 'children' && x !== undefined).map(([k, x]) => `${k}=${typeof x === 'object' ? JSON.stringify(x) : String(x)}`).join(' ')}>${drawn(v.props.children)}`;
+}
+
+describe('notable people (E6)', () => {
+  /** The kinds of event that belong to history proper: at a human pace each must name its person. */
+  const NAMED = new Set(['nation', 'era', 'invention', 'dynasty', 'war', 'conquest', 'secession', 'civil-war', 'nation-collapse', 'nation-fall', 'knowledge-lost', 'knowledge-regained', 'contact', 'prophet', 'music', 'trade', 'industry']);
+
+  it('every event of history names the person tied to it', () => {
+    const runs = fiveHistories();
+    let checked = 0;
+    for (const r of runs) {
+      const h = r.sim.civ.h;
+      for (const e of r.sim.events.events) {
+        if (e.simYear < r.began) continue;
+        const major = NAMED.has(e.type) || ((e.type === 'settlement' || e.type === 'temple') && e.importance >= 2);
+        if (!major) continue;
+        checked++;
+        const who = h.people[Number(e.data?.person ?? -1)];
+        expect(who, `${r.seed}: ${e.type} "${e.title}" names no one`).toBeDefined();
+        expect(`${e.title} ${e.description}`).toContain(who!.name);
+        expect(who!.events).toContain(e.id);
+      }
+    }
+    expect(checked).toBeGreaterThan(200);
+  }, 900000);
+
+  it('generals, prophets, explorers, artists, scholars and inventors live whole lives with an outcome', () => {
+    const runs = fiveHistories();
+    const seen = new Map<string, number>();
+    let rivals = 0, martyrs = 0, early = 0, soldiers = 0;
+    for (const r of runs) {
+      const h = r.sim.civ.h, ev = r.sim.events.events, now = r.sim.simYear;
+      const roles = new Set<string>();
+      for (const p of h.people) {
+        roles.add(p.role);
+        seen.set(p.role, (seen.get(p.role) ?? 0) + 1);
+        expect(p.name.length).toBeGreaterThan(1);
+        expect(h.nations[p.nation]).toBeDefined();
+        for (const t of [p.bold, p.wise, p.cruel, p.pious]) { expect(t).toBeGreaterThanOrEqual(0); expect(t).toBeLessThanOrEqual(1); }
+        if (p.role === 'ruler' || p.role === 'founder') continue;
+        // made by an event, and tied to it
+        expect(p.events.length).toBeGreaterThan(0);
+        expect(ev[p.events[0]!]!.description).toContain(p.name);
+        expect(p.born).toBeLessThan(p.rose);
+        expect(p.era).toBeGreaterThanOrEqual(0);
+        // they served whoever ruled when they rose
+        expect(h.people[p.patron]).toBeDefined();
+        // a life ends, in a way that is written down
+        if (p.died >= 0) { expect(p.died).toBeGreaterThanOrEqual(p.rose); expect(p.fate.length).toBeGreaterThan(5); }
+        else expect(h.notables).toContain(p.id);
+        expect(p.died >= 0 ? p.died - p.born : now - p.born).toBeLessThan(r.sim.civ.lifespan(r.sim, h.nations[p.nation]!.species) * 1.6);
+        if (p.role === 'general') {
+          soldiers++;
+          if (p.died >= 0 && !/in bed/.test(p.fate)) early++;
+          if (p.rival >= 0) { rivals++; expect(h.people[p.rival]!.rival).toBe(p.id); expect(h.people[p.rival]!.nation).not.toBe(p.nation); }
+        }
+        if (p.role === 'prophet' && /put to death/.test(p.fate)) { martyrs++; expect(p.died).toBe(p.rose); expect(h.people[p.rival]!.cruel).toBeGreaterThan(0.62); }
+      }
+      // the living on record are all alive
+      for (const id of h.notables) expect(h.people[id]!.died).toBeLessThan(0);
+      expect(roles.size).toBeGreaterThanOrEqual(5);
+    }
+    for (const role of ['ruler', 'founder', 'inventor', 'general', 'prophet', 'explorer', 'artist', 'scholar']) expect(seen.get(role) ?? 0, role).toBeGreaterThan(0);
+    // war is a dangerous trade, and the two sides of a war remember each other
+    expect(rivals).toBeGreaterThan(0);
+    expect(early).toBeGreaterThan(soldiers * 0.15);
+    expect(martyrs).toBeGreaterThanOrEqual(0);
+  }, 900000);
+
+  it('portraits are drawn from the body of the species, in the manner of the age', () => {
+    expect([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(artStyle)).toEqual([0, 0, 1, 1, 2, 2, 3, 3, 4, 4]);
+    expect(ART_NAMES.length).toBe(5);
+    const rng = new RNG(5);
+    const a = new Float32Array(GENE_COUNT).map(() => rng.next()), b = new Float32Array(GENE_COUNT).map(() => rng.next());
+    const face = (genes: Float32Array, era: number, role: string, seed: number) => drawn(Portrait({ genes, era, role, seed }));
+    // the same person is always drawn the same
+    expect(face(a, 4, 'general', 12)).toBe(face(a, 4, 'general', 12));
+    // two species do not look alike, nor do two people of one species, nor two callings
+    expect(face(a, 4, 'general', 12)).not.toBe(face(b, 4, 'general', 12));
+    expect(face(a, 4, 'general', 12)).not.toBe(face(a, 4, 'general', 13));
+    expect(face(a, 4, 'general', 12)).not.toBe(face(a, 4, 'prophet', 12));
+    // five ages, five manners
+    expect(new Set([0, 2, 4, 6, 8].map((era) => face(a, era, 'ruler', 3))).size).toBe(5);
+    for (const era of [0, 2, 4, 6, 8]) for (const role of ['ruler', 'founder', 'inventor', 'prophet', 'general', 'explorer', 'artist', 'scholar']) {
+      const text = face(b, era, role, 40 + era);
+      expect(text).not.toMatch(/NaN|undefined/);
+      expect(text.length).toBeGreaterThan(1500);
+    }
+  });
 });

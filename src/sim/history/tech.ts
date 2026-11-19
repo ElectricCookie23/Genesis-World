@@ -204,6 +204,19 @@ export function forget(k: Knowledge, count: number, year: number, eventId = -1):
   return gone;
 }
 
+/**
+ * What a small band cannot carry (system E3): the newest `count` things are simply not known to it. Unlike
+ * `forget` this leaves no memory of a loss: the settlers' grandchildren never had these crafts.
+ */
+export function shed(k: Knowledge, count: number): number {
+  const known: number[] = [];
+  for (let i = 0; i < WEB.length; i++) if (k.way[i]! >= 0) known.push(i);
+  known.sort((a, b) => WEB[b]!.level - WEB[a]!.level);
+  const gone = known.slice(0, Math.max(0, Math.min(known.length, Math.round(count))));
+  for (const i of gone) { k.way[i] = -1; k.year[i] = 0; }
+  return gone.length;
+}
+
 /** The best way of meeting a need that this land allows, or -1 if the land allows none. */
 export function wayFor(slotIndex: number, land: ReadonlySet<Land>): number {
   const ways = WEB[slotIndex]!.ways;

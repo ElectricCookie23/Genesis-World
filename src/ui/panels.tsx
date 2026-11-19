@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Nation } from '../render/gfx/nations';
 import { CreatureSketch } from './sketch';
+import { ART_NAMES, Portrait, artStyle } from './portrait';
 import { G, GENE_NAMES } from '../sim/genetics';
 import type { SimEvent } from '../sim/events';
-import type { SpeciesInfo } from '../shared/protocol';
+import type { PersonInfo, SpeciesInfo } from '../shared/protocol';
 import { actions, state, update, useStore, type Relative, type UIState } from './store';
 import { bigNumber, eventColor, eventGlyph, formatYear, hsl, metres, shortYear } from './format';
 import css from './ui.module.css';
@@ -609,6 +610,39 @@ const FIELD_COLOUR: Record<string, string> = {
 const ERA_NAMES = ['Age of Camps', 'Age of Fields', 'Age of Kilns', 'Age of Walls', 'Age of Sails', 'Age of Presses', 'Age of Engines', 'Age of Signals', 'Age of Orbit', 'Age Beyond'];
 
 /** One nation's knowledge: the tech web era by era, and its rulers on record (expansion system E1). */
+const ROLE_LABEL: Record<string, string> = { ruler: 'Ruler', founder: 'Founder', inventor: 'Inventor', prophet: 'Prophet', general: 'General', explorer: 'Explorer', artist: 'Artist', scholar: 'Scholar' };
+
+/** The two strongest sides of a temperament, in plain words. */
+function temperament(p: PersonInfo): string {
+  const sides: [number, string][] = [
+    [p.bold - 0.5, p.bold > 0.5 ? 'bold' : 'cautious'], [p.wise - 0.5, p.wise > 0.5 ? 'wise' : 'rash'],
+    [p.cruel - 0.5, p.cruel > 0.5 ? 'cruel' : 'gentle'], [p.pious - 0.5, p.pious > 0.5 ? 'devout' : 'doubting'],
+  ];
+  return sides.filter((x) => Math.abs(x[0]) > 0.15).sort((a, b) => Math.abs(b[0]) - Math.abs(a[0])).slice(0, 2).map((x) => x[1]).join(' and ');
+}
+
+/** One person on record: a portrait in the manner of their age, and what is known of the life. */
+function PersonCard({ p, genes, year }: { p: PersonInfo; genes: Float32Array | undefined; year: number }) {
+  const age = Math.max(1, Math.round((p.died >= 0 ? p.died : year) - p.born));
+  const nature = temperament(p);
+  return (
+    <div style={{ display: 'flex', gap: '8px', padding: '6px', border: '1px solid #ffffff1f', borderRadius: '6px', background: '#ffffff08', minWidth: 0 }}>
+      {genes && <Portrait genes={genes} era={p.era} role={p.role} seed={p.id} bold={p.bold} cruel={p.cruel} width={70} />}
+      <div style={{ minWidth: 0, font: '400 11.5px/1.35 system-ui, sans-serif', color: '#cfc9bd' }}>
+        <div style={{ font: '600 13px/1.2 system-ui, sans-serif', color: '#f2eee4', overflowWrap: 'anywhere' }}>{p.name}</div>
+        <div style={{ color: '#ffffff8c', margin: '1px 0 3px' }}>{ROLE_LABEL[p.role] ?? p.role}{p.house ? `, ${p.house}` : ''}</div>
+        <div>{p.died >= 0 ? `Lived ${age} ${age === 1 ? 'year' : 'years'}; ${p.fate || 'died'}.` : `Living, ${age} ${age === 1 ? 'year' : 'years'} old.`}</div>
+        {p.deed && <div style={{ overflowWrap: 'anywhere' }}>Remembered for: {p.deed}.</div>}
+        {nature && <div>By nature {nature}.</div>}
+        {(p.patron || p.rival) && <div style={{ overflowWrap: 'anywhere' }}>{p.patron ? `Served ${p.patron}` : ''}{p.patron && p.rival ? '; ' : ''}{p.rival ? `${p.patron ? 'r' : 'R'}ival of ${p.rival}` : ''}.</div>}
+        <div style={{ color: '#ffffff66' }}>{capitalise(ART_NAMES[artStyle(p.era)]!)}</div>
+      </div>
+    </div>
+  );
+}
+
+const capitalise = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
+
 export function NationPanel() {
   const s = useStore();
   const d = s.nationDetail;
@@ -654,6 +688,13 @@ export function NationPanel() {
             {Object.entries(FIELD_COLOUR).map(([f, c]) => <span key={f}><span style={{ color: c }}>●</span> {f}</span>)}
           </div>
         )}
+        {d && d.people.length > 0 && <div class={css.sub} style={{ margin: '8px 0 6px', letterSpacing: '0.08em' }}>PEOPLE ON RECORD</div>}
+        {d && d.people.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(236px, 1fr))', gap: '8px', margin: '0 0 10px' }}>
+            {d.people.slice(0, s.quality === 'low' ? 8 : 24).map((p) => <PersonCard key={p.id} p={p} genes={s.species.get(d.species)?.genes} year={year} />)}
+          </div>
+        )}
+        {d && d.people.length <= 2 && d.rulers.length > 1 && <p class={css.sub}>Generals, prophets, explorers, artists and scholars are recorded only while time runs at the pace of history or slower.</p>}
         {d && d.rulers.length > 0 && <div class={css.sub} style={{ margin: '8px 0 4px', letterSpacing: '0.08em' }}>RULERS ON RECORD</div>}
         {d && [...d.rulers].reverse().slice(0, 30).map((r) => (
           <div key={`${r.name}${r.from}`} class={css.when} style={{ color: '#cfc9bd', margin: '0 0 3px' }}>
