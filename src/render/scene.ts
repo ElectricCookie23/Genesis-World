@@ -54,15 +54,19 @@ const HAZE_SICK = new Vector3(0.75, 0.62, 0.38);
 export type Preset = 'low' | 'medium' | 'high' | 'ultra';
 
 /** What each quality preset turns on. Ultra may need a strong desktop GPU; Low is for phones. */
+// Costs set from a real GPU (docs/GPU_REVIEW.md, Apple M3 Pro at 1600x913 on a 2x display). As first written,
+// only Low held its settings: High ran at about 20 fps at a pixel ratio of 2 with 22 cloud steps (the cloud march
+// alone was over half the frame, and the rest alone missed 50 fps at that resolution), and Ultra at 12. High now
+// asks for 1.5 and 18 steps, Medium 1.25 and 12, Ultra 2 and 32; the step-downs in main.ts take it from there.
 export const PRESETS: Record<Preset, {
   ratio: number; dataSize: number; erosionSize: number; erosionIterations: number; oceanResolution: number; fftEvery: number;
   cloudSteps: number; cloudLight: number; cloudDetail: number; cloudNoise: number; auroraSteps: number; shadowSteps: number; maxLevel: number; lineSize: number;
   plants: number; models: number; grass: number; creatures: number; rain: number; taa: boolean; ao: boolean; bloom: boolean; fringe: boolean;
 }> = {
   low: { ratio: 1, dataSize: 128, erosionSize: 256, erosionIterations: 160, oceanResolution: 64, fftEvery: 2, cloudSteps: 8, cloudLight: 2, cloudDetail: 0, cloudNoise: 32, auroraSteps: 12, shadowSteps: 3, maxLevel: 9, lineSize: 256, plants: 4000, models: 200, grass: 0, creatures: 600, rain: 1500, taa: false, ao: false, bloom: false, fringe: false },
-  medium: { ratio: 1.5, dataSize: 192, erosionSize: 384, erosionIterations: 240, oceanResolution: 128, fftEvery: 1, cloudSteps: 14, cloudLight: 3, cloudDetail: 1, cloudNoise: 48, auroraSteps: 18, shadowSteps: 6, maxLevel: 10, lineSize: 512, plants: 15000, models: 600, grass: 2000, creatures: 3000, rain: 3000, taa: false, ao: false, bloom: true, fringe: true },
-  high: { ratio: 2, dataSize: 256, erosionSize: 512, erosionIterations: 320, oceanResolution: 256, fftEvery: 1, cloudSteps: 22, cloudLight: 4, cloudDetail: 1, cloudNoise: 64, auroraSteps: 28, shadowSteps: 8, maxLevel: 11, lineSize: 512, plants: 40000, models: 1600, grass: 6000, creatures: 5000, rain: 6000, taa: true, ao: true, bloom: true, fringe: true },
-  ultra: { ratio: 3, dataSize: 384, erosionSize: 768, erosionIterations: 400, oceanResolution: 512, fftEvery: 1, cloudSteps: 40, cloudLight: 6, cloudDetail: 1, cloudNoise: 64, auroraSteps: 40, shadowSteps: 12, maxLevel: 12, lineSize: 1024, plants: 60000, models: 2600, grass: 10000, creatures: 5000, rain: 10000, taa: true, ao: true, bloom: true, fringe: true },
+  medium: { ratio: 1.25, dataSize: 192, erosionSize: 384, erosionIterations: 240, oceanResolution: 128, fftEvery: 1, cloudSteps: 12, cloudLight: 3, cloudDetail: 1, cloudNoise: 48, auroraSteps: 18, shadowSteps: 6, maxLevel: 10, lineSize: 512, plants: 15000, models: 600, grass: 2000, creatures: 3000, rain: 3000, taa: false, ao: false, bloom: true, fringe: false },
+  high: { ratio: 1.5, dataSize: 256, erosionSize: 512, erosionIterations: 320, oceanResolution: 256, fftEvery: 1, cloudSteps: 18, cloudLight: 4, cloudDetail: 1, cloudNoise: 64, auroraSteps: 28, shadowSteps: 8, maxLevel: 11, lineSize: 512, plants: 40000, models: 1600, grass: 6000, creatures: 5000, rain: 6000, taa: true, ao: true, bloom: true, fringe: true },
+  ultra: { ratio: 2, dataSize: 384, erosionSize: 768, erosionIterations: 400, oceanResolution: 512, fftEvery: 1, cloudSteps: 32, cloudLight: 5, cloudDetail: 1, cloudNoise: 64, auroraSteps: 40, shadowSteps: 12, maxLevel: 12, lineSize: 1024, plants: 60000, models: 2600, grass: 10000, creatures: 5000, rain: 10000, taa: true, ao: true, bloom: true, fringe: true },
 };
 
 export class GenesisScene {

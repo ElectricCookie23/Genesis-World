@@ -155,10 +155,16 @@ async function boot(): Promise<void> {
     // blurred glass panels are costly on weak GPUs: use plain dark panels below the high preset
     document.documentElement.classList.toggle('lite', state.quality === 'low' || state.quality === 'medium' || adaptive >= 4);
   };
+  // The step this machine settled on is remembered for each preset, so the next visit starts there instead of
+  // running slowly for several seconds while it finds the same answer again.
+  const stepKey = () => `genesis:steps:${state.quality}`;
+  const rememberSteps = () => store.set(stepKey(), String(adaptive));
   actions.setQuality = (q) => {
+    // choosing a preset by hand asks for all of it: start again from the top
     adaptive = 0;
     update({ quality: q });
     store.set('genesis:quality', q);
+    rememberSteps();
     applyQuality();
     // texture sizes were fixed when the planet was built: say so if the new preset wants different ones
     if (q !== scene.builtWith) { update({ notice: 'Some of this preset (texture detail, wave and cloud resolution) takes effect after a reload.' }); window.setTimeout(() => update({ notice: '' }), 6000); }
@@ -181,6 +187,7 @@ async function boot(): Promise<void> {
     musicVolume: Number(store.get('genesis:music') ?? 0.6),
     reducedMotion: store.get('genesis:motion') ? store.get('genesis:motion') === '1' : reducedMotion,
   });
+  adaptive = Math.max(0, Math.min(5, Math.round(Number(store.get(stepKey()) ?? 0)) || 0));
   update({ soundVolume: Number(store.get('genesis:sound') ?? 0.7) });
   music.sfx = state.soundVolume;
   music.setVolume(state.musicVolume);
@@ -779,7 +786,7 @@ async function boot(): Promise<void> {
   window.addEventListener('resize', () => scene.resize());
 
   let lastFocus = 0;
-  let slowFor = 0;
+  let slowFor = 0, fastFor = 0, steppedUpAt = 0, retryAfter = 0, retryWait = 300000;
   let postcardBase = 0;
   const focusVec = new Vector3();
   let last = performance.now();
@@ -813,11 +820,23 @@ async function boot(): Promise<void> {
         if (rain > 0.2 && near > 0.2 && Math.random() < 0.12) music.thunder();
       }
       // adaptive quality: two seconds under target takes the next step down (the order is in applyQuality)
+      // With room to spare for a good while it tries one step back up; if that fails it waits much longer before
+      // trying again, so a machine on the edge is not made to stutter every few minutes.
       const target = mobile ? 26 : 50;
-      if (!state.opening && scene.fpsAvg < target && document.visibilityState === 'visible') {
-        slowFor += dt;
-        if (slowFor > 2 && adaptive < 5) { adaptive++; slowFor = 0; applyQuality(); }
-      } else slowFor = 0;
+      const watching = !state.opening && document.visibilityState === 'visible';
+      if (watching && scene.fpsAvg < target) {
+        slowFor += dt; fastFor = 0;
+        if (slowFor > 2 && adaptive < 5) {
+          adaptive++; slowFor = 0; applyQuality(); rememberSteps();
+          if (steppedUpAt > 0 && now - steppedUpAt < 20000) { retryWait = Math.min(retryWait * 4, 3600000); retryAfter = now + retryWait; }
+        }
+      } else {
+        slowFor = 0;
+        if (watching && adaptive > 0 && scene.fpsAvg > target * 1.14 && now > retryAfter) {
+          fastFor += dt;
+          if (fastFor > 15) { adaptive--; fastFor = 0; steppedUpAt = now; retryAfter = now + 20000; applyQuality(); rememberSteps(); }
+        } else fastFor = 0;
+      }
       scene.cam.autoOrbit = state.reducedMotion ? 0 : state.postcard ? 0.035 : 0.012;
       // postcard mode: a slow cinematic drift in and out, with depth of field up close
       scene.cinematic = state.postcard;
