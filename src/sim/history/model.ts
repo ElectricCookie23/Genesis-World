@@ -103,6 +103,10 @@ export interface Nation {
   land: Land[];
   /** Year the land was last surveyed. */
   surveyed: number;
+  /** Nations it is in touch with, by land or by sea (system E3): knowledge passes along these. */
+  contacts: number[];
+  /** How many things it has learned from others rather than discovered. */
+  borrowed?: number;
 }
 
 /** Everything the history engine keeps, in one saveable object. */

@@ -365,3 +365,75 @@ describe('era progression (E2)', () => {
     for (let t = 0.2; t < 1.2; t += 0.01) { const a = lightColour(t, sig), b = lightColour(t + 0.01, sig); for (let k = 0; k < 3; k++) expect(Math.abs(a[k]! - b[k]!)).toBeLessThan(0.08); }
   });
 });
+
+import type { SaveState } from '../src/sim/snapshot';
+import { borrowable } from '../src/sim/history/tech';
+
+/** Five small worlds saved at the dawn of their history, grown once and shared by every "five seeds" check. */
+const FIVE = ['amber-reef-101', 'coral-dune-303', 'ember-moss-404', 'slate-iris-707', 'jade-fjord-505'];
+let dawns: (SaveState | null)[] | null = null;
+function fiveDawns(): (SaveState | null)[] {
+  if (!dawns) {
+    dawns = FIVE.map((seed) => {
+      const sim = new Simulation(seed, 17);
+      for (let t = 0; t < 300e6 && !sim.civ.historyActive; t += 15000) sim.step(15000);
+      return sim.civ.historyActive ? saveSimulation(sim, 'dawn') : null;
+    });
+  }
+  return dawns;
+}
+/** A fresh copy of one of the five worlds at its dawn (null if that world never had a history). */
+function atDawn(k: number): Simulation | null {
+  const save = fiveDawns()[k];
+  if (!save) return null;
+  const sim = new Simulation(FIVE[k]!, 17);
+  loadSimulation(sim, save);
+  return sim;
+}
+
+describe('uneven history (E3)', () => {
+  it('a nation learns from one it is in touch with only what it is ready for, earliest first', () => {
+    const land = new Set<Land>(['ore', 'coast', 'river', 'forest', 'beasts', 'sand', 'coal']);
+    const teacher = newKnowledge(), pupil = newKnowledge();
+    const rng = new RNG(3);
+    for (let n = 0; n < 60; n++) { const i = chooseNext(teacher, land, {}, rng); teacher.way[i] = wayFor(i, land); }
+    let taken = 0, lastLevel = 0;
+    for (let n = 0; n < 200; n++) {
+      const i = borrowable(pupil, teacher, land);
+      if (i < 0) break;
+      for (const need of WEB[i]!.needs) expect(pupil.way[SLOT_INDEX.get(need)!]!).toBeGreaterThanOrEqual(0);
+      expect(teacher.way[i]!).toBeGreaterThanOrEqual(0);
+      pupil.way[i] = wayFor(i, land); taken++;
+      lastLevel = Math.max(lastLevel, WEB[i]!.level);
+    }
+    expect(taken).toBe(60);
+    expect(borrowable(teacher, pupil, land)).toBe(-1);
+    // an inland pupil takes what it can and leaves the seamanship
+    const dry = new Set<Land>(['ore', 'beasts']), inland = newKnowledge();
+    for (let n = 0; n < 200; n++) { const i = borrowable(inland, teacher, dry); if (i < 0) break; expect(WEB[i]!.field).not.toBe('sea'); inland.way[i] = wayFor(i, dry); }
+  });
+
+  it('in at least three of five worlds two nations stand two or more ages apart at the same moment', () => {
+    let wide = 0, withHistory = 0, learned = 0;
+    for (let k = 0; k < FIVE.length; k++) {
+      const sim = atDawn(k);
+      if (!sim) continue;
+      withHistory++;
+      let gap = 0;
+      for (let y = 0; y < 6000; y++) {
+        sim.step(1);
+        if (y % 20) continue;
+        const live = sim.civ.h.nations.filter((n) => n.ended < 0);
+        if (live.length > 1) gap = Math.max(gap, Math.max(...live.map((n) => n.era)) - Math.min(...live.map((n) => n.era)));
+      }
+      if (gap >= 2) wide++;
+      learned += sim.civ.h.nations.reduce((a, n) => a + (n.borrowed ?? 0), 0);
+      // contacts are always other, real nations
+      for (const n of sim.civ.h.nations) for (const c of n.contacts) { expect(c).not.toBe(n.id); expect(sim.civ.h.nations[c]).toBeDefined(); }
+    }
+    expect(withHistory).toBeGreaterThanOrEqual(4);
+    expect(wide).toBeGreaterThanOrEqual(3);
+    // and knowledge did pass between nations somewhere
+    expect(learned).toBeGreaterThan(10);
+  }, 600000);
+});
