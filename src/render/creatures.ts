@@ -94,7 +94,7 @@ export class CreatureLayer {
   season = 0;
   private chase = 0;
   mounds?: InstancedMesh;
-  private moundData: { ind: Individual; size: number }[] = [];
+  private moundData: { ind: Individual; size: number; hive: boolean }[] = [];
 
 
   private material: MeshBasicNodeMaterial;
@@ -253,11 +253,11 @@ export class CreatureLayer {
     if (!this.mounds) {
       const material = new MeshBasicNodeMaterial();
       material.colorNode = (attribute('color', 'vec3') as any).mul(surfaceLight(normalize(normalLocal), positionWorld) as any);
-      const geo = new ConeGeometry(0.5, 1, 7).translate(0, 0.5, 0).toNonIndexed();
+      // a rounded heap rather than a faceted cone: more sides, and the smooth normals of the indexed shape
+      const geo = new ConeGeometry(0.5, 1, 14, 3).translate(0, 0.5, 0);
       const col = new Float32Array(geo.attributes.position!.count * 3);
       for (let i = 0; i < col.length; i += 3) { col[i] = 0.36; col[i + 1] = 0.26; col[i + 2] = 0.17; }
       geo.setAttribute('color', new BufferAttribute(col, 3));
-      geo.computeVertexNormals();
       this.mounds = new InstancedMesh(geo, material, 256);
       this.mounds.frustumCulled = false;
       this.mounds.count = 0;
@@ -274,7 +274,9 @@ export class CreatureLayer {
       const nest = info.genes[G.Care]! > 0.55;
       if (!hive && !nest) continue;
       seen.add(key);
-      this.moundData.push({ ind, size: hive ? 0.004 : 0.0012 });
+      // Sized from the animals that build them: a hive stands about twice as tall as its builders are long, and a
+      // nest is a low ring about one body wide. (Fixed sizes made hives taller than the trees around them.)
+      this.moundData.push({ ind, size: hive ? ind.size * 1.5 : ind.size * 0.9, hive });
     }
   }
 
@@ -392,8 +394,9 @@ export class CreatureLayer {
         mp.copy(d.ind.home);
         const r = this.groundRadius(d.ind, mp);
         mq.setFromUnitVectors(Y, mp);
-        const sc = d.size * boost;
-        ms.set(sc, sc * (d.size > 0.002 ? 1.6 : 0.5), sc);
+        // nothing is built on water: a home on the shore can lie below the tide line
+        const sc = r <= sea + 1e-7 ? 0 : d.size * boost;
+        ms.set(sc, sc * (d.hive ? 1.4 : 0.35), sc);
         mm.compose(mp.clone().multiplyScalar(r), mq, ms);
         this.mounds!.setMatrixAt(i, mm);
       });

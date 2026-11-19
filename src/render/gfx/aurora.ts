@@ -19,7 +19,7 @@ export const uMagneticPole = uniform(new Vector3(0.14, 0.985, 0.1).normalize());
 
 /** The curtains hang between these heights (planet radii). */
 const LOW = 1 + 11.5 * EXAG;
-const HIGH = 1 + 26 * EXAG;
+const HIGH = 1 + 21 * EXAG;
 /** Angle from the magnetic pole to the middle of the oval (about 70 degrees magnetic latitude). */
 const OVAL = 0.35;
 
@@ -78,15 +78,19 @@ export class AuroraVolume {
             const patch = smoothstep(0.38, 0.62, fold.r).mul(0.9).add(0.1);
             const pulse = sin(dot(dir, vec3(3.1, 0.4, -2.7)).mul(6).sub(t.mul(0.55))).mul(0.3).add(0.7);
             // bright sharp lower border, fading upward
-            const height = smoothstep(0.0, 0.07, h).mul(exp(h.mul(-3.4))).mul(float(1).sub(smoothstep(0.85, 1.0, h)));
+            const height = smoothstep(0.0, 0.07, h).mul(exp(h.mul(-4.2))).mul(float(1).sub(smoothstep(0.85, 1.0, h)));
             const colour = mix(vec3(uLook.auroraLow), vec3(uLook.auroraHigh), smoothstep(0.12, 0.7, h)).add(vec3(1.0, 0.35, 0.55).mul(float(1).sub(smoothstep(0.0, 0.06, h))).mul(0.35));
-            // washed out in daylight
-            const night = float(1).sub(smoothstep(-0.2, 0.25, dot(dir, uSunDir)).mul(0.93));
+            // gone in daylight: on a real display the seven percent that used to remain showed as a pink crown on the day side
+            const night = float(1).sub(smoothstep(-0.22, 0.08, dot(dir, uSunDir)));
             sum.addAssign(colour.mul(sheets.mul(streaks).mul(patch).mul(pulse).mul(height).mul(night)).mul(ds));
           });
         });
       });
-      return sum.mul(uAurora).mul(210);
+      // Seen edge-on, at the limb from orbit or toward the pole from the ground, the line of sight runs a long way
+      // through the sheets and the plain sum saturated into a solid wall. A soft shoulder keeps the rays and folds
+      // readable however long the path is.
+      const lit: N = sum.mul(uAurora).mul(150);
+      return lit.div(lit.mul(1.3).add(1));
     });
     material.colorNode = glow();
     this.mesh = new Mesh(new IcosahedronGeometry(HIGH * 1.03, 5), material);

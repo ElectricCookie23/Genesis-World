@@ -199,11 +199,11 @@ export class VolumetricClouds {
           // the column leans downwind as it climbs, and spreads; ash tops flatten into an anvil
           const centre: N = (normalize as any)(src.xyz.add(wnd.xyz.mul(hN.mul(hN.add(0.4)))));
           const ang = sqrt(max(float(2).sub(dot(dir, centre).mul(2)), 0));
-          const width = float(0.012).add(pow(hN, 1.5).mul(0.05)).add(smoothstep(0.7, 1.0, hN).mul(0.045).mul(wnd.w));
+          const width = float(0.012).add(pow(max(hN, 0), 1.5).mul(0.05)).add(smoothstep(0.7, 1.0, hN).mul(0.045).mul(wnd.w));
           const billow = sin(p.x.mul(310).add(uTime.mul(0.4))).mul(sin(p.y.mul(270).sub(uTime.mul(0.3)))).mul(sin(p.z.mul(330))).mul(0.3).add(0.8);
           const top = float(1).sub(smoothstep(mix(float(0.5), float(0.92), wnd.w), mix(float(0.7), float(1.0), wnd.w), hN));
           const dens = exp(ang.div(width).pow2().negate()).mul(src.w).mul(billow).mul(top).mul(1.15);
-          out.addAssign((vec3 as any)(dens, dens.mul(wnd.w), dens.mul(pow(float(1).sub(hN), 5)).mul(wnd.w).mul(0.5)));
+          out.addAssign((vec3 as any)(dens, dens.mul(wnd.w), dens.mul(pow(float(1).sub(hN).max(0), 5)).mul(wnd.w).mul(0.5)));
         });
       }
       return vec3(out.x, out.y.div(max(out.x, 1e-4)), out.z);

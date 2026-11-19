@@ -307,18 +307,37 @@ export class Flora {
       material.opacityNode = cutout(card);
       const mesh = new Mesh(this.geos.get('broadleaf')!, material);
       scene.add(mesh);
-      // which way up does a read-back come? (differs between backends)
-      const probe = makeTarget(1, 4);
-      new Pass(vec4(uv().y, 0, 0, 1)).render(renderer, probe);
-      const pr = (await renderer.readRenderTargetPixelsAsync(probe, 0, 0, 1, 4)) as unknown as ArrayLike<number>;
-      const flipped = pr[0]! > pr[12]!;
-      probe.dispose();
       const W = TILE * FORMS.length, H = TILE * VIEWS;
       const atlas = new Uint8Array(W * H * 4);
       const prevTarget = renderer.getRenderTarget();
       const prevColor = (renderer as any).getClearColor(new Color()) as Color;
       const prevAlpha = (renderer as any).getClearAlpha() as number;
       (renderer as any).setClearColor(0x000000, 0);
+      // Which way up does a picture of the scene come back? Asked of the same kind of render as the tiles (a camera
+      // looking at geometry): a white card fills the upper half of the view and we see which rows it lands in. The
+      // earlier test used a full-screen pass, which does not agree with a camera render on WebGPU, so every imposter
+      // there was baked upside down (trunks above the crowns).
+      let flipped = false;
+      {
+        const probeScene = new Scene();
+        const white = new MeshBasicNodeMaterial({ side: DoubleSide });
+        white.colorNode = vec3(1, 1, 1);
+        const cardMesh = new Mesh(new PlaneGeometry(BAKE_HALF * 4, BAKE_HALF), white);
+        cardMesh.position.set(0, BAKE_CENTRE + BAKE_HALF / 2, 0);
+        probeScene.add(cardMesh);
+        cam.position.set(0, BAKE_CENTRE, 4);
+        cam.up.set(0, 1, 0);
+        cam.lookAt(0, BAKE_CENTRE, 0);
+        cam.updateMatrixWorld();
+        const probe = new RenderTarget(4, 4, { type: UnsignedByteType, format: RGBAFormat, depthBuffer: true });
+        renderer.setRenderTarget(probe);
+        renderer.render(probeScene, cam);
+        renderer.setRenderTarget(prevTarget);
+        const pr = (await renderer.readRenderTargetPixelsAsync(probe, 0, 0, 4, 4)) as unknown as ArrayLike<number>;
+        // the tiles are stored bottom row first, so they need turning over when the top of the view comes back first
+        flipped = pr[0]! > pr[48]!;
+        probe.dispose(); cardMesh.geometry.dispose(); white.dispose();
+      }
       // draw every tile first, then read them all back together
       const targets: RenderTarget[] = [];
       for (let f = 0; f < FORMS.length; f++) {
