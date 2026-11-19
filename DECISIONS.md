@@ -34,3 +34,12 @@ Choices made where the brief was unclear or something had to change. Newest at t
 30. **Day and night behaviour, chases, herding and migration of individuals are drawn, not simulated.** The populations are the truth; individuals near the camera act out what their species does.
 31. **Performance could not be measured on a real GPU** in the build environment (software rendering only, where the page runs at about 1 frame per second). Shader cost was cut where it was clearly wasted (cloud shadows, always-on noise), panels lose their blur below the high preset, and adaptive quality steps down bloom, instance counts and resolution.
 32. **GitHub Pages** could not be enabled from the build session (the API path is blocked and the repo is private). The owner needs to make the repo public and set Settings, Pages, Source to GitHub Actions.
+
+## Graphics overhaul (owner's direction, logged before work began)
+
+33. **New art direction:** an alien world, not Earth, and high-fidelity cinematic 3D rather than the low-poly diorama. BRIEF.md section 3 is superseded by `docs/GRAPHICS_BRIEF.md`.
+34. **Targets are not downgraded for WebGL2.** The FFT ocean, GPU hydraulic erosion and temporal anti-aliasing are built in full on WebGL2: render-to-texture ping-pong for the FFT and the erosion, a history buffer for TAA. They are not replaced by simpler stand-ins.
+35. **Tessellation is replaced by quadtree LOD terrain** (chunked cube-sphere that refines toward the camera).
+36. **WebGPU is optional.** A WebGPU path is kept behind feature detection only where it adds quality. WebGL2 must look the same on the High preset.
+37. **Screenshots from the build machine check correctness, not final look.** It renders in software. The owner judges the visuals on a real GPU from the deployed site, so every step is pushed as soon as it is correct.
+38. **After the graphics overhaul,** return to the items marked "simplified" in PROGRESS.md and complete them.

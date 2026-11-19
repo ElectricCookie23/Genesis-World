@@ -16,6 +16,26 @@ Status of all 150 features from BRIEF.md. Values: not started, in progress, done
 | 8 | Tier 3 | mostly done; see feature table |
 | 9 | Audio polish, performance pass, final QA | in progress |
 
+## Graphics overhaul (docs/GRAPHICS_BRIEF.md)
+
+Rules for this phase (owner's direction): full techniques on WebGL2, not simplified equivalents; quadtree LOD instead of tessellation; WebGPU only as an optional extra behind feature detection; WebGL2 must match on the High preset; screenshots from the build machine check correctness only; push after every step.
+
+| Step | What | Status | Notes |
+|---|---|---|---|
+| 0 | "Before" screenshots of the eight fixed views | not started | |
+| 1 | Alien art direction: star type per seed, sky and sunlight from it, plant pigments, ocean minerals, tinted moon | not started | |
+| 2 | Planet: cube-map bake of sim data, quadtree cube-sphere LOD, GPU hydraulic erosion (ping-pong), per-pixel PBR materials with triplanar mapping | not started | |
+| 3 | Lighting and night side: moonlight, airglow, starlight fill, soft terminator, shadows, GTAO | not started | |
+| 4 | Clouds: ray-marched volumetric clouds, types from the sim, shadows, lightning | not started | |
+| 5 | Ocean: FFT waves (ping-pong) driven by sim wind, foam, subsurface glow, reflections, underwater | not started | |
+| 6 | Nations and night map: light signature per nation, hierarchy, frayed city shapes, networks, borders, names, emblems | not started | |
+| 7 | Aurora: thin translucent curtains hugging the atmosphere | not started | |
+| 8 | Vegetation: real plant geometry, translucency, wind, imposters, dense ground cover | not started | |
+| 9 | Creatures: detailed meshes, skin materials, skeletal animation with IK | not started | |
+| 10 | Effects: lava, ash plumes, meteors, wildfire, weather | not started | |
+| 11 | Post-processing: AgX or ACES with auto exposure, physically based bloom, TAA (history buffer), depth of field, grain | not started | |
+| 12 | Performance tuning, presets, "after" screenshots, README before/after | not started | |
+
 ## Features
 
 | # | Feature | Status | Notes |
