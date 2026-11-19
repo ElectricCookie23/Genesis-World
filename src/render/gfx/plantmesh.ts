@@ -226,7 +226,9 @@ export function buildPlant(form: Form, seed = 1): BufferGeometry {
       break;
     case 'umbrella':
       b.crown = [0, 0.95, 0]; b.crownR = 0.55;
-      tree(b, { height: 0.7, trunkR: 0.045, lean: 0.16, levels: 2, children: [4, 3], angle: 1.1, ratio: 0.7, firstBranch: 0.72, gravity: 0.5, leafPart: PART.leaf, leafSize: 0.22, leaves: 5, bark: DARK_BARK, flatCrown: 0.9, twist: 1.6 });
+      // the crown is a shallow dome, not a single flat layer: leaf cards lying dead level showed as paper discs from
+      // above and as rows of dashes from the side (and in the imposter baked from the side)
+      tree(b, { height: 0.7, trunkR: 0.045, lean: 0.16, levels: 2, children: [4, 3], angle: 1.1, ratio: 0.7, firstBranch: 0.72, gravity: 0.5, leafPart: PART.leaf, leafSize: 0.22, leaves: 7, bark: DARK_BARK, flatCrown: 0.6, twist: 1.6 });
       break;
     case 'conifer': {
       b.crown = [0, 0.6, 0]; b.crownR = 0.6;
