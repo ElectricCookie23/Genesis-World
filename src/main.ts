@@ -22,6 +22,7 @@ import { Vector3 } from 'three/webgpu';
 import { del, get, set } from 'idb-keyval';
 import { Music } from './audio/music';
 import type { SlotInfo, UIState } from './ui/store';
+import { GOALS, emptyRecord, evaluateGoals, type GoalRecord } from './game/goals';
 import { actions, state, togglePanel, update } from './ui/store';
 
 const bootBar = document.getElementById('boot-bar') as HTMLElement;
@@ -122,6 +123,28 @@ async function boot(): Promise<void> {
     update({ slowOnEvents: on });
     send({ type: 'settings', slowOnEvents: on });
   };
+  // optional goals: judged about once a second from what the page already knows; nothing in the simulation depends on them
+  const goalRecord: GoalRecord = (() => {
+    try { return { ...emptyRecord(), ...(JSON.parse(store.get('genesis:goals') ?? '{}') as Partial<GoalRecord>) }; } catch { return emptyRecord(); }
+  })();
+  const saveGoals = () => store.set('genesis:goals', JSON.stringify(goalRecord));
+  const judgeGoals = () => {
+    if (!state.stats || state.opening) return;
+    const nations = state.realms.length ? state.realms.filter((r) => r.ended < 0).length : state.nations.length;
+    const before = JSON.stringify(goalRecord.memo);
+    const { states, fresh } = evaluateGoals({ stats: state.stats, species: state.species, settlements: state.settlements, events: state.events, nations }, goalRecord, seed);
+    update({ goals: states, goalsDone: { ...goalRecord.done }, goalTracked: goalRecord.tracked });
+    if (fresh.length || before !== JSON.stringify(goalRecord.memo)) saveGoals();
+    if (fresh.length) {
+      const names = fresh.map((id) => GOALS.find((g) => g.id === id)!.title);
+      const text = `Goal reached: ${names.join(', ')}.`;
+      update({ notice: text });
+      window.setTimeout(() => { if (state.notice === text) update({ notice: '' }); }, 6000);
+    }
+  };
+  window.setInterval(judgeGoals, 1000);
+  actions.trackGoal = (id) => { goalRecord.tracked = id; saveGoals(); judgeGoals(); update({ goalTracked: id }); };
+  actions.resetGoals = () => { goalRecord.done = {}; goalRecord.memo = {}; saveGoals(); judgeGoals(); };
   actions.copySeedLink = () => {
     const url = `${location.origin}${location.pathname}?seed=${encodeURIComponent(seed)}`;
     void navigator.clipboard?.writeText(url).then(() => {
@@ -799,6 +822,7 @@ async function boot(): Promise<void> {
     else if (k === 'c') togglePanel('chronicle');
     else if (k === 't') togglePanel('tree');
     else if (k === 'g') togglePanel('god');
+    else if (k === 'j') togglePanel('goals');
     else if (e.key === '?' || k === '/') togglePanel('help');
     else if (k === 'p') { update({ postcard: !state.postcard }); scene.cam.idle = state.postcard ? 100 : 0; }
     else if (k === 'm') togglePanel('map');

@@ -3,8 +3,9 @@ import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
 import type { NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 import type { Nation } from '../render/gfx/nations';
+import type { GoalRecord, GoalState } from '../game/goals';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'goals';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
 
 /** One person in an individual's family tree; key is set when that relative is drawn in the world and can be selected. */
@@ -74,6 +75,10 @@ export interface UIState {
   design: Record<number, number>;
   photoFilter: string;
   recording: boolean;
+  /** Optional goals: how each stands in this world, what has been reached on any world, and the one kept on screen. */
+  goals: GoalState[];
+  goalsDone: GoalRecord['done'];
+  goalTracked: string;
 }
 
 export interface SlotInfo { slot: number; name: string; seed: string; simYear: number; savedAt: number; }
@@ -125,6 +130,9 @@ export const state: UIState = {
   design: {},
   photoFilter: 'none',
   recording: false,
+  goals: [],
+  goalsDone: {},
+  goalTracked: '',
 };
 
 const listeners = new Set<() => void>();
@@ -186,6 +194,9 @@ export const actions = {
   setEarthNotes: (_on: boolean) => {},
   selectCreatureKey: (_key: number) => {},
   /** Swap places with the other future, or stop running it. */
+  /** Keep one goal on screen while playing ('' for none), or forget every goal reached. */
+  trackGoal: (_id: string) => {},
+  resetGoals: () => {},
   crossOver: () => {},
   endOtherFuture: () => {},
   fork: () => {},
