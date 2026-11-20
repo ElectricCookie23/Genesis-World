@@ -102,11 +102,15 @@ function Orrery({ c }: { c: CosmosInfo }) {
 }
 
 /** The nearby stars, with the ships sent to them along the way. */
-function StarMap({ c, year }: { c: CosmosInfo; year: number }) {
+function StarMap({ c, year, radio, firstWords }: { c: CosmosInfo; year: number; radio: number; firstWords: string }) {
   const far = Math.max(...c.stars.map((s) => s.ly));
   const at = (ly: number, angle: number): [number, number] => { const r = 14 + 80 * (ly / far); return [Math.cos(angle) * r, Math.sin(angle) * r]; };
   return (
     <svg viewBox="-104 -104 208 208" style={{ width: '100%', maxHeight: '300px', display: 'block' }} role="img" aria-label="Nearby stars and the ships sent to them">
+      {radio >= 0 && year - radio > 0.5 && (
+        // every broadcast this people ever made is still on its way out: a shell one light year wider each year
+        <g><circle r={Math.min(100, 14 + 80 * ((year - radio) / far))} fill="#7fb8ff10" stroke="#7fb8ff70" stroke-width="0.5" stroke-dasharray="2 2" /><title>{`Their signals have travelled ${Math.round(year - radio).toLocaleString('en-US')} light years. The first: ${firstWords}`}</title></g>
+      )}
       <circle r="2.6" fill="#fff1c9" />
       {c.stars.map((s, i) => {
         const [x, y] = at(s.ly, s.angle);
@@ -193,6 +197,25 @@ export function System() {
             </div>
           </div>
         )}
+        {s.industry && s.industry.deposits.length > 0 && (
+          <div class={css.goal}>
+            <div class={css.goalTitle}><b>What they burn</b><span class={css.sub}>{s.industry.warming > 0.05 ? `${s.industry.warming.toFixed(1)}° of warming so far` : ''}</span></div>
+            {s.industry.deposits.map((d) => (
+              <div class={css.sub} key={d.eventId} style={{ marginTop: '3px' }}>
+                <button class={css.link} style={{ marginRight: '6px' }} onClick={() => update({ whyEvent: d.eventId, panel: 'none' })}>{d.kind === 'coal' ? 'A coal field' : 'An oil field'}</button>
+                {d.kind === 'coal' ? `formed from ${d.source}, ${shortYear(year - d.from)} to ${shortYear(year - d.to)} ago.` : `formed from ${d.source}.`}
+              </div>
+            ))}
+            <div class={css.sub} style={{ marginTop: '5px' }}>
+              {s.industry.electric > 0 && `${Math.round(s.industry.electric * 100)}% of their towns are lit by electricity. `}
+              {s.industry.network > 0 && `${Math.round(s.industry.network * 100)}% of the great towns are joined by cable. `}
+              {s.industry.moonBase && 'They have a base on the moon. '}
+              {s.industry.skyClosedUntil > year && `A shell of wreckage has closed the sky for another ${Math.round(s.industry.skyClosedUntil - year).toLocaleString('en-US')} years. `}
+              {s.industry.defence && `They watch for falling rocks${s.industry.deflected ? ` and have turned ${s.industry.deflected} aside` : ''}. `}
+              {s.industry.council && `A council of ${s.industry.council.members} countries has sat since ${formatYear(s.industry.council.since)}${s.industry.council.decisions.length ? `; it has decided ${s.industry.council.decisions.join('; ')}` : ''}.`}
+            </div>
+          </div>
+        )}
         {s.future && (s.future.ring > 0 || s.future.arcologies > 0 || s.future.machines || s.future.uploaded > 0 || s.future.shade > 0 || s.future.projects > 0 || s.future.ending || Object.keys(s.future.origins).length > 0) && (
           <div class={css.goal}>
             <div class={css.goalTitle}><b>What its people have made of it</b></div>
@@ -238,7 +261,8 @@ export function System() {
         </div>
         <div class={css.goal}>
           <div class={css.goalTitle}><b>The stars nearby</b><span class={css.sub}>{c.fleets.length ? `${c.fleets.length} ships sent` : 'no one has left yet'}</span></div>
-          <StarMap c={c} year={year} />
+          <StarMap c={c} year={year} radio={s.industry?.firstBroadcast ?? -1} firstWords={s.industry?.firstMessage ?? ''} />
+          {s.industry && s.industry.firstBroadcast >= 0 && <div class={css.sub}>The dashed shell is their own signals, {Math.round(year - s.industry.firstBroadcast).toLocaleString('en-US')} light years out and growing by one each year. The first thing sent: "{s.industry.firstMessage}"</div>}
           {c.fleets.map((f) => {
             const star = c.stars[f.star]!;
             return (

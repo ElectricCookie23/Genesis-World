@@ -306,16 +306,16 @@ After E6 (2026-11-20), outside the numbered list: settlement by sea, the long pe
 
 | # | System | Status | Notes |
 |---|---|---|---|
-| E61 | Industrial Revolution | not started | |
-| E62 | Fossil Fuels From Your History | not started | |
-| E63 | Electrification | not started | |
-| E64 | Climate Change They Cause | not started | |
-| E65 | The Radio Bubble | not started | |
-| E66 | Information Age | not started | |
-| E67 | Space Age | not started | |
-| E68 | Moon Bases | not started | |
-| E69 | Global Institutions | not started | |
-| E70 | Asteroid Defense | not started | |
+| E61 | Industrial Revolution | simplified | `sim/industry.ts`: coal is laid down over the whole history of the world wherever old closed forest stood on wet ground, with the years and the plant that made it; when a people's industrial age begins the richest fields are opened (`coal-field`), and each names the forest it came from and links to that plant in the cause graph. Shown in the System panel ("What they burn"). Simplified: no smog, acid rain or railways are drawn or simulated here. |
+| E62 | Fossil Fuels From Your History | done | oil is laid down wherever a shallow sea was thick with life; each field says "formed from the plankton seas of N million years ago" (`oil-field`) and every deposit, coal or oil, links to its origin and carries the years it formed in. Tested on a grown world. |
+| E63 | Electrification | simplified | towns go over to electric light over about a century once the knowledge is there (`electrification`, then `grid-complete`), and the share is shown. Simplified: the colour of each nation's lights already follows its knowledge in the renderer; this share is not yet used to switch towns one by one. |
+| E64 | Climate Change They Cause | done | the simulation already added a people's emissions to the greenhouse; this keeps count of how much of the warming is theirs (`warming`, announced at 1.5 degrees) so it can be shown and acted on. Tested: emissions measurably raise the temperature. |
+| E65 | The Radio Bubble | done | the first broadcast is dated and given its words (`radio`); the shell of signals is drawn on the star map in the System panel, one light year wider each year, with the first message. |
+| E66 | Information Age | simplified | undersea cables, then a network that joins every great town (`network`, `network-complete`), with the share shown. Simplified: cables and pulses are not drawn. |
+| E67 | Space Age | done | every launch leaves debris; past a point it can cascade (`debris-cascade`) and close the sky for 150 to 600 years, during which nothing that depends on launching advances (the far-future clock, the moon base, interception), until `sky-reopens`. Tested: the cascade delays further launches. No debris ring is drawn. |
+| E68 | Moon Bases | simplified | a spacefaring people with a moon settles it (`moon-base`), and loses the base if the moon is lost. Simplified: no lights are drawn on the moon. |
+| E69 | Global Institutions | done | after a great war or once the warming frightens them, three or more countries form a council (`world-council`); its first decision cuts emissions by six parts in ten (`council-decision`). Tested: the world with a council warms less than the same world without. |
+| E70 | Asteroid Defense | done | a spacefaring people watches for falling rocks (`sky-watch`) and may turn one aside, more easily the smaller it is (`meteor-deflected`, instead of an impact), whether the rock came by chance or from the player's tool; a closed sky cannot launch interceptors. Tested. |
 
 ### Section 8. Beyond The 21St Century
 

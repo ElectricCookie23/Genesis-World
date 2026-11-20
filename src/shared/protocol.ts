@@ -5,6 +5,7 @@ import type { Archive, ObserverMessage } from '../sim/legacy';
 import type { LinkInfo } from '../sim/link';
 import type { StrangeInfo } from '../sim/strange';
 import type { FutureInfo } from '../sim/future';
+import type { IndustryInfo } from '../sim/industry';
 
 export const SPEEDS = [
   { key: 'pause', label: 'Pause', yearsPerSecond: 0 },
@@ -360,6 +361,6 @@ export type FromWorker =
   | { type: 'site'; detail: SiteDetail }
   | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[] }
   | { type: 'timeline'; points: TimelinePoint[] }
-  | { type: 'cosmos'; cosmos: CosmosInfo; messages: ObserverMessage[]; archives: Archive[]; link?: LinkInfo; strange: StrangeInfo; future: FutureInfo }
+  | { type: 'cosmos'; cosmos: CosmosInfo; messages: ObserverMessage[]; archives: Archive[]; link?: LinkInfo; strange: StrangeInfo; future: FutureInfo; industry: IndustryInfo }
   | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }
   | { type: 'error'; message: string };

@@ -20,6 +20,7 @@ import { Legacy } from './legacy';
 import { exchange } from './link';
 import { Strange } from './strange';
 import { Future } from './future';
+import { Industry } from './industry';
 
 /** Sim years covered by one full ecological step (one tick at Epoch speed). */
 export const ECO_YEARS = 15000;
@@ -98,6 +99,8 @@ export class Simulation {
   strange: Strange;
   /** What a people does beyond the space age, and how it ends (expansion section 8). */
   future: Future;
+  /** Fuel laid down over deep time and what an industrial people does with it, up to the edge of space (expansion section 7). */
+  industry: Industry;
   linkNoted: Record<string, number> = {};
   private cometLast = -1;
   private cometName = '';
@@ -183,6 +186,7 @@ export class Simulation {
     this.legacy = new Legacy(this.rng.fork('legacy'));
     this.strange = new Strange(this.rng.fork('strange'), this.regions.count);
     this.future = new Future(this.rng.fork('future'));
+    this.industry = new Industry(this.rng.fork('industry'), this.regions.count);
     this.lifeYear = this.lifeRng.range(0.35e6, 0.9e6);
     this.algaeDelay = this.lifeRng.range(1.2e6, 3e6);
     this.animalDelay = this.lifeRng.range(5e6, 10e6);
@@ -286,6 +290,7 @@ export class Simulation {
     this.cosmos.step(this, dt);
     this.legacy.step(this);
     this.strange.step(this, dt);
+    this.industry.step(this, dt);
     this.future.step(this, dt);
     // the linked world keeps the same years, then the two may notice each other
     if (this.neighbor) { this.neighbor.step(dt); exchange(this, this.neighbor); }
@@ -989,6 +994,9 @@ export class Simulation {
 
   /** A meteor strike. size 0..1. Used by the god tool and by rare natural impacts. */
   meteor(cell: number, size: number, byHand: boolean, cause = -1): SimEvent {
+    // a people that watches the sky may turn it aside (E70)
+    const turned = this.industry.intercept(this, cell, size);
+    if (turned) return turned;
     const w = this.world;
     const name = placeName(this.nameRng);
     const hitInfo = impact(w, cell, size);
@@ -1139,7 +1147,7 @@ export class Simulation {
 
   /** Nudge every random stream, so that a copy of this world takes a different road from here on. */
   diverge(): void {
-    for (let i = 0; i < 7; i++) { this.rng.next(); this.lifeRng.next(); this.civRng.next(); this.nameRng.next(); this.cosmos.rng.next(); this.legacy.rng.next(); this.strange.rng.next(); this.future.rng.next(); }
+    for (let i = 0; i < 7; i++) { this.rng.next(); this.lifeRng.next(); this.civRng.next(); this.nameRng.next(); this.cosmos.rng.next(); this.legacy.rng.next(); this.strange.rng.next(); this.future.rng.next(); this.industry.rng.next(); }
   }
 
   /** A per-cell layer for the overlays: how many kinds of animal live here, or how much oxygen is being made here. 0..1. */

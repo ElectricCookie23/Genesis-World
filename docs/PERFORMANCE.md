@@ -260,7 +260,22 @@ A JavaScript CPU profile and a count of every `GPUQueue.writeBuffer` call, on We
 - For the per-frame animated ones (animals), write one packed buffer per mesh, not one write per attribute.
 - Move the cube-map repacking (`fill`) into the simulation worker and transfer the finished arrays, and spread texture uploads over several frames.
 
-If the uploads go, the main thread at orbit drops from about 16 ms of script per frame to about 2, which should also remove most of the difference between WebGPU and WebGL2 seen in the tables above.
+~~If the uploads go, the main thread at orbit drops from about 16 ms of script per frame to about 2, which should also remove most of the difference between WebGPU and WebGL2 seen in the tables above.~~ **Tested and wrong about frame rate; see the next section.**
+
+### Measured: dropping the uploads does not speed up the frame (2026-11-21)
+
+I tested the estimate above on the live page by discarding every `writeBuffer` call above a size threshold while the camera was parked and the simulation paused (same build, WebGPU, High, `&noadapt`, pixel ratio 1.5; 3 s per measurement, baseline repeated at the end).
+
+| View | Baseline | Dropping writes over 20 kB (4.9 to 5.1 MB a frame, 37 to 41 calls) | Dropping writes over 2 kB (44 to 51 calls) | Baseline again | AO at 6 samples instead of 12 |
+|---|---|---|---|---|---|
+| Orbit | 17.73 ms | 17.83 ms | 17.77 ms | 17.70 ms | 17.67 ms |
+| Forest ground | 22.78 ms | 22.81 ms | 22.91 ms | 22.75 ms | 21.31 ms |
+| Town ground | 21.18 ms | 21.26 ms | 21.10 ms | 20.51 ms | 19.68 ms |
+
+1. **Removing all 5 MB of uploads changes the frame time by nothing** (within 0.1 ms) in all three views. The frame is limited by the GPU, and the 14 to 20 ms the profile shows inside `writeBuffer` is the main thread waiting for the GPU to take the next frame, not work that delays it. My estimate above was wrong.
+2. The picture is unchanged from orbit and at the town with the uploads dropped (mean pixel difference 1.2 and 2.2 out of 255, which is frame-to-frame noise), so those uploads were carrying nothing new. At the forest it differed (16.1), which I did not look into: wind or animal data that does change each frame is the likely reason.
+3. So fixing the uploads is still correct housekeeping (less driver work, less battery, and it will matter on machines where the processor is the limit, and once the GPU cost comes down), but **it will not raise the frame rate on this machine today.** The GPU-side items in "Suggestions" section A are the ones that will.
+4. **Halving ambient-occlusion samples from 12 to 6 saves 1.5 ms at the forest and about 0.8 to 1.5 ms at the town**, and nothing from orbit. Whether 6 samples looks worse was not compared.
 
 ## Open question: script time on WebGPU (answered above)
 
