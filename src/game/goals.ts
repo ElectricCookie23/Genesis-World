@@ -115,7 +115,7 @@ export const GOALS: Goal[] = [
   },
   {
     id: 'comeback', title: 'Back from the brink',
-    brief: 'After a mass extinction, see life double from its lowest point.',
+    brief: 'After a mass extinction, see life win back a quarter more kinds than it had at its lowest.',
     hint: 'You can wait for a catastrophe or cause one. What matters is what is left alive, and where.',
     check: (v, memo) => {
       const e = lastEvent(v, (x) => x.type === 'mass-extinction');
@@ -124,7 +124,7 @@ export const GOALS: Goal[] = [
       const n = v.stats.livingSpecies;
       const same = Math.floor(memo / 1000) === e.id + 1;
       const low = Math.min(999, same ? Math.min(memo % 1000, n) : n);
-      const target = Math.max(low * 2, low + 5);
+      const target = low + Math.max(5, Math.round(low / 4));
       return { progress: 0.25 + 0.75 * clamp01((n - low) / (target - low)), done: n >= target, note: `${n} kinds alive; ${low} at the worst after ${e.title}`, eventId: e.id, memo: (e.id + 1) * 1000 + low };
     },
   },

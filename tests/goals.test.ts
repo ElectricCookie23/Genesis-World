@@ -41,7 +41,7 @@ describe('goals', () => {
     expect(state(view({ species }), 'giant').result.done).toBe(false);
   });
 
-  it('want a mass extinction, then life doubling from its lowest point, before a comeback counts', () => {
+  it('want a mass extinction, then life winning back ground from its lowest point, before a comeback counts', () => {
     const record = emptyRecord();
     expect(state(view({ stats: stats({ livingSpecies: 40 }) }), 'comeback', record).result.done).toBe(false);
     const events = [event(0), event(1, { type: 'mass-extinction', title: 'The Great Dying' })];
@@ -51,7 +51,7 @@ describe('goals', () => {
     expect(first.result.eventId).toBe(1);
     expect(state(view({ stats: stats({ livingSpecies: 6 }), events }), 'comeback', record).result.done).toBe(false);
     expect(state(view({ stats: stats({ livingSpecies: 10 }), events }), 'comeback', record).result.done).toBe(false);
-    expect(state(view({ stats: stats({ livingSpecies: 12 }), events }), 'comeback', record).result.done).toBe(true);
+    expect(state(view({ stats: stats({ livingSpecies: 11 }), events }), 'comeback', record).result.done).toBe(true);
     // a later extinction starts the count again
     const again = [...events, event(2, { type: 'mass-extinction', title: 'The Second Dying' })];
     expect(state(view({ stats: stats({ livingSpecies: 12 }), events: again }), 'comeback', record).result.done).toBe(false);

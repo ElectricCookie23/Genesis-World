@@ -34,16 +34,16 @@ export function Goals() {
                 {result.note}
                 {rec && <> · reached {here ? `here, ${formatYear(rec.year)}` : `on the world "${rec.seed}"`}</>}
               </div>
-              <div style={{ marginTop: 4 }}>
+              <div style={{ marginTop: '4px' }}>
                 <button class={css.link} onClick={() => setOpen(open === goal.id ? '' : goal.id)}>{open === goal.id ? 'hide the hint' : 'a hint'}</button>
                 {why !== undefined && why >= 0 && s.events[why] && <button class={css.link} onClick={() => update({ whyEvent: why, panel: 'none' })}>why did this happen?</button>}
                 {done && here && <button class={css.link} onClick={() => actions.copySeedLink()}>share this world</button>}
               </div>
-              {open === goal.id && <div class={css.sub} style={{ marginTop: 4 }}>{goal.hint}</div>}
+              {open === goal.id && <div class={css.sub} style={{ marginTop: '4px' }}>{goal.hint}</div>}
             </div>
           );
         })}
-        {reached > 0 && <p style={{ marginTop: 12 }}><button class={css.link} onClick={() => actions.resetGoals()}>start the list again</button></p>}
+        {reached > 0 && <p style={{ marginTop: '12px' }}><button class={css.link} onClick={() => actions.resetGoals()}>start the list again</button></p>}
       </div>
     </div>
   );
