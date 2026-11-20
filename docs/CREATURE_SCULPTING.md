@@ -16,6 +16,36 @@ The builder is better than "parts stuck together": the body is one skin lofted a
 
 So the fix is not "more triangles". It is **anatomy in the profile, masses where limbs join, and a real head**, and the performance measurements say there is room: all animals in view cost 0.06 to 0.35 ms even at 553,000 triangles (`docs/PERFORMANCE.md`).
 
+## Baseline: what generated animals look like today
+
+Two species sheets were captured from the live site on 2026-11-21 (WebGL2, High, bundle `index-C8xtQ58C.js`, seed `amber-reef-101` at the dawn of history, about 74 My). Each animal was put alone on a patch of open ground and photographed from the side and from a three-quarter view (two tiles per animal, labelled with its genes). All were forced onto land so they could be seen, so swimmers are lying on the ground.
+
+- `docs/asset-previews/species-sheet-webgl-evolved.jpg`: the 24 most numerous living species in that world.
+- `docs/asset-previews/species-sheet-webgl-random.jpg`: 24 genomes with every gene drawn at random.
+
+Both sheets were looked at. Framing failed for about a fifth of the tiles (animal too small, off frame, or behind a tree: evolved "Xanoia longaevus", "Gryornis minimus", "Eriolichthys socialis"; random 9, 12, 13, 19, 23), so judge from the rest.
+
+**What the evolved sheet shows**
+
+1. **They nearly all look the same.** Twenty or so of the 24 are one shape: a round ball head, a smooth teardrop body tapering to a point, banded in pink and green (or purple and blue), with either a forked tail fluke or one pair of thin stick legs under the middle. It reads as a bowling pin or a fishing float. Different species are told apart by colour, not by build.
+2. **The head is a plain ball** joined to the body by a pinch, with a dot for an eye. No mouth, jaw or snout on any of them.
+3. **Legs are two thin straight sticks** from the belly, no thicker at the top, ending in nothing visible at this size.
+4. **No limbs at all on many**: a head, a body and a fin.
+5. Colour is two flat bands wrapped round the body like a sock.
+
+The gene labels explain the sameness: in this young world almost every species has `limb pairs` 1, `neck` under 0.3, `horn` and `armour` near 0, `fur` near 0. The builder has nothing to work with, and its default with nothing set is the pin. So part of "make them sculpted every time" is that **the plain default body needs to be a good animal**, since it is what most species use.
+
+**What the random sheet shows** (genes that evolution has not reached yet)
+
+1. **Beaded bodies**: with `segments` high the torso becomes a row of pinched beads (random 2, 10, 11, 15, 20).
+2. **Boards**: wings and gliding flaps show as large flat rectangles hanging straight down under the body (random 14, 17, 20), the most broken-looking feature on the sheet.
+3. **Saw-tooth backs**: armour plates are a row of identical triangles (random 1, 2, 17, 20).
+4. **Bulb heads on wire necks** with eyes on stalks or stuck to the surface, and horns as plain spikes (random 1, 2, 10, 21).
+5. **Legs either wires or thick ringed columns** with a bulge at each joint (random 5, 11, 15).
+6. More variety than the evolved sheet, and a few read as creatures (random 5 as a ribbed barrel on four legs, 22 as a low finned walker), but none reads as sculpted.
+
+These two sheets are the baseline to beat. Re-running them after each change is the test (`tool/jobs/species.mjs` on the review Mac; ask and it will be re-run).
+
 ## The plan, cheapest first
 
 Each step is independent and each one alone makes a visible difference. All of it runs once when a species is created, never per frame.
