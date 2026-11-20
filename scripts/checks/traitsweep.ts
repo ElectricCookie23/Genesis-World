@@ -7,7 +7,7 @@ import { G, HUNTER_DIET } from '../../src/sim/genetics';
 
 const my = Number(process.argv[2] ?? 200), n = Number(process.argv[3] ?? 27);
 const GENES: [string, number][] = [['glow', G.Glow], ['echo', G.Echo], ['electric', G.Electric], ['ornament', G.Ornament], ['metamorph', G.Metamorphosis], ['colourchange', G.ColorChange], ['diet', G.Diet], ['burrow', G.Burrow]];
-const EVENTS = ['settlement', 'first-hunter', 'first-pack', 'sea-fall', 'sea-rise', 'land-bridge', 'invasion', 'mass-hatching', 'cave-dwellers', 'vent-life', 'age-of-giants', 'carnivorous-plant', 'rediscovery'];
+const EVENTS = ['settlement', 'first-hunter', 'first-pack', 'sea-fall', 'sea-rise', 'land-bridge', 'invasion', 'hatching', 'cave', 'vent', 'oxygen', 'carnivorous-plant', 'rediscovery'];
 for (const seed of process.argv.slice(4)) {
   const t0 = Date.now();
   const sim = new Simulation(seed, n);

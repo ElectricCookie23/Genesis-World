@@ -483,7 +483,8 @@ export class Flora {
       if (leaf > 0.74 && water < 0.45) return 'column';
       return water > 0.6 && h < 0.4 ? 'fern' : 'shrub';
     }
-    if (glow > 0.5) return water > 0.55 ? 'mushroom' : 'fan';
+    // (0.55 was thirstier than any glowing plant in the measured histories: no giant mushroom ever grew)
+    if (glow > 0.5) return water > 0.42 ? 'mushroom' : 'fan';
     if (leaf < 0.33) return 'conifer';
     if (leaf > 0.74) return water < 0.42 ? 'column' : 'bottle';
     if (genes && genes[PG.Height]! > 0.72 && water > 0.55) return 'palm';

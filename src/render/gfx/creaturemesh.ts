@@ -153,6 +153,8 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
   const insulated = g[G.Insulation]! > 0.5;
   // natural skins are muted: the genes give the hue, the renderer keeps saturation believable
   const base = new Color().setHSL(g[G.Hue]!, insulated ? 0.28 : 0.46, insulated ? 0.4 : 0.33);
+  // animals of the dark underground lose their colour: pale, almost white
+  if (g[G.Burrow]! > 0.6 && g[G.Nocturnal]! > 0.58) base.lerp(new Color(0.86, 0.82, 0.78), 0.7);
   const second = new Color().setHSL(g[G.Hue2]!, 0.5, 0.22);
   const belly = base.clone().lerp(new Color(0.9, 0.86, 0.75), 0.4);
   const hornC: V3 = [0.85, 0.8, 0.68];
