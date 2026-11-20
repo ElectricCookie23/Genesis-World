@@ -197,6 +197,8 @@ export const actions = {
   /** Open the knowledge and rulers of a nation (by the simulation's nation id). */
   openNation: (_id: number) => {},
   openDynasty: (_id: number) => {},
+  /** What is being built in a town just now, if it is in view from close by. */
+  construction: (_id: number): { what: string; progress: number; years: number; stage: string }[] => [],
   /** Fly to a town and replay its growth. */
   timelapse: (_id: number, _cell: number) => {},
   setEarthNotes: (_on: boolean) => {},

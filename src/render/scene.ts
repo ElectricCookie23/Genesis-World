@@ -730,8 +730,18 @@ export class GenesisScene {
     return this.lastCell;
   }
 
+  private simYearSeen = 0;
+  private simYearShown = 0;
+  private yearsPerSecond = 0;
+
+  /** What is being built in a town just now, if it has been drawn from close by lately (system E12). */
+  construction(id: number): { what: string; progress: number; years: number; stage: string }[] {
+    return this.towns?.sites.get(id) ?? [];
+  }
+
   applyStats(stats: WorldStats): void {
     this.tilt = stats.tilt;
+    this.simYearSeen = stats.simYear; this.yearsPerSecond = stats.yearsPerSecond;
     // seasons are only shown when a year lasts long enough to see them
     if (stats.yearsPerSecond > 0 && stats.yearsPerSecond <= 1.01) {
       this.declination = stats.tilt * Math.sin(stats.yearFrac * Math.PI * 2);
@@ -863,7 +873,10 @@ export class GenesisScene {
     if (this.erosion && !this.erosion.finished) this.erosion.step(this.renderer, this.erosionPerFrame);
     else if (this.erosion && this.ground) void this.ground.readDetail(this.renderer, this.erosion);
     if (this.civ?.update(this.lastCells, this.speciesMap, performance.now(), dt)) { this.onNations?.(this.civ.nations); this.towns?.setTowns(this.civ.towns, this.civ.nations, this.civ.lanes); }
-    this.towns?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist, this.time);
+    // the date, carried forward between the simulation's reports so that work on a building site advances smoothly
+    // (never more than a fraction of a second of sim time ahead of or behind the last report, however slow the frames)
+    this.simYearShown = Math.max(this.simYearSeen - this.yearsPerSecond * 0.3, Math.min(this.simYearSeen + this.yearsPerSecond * 0.2, this.simYearShown + this.yearsPerSecond * dt));
+    this.towns?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist, this.time, this.simYearShown, this.yearsPerSecond);
     this.updateTornadoes();
     this.caves?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist);
     // bones are too small to matter from orbit, except in the fossil view

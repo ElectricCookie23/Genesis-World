@@ -837,6 +837,15 @@ export function Peoples() {
               <div class={css.what} style={{ color: '#ece7db' }}>{st.name}</div>
               <div class={css.when} style={{ color: '#ece7db' }}>A {kind(st.tech)} of {bigNumber(st.pop * 1000)} {sp ? sp.name : 'people'}, founded {formatYear(st.founded).toLowerCase()}.</div>
               {st.relic && <div class={css.when} style={{ color: '#d8b98a' }}>Its {st.relic} were built with a forgotten technique: no one here can make more.</div>}
+              {actions.construction(st.id).map((j, i) => (
+                <div key={i} class={css.when} style={{ color: '#ece7db', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span>Building {j.what}: {j.stage}</span>
+                  <span title={`${Math.round(j.progress * 100)}% of a job of ${j.years} years`} style={{ display: 'inline-block', width: '72px', height: '6px', borderRadius: '3px', background: '#ffffff26', overflow: 'hidden' }}>
+                    <span style={{ display: 'block', width: `${Math.round(j.progress * 100)}%`, height: '100%', background: '#ffcf8a' }} />
+                  </span>
+                  <span>{Math.round(j.progress * 100)}%</span>
+                </div>
+              ))}
               {(st.monuments ?? 0) > 0 && <div class={css.when} style={{ color: '#ffd76a' }}>{st.monuments} great {st.monuments === 1 ? 'work stands' : 'works stand'} here from a golden age.</div>}
               {belief && <div class={css.when} style={{ color: '#ece7db' }}>Its faith remembers: {belief.title.toLowerCase()}.</div>}
               <button class={css.link} onClick={() => actions.flyToCell(st.cell, 0.25)}>fly there</button>

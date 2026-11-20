@@ -8,7 +8,7 @@ import {
 } from 'three/webgpu';
 import { Copies, packAttributes } from './packed';
 import {
-  abs, attribute, cameraPosition, cross, dot, float, floor, fract, max, mix, normalGeometry, normalize, positionGeometry, positionWorld, sin, smoothstep, step,
+  abs, attribute, cameraPosition, cos, cross, dot, float, floor, fract, max, min, mix, normalGeometry, normalize, positionGeometry, positionWorld, sin, smoothstep, step,
   varying, vec2, vec3,
 } from 'three/tsl';
 import type { Grid } from '../../sim/world';
@@ -16,7 +16,7 @@ import type { CellSnapshot, SettlementInfo } from '../../shared/protocol';
 import { EXAG, uHazeTint, uMoonDir, uSeaKm, uSunDir, uTime } from '../common';
 import { uLook } from './look';
 import { settlementSize, type Nation } from './nations';
-import { MAX_PLOTS, planCity, type CityPlan, type CitySite, type District } from './cityplan';
+import { MAX_PLOTS, buildingSites, planCity, stageOf, watchable, type CityPlan, type CitySite, type District, type Site } from './cityplan';
 import type { PlanetData } from './planetdata';
 import type { GroundSampler } from './ground';
 import { groundRadiusNode } from './terrain';
@@ -26,7 +26,9 @@ import { eclipseLight } from './eclipse';
 type N = any;
 
 const PART = { wall: 0, roof: 1, windows: 2, flame: 3, sail: 4, hull: 5, road: 6 } as const;
-export const BUILDINGS = ['hut', 'house', 'hall', 'tower', 'dome', 'spire', 'temple', 'boat', 'road', 'wall', 'gate'] as const;
+export const BUILDINGS = ['hut', 'house', 'hall', 'tower', 'dome', 'spire', 'temple', 'boat', 'road', 'wall', 'gate', 'scaffold', 'hoist', 'crane', 'worker'] as const;
+/** How tall each kind of building stands, in the units its model is drawn in: what scaffolding has to reach. */
+export const HEIGHT: Partial<Record<(typeof BUILDINGS)[number], number>> = { hut: 1.0, house: 0.92, hall: 1.25, tower: 2.55, dome: 1.2, spire: 4.3, temple: 1.72 };
 export type Building = (typeof BUILDINGS)[number];
 
 type V3 = [number, number, number];
@@ -152,6 +154,41 @@ export function buildBuilding(kind: Building): BufferGeometry {
       s.box(0, 0, 0, 1.06, 0.5, 0.2, PART.wall, PART.wall);
       for (const x of [-0.36, 0, 0.36]) s.box(x, 0.5, 0.06, 0.16, 0.12, 0.08, PART.wall, PART.wall);
       break;
+    case 'scaffold': {
+      // poles and ledgers round a building one unit high: the shader stretches it to the height of what it stands round
+      const w = 0.72, d = 0.6, t = 0.03;
+      for (const [x, z] of [[-w, -d], [w, -d], [-w, d], [w, d], [0, -d], [0, d]] as [number, number][]) s.box(x, 0, z, t, 1.04, t, PART.hull, PART.hull);
+      for (const y of [0.24, 0.5, 0.76, 1.0]) {
+        for (const z of [-d, d]) s.box(0, y, z, w * 2 + t, t, t, PART.hull, PART.hull);
+        for (const x of [-w, w]) s.box(x, y, 0, t, t, d * 2 + t, PART.hull, PART.hull);
+      }
+      // a ramp of planks up one side
+      s.box(0, 0.24, -d - 0.06, w * 2, 0.012, 0.1, PART.sail, PART.sail);
+      s.box(0, 0.5, d + 0.06, w * 2, 0.012, 0.1, PART.sail, PART.sail);
+      break;
+    }
+    case 'hoist':
+      // a timber crane: a post, a jib braced back to it and a treadwheel at its foot
+      s.box(0, 0, 0, 0.07, 1.9, 0.07, PART.hull, PART.hull);
+      s.box(0.42, 1.82, 0, 0.9, 0.06, 0.06, PART.hull, PART.hull);
+      s.box(-0.2, 1.5, 0, 0.36, 0.05, 0.05, PART.hull, PART.hull);
+      s.ring(-0.16, 0, 0.02, 0.3, 0.12, 0.3, 10, PART.hull);
+      s.box(0.84, 1.2, 0, 0.02, 0.62, 0.02, PART.sail, PART.sail);
+      break;
+    case 'crane':
+      // a tower crane: a mast, a long jib with its load line, a short counter-jib with its weight, a cab
+      s.box(0, 0, 0, 0.11, 3.5, 0.11, PART.wall, PART.wall);
+      s.box(0.95, 3.46, 0, 2.1, 0.07, 0.08, PART.wall, PART.wall);
+      s.box(-0.45, 3.46, 0, 0.7, 0.07, 0.08, PART.wall, PART.wall);
+      s.box(-0.72, 3.26, 0, 0.2, 0.2, 0.16, PART.hull, PART.hull);
+      s.box(0.06, 3.2, 0.1, 0.16, 0.2, 0.14, PART.windows, PART.wall);
+      s.box(1.6, 2.5, 0, 0.02, 0.96, 0.02, PART.hull, PART.hull);
+      break;
+    case 'worker':
+      // one of the builders, seen from far above: a body and a head
+      s.box(0, 0, 0, 0.3, 0.62, 0.22, PART.roof, PART.roof);
+      s.box(0, 0.62, 0, 0.2, 0.2, 0.2, PART.sail, PART.sail);
+      break;
     case 'gate':
       // two towers either side of the road and a lintel over it
       for (const z of [-0.42, 0.42]) { s.box(0, 0, z, 0.4, 0.95, 0.34, PART.wall, PART.wall); s.box(0, 0.95, z, 0.48, 0.12, 0.42, PART.wall, PART.roof); }
@@ -210,7 +247,7 @@ export class Towns {
     const rotate = (v: N, q: N): N => v.add(cross(q.xyz, cross(q.xyz, v).add(v.mul(q.w))).mul(2));
     for (const kind of BUILDINGS) {
       const boat = kind === 'boat';
-      const slotCap = boat ? 96 : kind === 'house' || kind === 'road' ? cap : kind === 'hut' || kind === 'wall' ? Math.ceil(cap / 2) : kind === 'temple' || kind === 'gate' ? 64 : Math.ceil(cap / 4);
+      const slotCap = boat ? 96 : kind === 'house' || kind === 'road' ? cap : kind === 'hut' || kind === 'wall' ? Math.ceil(cap / 2) : kind === 'temple' || kind === 'gate' ? 64 : kind === 'scaffold' || kind === 'hoist' || kind === 'crane' ? 48 : kind === 'worker' ? 160 : Math.ceil(cap / 4);
       const g = buildBuilding(kind);
       // per-building data in one shared buffer (WebGPU allows 8 vertex buffers per draw; separately these made 9)
       const { iDir, iQuat, iData, iTint, iLight } = packAttributes(g, [
@@ -238,7 +275,28 @@ export class Towns {
         const ground: N = groundRadiusNode(data, erosionTex, under);
         const above: N = step(float(1).add(uSeaKm.mul(EXAG)).add(0.00002), ground);
         material.positionNode = under.mul(ground.add(lift.mul(above)).add(0.000003));
-      } else material.positionNode = base.add(rotate((positionGeometry as any).add(roll).mul(aData.x).mul(dry), aQuat));
+      } else {
+        let geo: N = (positionGeometry as any).add(roll);
+        if (HEIGHT[kind] !== undefined) {
+          // A building under construction (system E12) carries how far along it is as a negative number where a
+          // finished one carries its share of lit windows. It is drawn up to that height and no further: the
+          // foundation first, the walls rising, the roof closing over last.
+          const built: N = aData.z.negate().mul(HEIGHT[kind]! * 1.02);
+          const rising: N = step(aData.z, -0.0005);
+          geo = (vec3 as any)(geo.x, (min as any)(geo.y, mix(float(1e3), built, rising)), geo.z);
+        } else if (kind === 'scaffold') {
+          // as tall as what it stands round
+          geo = geo.mul((vec3 as any)(1, aData.w, 1));
+        } else if (kind === 'hoist' || kind === 'crane') {
+          // the jib swings slowly back and forth over the work
+          const a: N = sin(uTime.mul(0.4).add(aData.y.mul(40))).mul(0.9);
+          geo = (vec3 as any)(geo.x.mul(cos(a)).add(geo.z.mul(sin(a))), geo.y, geo.z.mul(cos(a)).sub(geo.x.mul(sin(a))));
+        } else if (kind === 'worker') {
+          // builders going to and fro along the front of the site
+          geo = geo.add((vec3 as any)(sin(uTime.mul(1.1).add(aData.y.mul(50))).mul(2.6), 0, sin(uTime.mul(0.7).add(aData.y.mul(31))).mul(0.9)));
+        }
+        material.positionNode = base.add(rotate(geo.mul(aData.x).mul(dry), aQuat));
+      }
       const nW: N = varying(normalize(rotate(normalGeometry, aQuat)));
       const vPart: N = varying(attribute('bpart', 'float'));
       const vUv: N = varying(attribute('buv', 'vec2'));
@@ -290,11 +348,16 @@ export class Towns {
     this.cells = cells;
   }
 
+  /** What is being built in each town drawn lately (system E12): for the info card. */
+  readonly sites = new Map<number, { what: string; progress: number; years: number; stage: string }[]>();
+  private lastYear = -1;
+  private lastBuilt = 0;
+
   /** The drawn ground, sampled here on the page: where the shore really is and which way the land rises. */
   ground: GroundSampler | null = null;
 
   /** Plans of the towns drawn lately, by settlement id, each with the facts it was drawn from. */
-  private plans = new Map<number, { key: string; plan: CityPlan }>();
+  private plans = new Map<number, { key: string; plan: CityPlan; checked: number; wet: Map<number, boolean>; sea: number }>();
   /** A town being replayed from its first huts: which, since when (seconds) and over how long. */
   private lapse: { id: number; start: number; seconds: number } | null = null;
 
@@ -312,7 +375,12 @@ export class Towns {
    * The plan of a town, from where it stands and what has happened to it: the roads lead toward its
    * neighbours, the shore is where the sea is, the land rises where it rises. Kept until those facts change.
    */
-  private planFor(st: TownInfo, c: Vector3, east: Vector3, north: Vector3, nat: Nation | undefined, cells: CellSnapshot): CityPlan {
+  private planFor(st: TownInfo, c: Vector3, east: Vector3, north: Vector3, nat: Nation | undefined, cells: CellSnapshot): { plan: CityPlan; wet: Map<number, boolean> } {
+    // (the ground is read again every few seconds at most: a town is redrawn many times a second while its building
+    // sites are being watched, and the shore does not move that fast)
+    const now = performance.now();
+    const known = this.plans.get(st.id);
+    if (known && now - known.checked < 4000 && Math.abs(known.sea - cells.seaLevel) < 1e-4) return known;
     const { pos, neighbors, ncount } = this.grid;
     const { elevation, seaLevel } = cells;
     const local = (i: number): [number, number, number] => {
@@ -367,11 +435,11 @@ export class Towns {
     };
     const key = JSON.stringify(site);
     const have = this.plans.get(st.id);
-    if (have && have.key === key) return have.plan;
-    const plan = planCity(site);
+    if (have && have.key === key && Math.abs(have.sea - cells.seaLevel) < 1e-4) { have.checked = now; return have; }
+    const made = { key, plan: planCity(site), checked: now, wet: new Map<number, boolean>(), sea: cells.seaLevel };
     if (this.plans.size > 96) this.plans.delete(this.plans.keys().next().value as number);
-    this.plans.set(st.id, { key, plan });
-    return plan;
+    this.plans.set(st.id, made);
+    return made;
   }
 
   /** Settlements, the nations they belong to, and the sea lanes (chains of cells) boats follow. */
@@ -419,7 +487,7 @@ export class Towns {
   private static m: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0];
 
   /** Rebuild the towns near the camera when it moves; boats move every frame. */
-  update(focus: Vector3, dist: number, time: number): void {
+  update(focus: Vector3, dist: number, time: number, simYear = 0, yearsPerSecond = 0): void {
     const cells = this.cells;
     const show = dist < 0.55 && !!cells && this.settlements.length > 0;
     if (!show) {
@@ -432,8 +500,14 @@ export class Towns {
     const boost = 1 + Math.min(1.6, dist * 3.2);
     const wall = performance.now() / 1000;
     if (this.lapse && wall - this.lapse.start > this.lapse.seconds + 0.5) { this.lapse = null; this.dirty = true; }
+    // building sites are worth drawing from close by, while time runs slowly enough to watch them: then the towns
+    // are redrawn as the work advances, a dozen times a second at most
+    const working = dist < 0.14 && yearsPerSecond <= 3.01;
+    if (working && Math.abs(simYear - this.lastYear) > 0.0008 && wall - this.lastBuilt > 0.12) this.dirty = true;
     if (moved || this.dirty || this.lapse) {
       this.dirty = false;
+      this.lastYear = simYear; this.lastBuilt = wall;
+      this.sites.clear();
       this.lastFocus.copy(focus);
       this.lastDist = dist;
       for (const [k, s] of this.slots) if (k !== 'boat') s.n = 0;
@@ -460,15 +534,22 @@ export class Towns {
         const eraNow = Math.min(st.tech, 0.15 + size * 0.95);
         const era = lapse < 1 ? Math.min(eraNow, 0.12 + (eraNow - 0.12) * Math.pow(lapse, 0.8)) : eraNow;
         // ---- the town is laid out on its plan: roads, streets, plots in the order they were built, walls
-        const plan = this.planFor(st, c, east, north, nat, cells!);
+        const laid = this.planFor(st, c, east, north, nat, cells!);
+        const plan = laid.plan, wetAt = laid.wet;
         const U = 0.00062 * boost;
         const full = Math.min(plan.plots.length, townPlots(st.pop, st.tech));
         const count = Math.max(lapse < 1 ? 3 : 0, Math.round(full * lapse * lapse));
-        const at = (x: number, y: number): Vector3 => up.copy(c).addScaledVector(east, x * U).addScaledVector(north, y * U).normalize();
+        let px = 0, py = 0;
+        const at = (x: number, y: number): Vector3 => { px = x; py = y; return up.copy(c).addScaledVector(east, x * U).addScaledVector(north, y * U).normalize(); };
         const toward = (h: number): Vector3 => fwd.copy(east).multiplyScalar(Math.cos(h)).addScaledVector(north, Math.sin(h));
         const wet = (): boolean => {
-          // by the ground as it is drawn, where that can be sampled; else by the nearest cell
-          if (this.ground) return this.ground.heightAt(up.x, up.y, up.z, this.ground.cellAt(up.x, up.y, up.z, st.cell)) <= this.ground.sea + 0.012;
+          // by the ground as it is drawn, where that can be sampled (and remembered for this place in this town); else by the nearest cell
+          if (this.ground) {
+            const k = Math.round(px * 4) * 8192 + Math.round(py * 4) + Math.round(boost * 8) * 67108864;
+            let w = wetAt.get(k);
+            if (w === undefined) { w = this.ground.heightAt(up.x, up.y, up.z, this.ground.cellAt(up.x, up.y, up.z, st.cell)) <= this.ground.sea + 0.012; wetAt.set(k, w); }
+            return w;
+          }
           let cell = st.cell, best = up.x * pos[cell * 3]! + up.y * pos[cell * 3 + 1]! + up.z * pos[cell * 3 + 2]!;
           for (let j = 0; j < ncount[st.cell]!; j++) { const nb = neighbors[st.cell * 6 + j]!; const d = up.x * pos[nb * 3]! + up.y * pos[nb * 3 + 1]! + up.z * pos[nb * 3 + 2]!; if (d > best) { best = d; cell = nb; } }
           return elevation[cell]! <= seaLevel + 0.01;
@@ -507,6 +588,31 @@ export class Towns {
           }
           for (const g of wall.gates) { at(g[0], g[1]); if (!wet()) this.put('gate', up, 0, U * 1.25, 0.7, 0, era, tint, light, toward(Math.atan2(g[1], g[0]))); }
         }
+        // ---- what is being built just now (system E12): each crew at one plot, at its stage
+        const jobs: Site[] = working && lapse >= 1 ? buildingSites(st.id * 7919 + 13, count, simYear, (i) => plan.plots[i]!.central).filter((j) => watchable(j, yearsPerSecond)) : [];
+        const shown: { what: string; progress: number; years: number; stage: string }[] = [];
+        const raise = (kind: Building, sz: number, seed: number, progress: number, heading: number, x: number, y: number): void => {
+          // scaffolding to the height the work has reached, a crane of the age beside anything tall, builders in the street
+          const tall = HEIGHT[kind] ?? 1;
+          this.put('scaffold', up, 0, sz * (kind === 'dome' || kind === 'hall' || kind === 'temple' ? 1.45 : 1), seed, 0, tall * Math.min(1, progress + 0.2), tint, light, toward(heading));
+          if (kind !== 'hut' && kind !== 'house' && progress < 0.96) { at(x + Math.cos(heading + 2.2) * 0.62, y + Math.sin(heading + 2.2) * 0.62); this.put(era >= 0.85 ? 'crane' : 'hoist', up, 0, sz * (era >= 0.85 ? 1 : 0.8) * Math.max(0.8, tall / (era >= 0.85 ? 3 : 1.7)), seed, 0, era, tint, light, toward(heading)); }
+          for (let w = 0; w < (kind === 'hut' ? 2 : 4); w++) { at(x + Math.cos(heading) * 0.5 + Math.cos(heading + 1.57) * (w - 1.5) * 0.22, y + Math.sin(heading) * 0.5 + Math.sin(heading + 1.57) * (w - 1.5) * 0.22); this.put('worker', up, 0, 0.00006 * boost, hash(seed * 977 + w * 31 + st.id), 0, era, tint, light, toward(heading + 1.57)); }
+        };
+        // great works (system E10): each one built stands on its place near the square; in a golden age the next is going up
+        const works = Math.min(plan.monuments.length, st.monuments ?? 0);
+        for (let m = 0; m < plan.monuments.length && lapse >= 1; m++) {
+          const [mx, my] = plan.monuments[m]!;
+          const going = m === works && !!nat?.golden && working;
+          if (m >= works && !going) break;
+          at(mx, my);
+          if (wet()) continue;
+          const kind: Building = m % 2 ? 'dome' : 'spire', sz = 0.00094 * boost, seed = hash(st.id * 53 + m * 7), heading = Math.atan2(-my, -mx);
+          // a great work takes a generation: thirty years, which is how often the chronicle records one in a golden age
+          const progress = going ? Math.max(0.04, (simYear / 30 + hash(st.id * 3 + m)) % 1) : 1;
+          this.put(kind, up, 0, sz, seed, going ? -progress : lit, Math.max(era, 0.5), tint, light, toward(heading));
+          if (going) { raise(kind, sz, seed, progress, heading, mx, my); shown.push({ what: `a great ${kind}`, progress, years: 30, stage: stageOf(progress) }); }
+          total++;
+        }
         for (let k = 0; k < count && total < this.budget; k++) {
           const plot = plan.plots[k]!;
           const h3 = hash(st.id * 1299709 + k * 7), h2 = hash(st.id * 104729 + k * 17);
@@ -514,13 +620,20 @@ export class Towns {
           // not in the sea
           if (wet()) continue;
           const kind = buildingFor(plot.district, plot.central, era, h3);
+          const job = jobs.length ? jobs.find((j) => j.plot === k) : undefined;
           // towers and spires stand above the trees and the largest animals (on a real GPU, animals on the skyline were
           // as tall as tower blocks, and from low altitude the blocks read as pins)
           const sz = (kind === 'hut' ? 0.00028 : kind === 'house' ? 0.0004 : kind === 'hall' ? 0.00048 : 0.00064) * boost * (0.85 + 0.3 * h3);
           // it faces its street
-          this.put(kind, up, 0, sz, h2, lit, era, tint, light, toward(plot.yaw));
+          if (job) {
+            const progress = Math.max(0.04, job.progress);
+            this.put(kind, up, 0, sz, h2, -progress, era, tint, light, toward(plot.yaw));
+            raise(kind, sz, h2, progress, plot.yaw, plot.x, plot.y);
+            shown.push({ what: `a ${kind} in the ${plot.district === 'homes' ? 'streets of houses' : plot.district === 'market' ? 'market' : plot.district === 'temple' ? 'temple quarter' : plot.district}`, progress, years: job.years, stage: stageOf(progress) });
+          } else this.put(kind, up, 0, sz, h2, lit, era, tint, light, toward(plot.yaw));
           total++;
         }
+        if (shown.length) this.sites.set(st.id, shown);
       }
       for (const [k, s] of this.slots) {
         if (k === 'boat') continue;

@@ -62,6 +62,8 @@ export interface CityPlan {
   plots: Plot[];
   streets: Street[];
   walls: Wall[];
+  /** Places kept open round the middle of town for great works (system E12): a monument stands on each one that has been built. */
+  monuments: [number, number][];
   /** Where the temple stands (if the site has one) and where the harbour is (if it has one). */
   temple: [number, number] | null;
   harbour: [number, number] | null;
@@ -176,6 +178,18 @@ export function planCity(site: CitySite): CityPlan {
     return false;
   };
   if (temple) claim(temple[0], temple[1]);
+  // room for great works: between the roads, a little way out from the square
+  const monuments: [number, number][] = [];
+  const bearings = streets.slice(0, mains).map((s) => Math.atan2(s.points[1]![1], s.points[1]![0])).sort((a, b) => a - b);
+  for (let k = 0; k < bearings.length && monuments.length < 5; k++) {
+    const a = bearings[k]!, b = k + 1 < bearings.length ? bearings[k + 1]! : bearings[0]! + Math.PI * 2;
+    if (b - a < 0.7) continue;
+    const mid = (a + b) / 2, r = 2.3 + rnd() * 0.9;
+    const x = Math.cos(mid) * r, y = Math.sin(mid) * r;
+    if (!dry(x, y, 1) || !free(x, y)) continue;
+    claim(x, y); claim(x + 0.6, y); claim(x - 0.6, y); claim(x, y + 0.6); claim(x, y - 0.6);
+    monuments.push([x, y]);
+  }
   const raw: { plot: Plot; score: number }[] = [];
   for (let s = 0; s < streets.length; s++) {
     const st = streets[s]!;
@@ -234,7 +248,7 @@ export function planCity(site: CitySite): CityPlan {
     }
     walls.push({ points: pts, gates, order: n });
   }
-  return { plots, streets, walls, temple, harbour };
+  return { plots, streets, walls, monuments, temple, harbour };
 }
 
 /** What a plan looks like in a few numbers: used to tell two towns apart. */
@@ -260,4 +274,78 @@ export function planShape(plan: CityPlan, plots = plan.plots.length): PlanShape 
   for (const p of list) { xx += (p.x - mx) ** 2; yy += (p.y - my) ** 2; xy += (p.x - mx) * (p.y - my); }
   const t = xx + yy, d = Math.sqrt(Math.max(0, (xx - yy) ** 2 + 4 * xy * xy));
   return { plots: list.length, share, stretch: Math.sqrt((t + d) / Math.max(1e-6, t - d)), lean: [mx, my], walls: plan.walls.filter((w) => w.order <= plots).length, roads: plan.streets.filter((s) => s.rank === 0).length };
+}
+
+// ---------------------------------------------------------------- construction (system E12)
+
+export interface Site {
+  /** Which plot of the town (an index into the plan's plots, below the town's size). */
+  plot: number;
+  /** How far along the work is, 0 .. 1. */
+  progress: number;
+  /** How many years this job takes from first trench to last tile. */
+  years: number;
+  /** Which of the town's building crews is on it. */
+  crew: number;
+}
+
+/**
+ * How long each of a town's crews spends on one job: the first builds houses (a season), the second halls and
+ * towers (a year and a half), the third the largest buildings (six years). At 1x a day passes each second, so
+ * a house goes up in a minute and a half of watching; at 10x a year passes each second, houses are finished
+ * too fast to follow, and it is the six-year jobs and the great works that can be watched.
+ */
+export const CREW_YEARS = [0.25, 1.5, 6];
+
+/** A job is worth drawing only if watching it takes a few seconds at the present speed. */
+export function watchable(site: Site, yearsPerSecond: number): boolean {
+  return yearsPerSecond <= 0 || site.years / yearsPerSecond >= 3;
+}
+
+export const STAGES = ['foundation', 'frame', 'walls', 'roof', 'details'] as const;
+
+/** The stage a job is at. */
+export function stageOf(progress: number): (typeof STAGES)[number] {
+  return progress < 0.15 ? 'foundation' : progress < 0.4 ? 'frame' : progress < 0.75 ? 'walls' : progress < 0.93 ? 'roof' : 'details';
+}
+
+function mix32(a: number, b: number, c: number): number {
+  let h = Math.imul(a | 0, 0x9e3779b1) ^ Math.imul(b | 0, 0x85ebca6b) ^ Math.imul(c | 0, 0xc2b2ae35);
+  h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12; h = Math.imul(h, 0x297a2d39); h ^= h >>> 15;
+  return h >>> 0;
+}
+
+/**
+ * The building sites of a town at a moment (system E12). A town is always being built: each crew takes one
+ * plot at a time, works on it for its span of years, then moves to another. Which plot is a matter of the
+ * town, the crew and the count of jobs it has done, so the same town at the same date always shows the same
+ * work at the same stage, with nothing stored. Half the time a crew is at the growing edge (the newest tenth
+ * of the town); otherwise it is rebuilding something older. `central(i)` says how near the middle plot i is,
+ * so the crew that builds great works chooses a place for them.
+ */
+export function buildingSites(seed: number, plots: number, year: number, central?: (plot: number) => number): Site[] {
+  const out: Site[] = [];
+  if (plots < 2) return out;
+  const crews = plots >= 80 ? 3 : plots >= 20 ? 2 : 1;
+  for (let j = 0; j < crews; j++) {
+    const span = CREW_YEARS[j]!;
+    // crews do not all start on the same day
+    const t = year / span + (mix32(seed, j, 0x51e) % 1000) / 1000;
+    const job = Math.floor(t);
+    let plot = -1;
+    for (let attempt = 0; attempt < 6 && plot < 0; attempt++) {
+      const h = mix32(seed, j * 131 + attempt, job);
+      const edge = (h & 1) === 0;
+      // the great-works crew builds toward the middle (the older half of the town); the others anywhere, often at the edge
+      const p = j === 2 ? (h >>> 1) % Math.ceil(plots / 2) : edge ? plots - 1 - ((h >>> 1) % Math.max(1, Math.ceil(plots / 10))) : (h >>> 1) % plots;
+      if (j === 2 && central && central(p) < 0.5 && attempt < 4) continue;
+      // no two crews on one plot
+      if (out.some((s) => s.plot === p)) continue;
+      plot = p;
+    }
+    // (failing all else, the first plot no one is working on)
+    for (let p = 0; plot < 0 && p < plots; p++) if (!out.some((s) => s.plot === p)) plot = p;
+    if (plot >= 0) out.push({ plot, progress: t - job, years: span, crew: j });
+  }
+  return out;
 }
