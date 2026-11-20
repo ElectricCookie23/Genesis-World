@@ -1,9 +1,9 @@
 // Saving and restoring the whole simulation. A save holds only what changes over time;
 // everything derived from the seed (grid, regions, noise) is rebuilt when loading.
-import type { Simulation } from './simulation';
+import { Simulation } from './simulation';
 
 /** Static or derived members that are rebuilt from the seed and must not be saved. */
-const SKIP = new Set(['grid', 'regions', 'reg', 'regionStart', 'regionList', 'regionFill', 'scratch', 'prof', 'neighbors', 'ncount', 'tris', 'pos', 'lat', 'lon']);
+const SKIP = new Set(['neighbor', 'grid', 'regions', 'reg', 'regionStart', 'regionList', 'regionFill', 'scratch', 'prof', 'neighbors', 'ncount', 'tris', 'pos', 'lat', 'lon']);
 /** Shared references that are saved once elsewhere. */
 const SKIP_IN: Record<string, Set<string>> = { creatures: new Set(['plants']) };
 
@@ -49,6 +49,8 @@ export interface SaveState {
   savedAt: number;
   name: string;
   data: Plain;
+  /** The linked world (expansion E98), saved whole beside this one. */
+  neighbor?: SaveState;
 }
 
 export const SAVE_VERSION = 1;
@@ -57,7 +59,9 @@ export const SAVE_VERSION = 1;
 export function saveSimulation(sim: Simulation, name = ''): SaveState {
   const data = capture(sim, 'sim', new WeakSet());
   // structuredClone deep-copies arrays of species, events and so on, so the save is detached from the live sim
-  return structuredClone({ version: SAVE_VERSION, seed: sim.seed, gridN: sim.grid.n, simYear: sim.simYear, savedAt: Date.now(), name, data });
+  const save: SaveState = structuredClone({ version: SAVE_VERSION, seed: sim.seed, gridN: sim.grid.n, simYear: sim.simYear, savedAt: Date.now(), name, data });
+  if (sim.neighbor) save.neighbor = saveSimulation(sim.neighbor, name);
+  return save;
 }
 
 /** Overwrite a freshly built simulation (same seed) with saved state. */
@@ -65,6 +69,9 @@ export function loadSimulation(sim: Simulation, save: SaveState): void {
   if (save.version !== SAVE_VERSION) throw new Error('This save is from a different version of Genesis.');
   if (save.seed !== sim.seed) throw new Error('Save and world seeds differ.');
   restore(sim, structuredClone(save.data));
+  // a linked world comes back with it, or goes if the save had none
+  if (save.neighbor) { sim.neighbor = new Simulation(save.neighbor.seed, save.neighbor.gridN); loadSimulation(sim.neighbor, save.neighbor); }
+  else sim.neighbor = undefined;
   // region summaries are derived, not saved: without this a loaded world ran on year-zero summaries until its next ecology step
   sim.refreshDerived();
   sim.terrainDirty = true;

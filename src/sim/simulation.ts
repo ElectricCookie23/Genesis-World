@@ -17,6 +17,7 @@ import { Civilization } from './civilization';
 import { CellLog, Log } from './history/celllog';
 import { Cosmos, MAP_H, MAP_W } from './cosmos';
 import { Legacy } from './legacy';
+import { exchange } from './link';
 
 /** Sim years covered by one full ecological step (one tick at Epoch speed). */
 export const ECO_YEARS = 15000;
@@ -89,6 +90,9 @@ export class Simulation {
   cosmos: Cosmos;
   /** Messages written to the watcher, and the archives peoples leave behind (expansion E99, E100). */
   legacy: Legacy;
+  /** A second world from another seed, running beside this one (expansion E98), and what this world has learned of it (event ids by kind). */
+  neighbor?: Simulation;
+  linkNoted: Record<string, number> = {};
   private cometLast = -1;
   private cometName = '';
   private convergentNoted = new Set<string>();
@@ -259,6 +263,8 @@ export class Simulation {
     this.geologyEvents(dt);
     this.cosmos.step(this, dt);
     this.legacy.step(this);
+    // the linked world keeps the same years, then the two may notice each other
+    if (this.neighbor) { this.neighbor.step(dt); exchange(this, this.neighbor); }
     // continents drift: slow enough that it only shows at high time speeds
     this.driftAcc += dt;
     if (this.driftAcc >= 2e6) {
@@ -975,6 +981,17 @@ export class Simulation {
     this.era = { kind: 'winter', eventId: winter.id };
     this.globalDieback(0.3 + 0.5 * size, winter.id);
     return ev;
+  }
+
+  /**
+   * Link a second world by its seed. It is built small and brought to this world's age (in long steps, so its early
+   * history is coarser than this world's).
+   */
+  link(seed: string): void {
+    if (seed === this.seed) return;
+    const other = new Simulation(seed, 15);
+    while (other.simYear < this.simYear) other.step(Math.min(50000, this.simYear - other.simYear));
+    this.neighbor = other;
   }
 
   /** The sea climbs its shores for a while (a passing planet's pull). */

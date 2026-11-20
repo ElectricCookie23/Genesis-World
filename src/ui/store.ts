@@ -6,6 +6,7 @@ import type { Nation } from '../render/gfx/nations';
 import type { GoalRecord, GoalState } from '../game/goals';
 import type { CosmosInfo } from '../sim/cosmos';
 import type { Archive, ObserverMessage } from '../sim/legacy';
+import type { LinkInfo } from '../sim/link';
 
 export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'goals' | 'system';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
@@ -89,6 +90,8 @@ export interface UIState {
   skyMessages: ObserverMessage[];
   archives: Archive[];
   skyMessage: { id: number; until: number } | null;
+  /** The linked second world, if there is one. */
+  link: LinkInfo | null;
 }
 
 export interface SlotInfo { slot: number; name: string; seed: string; simYear: number; savedAt: number; }
@@ -148,6 +151,7 @@ export const state: UIState = {
   skyMessages: [],
   archives: [],
   skyMessage: null,
+  link: null,
 };
 
 const listeners = new Set<() => void>();

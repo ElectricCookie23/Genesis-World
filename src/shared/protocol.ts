@@ -2,6 +2,7 @@
 import type { SimEvent } from '../sim/events';
 import type { CosmosInfo } from '../sim/cosmos';
 import type { Archive, ObserverMessage } from '../sim/legacy';
+import type { LinkInfo } from '../sim/link';
 
 export const SPEEDS = [
   { key: 'pause', label: 'Pause', yearsPerSecond: 0 },
@@ -259,7 +260,7 @@ export interface HerdSnapshot {
 }
 
 export type ToWorker =
-  | { type: 'init'; seed: string; gridN?: number }
+  | { type: 'init'; seed: string; gridN?: number; neighbor?: string }
   | { type: 'speed'; index: number }
   | { type: 'focus'; x: number; y: number; z: number; altitude: number }
   | { type: 'requestCells' }
@@ -291,6 +292,6 @@ export type FromWorker =
   | { type: 'dynasty'; detail: DynastyDetail }
   | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[] }
   | { type: 'timeline'; points: TimelinePoint[] }
-  | { type: 'cosmos'; cosmos: CosmosInfo; messages: ObserverMessage[]; archives: Archive[] }
+  | { type: 'cosmos'; cosmos: CosmosInfo; messages: ObserverMessage[]; archives: Archive[]; link?: LinkInfo }
   | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }
   | { type: 'error'; message: string };
