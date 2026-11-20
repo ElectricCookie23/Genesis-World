@@ -147,6 +147,8 @@ export interface SettlementInfo {
   walls?: number[];
   /** Founded by settlers who came by sea. */
   overseas?: boolean;
+  /** How many layers lie in the ground here, counting the ruins it stands on (system E17). */
+  layers?: number;
   /** Has dammed a river; works a mine (system E16). */
   dam?: boolean;
   mine?: boolean;
@@ -212,6 +214,22 @@ export interface PersonInfo {
   house: string; houseId: number;
   /** What they are remembered for: the title and id of the first event they are tied to. */
   deed: string; eventId: number;
+}
+
+/** One layer in the ground of a town site (system E17), as the dig view shows it. */
+export interface SiteLayer {
+  year: number;
+  /** 'camp', 'village', 'town', 'city', 'great city', 'burnt', 'flood', 'ash', 'shaken', 'decay' or 'abandoned'. */
+  kind: string;
+  tech: number;
+  /** The event behind it ('' if none), and its id (-1 if none). */
+  cause: string; eventId: number;
+}
+
+/** Everything in the ground at one site: the towns that stood there, oldest first, each with its layers. */
+export interface SiteDetail {
+  id: number; cell: number; layers: number;
+  towns: { id: number; name: string; people: string; species: number; founded: number; ruined: number; strata: SiteLayer[] }[];
 }
 
 /** One member of a ruling house, for its family tree. */
@@ -288,6 +306,7 @@ export type ToWorker =
   | { type: 'requestLayer'; kind: 'diversity' | 'oxygen' }
   | { type: 'requestNation'; id: number }
   | { type: 'requestDynasty'; id: number }
+  | { type: 'requestSite'; id: number }
   | { type: 'rewindLimit'; count: number }
   /** Jump ahead by running the sim flat out (used by automated checks). */
   /** Jump ahead. It stops where a history begins, unless `through` is set (for scripts that need to reach a date). */
@@ -305,6 +324,7 @@ export type FromWorker =
   | { type: 'layer'; kind: 'diversity' | 'oxygen'; values: Float32Array }
   | { type: 'nation'; detail: NationDetail }
   | { type: 'dynasty'; detail: DynastyDetail }
+  | { type: 'site'; detail: SiteDetail }
   | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[] }
   | { type: 'timeline'; points: TimelinePoint[] }
   | { type: 'cosmos'; cosmos: CosmosInfo; messages: ObserverMessage[]; archives: Archive[]; link?: LinkInfo; strange: StrangeInfo }

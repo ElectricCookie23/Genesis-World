@@ -6,7 +6,7 @@ import { G, P, PHEN_COUNT, sizeMetres } from './genetics';
 import { nearestCell } from './world';
 import { loadSimulation, saveSimulation, type SaveState } from './snapshot';
 import {
-  HISTORY_SPEED, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type DynastyDetail, type HouseMember, type NationDetail, type PersonInfo, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
+  HISTORY_SPEED, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type DynastyDetail, type HouseMember, type SiteDetail, type NationDetail, type PersonInfo, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
 } from '../shared/protocol';
 import { ERAS, earthNote, eraOf } from './history/eras';
 import { compound } from './history/language';
@@ -388,7 +388,7 @@ function tick(): void {
     post({ type: 'species', species: speciesList(s) });
     if (s.civ.settlements.length) {
       const joins = linksByTown(s);
-      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, belief: t.belief, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, temple: t.temple, farms: t.farms, monuments: t.monuments ?? 0, walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas, links: joins.get(t.id), dam: t.dam !== undefined, mine: t.mine !== undefined })) , nations: nationList(s) });
+      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, belief: t.belief, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, temple: t.temple, farms: t.farms, monuments: t.monuments ?? 0, walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas, links: joins.get(t.id), dam: t.dam !== undefined, mine: t.mine !== undefined, layers: (t.strata ? t.strata.length : 1) + (t.over !== undefined ? 1 : 0) })) , nations: nationList(s) });
     }
     speciesVersion = s.creatures.version;
     if (s.plants.version !== plantVersion) {
@@ -460,6 +460,19 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         post({ type: 'loaded', cells, stats: stats(sim), events: sim.events.events }, transfer);
         break;
       }
+      case 'requestSite':
+        if (sim) {
+          const stack = sim.civ.siteOf(msg.id);
+          if (stack) {
+            const s = sim;
+            const detail: SiteDetail = {
+              id: msg.id, cell: stack.cell, layers: stack.layers,
+              towns: stack.towns.map((t) => ({ id: t.id, name: t.name, people: s.creatures.species[t.species]?.name ?? '', species: t.species, founded: t.founded, ruined: t.ruined, strata: t.strata.map((x) => ({ year: x.year, kind: x.kind, tech: x.tech, cause: s.events.events[x.eventId]?.title ?? '', eventId: s.events.events[x.eventId] ? x.eventId : -1 })) })),
+            };
+            post({ type: 'site', detail });
+          }
+        }
+        break;
       case 'requestDynasty':
         if (sim) { const detail = dynastyDetail(sim, msg.id); if (detail) post({ type: 'dynasty', detail }); }
         break;
