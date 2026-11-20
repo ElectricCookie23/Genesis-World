@@ -4,7 +4,7 @@
 // how strongly it follows that part's motion) and to shade it (a skin uv and a material zone).
 // Local frame: +X forward, +Y up, torso length 1, feet on y = 0.
 import { BufferAttribute, BufferGeometry, Color, type InterleavedBufferAttribute } from 'three/webgpu';
-import { G, Limb, limbKind } from '../../sim/genetics';
+import { G, HUNTER_DIET as HUNTER, Limb, limbKind } from '../../sim/genetics';
 import { packAttributes } from './packed';
 
 export const ZONE = { skin: 0, limb: 1, membrane: 2, bone: 3, eye: 4, bladder: 5, grove: 6 } as const;
@@ -138,13 +138,18 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
   const W = H * (0.85 + 0.3 * g[G.Armor]!);
   const walker = hasLimbs && (kind === Limb.Legs || kind === Limb.Wings);
   const swimmer = !walker;
-  const legLen = walker ? H * (0.45 + 1.5 * g[G.LimbLength]!) : 0;
+  // legs carry weight: a giant's are short and thick for its body, and none are stilts (the old range reached 1.95 body
+  // depths and read as a body on poles)
+  const legLen = walker ? H * (0.4 + 1.05 * g[G.LimbLength]!) * (1 - 0.22 * Math.max(0, g[G.Size]! - 0.6) / 0.4) : 0;
   const bodyY = legLen + H * 0.5;
   const segs = Math.max(1, Math.min(6, 1 + Math.round(g[G.Segments]! * 5)));
-  const neck = H * 2.4 * g[G.Neck]!;
+  // a neck no longer than the legs and body can balance
+  const neck = Math.min(H * 2.4 * g[G.Neck]!, legLen * 1.25 + H * 0.9);
   const hs = H * (0.5 + 0.6 * g[G.Head]!);
   const snout = 1 + 0.5 * g[G.Diet]!;
-  const tail = L * 1.15 * g[G.Tail]!;
+  // an animal on one pair of legs needs a tail to stand against
+  const biped = walker && (kind === Limb.Wings || Math.max(1, Math.round(g[G.LimbPairs]! * 4)) === 1);
+  const tail = L * 1.15 * Math.max(g[G.Tail]!, biped ? 0.36 : 0);
   const hasNeck = neck > H * 0.3;
   const headX = L / 2 + neck * 0.55, headY = bodyY + H * 0.15 + neck * 0.8;
   const headLen = hs * 1.25 * snout;
@@ -152,11 +157,13 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
   // ---- colours
   const insulated = g[G.Insulation]! > 0.5;
   // natural skins are muted: the genes give the hue, the renderer keeps saturation believable
-  const base = new Color().setHSL(g[G.Hue]!, insulated ? 0.28 : 0.46, insulated ? 0.4 : 0.33);
+  const base = new Color().setHSL(g[G.Hue]!, insulated ? 0.4 : 0.56, insulated ? 0.46 : 0.4);
   // animals of the dark underground lose their colour: pale, almost white
   if (g[G.Burrow]! > 0.6 && g[G.Nocturnal]! > 0.58) base.lerp(new Color(0.86, 0.82, 0.78), 0.7);
-  const second = new Color().setHSL(g[G.Hue2]!, 0.5, 0.22);
-  const belly = base.clone().lerp(new Color(0.9, 0.86, 0.75), 0.4);
+  const second = new Color().setHSL(g[G.Hue2]!, 0.62, 0.3);
+  const belly = base.clone().lerp(new Color(0.94, 0.9, 0.8), 0.55);
+  // the second colour as it is worn on the back, the face and the feet
+  const mark = base.clone().lerp(second, 0.75);
   const hornC: V3 = [0.85, 0.8, 0.68];
   const glowC = new Color().setHSL(g[G.GlowHue]!, 0.9, 0.55);
   const glows = g[G.Glow]! > 0.5 || (g[G.Electric]! > 0.6 && g[G.Water]! > 0.6);
@@ -172,7 +179,7 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
   // ---- the spine: stations from tail tip to snout
   // `sq` squares the section off (2 is an ellipse), `ridge` raises the line of the back, `lump` is the mass of a
   // shoulder or haunch on the lower flank where a leg joins.
-  interface Station { x: number; y: number; ry: number; rz: number; kind: number; w: number; sq?: number; ridge?: number; lump?: number; }
+  interface Station { x: number; y: number; ry: number; rz: number; kind: number; w: number; sq?: number; ridge?: number; lump?: number; /** how far the section reaches below its middle (1 is as far as above) */ low?: number; /** how much of the face colour it wears, 0..1 */ face?: number; /** a brow: the upper flank of the section stands out over the eyes */ brow?: number; }
   const st: Station[] = [];
   // ---- anatomy. A body is not a sausage: it is deep at the chest, drawn in at the waist and wide again at the hips,
   // and a hunter is leaner than a grazer. (With one smooth bump for thickness and plain ellipses for sections,
@@ -183,10 +190,10 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
   const fish = (u: number, e: number) => Math.pow(Math.sin(Math.PI * Math.pow(Math.min(1, Math.max(0, u * 0.94 + 0.03)), e)), 0.85);
   /** Depth and width of the trunk along the spine: 0 at the tail root, 1 at the neck. About 1 at the deepest. */
   const depthAt = (u: number): number => walker
-    ? 0.66 + 0.34 * bell(u, 0.72, 0.3) + 0.1 * bell(u, 0.14, 0.22) + 0.1 * (1 - hunterish) * bell(u, 0.48, 0.3) - (0.03 + 0.1 * hunterish + 0.05 * runner) * bell(u, 0.38, 0.2)
+    ? 0.6 + 0.42 * bell(u, 0.74, 0.26) + 0.14 * bell(u, 0.14, 0.2) + 0.1 * (1 - hunterish) * bell(u, 0.48, 0.3) - (0.06 + 0.12 * hunterish + 0.08 * runner) * bell(u, 0.4, 0.18)
     : 0.5 + 0.5 * fish(u, 0.85);
   const widthAt = (u: number): number => walker
-    ? 0.7 + 0.24 * bell(u, 0.74, 0.28) + 0.2 * bell(u, 0.16, 0.24) + 0.06 * (1 - hunterish) * bell(u, 0.46, 0.3)
+    ? 0.66 + 0.3 * bell(u, 0.74, 0.26) + 0.24 * bell(u, 0.16, 0.22) + 0.06 * (1 - hunterish) * bell(u, 0.46, 0.3) - 0.06 * runner * bell(u, 0.42, 0.18)
     : 0.5 + 0.46 * fish(u, 0.8);
   // where the legs stand along the body (the same places the legs are built at, below)
   const legPairsEarly = walker ? (kind === Limb.Wings ? 1 : Math.max(1, Math.round(g[G.LimbPairs]! * 4))) : 0;
@@ -195,6 +202,12 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
   const endR = 0.5 * depthAt(0);
   /** Height of the back above the middle of the body, for what stands on it (plates, sails). */
   const taper = depthAt;
+  /** A point on the skin of the trunk: u along it (0 tail root .. 1 neck), th round it from the top of the back, lifted off the skin by `lift`. */
+  const skinAt = (u: number, th: number, lift: number): V3 => {
+    const ry = H * 0.5 * depthAt(u), rz = W * 0.5 * widthAt(u);
+    const c = Math.cos(th), sn = Math.sin(th), e = 0.87;
+    return [-L / 2 + u * L, bodyY + H * 0.04 * Math.sin(u * Math.PI) + Math.sign(c) * Math.pow(Math.abs(c), e) * (ry + lift), Math.sign(sn) * Math.pow(Math.abs(sn), e) * (rz + lift)];
+  };
   if (tail > 0.08) {
     const n = 7;
     for (let i = 0; i < n; i++) {
@@ -207,7 +220,10 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
   for (let i = 0; i <= torsoN; i++) {
     const u = i / torsoN;
     // segmented bodies pinch in between their segments
-    const pinch = segs > 1 ? 1 - (cover === COVER.chitin ? 0.2 : 0.1) * Math.pow(0.5 + 0.5 * Math.cos(u * Math.PI * 2 * segs), 6) : 1;
+    // (a deep pinch between segments made a string of beads; a plated animal's bands overlap like roof tiles, each
+    // standing a little proud at its back edge, and a soft one only swells gently)
+    const within = (u * segs) % 1;
+    const pinch = segs > 1 ? (cover === COVER.chitin ? 0.97 + 0.06 * within : 1 - 0.035 * (0.5 + 0.5 * Math.cos(u * Math.PI * 2 * segs))) : 1;
     const r = 0.5 * pinch;
     const x = -L / 2 + u * L;
     let lump = 0;
@@ -225,25 +241,40 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
     for (let i = 1; i <= n; i++) {
       const t = i / (n + 1);
       const e = t * t * (3 - 2 * t);
-      const r = (front.ry / H) * (1 - e) + 0.19 * e + 0.04 * Math.sin(t * Math.PI) * 0;
+      // (it tapers to what the head needs, not to a wire)
+      const r = (front.ry / H) * (1 - e) + Math.max(0.2, (hs / H) * 0.34) * e;
       st.push({ x: front.x + (headX - front.x) * t, y: front.y + (headY - front.y) * e, ry: H * r, rz: W * r * 0.9, kind: RIG.head, w: t * 0.7 });
     }
   }
-  // head: a skull, not an egg. A braincase behind, a brow over the eyes, and a muzzle in front that drops below the
-  // line of the brow and narrows; a meat-eater's is deeper in the jaw, a grazer's blunter.
+  // ---- the head. It grows out of the neck without a step, swells to a braincase, and ends in an upper jaw that is
+  // flat underneath; the lower jaw is a part of its own, hung a little open below it, with the dark of the mouth
+  // between. (As one closed shape it read as a bell with a hollow, and no animal had a mouth.) These are invented
+  // animals: the jaw is a plain scoop or a hooked shear, not a muzzle with lips.
   const hN = 16;
   const hx0 = hasNeck ? headX - hs * 0.25 : front.x + hs * 0.05, hy = hasNeck ? headY : front.y + H * 0.12;
+  const neckR = hasNeck ? Math.max(0.2, (hs / H) * 0.34) * (H / hs) : Math.min(0.5, (front.ry / hs) * 0.9);
+  /** Half-height and half-width of the head at t (0 back of the skull .. 1 tip of the jaw), in head sizes. */
+  const headR = (t: number): number => {
+    const grow = Math.min(1, t / 0.3);
+    const skull = neckR + (0.5 - neckR) * grow * grow * (3 - 2 * grow);
+    const fore = Math.max(0, (t - 0.38) / 0.62);
+    const jawEnd = 0.2 + 0.08 * hunterish;
+    // the snout closes in a rounded tip: left blunt, the end of the head was a ring, and with the jaw under it the
+    // whole head read from in front as a cup with a hollow (seen in the game, on animals at the surface of the sea)
+    const tip = t > 0.8 ? Math.sqrt(Math.max(0, 1 - ((t - 0.8) / 0.2) ** 2)) : 1;
+    return i0((skull * (1 - fore) + (jawEnd + (0.5 - jawEnd) * Math.pow(1 - fore, 1.6)) * fore) * (0.25 + 0.75 * tip));
+  };
+  const i0 = (x: number) => Math.max(0.03, x);
   for (let i = 0; i <= hN; i++) {
     const t = i / hN;
-    const braincase = 0.5 * bell(t, 0.3, 0.27);
-    const along = t > 0.5 ? 1 - (t - 0.5) / 0.5 : 1;
-    const muzzle = (0.3 + 0.12 * hunterish) * Math.pow(Math.max(0, along), 0.5);
-    const r = i === hN ? 0.012 : Math.max(0.03, Math.max(braincase, muzzle) * (t < 0.1 ? 0.8 + t * 2 : 1));
-    const fore = Math.max(0, Math.min(1, (t - 0.42) / 0.3));
+    const r = i === hN ? 0.02 : headR(t);
+    const fore = Math.max(0, Math.min(1, (t - 0.4) / 0.25));
+    // the tip of a hunter's jaw hooks down
+    const hook = hunterish * hs * 0.07 * Math.pow(Math.max(0, (t - 0.8) / 0.2), 2);
     st.push({
-      x: hx0 + t * headLen, y: hy - hs * 0.08 * t - hs * 0.07 * fore * fore * (3 - 2 * fore),
-      ry: hs * r * (i === 0 && hasNeck ? 0.85 : 1), rz: hs * r * (0.95 - 0.2 * fore), kind: RIG.head, w: 1,
-      sq: 2.15, ridge: 0.2 * bell(t, 0.4, 0.09),
+      x: hx0 + t * headLen, y: hy - hs * 0.05 * t - hook,
+      ry: hs * r, rz: hs * r * (0.98 - 0.22 * fore), kind: RIG.head, w: 1,
+      sq: 2.2, ridge: 0.16 * bell(t, 0.36, 0.1), low: 1 - 0.78 * fore * fore * (3 - 2 * fore), face: Math.max(0, Math.min(1, (t - 0.3) / 0.4)), brow: 0.22 * bell(t, 0.42, 0.1),
     });
   }
   // ---- loft the skin
@@ -264,9 +295,15 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
       const lump = (s.lump ?? 0) * Math.max(0, 1 - Math.abs(cy0 + 0.3) / 0.8);
       const ridge = (s.ridge ?? 0) * Math.pow(Math.max(0, cy0), 10);
       // bellies are a little flatter than backs
-      const p: V3 = [s.x, s.y + cy * s.ry * (cy < 0 ? 0.92 : 1) + ridge * s.ry - lump * s.ry * 0.06, sz * s.rz * (1 + lump * 0.15)];
-      const under = Math.max(0, Math.min(1, (-cy + 0.2) / 0.7));
-      const c: V3 = [base.r + (belly.r - base.r) * under * 0.6, base.g + (belly.g - base.g) * under * 0.6, base.b + (belly.b - base.b) * under * 0.6];
+      // a brow stands out on the upper flank of the skull, so the eyes sit under it in shadow
+      const brow = (s.brow ?? 0) * Math.max(0, 1 - Math.abs(cy0 - 0.55) / 0.4);
+      const p: V3 = [s.x, s.y + cy * s.ry * (cy < 0 ? 0.92 * (s.low ?? 1) : 1) + ridge * s.ry - lump * s.ry * 0.06 + brow * s.ry * 0.25, sz * s.rz * (1 + lump * 0.15 + brow)];
+      // colour follows the body: a pale belly, a line of the second colour down the back, the same colour on the face
+      // and toward the tip of the tail
+      const under = Math.max(0, Math.min(1, (-cy0 + 0.15) / 0.6));
+      const backLine = Math.pow(Math.max(0, cy0), 3) * 0.85;
+      const worn = Math.max(backLine, (s.face ?? 0) * 0.55 * (1 - under), s.kind === RIG.tail && !swimmer ? s.w * 0.6 : 0);
+      const c: V3 = [0, 1, 2].map((ch) => { const b0 = [base.r, base.g, base.b][ch]!, be = [belly.r, belly.g, belly.b][ch]!, mk = [mark.r, mark.g, mark.b][ch]!; const body = b0 + (be - b0) * under * 0.85; return body + (mk - body) * worn; }) as V3;
       row.push(m.v(p, c, [s.kind, s.w, 0, sz >= 0 ? 1 : -1], [(s.x - x0) / (x1 - x0), 0, 0, 0], [(s.x - x0) / (x1 - x0), k / M, ZONE.skin, 0]));
     }
     rows.push(row);
@@ -294,13 +331,76 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
   const es = hs * (0.1 + 0.14 * g[G.EyeSize]!);
   const iris: V3 = rgb(new Color().setHSL((g[G.Hue2]! + 0.5) % 1, 0.75, 0.45));
   const eyeGlow: V3 = g[G.Nocturnal]! > 0.6 ? rgb(new Color().setHSL(g[G.GlowHue]!, 0.8, 0.5), 0.6) : [0, 0, 0];
+  // one eye looks forward from the brow; pairs sit on the sides of the skull; an odd one out sits above and between
+  const paired = eyes - (eyes % 2), rowsOfEyes = paired / 2;
   for (let e = 0; e < eyes; e++) {
-    const side = e % 2 === 0 ? 1 : -1;
-    const row = Math.floor(e / 2);
-    // set into the side of the skull under the brow, not stuck on the surface
-    const t = 0.44 - row * 0.15;
-    const c: V3 = [hx0 + t * headLen, hy + hs * (0.13 + row * 0.1), side * hs * (0.3 - row * 0.03)];
-    m.ball(c, [es, es, es], 8, iris, [RIG.head, 1, 0, side], [c[0], c[1], c[2], es], ZONE.eye, eyeGlow);
+    const middle = e >= paired;
+    const side = middle ? 0 : e % 2 === 0 ? 1 : -1;
+    const row = middle ? 0 : Math.floor(e / 2);
+    const t = middle ? 0.5 : 0.46 - row * (rowsOfEyes > 2 ? 0.12 : 0.15);
+    const hr = hs * headR(t);
+    // set into the skull: two thirds of the ball is under the skin
+    const c: V3 = middle
+      ? [hx0 + t * headLen, hy - hs * 0.05 * t + hr * 0.82, 0]
+      : [hx0 + t * headLen, hy - hs * 0.05 * t + hr * (0.28 + row * 0.16), side * (hr * 0.9 * (1 - row * 0.12) - es * 0.3)];
+    m.ball(c, [es, es, es], 8, iris, [RIG.head, 1, 0, side || 1], [c[0], c[1], c[2], es], ZONE.eye, eyeGlow);
+  }
+  // ---- the lower jaw, and the dark of the mouth above it
+  {
+    const from = 0.42, n = 7;
+    // (nearly shut: the mouth is a line along the side of the head, not a cavity)
+    const gape = hs * (0.012 + 0.03 * hunterish);
+    const path: V3[] = [], radii: number[] = [], roof: V3[][] = [[], []];
+    for (let i = 0; i <= n; i++) {
+      const t = from + (0.97 - from) * (i / n), a = i / n;
+      const hr = hs * headR(t), fore = Math.max(0, Math.min(1, (t - 0.4) / 0.25));
+      const under = hy - hs * 0.05 * t - hr * 0.92 * (1 - 0.78 * fore * fore * (3 - 2 * fore));
+      const closed = Math.sin(Math.min(1, a / 0.12) * Math.PI / 2) * Math.sqrt(Math.max(0.02, 1 - Math.pow(Math.max(0, (a - 0.75) / 0.25), 2)));
+      const half = hr * (0.98 - 0.22 * fore) * 0.8 * closed;
+      const deep = hs * (0.11 + 0.05 * hunterish) * (1 - 0.55 * a);
+      path.push([hx0 + t * headLen, under - gape * a - deep * 0.55, 0]);
+      radii.push(Math.max(0.01, half));
+      roof[0]!.push([hx0 + t * headLen, under - gape * a * 0.4, half * 0.7]);
+      roof[1]!.push([hx0 + t * headLen, under - gape * a * 0.4, -half * 0.7]);
+    }
+    const jawC: V3 = rgb(belly, 0.92);
+    m.tube(path, radii, 10, jawC, () => headRig, [0, 0, 0, 0], ZONE.skin, (hs * (0.11 + 0.05 * hunterish)) / Math.max(0.02, Math.max(...radii)));
+    m.sheet(roof, [0.16, 0.035, 0.05], () => headRig, ZONE.bone);
+  }
+  if (g[G.Ornament]! > 0.25) {
+    const tall = hs * (0.2 + 0.55 * g[G.Ornament]!);
+    const grid: V3[][] = [];
+    for (let r = 0; r <= 2; r++) {
+      const row: V3[] = [];
+      for (let c = 0; c <= 5; c++) {
+        const t = 0.62 - (c / 5) * 0.62, up = (r / 2) * tall * Math.pow(Math.sin(Math.min(1, c / 5 + 0.12) * Math.PI * 0.9), 0.7);
+        row.push([hx0 + t * headLen - up * 0.55, hy - hs * 0.05 * t + hs * headR(t) * 0.95 + up, 0]);
+      }
+      grid.push(row);
+    }
+    m.sheet(grid, rgb(second, 1.5), () => headRig, ZONE.membrane);
+  }
+  // ---- feelers: an animal that lives by scent or touch carries them on its snout; one that lives by hearing has
+  // a pair of fans behind its eyes
+  if (g[G.Smell]! > 0.55) {
+    const fl = hs * (0.5 + 1.1 * (g[G.Smell]! - 0.55) / 0.45);
+    for (const side of [1, -1]) {
+      const path: V3[] = [], radii: number[] = [];
+      for (let i = 0; i <= 5; i++) { const t = i / 5; path.push([hx0 + headLen * 0.86 + fl * 0.75 * t, hy - hs * 0.04 + fl * 0.45 * t * (1.4 - t), side * (hs * 0.1 + fl * 0.3 * t)]); radii.push(hs * 0.035 * (1 - t * 0.8)); }
+      m.tube(path, radii, 5, rgb(mark, 1.1), () => headRig, [0, 0, 0, 0], ZONE.limb);
+    }
+  }
+  if (g[G.Hearing]! > 0.6) {
+    const fan = hs * (0.35 + 0.6 * (g[G.Hearing]! - 0.6) / 0.4);
+    for (const side of [1, -1]) {
+      const grid: V3[][] = [];
+      for (let r = 0; r <= 2; r++) {
+        const row: V3[] = [];
+        for (let c = 0; c <= 4; c++) { const a = -0.5 + (c / 4) * 1.9, out = (r / 2) * fan * (0.75 + 0.25 * Math.cos(c * Math.PI)); row.push([hx0 + headLen * 0.2 - Math.cos(a) * out * 0.7, hy + hs * 0.15 + Math.sin(a) * out, side * (hs * headR(0.2) * 0.85 + out * 0.5)]); }
+        grid.push(row);
+      }
+      m.sheet(grid, rgb(second, 1.5), () => headRig, ZONE.membrane);
+    }
   }
   // ---- horns: curved, tapering
   if (g[G.Horn]! > 0.22) {
@@ -320,30 +420,70 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
   const limbC: V3 = rgb(base, 0.82);
   if (walker) {
     const legPairs = kind === Limb.Wings ? 1 : pairs;
-    const thick = H * (0.11 + 0.1 * g[G.Size]!);
+    // thicker for a big animal and for a short-legged one: weight has to go somewhere
+    // (and never thin beside the length of the body: a long low animal on many legs still needs legs)
+    const thick = Math.max(H * (0.14 + 0.12 * g[G.Size]! + 0.05 * (1 - g[G.LimbLength]!)), L * 0.055);
+    // short legs sprawl out from the body; long ones stand under it
+    const sprawl = Math.max(0, 0.55 - g[G.LimbLength]!) * 1.6;
+    const toes = 2 + (Math.round(g[G.LimbType]! * 97) % 2);
+    // 7. a foot for the life it leads (docs/concepts/07): a giant stands on pillars, a hunter on long clawed toes, a
+    // long-legged plant-eater on a single hard block, the rest on a pad with blunt toes
+    const pillar = g[G.Size]! > 0.7;
+    const clawed = !pillar && g[G.Diet]! > HUNTER;
+    const hoofed = !pillar && !clawed && g[G.LimbLength]! > 0.58;
     for (let p = 0; p < legPairs; p++) {
       const lx = legPairs === 1 ? 0.05 : -L * 0.34 + (p / (legPairs - 1)) * L * 0.68;
       for (const side of [1, -1]) {
-        const hipY = bodyY - H * 0.12, hipZ = side * W * 0.36;
+        const hipY = bodyY - H * 0.04, hipZ = side * W * 0.27;
         const phase = (p + (side > 0 ? 0 : 1)) % 2;
         // hind legs bend the other way from fore legs
         const sideCode = side * (p < legPairs / 2 && legPairs > 1 ? 2 : 1);
         const rig2: [number, number, number, number] = [lx, hipY, hipY, hipZ];
-        const path: V3[] = [], radii: number[] = [];
+        const path: V3[] = [], radii: number[] = [], shade: number[] = [];
         const ankle = hipY * 0.06;
-        // a heavy thigh running up into the shoulder or haunch, a knee, a lean shin and a slight flare at the ankle:
-        // a leg, where there was a pipe of nearly even width
+        // a heavy thigh that starts inside the flank, so the leg grows out of the body; a knee; a lean shin; an ankle
         const NL = 12, lean = 1 - 0.3 * runner;
         for (let i = 0; i <= NL; i++) {
           const t = i / NL;
-          path.push([lx, hipY - (hipY - ankle) * t, hipZ]);
-          radii.push(thick * (1.15 * lean * Math.pow(1 - t, 1.8) + 0.5 + 0.1 * bell(t, 0.5, 0.13) + 0.08 * bell(t, 1, 0.12)));
+          path.push([lx, hipY - (hipY - ankle) * t, hipZ + side * thick * sprawl * t]);
+          // (the top of the thigh is drawn in under the skin of the flank, so no edge shows where the leg begins)
+          // the thigh is several times the shin (docs/concepts/02): more so for a runner and for an animal on two legs
+          const thigh = (1.0 + 0.45 * runner + (legPairs === 1 ? 0.35 : 0)) * lean, shin = pillar ? 0.66 : 0.44 - 0.08 * runner;
+          radii.push(thick * (thigh * Math.pow(1 - t, 2.2) + shin + 0.09 * bell(t, 0.52, 0.1) + (pillar ? 0.12 : 0.07) * bell(t, 1, 0.12)) * (0.55 + 0.45 * Math.min(1, t / 0.14)));
+          shade.push(t);
         }
-        m.tube(path, radii, 8, limbC, (i) => [RIG.leg, i / NL, phase, sideCode], rig2, ZONE.limb);
-        // foot: a low pad reaching forward, little wider than the shin and set slightly into the ground. As a round
-        // ball three shins wide it read as a ball on a stick, and it hovered on uneven ground (seen on a real GPU).
-        const footH = Math.max(ankle * 0.5, thick * 0.3);
-        m.ball([lx + thick * 0.75, footH * 0.7, hipZ], [thick * 1.25, footH, thick * 0.62], 6, limbC, [RIG.leg, 1.1, phase, sideCode], rig2, ZONE.limb);
+        // the leg is the body's colour where it leaves the body and the second colour toward the foot
+        const legStart = m.pos.length / 3;
+        m.tube(path, radii, 9, limbC, (i) => [RIG.leg, i / NL, phase, sideCode], rig2, ZONE.limb);
+        for (let v = legStart; v < m.pos.length / 3; v++) {
+          const t = Math.max(0, Math.min(1, (hipY - m.pos[v * 3 + 1]!) / Math.max(1e-6, hipY - ankle)));
+          const k = Math.pow(t, 1.5) * 0.7;
+          // (at the top it is the colour of the flank it grows out of)
+          const f = [base.r + (belly.r - base.r) * 0.4, base.g + (belly.g - base.g) * 0.4, base.b + (belly.b - base.b) * 0.4];
+          m.col[v * 3] = f[0]! + (mark.r * 0.8 - f[0]!) * k; m.col[v * 3 + 1] = f[1]! + (mark.g * 0.8 - f[1]!) * k; m.col[v * 3 + 2] = f[2]! + (mark.b * 0.8 - f[2]!) * k;
+        }
+        // the foot: a low pad set slightly into the ground, with two or three blunt toes spread in front of it
+        const footC: V3 = rgb(mark, 0.75);
+        const footH = Math.max(ankle * 0.5, thick * 0.3), fz = hipZ + side * thick * sprawl;
+        const footRig: [number, number, number, number] = [RIG.leg, 1.1, phase, sideCode];
+        if (pillar) {
+          // a broad round pad, a little wider than the leg, with a row of blunt nails across the front
+          m.ball([lx + thick * 0.1, footH * 0.8, fz], [thick * 1.15, footH * 1.2, thick * 1.1], 7, footC, footRig, rig2, ZONE.limb);
+          for (let k = -1; k <= 1; k++) m.ball([lx + thick * 1.05, footH * 0.5, fz + k * thick * 0.55], [thick * 0.26, footH * 0.6, thick * 0.24], 4, hornC, footRig, rig2, ZONE.bone);
+        } else if (hoofed) {
+          // one hard block, narrower than the ankle above it, cut square at the ground
+          m.ball([lx + thick * 0.3, footH * 0.95, fz], [thick * 0.72, footH * 1.25, thick * 0.5], 6, rgb(second, 0.7), footRig, rig2, ZONE.bone);
+        } else {
+          m.ball([lx + thick * 0.25, footH * 0.7, fz], [thick * (clawed ? 0.7 : 0.9), footH, thick * (clawed ? 0.6 : 0.8)], 6, footC, footRig, rig2, ZONE.limb);
+          const count = clawed ? 3 : toes;
+          for (let k = 0; k < count; k++) {
+            const a = (k - (count - 1) / 2) * (count === 2 ? 0.7 : 0.55);
+            const reach = clawed ? 1.35 : 0.95;
+            m.ball([lx + thick * (0.25 + reach * Math.cos(a)), footH * 0.5, fz + thick * reach * Math.sin(a)], [thick * (clawed ? 0.8 : 0.62), footH * 0.7, thick * (clawed ? 0.2 : 0.3)], 5, footC, footRig, rig2, ZONE.limb);
+            // a hunter's toes end in pale claws
+            if (clawed) m.ball([lx + thick * (0.25 + (reach + 0.75) * Math.cos(a)), footH * 0.35, fz + thick * (reach + 0.75) * Math.sin(a)], [thick * 0.34, footH * 0.4, thick * 0.1], 4, hornC, footRig, rig2, ZONE.bone);
+          }
+        }
       }
     }
   }
@@ -360,12 +500,38 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
           const row: V3[] = [];
           for (let c = 0; c <= 3; c++) {
             const s = c / 3 - 0.5;
-            const chord = H * 0.55 * (1 - t * 0.85);
+            // (the trailing edge is notched between the rays)
+            const chord = H * 0.62 * (1 - t * 0.8) * (c === 0 && r % 2 ? 0.86 : 1);
             row.push([fx + s * chord - t * len * 0.45, bodyY - H * 0.2 - t * len * 0.25, side * (W * 0.42 + t * len * 0.85)]);
           }
           grid.push(row);
         }
         m.sheet(grid, finC, (r) => [RIG.tail, r / 4, p, side], ZONE.membrane);
+      }
+    }
+  }
+  if (swimmer) {
+    // a fin along the back, its edge notched between the rays
+    const grid: V3[][] = [];
+    const tall = H * (0.22 + 0.5 * g[G.Tail]!);
+    for (let r = 0; r <= 2; r++) {
+      const row: V3[] = [];
+      for (let c = 0; c <= 10; c++) {
+        const u = 0.22 + (c / 10) * 0.56;
+        const top = skinAt(u, 0, 0);
+        const rise = (r / 2) * tall * Math.pow(Math.sin((c / 10) * Math.PI), 0.6) * (c % 2 ? 0.78 : 1);
+        row.push([top[0] - rise * 0.35, top[1] - H * 0.02 + rise, 0]);
+      }
+      grid.push(row);
+    }
+    m.sheet(grid, rgb(mark, 1.1), (r) => [RIG.tail, (r / 2) * 0.12, 2, 1], ZONE.membrane);
+    // an animal that makes its own light carries it in a row of spots along each flank, where it shows in dark water
+    if (glows) {
+      const lamp: V3 = [glowC.r, glowC.g, glowC.b];
+      for (let k = 0; k < 8; k++) for (const side of [1, -1]) {
+        const c = skinAt(0.16 + k * 0.1, side * 1.25, H * 0.004);
+        const r = H * 0.035 * (1 - 0.05 * Math.abs(k - 4));
+        m.ball(c, [r, r, r], 5, [glowC.r * 0.8, glowC.g * 0.8, glowC.b * 0.8], [RIG.tail, 0.3 * (1 - (0.16 + k * 0.1)) ** 2, 0, side], [0, 0, 0, 0], ZONE.bone, lamp);
       }
     }
   }
@@ -395,15 +561,17 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
         const row: V3[] = [];
         for (let c = 0; c <= 4; c++) {
           const s = c / 4;
-          const chord = L * 0.62 * (1 - t * 0.7) * (1 - 0.12 * Math.abs(Math.sin(t * Math.PI * 3)) * s);
-          row.push([0.22 - t * L * 0.1 - s * chord, bodyY + H * 0.3 + Math.sin(t * Math.PI) * H * 0.12, side * (W * 0.36 + t * span)]);
+          // broad at the root, swept back and drawn to a point, the trailing edge scalloped between three fingers and
+          // hanging a little below the leading edge (as a flat rectangle it read as a board)
+          const chord = L * 0.7 * Math.pow(1 - t, 0.75) * (1 - 0.28 * Math.abs(Math.sin(t * Math.PI * 3)) * s * s) + L * 0.03;
+          row.push([0.22 - t * t * L * 0.34 - s * chord, bodyY + H * 0.3 + Math.sin(t * Math.PI) * H * 0.14 - s * s * H * 0.14, side * (W * 0.36 + t * span)]);
         }
         grid.push(row);
       }
       m.sheet(grid, wingC, (r) => [RIG.wing, r / 7, 0, side], ZONE.membrane);
       // the arm along the leading edge
       const path: V3[] = [], radii: number[] = [];
-      for (let i = 0; i <= 5; i++) { const t = i / 5; path.push([0.22 - t * L * 0.1, bodyY + H * 0.3 + Math.sin(t * Math.PI) * H * 0.12, side * (W * 0.36 + t * span)]); radii.push(H * 0.07 * (1 - t * 0.8)); }
+      for (let i = 0; i <= 5; i++) { const t = i / 5; path.push([0.22 - t * t * L * 0.34, bodyY + H * 0.3 + Math.sin(t * Math.PI) * H * 0.14, side * (W * 0.36 + t * span)]); radii.push(H * 0.08 * (1 - t * 0.8)); }
       m.tube(path, radii, 5, limbC, (i) => [RIG.wing, i / 5, 0, side], [0, 0, 0, 0], ZONE.limb);
     }
   }
@@ -418,24 +586,68 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
         const out = r / 2, span = L * 0.6 * (1 - 0.45 * out);
         for (let c = 0; c <= 3; c++) {
           const t = c / 3, edge = Math.abs(t - 0.5) * 2;
-          row.push([-span / 2 + t * span, bodyY - H * 0.1 - out * H * 0.24 - out * edge * H * 0.06, side * (W * 0.3 + out * W * 0.55 * (1 - 0.4 * edge * edge))]);
+          // (it stands out from the flank above the legs; hung low it sat between them like a rag)
+          row.push([-span / 2 + t * span, bodyY + H * 0.08 - out * H * 0.1, side * (W * 0.34 + out * W * 0.85 * (1 - 0.4 * edge * edge))]);
         }
         grid.push(row);
       }
-      m.sheet(grid, limbC, () => [RIG.body, 0, 0, side], ZONE.membrane);
+      m.sheet(grid, rgb(mark, 1.05), () => [RIG.body, 0, 0, side], ZONE.membrane);
     }
   }
-  // ---- armour: a ridge of plates along the back
-  if (g[G.Armor]! > 0.45) {
-    const n = 7;
-    const size = H * (0.18 + 0.3 * g[G.Armor]!);
+  // ---- a carapace: an armoured animal's back is covered in scutes that lie on it like tiles, each overlapping the
+  // one behind and following the curve of the body, larger along the spine and smaller down the flanks. (Armour was
+  // only ever a row of things standing on the back.)
+  if (g[G.Armor]! > 0.45 && walker) {
+    const along = 11, heavy = (g[G.Armor]! - 0.45) / 0.55;
+    const reach = 0.75 + 0.5 * heavy; // how far down the flank the armour comes, in radians from the spine
+    const across = 2 + Math.round(heavy * 2);
+    for (let i = 0; i < along; i++) {
+      const u0 = 0.05 + (i / along) * 0.9, u1 = u0 + (0.9 / along) * 1.25;
+      for (let j = -across; j <= across; j++) {
+        const dth = reach / (across + 0.5), th = (j + (i % 2 ? 0.5 : 0)) * dth;
+        if (Math.abs(th) > reach) continue;
+        const lift = H * (0.012 + 0.03 * heavy);
+        // front edge on the skin, back edge raised over the next row
+        const grid: V3[][] = [
+          [skinAt(u1, th - dth * 0.55, lift * 0.3), skinAt(u1, th, lift * 0.45), skinAt(u1, th + dth * 0.55, lift * 0.3)],
+          [skinAt((u0 + u1) / 2, th - dth * 0.6, lift), skinAt((u0 + u1) / 2, th, lift * 1.5), skinAt((u0 + u1) / 2, th + dth * 0.6, lift)],
+          [skinAt(u0, th - dth * 0.42, lift * 1.5), skinAt(u0, th, lift * 2.1), skinAt(u0, th + dth * 0.42, lift * 1.5)],
+        ];
+        m.sheet(grid, rgb(mark, 0.62 + 0.3 * (((i * 3 + j * 5 + 20) % 4) / 3)), () => [RIG.body, 0, 0, th >= 0 ? 1 : -1], ZONE.bone);
+      }
+    }
+  }
+  // ---- armour: plates along the back. Two rows, staggered and leaning apart, each a rounded leaf that overlaps
+  // the next, large over the hips and small toward the neck and tail. (One row of identical triangles read as the
+  // edge of a saw.)
+  if (g[G.Armor]! > 0.62 || (g[G.Armor]! > 0.45 && !walker)) {
+    const n = 9;
+    const size = H * (0.2 + 0.3 * g[G.Armor]!);
     for (let i = 0; i < n; i++) {
-      const u = (i + 0.5) / n;
-      const px = -L * 0.42 + u * L * 0.84;
-      const top = bodyY + H * 0.5 * taper(u) * 0.95;
-      const s = size * (0.6 + 0.4 * Math.sin(u * Math.PI));
-      const grid: V3[][] = [[[px - s * 0.5, top - s * 0.15, 0], [px + s * 0.5, top - s * 0.15, 0]], [[px - s * 0.35, top + s * 0.6, 0], [px + s * 0.3, top + s * 0.55, 0]], [[px - s * 0.05, top + s, 0], [px + s * 0.05, top + s, 0]]];
-      m.sheet(grid, rgb(base, 0.5), () => [RIG.body, 0, 0, 1], ZONE.bone);
+      const u = (i + 0.5) / n, side = i % 2 === 0 ? 1 : -1;
+      const px = -L * 0.44 + u * L * 0.86;
+      const top = bodyY + H * 0.5 * taper(u) * 0.93;
+      const s = size * (0.45 + 0.55 * Math.pow(Math.sin(Math.min(1, u * 1.15) * Math.PI), 0.8)) * (0.9 + 0.2 * (((i * 7) % 5) / 4));
+      const lean = side * 0.32;
+      const grid: V3[][] = [];
+      for (let r = 0; r <= 3; r++) {
+        const h = r / 3, wide = [0.5, 0.56, 0.42, 0.14][r]! * s;
+        const row: V3[] = [];
+        for (let c = 0; c <= 2; c++) row.push([px + (c - 1) * wide - h * s * 0.12, top - s * 0.12 + h * s * 0.95, side * W * 0.1 + lean * h * s]);
+        grid.push(row);
+      }
+      m.sheet(grid, rgb(mark, 0.85 + 0.25 * (i % 2)), () => [RIG.body, 0, 0, 1], ZONE.bone);
+    }
+  }
+  // ---- the end of the tail: a club on an armoured walker, a fan in the second colour on one that shows off
+  if (tail > 0.25 && walker) {
+    const tx = -L / 2 - tail + 0.02, ty = bodyY - tail * 0.1;
+    if (g[G.Armor]! > 0.5) m.ball([tx, ty, 0], [H * 0.2, H * 0.17, H * 0.2], 7, hornC, [RIG.tail, 1, 0, 1], [0, 0, 0, 0], ZONE.bone);
+    else if (g[G.Ornament]! > 0.3) {
+      const fan = Math.min(H * 0.75, H * (0.3 + 0.5 * g[G.Ornament]!));
+      const grid: V3[][] = [];
+      for (let r = 0; r <= 2; r++) { const row: V3[] = []; for (let c = 0; c <= 6; c++) { const a = (c / 6 - 0.5) * 2.0, reach = fan * (r / 2) * (0.82 + 0.18 * Math.cos(c * Math.PI)); row.push([tx + 0.03 - Math.cos(a) * reach, ty + Math.sin(a) * reach, 0]); } grid.push(row); }
+      m.sheet(grid, rgb(second, 1.5), () => [RIG.tail, 1, 0, 1], ZONE.membrane);
     }
   }
   // ---- ornament: a sail along the back, in the second colour
@@ -455,7 +667,7 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
   }
   // gas-bladder drifters: slow winged bodies carry a great pale float above them
   if (flying && g[G.Metabolism]! < 0.3 && g[G.Size]! > 0.45) {
-    m.ball([0, bodyY + H * 1.7, 0], [L * 0.55, H * 1.1, W * 1.1], 12, rgb(second, 1.3), [RIG.body, 0, 0, 1], [0, 0, 0, 0], ZONE.bladder);
+    m.ball([0, bodyY + H * 1.7, 0], [L * 0.55, H * 1.1, W * 1.1], 18, rgb(second, 1.3), [RIG.body, 0, 0, 1], [0, 0, 0, 0], ZONE.bladder);
   }
   // living islands and walking forests: giants that carry a grove on their backs
   if (g[G.Size]! > 0.85 && (g[G.Water]! > 0.7 ? g[G.Armor]! > 0.25 : g[G.ColorChange]! > 0.6)) {

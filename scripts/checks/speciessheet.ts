@@ -24,6 +24,8 @@ for (let k = 0; k < (random ? 8 : ARCH.length); k++) {
   const genes = new Float32Array(G.COUNT as number);
   for (let i = 0; i < genes.length; i++) genes[i] = random ? rng.next() : 0.15 + rng.next() * 0.3;
   if (!random) { genes[G.Armor] = 0.1; genes[G.Horn] = 0.05; genes[G.Ornament] = 0.1; genes[G.Glow] = 0.1; for (const g in ARCH[k]![1]) genes[Number(g)] = ARCH[k]![1][Number(g)]!; }
+  // each archetype in its own pair of colours, so that the two-tone skin can be judged
+  if (!random) { genes[G.Hue] = (k * 0.137 + 0.05) % 1; genes[G.Hue2] = (k * 0.137 + 0.5) % 1; }
   genomes.push([random ? `random ${k + 1}` : ARCH[k]![0], genes]);
 }
 

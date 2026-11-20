@@ -68,18 +68,21 @@ export function makeCreatureMaterial(data: PlanetData, erosionTex: Texture, clou
   const leg: N = mix(legPos, footPos, step(1.05, w));
 
   // ---- everything else: waves down the spine and tail, wing beats, a head that looks about, breathing
-  const dzTail = sin(t.mul(0.9).sub(p.x.mul(4)).add(rig.z)).mul(rig.y).mul(0.14).mul(moving.mul(0.7).add(0.3)).mul(isTail);
+  const dzTail = sin(t.mul(0.9).sub(p.x.mul(4)).add(rig.z)).mul(rig.y).mul(0.2).mul(moving.mul(0.7).add(0.3)).mul(isTail);
   const dyTail = sin(t.mul(0.9).sub(p.x.mul(4)).sub(1.3)).mul(rig.y).mul(0.03).mul(isTail);
   const flap = sin(t.mul(1.6).sub(rig.y.mul(1.2)));
   const dyWing = flap.mul(rig.y).mul(0.42).mul(isWing);
   const dxWing = flap.mul(rig.y).mul(rig.y).mul(-0.08).mul(isWing);
-  const dyHead = sin(t.mul(0.5)).mul(0.02).mul(rig.y).mul(isHead);
+  // the head nods with each step, a beat behind the body, and drifts a little when the animal stands
+  const dyHead = sin(t.mul(0.5)).mul(0.02).add(sin(t.mul(2).sub(1.1)).mul(0.035).mul(moving)).mul(rig.y).mul(isHead);
   const dzHead = sin(t.mul(0.31).add(id.y)).mul(0.05).mul(rig.y).mul(float(1).sub(moving.mul(0.6))).mul(isHead);
-  const bob = sin(t.mul(2)).mul(0.012).mul(moving);
+  // the body rises and falls twice in a stride, and the spine sways from side to side as the weight changes feet
+  const bob = sin(t.mul(2)).mul(0.028).mul(moving);
+  const dzSpine = sin(t.sub(p.x.mul(3.2))).mul(0.024).mul(moving);
   const breathe = sin(uTime.mul(2).add(id.y)).mul(0.015).add(1);
   // fur shells stand off the skin and sag a little
   const shell: N = n0.mul(skin.w).sub(vec3(0, skin.w.mul(0.35), 0));
-  const body: N = vec3(p.x.add(dxWing), p.y.add(dyTail).add(dyWing).add(dyHead).add(bob).mul(breathe), p.z.add(dzTail).add(dzHead)).add(shell);
+  const body: N = vec3(p.x.add(dxWing), p.y.add(dyTail).add(dyWing).add(dyHead).add(bob).mul(breathe), p.z.add(dzTail).add(dzHead).add(dzSpine)).add(shell);
   const local: N = mix(body, leg, isLeg).mul(scale);
   material.positionNode = rotate(local).add(ip);
 
