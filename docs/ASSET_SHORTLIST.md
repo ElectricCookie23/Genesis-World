@@ -87,7 +87,7 @@ Not suitable although they matched the search: cartoon characters (`pp-coral-kel
 | Game need | Candidates (sheet, tile number, name) | Verdict |
 |---|---|---|
 | **rocks and boulders** | `pp-rocks-bones` 10, 17, 18 (smooth grey boulders), 16 (tall grey slab), 11, 15 (red-brown faceted), 12 `Rock_Medium` (mossy), 21 (rock cluster with rubble), 20 `Rock_Formation` (sandstone stack), 14 `Mountain` (snow-tipped spire) | Good range of colours and shapes; 20 and 14 suit desert and alpine ground. |
-| **bones on the ground** (fossil sites, dead herds) | `pp-rocks-bones` 8 `Large_Bone` (a rib arch), 25 `Ribcage`, 37 `Skull`, 1 to 5 single bones, 6, 7 fish skeletons | 8 and 25 read well from a distance. The skull is human-shaped, so only for the people's era. |
+| **bones on the ground** (fossil sites, dead herds) | `pp-rocks-bones` 8 `Large_Bone` (a rib arch), 25 `Ribcage`, 37 `Skull`, 1 to 5 single bones, 6, 7 fish skeletons | 8 and 25 read well from a distance. **Not 37: the skull is human-shaped, and the owner wants nothing human-looking in the game** (2026-11-21). |
 | shell | `pp-rocks-bones` 22 `Mussel_Open` | One usable beach object. |
 | dead tree | `pp-rocks-bones` 24 `Dead_Tree` | Thin bare branches; good. |
 | **boats** (the game has harbours and no boats) | `pp-boats` 3, 4 `Boat` (plain rowing boats), 10 `Sail_Boat` (one mast), 11 `Sail_Ship`, 12 `Ship` (three-masters), 13 `Small_Ship`, 21 `Cruise_Ship`, 22 `Ship_Wreck` | Covers every era from first boats to the modern age. 3 or 4 and 10 are the ones to start with. |

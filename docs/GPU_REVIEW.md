@@ -2,6 +2,8 @@
 
 > **Pre-merge checks are possible (2026-11-21).** The review Mac can build any branch or commit locally and run the same GPU checks against it before it reaches `main` or the live site. Proven once: `origin/main` built in about 6 s, loaded on WebGPU at High with an empty console. To use it, push the work to a branch and ask for a check of that branch by name.
 
+> **Owner direction, 2026-11-21, in the owner's words to the Mac session:** "i don't want humans or anything resembling humans in the game. please. we can act and assume by something similar of a human but no need to show them in any way". So the thinking species may behave like people, but nothing human-looking is to be drawn. Places in the code that look, from their comments alone (not yet checked on screen), as if they draw a person-like figure: `src/render/gfx/buildings.ts` line 262 ("one of the builders, seen from far above: a body and a head") with its use at line 508, and line 339, the colossus wonder ("a figure on a plinth, facing +x, with one arm raised and a fire in its hand"). Worth checking too: `Portrait` in `src/ui/portrait` (drawn from the species' genes, so it may already be fine), the citizen and battlefield pictures in `src/ui/ground.tsx`, and "the figures peoples have named among the stars". Asset and concept work on the Mac follows the same rule (no human figures, skulls or statues).
+
 Observations only. Nothing under `src/` was changed. Screenshots are in `docs/screenshots/gpu/`.
 
 This is the second version. The first was cut short by a flat battery; this one adds frame rates on mains power, a clean WebGL2 pass, a proper look at creatures, and corrects the first version's account of the black ground (C3).
