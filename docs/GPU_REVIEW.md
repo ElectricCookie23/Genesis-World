@@ -15,6 +15,24 @@ This is the second version. The first was cut short by a flat battery; this one 
 - Roughly 60 of about 230 captures were looked at. Each finding names the files it rests on; the rest are listed at the end.
 - For part of the second run the machine's owner was also using the same browser window, so the Genesis tab may have been in the background at times. The frame-rate table was finished before that; the creature captures after it were checked to be in a visible tab.
 
+## Phone and tablet screen shapes (2026-11-21)
+
+Chrome's device emulation on the review Mac (screen size, pixel density and touch flag set; still the Mac's GPU, so **speed here says nothing about a real phone**). Live site, young world (year 9,000), WebGPU. Files `docs/screenshots/gpu/screen-*.jpg`; the four named below were looked at. A small-laptop size (1280 x 720) was planned and not captured.
+
+| Shape | Detected as | Preset, pixel ratio | Fits? |
+|---|---|---|---|
+| Phone portrait, 390 x 844 at density 3 | mobile | Low, 1 | **No** |
+| Phone landscape, 844 x 390 at density 3 | mobile | Low, 1 | Yes |
+| Tablet portrait, 820 x 1180 at density 2 | mobile | Low, 1 | Yes |
+
+1. **Phone portrait: the bottom toolbar does not fit.** "History" and "100x" overlap each other, and everything after "Epoch" runs off the right edge ("Chro" is cut mid-word); Chronicle, Tree, Guide, Goals, the system, sky-tools, settings and help buttons cannot be seen. Nine text elements lie outside the screen. `screen-phone-portrait-main.jpg`.
+2. **Phone portrait: no stats box** (temperature, oxygen, species, fps). It shows in landscape and on the tablet.
+3. **Panels on a phone open as a bottom sheet** covering the lower 60% of the screen, which works and reads well; the toolbar shows faintly through the bottom of the sheet. `screen-phone-portrait-panel.jpg`.
+4. **The picture is soft on dense screens.** Low renders at pixel ratio 1 (a 390 x 844 canvas on a 1170 x 2532 screen), so the planet is visibly blurred and its limb fuzzy on all three shapes, while the text is sharp.
+5. **Goals show as reached in a world that has not reached them.** In a lifeless world at year 9,000 the panel says "10 of 11 reached", with a tick on "A green world" beside "0% of the land is green · reached here, Year 52.96 million", and ticks on "Out of the water" and "Take to the air" beside "no animals yet". The followed-goal box at the top shows the same tick and a full bar at 0%. The ticks come from earlier runs of the same seed in this browser; a `&fresh` world still shows them as reached "here".
+6. Landscape phone and tablet lay out cleanly: title, followed goal, stats box and the full toolbar, nothing overlapping. `screen-phone-landscape-main.jpg`, `screen-tablet-portrait-main.jpg`.
+7. Touch gestures (pinch, drag, long press) were not tested.
+
 ## Motion pass 2: an animal walking, and the sky-tools panel (2026-11-21)
 
 WebGL2, High, bundle `assets/index-DP-gr_s8.js` (newer than the check below; commit not recorded), seed `amber-reef-101` at its dawn, 99.78 My on this build. One species at a time was placed on open ground and tracked from the side, 12 frames about 150 ms apart, simulation at 1x.
