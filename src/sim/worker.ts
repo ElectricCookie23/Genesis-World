@@ -175,6 +175,23 @@ function fashionSource(s: Simulation, n: Simulation['civ']['h']['nations'][numbe
   return { cultureId: own.id * 7919 + 17, fashionFrom: best ? best.culture * 7919 + 17 : -1, fashionShare: best ? Math.min(0.6, 0.15 + 0.45 * own.trade) : 0 };
 }
 
+/** What joins each town to others (system E15): for each town, pairs of the other town's id and the kind of network. */
+function linksByTown(s: Simulation): Map<number, number[]> {
+  const out = new Map<number, number[]>();
+  for (const l of s.civ.h.links ?? []) {
+    let a = out.get(l.a); if (!a) out.set(l.a, (a = [])); a.push(l.b, l.kind);
+    let b = out.get(l.b); if (!b) out.set(l.b, (b = [])); b.push(l.a, l.kind);
+  }
+  return out;
+}
+
+/** The kinds of network a nation has built, in the order it first built them. */
+function networksOf(s: Simulation, nation: number): number[] {
+  const out: number[] = [];
+  for (const l of s.civ.h.links ?? []) if (l.nation === nation && !out.includes(l.kind)) out.push(l.kind);
+  return out;
+}
+
 /** The towns the page is told about: every living one, and the ruins of the last few hundred to fall. */
 function shownSettlements(s: Simulation): Simulation['civ']['settlements'] {
   const all = s.civ.settlements;
@@ -227,7 +244,7 @@ function nationList(s: Simulation): NationInfo[] {
       id: n.id, name: n.name, species: n.species, capital: n.capital, founded: n.founded, ended: n.ended, parent: n.parent, government: n.government,
       stability: n.stability, tech: n.tech, era: n.era, eraName: s.civ.eraName(n), eraOwn: s.civ.eraOwnName(n), earth: earthNote(n.era), hue: n.hue, pop: n.pop, towns: n.towns,
       culture: culture.name, language: h.languages[culture.language]!.name, ruler: ruler && ruler.died < 0 ? ruler.name : '', rulerSince: ruler && ruler.died < 0 ? ruler.reignFrom : -1,
-      house: house ? house.name : '', houseReigns: house ? house.reigns : 0, houseId: house ? house.id : -1, eventId: n.eventId, ...fashionSource(s, n), golden: n.golden ? n.golden.own : '', goldenSince: n.golden ? n.golden.since : -1, goldenWorks: n.golden ? n.golden.works : 0,
+      house: house ? house.name : '', houseReigns: house ? house.reigns : 0, houseId: house ? house.id : -1, eventId: n.eventId, ...fashionSource(s, n), networks: networksOf(s, n.id), golden: n.golden ? n.golden.own : '', goldenSince: n.golden ? n.golden.since : -1, goldenWorks: n.golden ? n.golden.works : 0,
       calendar: cal ? cal.name : '', calendarOwn: cal ? cal.own : '', calendarEpoch: cal ? cal.epoch : 0, calendarEvent: cal ? cal.eventId : -1,
     };
   });
@@ -370,7 +387,8 @@ function tick(): void {
     lastSpecies = now;
     post({ type: 'species', species: speciesList(s) });
     if (s.civ.settlements.length) {
-      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, belief: t.belief, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, temple: t.temple, farms: t.farms, monuments: t.monuments ?? 0, walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas })) , nations: nationList(s) });
+      const joins = linksByTown(s);
+      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, belief: t.belief, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, temple: t.temple, farms: t.farms, monuments: t.monuments ?? 0, walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas, links: joins.get(t.id) })) , nations: nationList(s) });
     }
     speciesVersion = s.creatures.version;
     if (s.plants.version !== plantVersion) {
