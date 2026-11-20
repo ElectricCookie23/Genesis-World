@@ -6,6 +6,7 @@ import { G, GENE_NAMES, HUNTER_DIET } from '../sim/genetics';
 import type { SimEvent } from '../sim/events';
 import type { NationInfo, PersonInfo, SpeciesInfo } from '../shared/protocol';
 import { dateIn } from '../sim/history/calendar';
+import { describeRuin } from '../sim/history/decay';
 import { actions, state, update, useStore, type Relative, type UIState } from './store';
 import { bigNumber, eventColor, eventGlyph, formatYear, hsl, metres, shortYear } from './format';
 import { Strata } from './strange';
@@ -886,7 +887,7 @@ export function Peoples() {
           <div class={css.entry} key={st.id} style={{ color: '#b9a48c', cursor: 'default' }}>
             <i class={css.dot} />
             <div class={css.what} style={{ color: '#cfc9bd' }}>{st.name}</div>
-            <div class={css.when} style={{ color: '#ece7db' }}>Abandoned {formatYear(st.ruined).toLowerCase()}.</div>
+            <div class={css.when} style={{ color: '#ece7db' }}>Abandoned {formatYear(st.ruined).toLowerCase()}. {st.tech >= 0.3 ? describeRuin(Math.max(0, (s.stats?.simYear ?? 0) - st.ruined), st.tech) : ''}{st.feral ? ` ${st.feral} runs wild in it.` : ''}{st.nesting ? ` ${st.nesting} nests in its towers.` : ''}</div>
             <button class={css.link} onClick={() => actions.flyToCell(st.cell, 0.25)}>visit the ruins</button>
             <button class={css.link} onClick={() => actions.openSite(st.id)}>dig here</button>
           </div>
