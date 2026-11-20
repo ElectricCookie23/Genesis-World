@@ -7,8 +7,9 @@ import type { GoalRecord, GoalState } from '../game/goals';
 import type { CosmosInfo } from '../sim/cosmos';
 import type { Archive, ObserverMessage } from '../sim/legacy';
 import type { LinkInfo } from '../sim/link';
+import type { StrangeInfo } from '../sim/strange';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'goals' | 'system';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'goals' | 'system' | 'microscope';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
 
 /** One person in an individual's family tree; key is set when that relative is drawn in the world and can be selected. */
@@ -94,6 +95,10 @@ export interface UIState {
   skyMessage: { id: number; until: number } | null;
   /** The linked second world, if there is one. */
   link: LinkInfo | null;
+  /** Strata, the magnetic field, microbes under the camera, the hive mind, the swarm (expansion section 9). */
+  strange: StrangeInfo | null;
+  /** The heartbeat is heard as well as seen. */
+  pulseSound: boolean;
 }
 
 export interface SlotInfo { slot: number; name: string; seed: string; simYear: number; savedAt: number; }
@@ -155,6 +160,8 @@ export const state: UIState = {
   archives: [],
   skyMessage: null,
   link: null,
+  strange: null,
+  pulseSound: true,
 };
 
 const listeners = new Set<() => void>();
@@ -228,6 +235,7 @@ export const actions = {
   selectCreatureKey: (_key: number) => {},
   /** Swap places with the other future, or stop running it. */
   /** Keep one goal on screen while playing ('' for none), or forget every goal reached. */
+  setPulseSound: (_on: boolean) => {},
   trackGoal: (_id: string) => {},
   resetGoals: () => {},
   crossOver: () => {},

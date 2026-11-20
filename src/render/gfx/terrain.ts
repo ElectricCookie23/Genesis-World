@@ -252,7 +252,9 @@ export class TerrainSurface {
     // the moon lights the night side in its own tint; airglow and starlight keep the rest from going black
     const moonUp = smoothstep(-0.1, 0.25, dot(dir, M));
     const moonLight = vec3(uLook.moon).mul(0.05).mul(max(dot(Nrm, M), 0).mul(0.8).add(0.2)).mul(moonUp).mul(float(1).sub(day)).mul(ao.mul(0.6).add(0.4));
-    const airglow = vec3(0.006, 0.01, 0.009).add(vec3(uLook.sky).mul(0.005));
+    // From orbit the unlit land is given a little more of it than from the ground, so continents stand out from the
+    // sea on the night side (three GPU checks in a row found the two the same black away from the city lights).
+    const airglow = vec3(0.006, 0.01, 0.009).add(vec3(uLook.sky).mul(0.005)).mul(smoothstep(0.3, 1.5, camDist).mul(3).add(1));
     // a second sun casts its own shadows, so under two suns every mountain has two
     let occl2: N = float(0);
     for (let i = 0; i < Math.max(2, Math.floor(this.shadowSteps / 2)); i++) {

@@ -171,6 +171,27 @@ export function System() {
             {c.bursts > 0 && `${c.bursts === 1 ? 'One dying star has' : `${c.bursts} dying stars have`} burned a side of this world.`}
           </p>
         )}
+        {s.strange && (
+          <div class={css.goal}>
+            <div class={css.goalTitle}><b>This world</b><span class={css.sub}>pulse {s.strange.pulse.rate}</span></div>
+            <div class={css.sub}>
+              {s.strange.poleFlip > 0 ? 'The magnetic field is turning over: the auroras have left the poles and wander.' : `The magnetic field is steady${s.strange.poleSign < 0 ? ', the other way up from how it began' : ''}.`}
+              {' '}A swarm of falling stars crosses its path every {s.strange.swarm.period.toLocaleString('en-US')} years
+              {year < 5e6 || s.strange.swarm.next - year > s.strange.swarm.period * 1.5 ? '.' : `; the next is ${Math.max(0, Math.round(s.strange.swarm.next - year)).toLocaleString('en-US')} years off.`}
+              {s.strange.swarm.stage === 1 && ' Its people tell stories about it.'}
+              {s.strange.swarm.stage === 2 && ' Its people have worked out the year.'}
+              {s.strange.swarm.stage === 3 && ' Its people are ready for it.'}
+              {s.strange.swarm.survived > 0 && ` They have come through ${s.strange.swarm.survived} of them prepared.`}
+            </div>
+            {s.strange.hive && <div class={css.sub} style={{ marginTop: '3px' }}>{s.species.get(s.strange.hive.species)?.name ?? 'A small animal'} lives as one joined colony across {s.strange.hive.regions} countries{s.strange.hive.awake ? ', and it thinks.' : `; ${Math.round(s.strange.hive.mind * 100)}% of the way to a mind of its own.`}</div>}
+            {s.strange.blooms > 0 && <div class={css.sub} style={{ marginTop: '3px' }}>{s.strange.blooms === 1 ? 'One kind of plant here drugs' : `${s.strange.blooms} kinds of plant here drug`} the animals that feed on it.</div>}
+            {s.strange.mimics.length > 0 && <div class={css.sub} style={{ marginTop: '3px' }}>{s.strange.mimics.map((id) => s.species.get(id)?.name ?? 'An animal').join(', ')} build{s.strange.mimics.length === 1 ? 's' : ''} nests like the ruins they live among.</div>}
+            <div style={{ marginTop: '4px' }}>
+              <button class={css.link} onClick={() => update({ panel: 'section' })}>the layers in the rock</button>
+              <button class={css.link} onClick={() => update({ panel: 'microscope' })}>under the lens</button>
+            </div>
+          </div>
+        )}
         <div class={css.goal}>
           <div class={css.goalTitle}><b>A linked world</b>{s.link && <span class={css.sub}>{s.link.seed}</span>}</div>
           {s.link ? (

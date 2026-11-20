@@ -243,7 +243,6 @@ export class Cosmos {
     const rocks = 3 + r.int(4);
     for (let i = 0; i < rocks; i++) this.falling.push({ year: sim.simYear + r.range(0.02e6, 1.6e6), size: r.range(0.15, 0.5), cause: ev.id });
     sim.cometNext = Math.min(sim.cometNext, sim.simYear + 1);
-    sim.civ.omen(sim, ev.id, sim.civRng);
     return ev;
   }
 
@@ -274,7 +273,6 @@ export class Cosmos {
     sim.plants.ozoneHole = Math.max(sim.plants.ozoneHole, 0.6);
     for (const k of regions) if (reg.land[k]! > 0.3) sim.plants.burn(k, 0.35 * kill[regions.indexOf(k)]!);
     sim.civ.witness(sim, ev.id, regions, kill.map((x) => x * 0.6));
-    sim.civ.omen(sim, ev.id, sim.civRng);
     this.bursts++;
     return ev;
   }

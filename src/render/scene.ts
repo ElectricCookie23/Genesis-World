@@ -21,7 +21,7 @@ import { PostFX } from './postfx';
 import { Flora } from './gfx/flora';
 import { CreatureLayer, type Individual } from './creatures';
 import { Rivers } from './rivers';
-import { AuroraVolume, uAurora } from './gfx/aurora';
+import { AuroraVolume, uAurora, uMagneticPole } from './gfx/aurora';
 import { PG } from '../sim/genetics';
 import { CLOUD_TOP } from './gfx/volclouds';
 import { applyLook, uLook, worldLook, type WorldLook } from './gfx/look';
@@ -379,6 +379,8 @@ export class GenesisScene {
   private speciesMap = new Map<number, SpeciesInfo>();
   /** Called when the list of nations was rebuilt. */
   onNations?: (nations: Nation[]) => void;
+  /** Species whose nests copy the ruins they live among (E87). */
+  setMimics(ids: number[]): void { if (this.creatures) this.creatures.mimics = ids; }
   setSettlements(list: SettlementInfo[], known?: NationInfo[]): void {
     this.civ?.setSettlements(list, known);
     this.vegetation?.setTowns(list);
@@ -763,6 +765,12 @@ export class GenesisScene {
     this.eraHazeTarget = stats.era === 'winter' ? 1 : 0;
     this.stormCells = stats.storms;
     this.solar = stats.solar ?? 1;
+    // the magnetic pole: steady at one end of the world, and wandering across it while the field turns over (E82)
+    {
+      const sign = stats.poleSign ?? 1, t = stats.poleFlip ?? 0;
+      const a = t * Math.PI, w = this.time * 0.05;
+      (uMagneticPole.value as Vector3).set(0.14 * sign * Math.cos(a) + Math.sin(a) * Math.cos(w), 0.985 * sign * Math.cos(a), 0.1 * sign * Math.cos(a) + Math.sin(a) * Math.sin(w)).normalize();
+    }
     // the star in old age: larger in the sky and redder, and its light with it
     const swell = stats.starSwell ?? 1;
     if (swell !== this.starSwell) {

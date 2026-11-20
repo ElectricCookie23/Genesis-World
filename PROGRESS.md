@@ -336,16 +336,16 @@ After E6 (2026-11-20), outside the numbered list: settlement by sea, the long pe
 
 | # | System | Status | Notes |
 |---|---|---|---|
-| E81 | Deep-Time Strata | not started | |
-| E82 | Magnetic Pole Flips | not started | |
-| E83 | Microbe Layer | not started | |
-| E84 | Continental Hive Mind | not started | |
-| E85 | Trance Blooms | not started | |
-| E86 | Light and Noise Pollution | not started | |
-| E87 | Mimic Architects | not started | |
-| E88 | Predictable Catastrophe | not started | |
-| E89 | Ecological Memory | not started | |
-| E90 | The Planet's Pulse | not started | |
+| E81 | Deep-Time Strata | done | `sim/strange.ts` (`lay`, `readRocks`): impacts, super-eruptions, mass extinctions, the first forests, industry and the last war each leave a layer, worldwide or local; a people with the means reads them oldest first (`strata-read`, caused by the event that laid the layer). Shown under the cross-section (key X) as bands that open the event. A meteor layer is worldwide after a big impact (tested). |
+| E82 | Magnetic Pole Flips | done | on a long cycle set by the seed, or the sky tool "Flip the poles": 30,000 years in which mutation rises, the animals that travel by the field lose a fifth of their number (`migration-lost`, caused by the flip), navigators are confused, and the auroras leave the poles and wander (`uMagneticPole` from `poleSign` and `poleFlip` in the stats). Afterwards the field points the other way. |
+| E83 | Microbe Layer | simplified | sickness is bred per region where animals crowd on warm wet ground (`germ`), the worst-bred place gives the world plagues of its own, and every plague not sent by the player is caused by a `strain` event from that region. The microscope (key N, "Under the lens") shows drifting cells, thicker where life crowds and redder where sickness breeds. Simplified: one number per region, not a simulation of microbes, and no effect on soil or air yet. |
+| E84 | Continental Hive Mind | simplified | a small, very sociable land animal spread over many regions joins its colonies (`hive`), and over tens of millions of years can become a mind (`hive-mind`, importance 3); it ends with its animal. Shown in the System panel with how far along it is. Simplified: no light pulses are drawn across the continent yet. |
+| E85 | Trance Blooms | simplified | a glowing, mildly toxic plant that covers enough land flowers (`trance-bloom`); a town where it is the main plant learns what it does and grows it as a medicine, with a festival when it opens (`bloom-use`, caused by the bloom). Changed from the brief by the owner's decision of 2026-11-21: the game has no religion, so no faith or temple is built on it. Simplified: animals near the flowers are not yet drawn behaving oddly. |
+| E86 | Light and Noise Pollution | done | towns of tech 0.6 and up cast light over their region and its neighbours, and industrial ones noise: animals of the night and those that glow are thinned by light, those that echolocate or hear keenly by noise, and a species that loses a real share is recorded (`light-pollution`, `noise-pollution`, caused by the town). The diversity overlay shows the result. Tested: the night animal declines, the day animal does not. |
+| E87 | Mimic Architects | done | where a town has lain in ruin for 500 years with no one living there, a nest-building animal of that region may start building its nests as narrow towers (`mimic`, caused by the ruin); the renderer draws that species' mounds three times as tall as wide. At most three such species a world. |
+| E88 | Predictable Catastrophe | done | the Swarm: a meteor storm every 1,800 to 4,200 years (set by the seed), told storm by storm only when time runs slowly enough to live through. A people that has seen two makes a myth of it, with records and numbers dates it, and with the means prepares; a prepared people loses one in twenty where an unready one loses three in ten (`swarm-survived`, caused by the prediction). Tested through all four stages. |
+| E89 | Ecological Memory | simplified | `plants.scar`: land grazed to the root or farmed for generations wears out and grows less (up to 60 percent less), and heals with a half-life of 400 years. Tested: half healed after four centuries. Simplified: the gap left by an extinct keystone species is not modelled, and the scar shows only as thinner plant cover. |
+| E90 | The Planet's Pulse | done | one number from how much is alive against its recent best, how far the climate is from where it began, and how recently the world was jolted: 48 beats a minute when all is well, up to 140 in crisis. A beating dot beside the title, green to red, and a soft double thud in a crisis (can be turned off in Settings). Tested against every kind of major event. |
 
 ### Section 10. Out Of This World
 
