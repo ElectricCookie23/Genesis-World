@@ -840,6 +840,7 @@ export function Peoples() {
               {(st.monuments ?? 0) > 0 && <div class={css.when} style={{ color: '#ffd76a' }}>{st.monuments} great {st.monuments === 1 ? 'work stands' : 'works stand'} here from a golden age.</div>}
               {belief && <div class={css.when} style={{ color: '#ece7db' }}>Its faith remembers: {belief.title.toLowerCase()}.</div>}
               <button class={css.link} onClick={() => actions.flyToCell(st.cell, 0.25)}>fly there</button>
+              {st.tech >= 0.3 && <button class={css.link} title="Fly down and replay this town from its first huts to what it is now" onClick={() => actions.timelapse(st.id, st.cell)}>watch it grow</button>}
               {st.eventId >= 0 && <button class={css.link} onClick={() => update({ whyEvent: st.eventId })}>its story</button>}
               {belief && <button class={css.link} onClick={() => update({ whyEvent: st.belief })}>its faith</button>}
             </div>

@@ -313,6 +313,7 @@ export class GenesisScene {
       });
     }
     this.towns = new Towns(grid, this.data, this.erosion.texture, this.clouds.shadow, this.buildingBudget);
+    this.towns.ground = this.ground;
     for (const m of this.towns.meshes) this.scene.add(m);
     this.tornadoes = new Tornadoes(this.data, this.erosion.texture);
     this.scene.add(this.tornadoes.mesh);
@@ -375,6 +376,10 @@ export class GenesisScene {
   setSettlements(list: SettlementInfo[], known?: NationInfo[]): void {
     this.civ?.setSettlements(list, known);
     this.vegetation?.setTowns(list);
+  }
+  /** Replay one town's growth from its first huts to what it is now (system E11). */
+  timelapse(id: number, seconds = 16): void {
+    this.towns?.timelapse(id, seconds);
   }
   /** A war or plague event at a settlement's cell. */
   civUnrest(cell: number, kind: 'war' | 'plague'): void {

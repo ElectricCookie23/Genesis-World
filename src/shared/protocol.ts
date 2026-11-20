@@ -131,6 +131,10 @@ export interface SettlementInfo {
   temple?: boolean;
   /** Great works raised here in golden ages. */
   monuments?: number;
+  /** Its walls, oldest first, as pairs: the people it held (thousands) and what it knew when each was built. */
+  walls?: number[];
+  /** Founded by settlers who came by sea. */
+  overseas?: boolean;
   farms?: boolean;
   /** Nation it belongs to, or -1 while it is a camp outside history. */
   nation?: number;

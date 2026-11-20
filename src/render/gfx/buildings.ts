@@ -16,15 +16,17 @@ import type { CellSnapshot, SettlementInfo } from '../../shared/protocol';
 import { EXAG, uHazeTint, uMoonDir, uSeaKm, uSunDir, uTime } from '../common';
 import { uLook } from './look';
 import { settlementSize, type Nation } from './nations';
+import { MAX_PLOTS, planCity, type CityPlan, type CitySite, type District } from './cityplan';
 import type { PlanetData } from './planetdata';
+import type { GroundSampler } from './ground';
 import { groundRadiusNode } from './terrain';
 import { eclipseLight } from './eclipse';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
 
-const PART = { wall: 0, roof: 1, windows: 2, flame: 3, sail: 4, hull: 5 } as const;
-export const BUILDINGS = ['hut', 'house', 'hall', 'tower', 'dome', 'spire', 'temple', 'boat'] as const;
+const PART = { wall: 0, roof: 1, windows: 2, flame: 3, sail: 4, hull: 5, road: 6 } as const;
+export const BUILDINGS = ['hut', 'house', 'hall', 'tower', 'dome', 'spire', 'temple', 'boat', 'road', 'wall', 'gate'] as const;
 export type Building = (typeof BUILDINGS)[number];
 
 type V3 = [number, number, number];
@@ -141,6 +143,20 @@ export function buildBuilding(kind: Building): BufferGeometry {
       (s as any).quad([0.02, 0.22, 0.0], [0.02, 0.8, 0.0], [0.36, 0.72, 0.1], [0.4, 0.26, 0.12], PART.sail);
       s.ring(-0.45, 0, 0.14, 0.035, 0.24, 0, 5, PART.flame);
       break;
+    case 'road':
+      // one stretch of street, a plan unit long (+x): a low slab that lies on the ground
+      s.box(0, 0, 0, 1.1, 0.03, 0.36, PART.road, PART.road);
+      break;
+    case 'wall':
+      // one stretch of town wall with a walk along the top and three merlons
+      s.box(0, 0, 0, 1.06, 0.5, 0.2, PART.wall, PART.wall);
+      for (const x of [-0.36, 0, 0.36]) s.box(x, 0.5, 0.06, 0.16, 0.12, 0.08, PART.wall, PART.wall);
+      break;
+    case 'gate':
+      // two towers either side of the road and a lintel over it
+      for (const z of [-0.42, 0.42]) { s.box(0, 0, z, 0.4, 0.95, 0.34, PART.wall, PART.wall); s.box(0, 0.95, z, 0.48, 0.12, 0.42, PART.wall, PART.roof); }
+      s.box(0, 0.55, 0, 0.3, 0.22, 0.5, PART.wall, PART.wall);
+      break;
   }
   return s.build();
 }
@@ -157,9 +173,27 @@ function hash(n: number): number {
 
 export interface TownInfo extends SettlementInfo { temple?: boolean }
 
+/** How many plots a town of this many people (thousands) and this knowledge fills. */
+export function townPlots(pop: number, tech: number): number {
+  const size = settlementSize(pop);
+  return Math.min(MAX_PLOTS, Math.round(5 + 300 * size * size * (0.3 + 0.7 * tech)));
+}
+
+/** What stands on a plot: by its quarter, how near the middle it is, and how far the town has come. `r` is the plot's own luck. */
+export function buildingFor(district: District, central: number, era: number, r: number): Building {
+  if (era < 0.3) return district === 'market' && r < 0.2 && era > 0.22 ? 'house' : 'hut';
+  if (district === 'market') return era < 0.6 ? (r < 0.5 ? 'hall' : 'house') : era < 0.85 ? (r < 0.4 ? 'tower' : 'hall') : r < 0.3 ? 'spire' : r < 0.8 ? 'tower' : 'dome';
+  if (district === 'temple') return era < 0.6 ? (r < 0.6 ? 'hall' : 'house') : r < 0.5 ? 'dome' : 'hall';
+  if (district === 'docks') return r < 0.55 ? 'hall' : 'house';
+  if (district === 'workshops') return era < 0.6 ? (r < 0.3 ? 'hall' : r < 0.45 ? 'hut' : 'house') : era < 0.85 ? (r < 0.5 ? 'hall' : 'house') : r < 0.2 ? 'tower' : r < 0.7 ? 'hall' : 'house';
+  // homes: houses, with the odd hut at the edge of an early town and towers toward the middle of a late one
+  if (era < 0.6) return central < 0.25 && r < 0.3 ? 'hut' : 'house';
+  if (era < 0.85) return central > 0.55 && r < 0.18 ? 'tower' : 'house';
+  return central > 0.45 && r < 0.4 ? 'tower' : r > 0.95 ? 'dome' : 'house';
+}
+
 export class Towns {
   readonly meshes: Copies[] = [];
-  private placedX = new Float32Array(260); private placedY = new Float32Array(260); private placedS = new Float32Array(260);
   /** Most buildings drawn at once. */
   budget = 4000;
   private slots = new Map<Building, Slot>();
@@ -176,7 +210,7 @@ export class Towns {
     const rotate = (v: N, q: N): N => v.add(cross(q.xyz, cross(q.xyz, v).add(v.mul(q.w))).mul(2));
     for (const kind of BUILDINGS) {
       const boat = kind === 'boat';
-      const slotCap = boat ? 96 : kind === 'house' ? cap : kind === 'hut' ? Math.ceil(cap / 2) : kind === 'temple' ? 64 : Math.ceil(cap / 4);
+      const slotCap = boat ? 96 : kind === 'house' || kind === 'road' ? cap : kind === 'hut' || kind === 'wall' ? Math.ceil(cap / 2) : kind === 'temple' || kind === 'gate' ? 64 : Math.ceil(cap / 4);
       const g = buildBuilding(kind);
       // per-building data in one shared buffer (WebGPU allows 8 vertex buffers per draw; separately these made 9)
       const { iDir, iQuat, iData, iTint, iLight } = packAttributes(g, [
@@ -194,7 +228,17 @@ export class Towns {
       // cells and can dip under the tide inside a land cell: such a building shrinks to nothing (huts stood half
       // under water in the surf).
       const dry: N = boat ? float(1) : step(float(1).add(uSeaKm.mul(EXAG)).add(0.00002), radius);
-      material.positionNode = base.add(rotate((positionGeometry as any).add(roll).mul(aData.x).mul(dry), aQuat));
+      if (kind === 'road' || kind === 'wall') {
+        // Streets and walls lie along the ground: every corner finds the ground under itself, where a building
+        // stands level on the ground under its middle. (As rigid slabs, stretches of road on a slope were half
+        // buried and a street read as a row of dashes.)
+        const local: N = rotate((positionGeometry as any).mul(aData.x), aQuat);
+        const lift: N = dot(local, aDir);
+        const under: N = normalize(aDir.add(local.sub(aDir.mul(lift))));
+        const ground: N = groundRadiusNode(data, erosionTex, under);
+        const above: N = step(float(1).add(uSeaKm.mul(EXAG)).add(0.00002), ground);
+        material.positionNode = under.mul(ground.add(lift.mul(above)).add(0.000003));
+      } else material.positionNode = base.add(rotate((positionGeometry as any).add(roll).mul(aData.x).mul(dry), aQuat));
       const nW: N = varying(normalize(rotate(normalGeometry, aQuat)));
       const vPart: N = varying(attribute('bpart', 'float'));
       const vUv: N = varying(attribute('buv', 'vec2'));
@@ -218,7 +262,9 @@ export class Towns {
       const sunH = dot(up, L);
       const day = smoothstep(-0.12, 0.22, sunH);
       const night = float(1).sub(day);
-      let albedo: N = wall.mul(is(PART.wall).add(is(PART.windows))).add(roof.mul(is(PART.roof))).add(vec3(0.86, 0.82, 0.7).mul(is(PART.sail))).add(vec3(0.2, 0.14, 0.1).mul(is(PART.hull)));
+      let albedo: N = wall.mul(is(PART.wall).add(is(PART.windows))).add(roof.mul(is(PART.roof))).add(vec3(0.86, 0.82, 0.7).mul(is(PART.sail))).add(vec3(0.2, 0.14, 0.1).mul(is(PART.hull)))
+        // streets go from trodden earth to paving as a people learns to build
+        .add(mix(vec3(0.4, 0.32, 0.22), vec3(0.47, 0.46, 0.44), smoothstep(0.4, 0.75, tech)).mul(is(PART.road)));
       albedo = mix(albedo, vec3(0.06, 0.08, 0.1), glass.mul(0.85));
       const sunColor: N = mix(vec3(uLook.dusk), vec3(uLook.star), smoothstep(-0.05, 0.4, sunH));
       const sunVis = smoothstep(-0.08, 0.1, sunH).mul(cloudShadow(vBase)).mul(eclipseLight(vBase));
@@ -242,6 +288,90 @@ export class Towns {
 
   setCells(cells: CellSnapshot): void {
     this.cells = cells;
+  }
+
+  /** The drawn ground, sampled here on the page: where the shore really is and which way the land rises. */
+  ground: GroundSampler | null = null;
+
+  /** Plans of the towns drawn lately, by settlement id, each with the facts it was drawn from. */
+  private plans = new Map<number, { key: string; plan: CityPlan }>();
+  /** A town being replayed from its first huts: which, since when (seconds) and over how long. */
+  private lapse: { id: number; start: number; seconds: number } | null = null;
+
+  /** Replay the growth of one town from nothing to what it is now (system E11). */
+  timelapse(id: number, seconds = 16): void {
+    // (by the clock on the wall: the scene's own clock runs slow when frames are slow, and a replay must still end)
+    this.lapse = { id, start: performance.now() / 1000, seconds };
+    this.dirty = true;
+  }
+
+  /** True while a time-lapse is running: the towns are then redrawn every frame. */
+  get lapsing(): boolean { return !!this.lapse; }
+
+  /**
+   * The plan of a town, from where it stands and what has happened to it: the roads lead toward its
+   * neighbours, the shore is where the sea is, the land rises where it rises. Kept until those facts change.
+   */
+  private planFor(st: TownInfo, c: Vector3, east: Vector3, north: Vector3, nat: Nation | undefined, cells: CellSnapshot): CityPlan {
+    const { pos, neighbors, ncount } = this.grid;
+    const { elevation, seaLevel } = cells;
+    const local = (i: number): [number, number, number] => {
+      const dx = pos[i * 3]! - c.x, dy = pos[i * 3 + 1]! - c.y, dz = pos[i * 3 + 2]! - c.z;
+      const e = dx * east.x + dy * east.y + dz * east.z, n = dx * north.x + dy * north.y + dz * north.z;
+      return [e, n, Math.hypot(e, n)];
+    };
+    // the nearest other towns, its own nation's first: roads lead to them
+    const near: { a: number; d: number }[] = [];
+    for (const o of this.settlements) {
+      if (o.id === st.id || o.ruined >= 0) continue;
+      const dot = pos[o.cell * 3]! * c.x + pos[o.cell * 3 + 1]! * c.y + pos[o.cell * 3 + 2]! * c.z;
+      if (dot < 0.955) continue;
+      const [e, n, d] = local(o.cell);
+      near.push({ a: Math.atan2(n, e), d: d * (o.nation === st.nation ? 0.7 : 1) });
+    }
+    near.sort((a, b) => a.d - b.d);
+    // the sea, and the lie of the land, from the cells around
+    let wx = 0, wy = 0, shore = Infinity, gx = 0, gy = 0, steep = 0;
+    const here = elevation[st.cell]!;
+    for (let j = 0; j < ncount[st.cell]!; j++) {
+      const nb = neighbors[st.cell * 6 + j]!;
+      const [e, n, d] = local(nb);
+      if (elevation[nb]! <= seaLevel) { wx += e / d; wy += n / d; shore = Math.min(shore, (d * 0.5) / 0.00062); }
+      else { const rise = elevation[nb]! - here; gx += (e / d) * rise; gy += (n / d) * rise; steep = Math.max(steep, Math.abs(rise)); }
+    }
+    const g = this.ground;
+    if (g) {
+      // look outward along sixteen bearings for the nearest water, and feel which way the ground rises
+      wx = 0; wy = 0; shore = Infinity; gx = 0; gy = 0; steep = 0;
+      const U0 = 0.00062, probe = new Vector3();
+      const high = (x: number, y: number): number => { probe.copy(c).addScaledVector(east, x * U0).addScaledVector(north, y * U0).normalize(); return g.heightAt(probe.x, probe.y, probe.z, g.cellAt(probe.x, probe.y, probe.z, st.cell)) - g.sea; };
+      const centre = high(0, 0);
+      for (let b = 0; b < 16; b++) {
+        const a = (b / 16) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+        for (let r = 2; r <= 26; r += 2) if (high(ca * r, sa * r) <= 0.012) { if (r < shore - 0.5) { shore = r; wx = ca; wy = sa; } else if (r < shore + 2.5) { wx += ca * 0.5; wy += sa * 0.5; } break; }
+        const rise = high(ca * 6, sa * 6) - centre;
+        if (rise > -0.5) { gx += ca * rise; gy += sa * rise; steep = Math.max(steep, Math.abs(rise) * 0.25); }
+      }
+    }
+    const coastal = Number.isFinite(shore);
+    const walls: number[] = [];
+    for (let i = 0; st.walls && i + 1 < st.walls.length; i += 2) walls.push(townPlots(st.walls[i]!, st.walls[i + 1]!));
+    const site: CitySite = {
+      seed: (st.id * 2654435761) >>> 0,
+      roads: near.slice(0, 4).map((x) => Math.round(x.a * 8) / 8),
+      coast: coastal ? Math.round(Math.atan2(wy, wx) * 8) / 8 : 0,
+      shore: coastal ? Math.max(2, Math.round(shore) - 1) : Infinity,
+      uphill: Math.round(Math.atan2(gy, gx) * 8) / 8,
+      slope: Math.round(Math.min(1, steep * 2.5) * 10) / 10,
+      temple: !!st.temple, port: coastal && (!!st.overseas || st.tech > 0.36), capital: !!nat && nat.capital === st.id, walls,
+    };
+    const key = JSON.stringify(site);
+    const have = this.plans.get(st.id);
+    if (have && have.key === key) return have.plan;
+    const plan = planCity(site);
+    if (this.plans.size > 96) this.plans.delete(this.plans.keys().next().value as number);
+    this.plans.set(st.id, { key, plan });
+    return plan;
   }
 
   /** Settlements, the nations they belong to, and the sea lanes (chains of cells) boats follow. */
@@ -300,16 +430,16 @@ export class Towns {
     const { pos, neighbors, ncount } = this.grid;
     const { elevation, seaLevel } = cells!;
     const boost = 1 + Math.min(1.6, dist * 3.2);
-    if (moved || this.dirty) {
+    const wall = performance.now() / 1000;
+    if (this.lapse && wall - this.lapse.start > this.lapse.seconds + 0.5) { this.lapse = null; this.dirty = true; }
+    if (moved || this.dirty || this.lapse) {
       this.dirty = false;
       this.lastFocus.copy(focus);
       this.lastDist = dist;
       for (const [k, s] of this.slots) if (k !== 'boat') s.n = 0;
       const reachCos = Math.cos(Math.min(0.5, 0.08 + dist * 0.7));
-      const up = new Vector3(), east = new Vector3(), north = new Vector3(), c = new Vector3();
+      const up = new Vector3(), east = new Vector3(), north = new Vector3(), c = new Vector3(), fwd = new Vector3();
       let total = 0;
-      const placedX = this.placedX, placedY = this.placedY, placedS = this.placedS;
-      let placedN = 0;
       for (const st of this.settlements) {
         if (st.ruined >= 0 || total >= this.budget) continue;
         c.set(pos[st.cell * 3]!, pos[st.cell * 3 + 1]!, pos[st.cell * 3 + 2]!);
@@ -318,8 +448,6 @@ export class Towns {
         const tint = nat ? nat.signature : [0.6, 0.4, 0.3];
         const light = nat ? nat.color : [1.0, 0.5, 0.14];
         const size = settlementSize(st.pop);
-        const radius = (0.0025 + 0.02 * size * (0.25 + 0.75 * st.tech));
-        const count = Math.min(260, Math.round(5 + 240 * size * size * (0.3 + 0.7 * st.tech)));
         east.set(-c.z, 0, c.x).normalize();
         north.crossVectors(c, east);
         // about half the windows at most: with four in five lit and bright, every tower wore a wide pink halo at night
@@ -327,36 +455,70 @@ export class Towns {
         // What gets built follows how many people there are as well as what they know: a few hundred farmers with
         // advanced neighbours do not raise tower blocks and domes. (Seen on a real GPU: a town of 503 drawn as a
         // modern skyline.) Small places stay huts, houses and a hall whatever the age.
-        const era = Math.min(st.tech, 0.15 + size * 0.95);
-        if (st.temple) { this.put('temple', c, hash(st.id * 31) * 6.28, 0.0009 * boost, hash(st.id), lit, st.tech, tint, light); total++; }
-        placedN = 0;
-        for (let k = 0; k < count && total < this.budget; k++) {
-          const h1 = hash(st.id * 7919 + k * 31), h2 = hash(st.id * 104729 + k * 17), h3 = hash(st.id * 1299709 + k * 7);
-          // dense in the middle, thinning outward, on loose rings so there are streets between
-          const ring = Math.pow(h1, 0.75);
-          const r = radius * (0.12 + ring * 0.9), a = h2 * Math.PI * 2;
-          up.copy(c).addScaledVector(east, Math.cos(a) * r).addScaledVector(north, Math.sin(a) * r).normalize();
-          // not in the sea
+        // A time-lapse (system E11) replays the same town from its first huts to what it is now.
+        const lapse = this.lapse && this.lapse.id === st.id ? Math.min(1, Math.max(0, wall - this.lapse.start) / this.lapse.seconds) : 1;
+        const eraNow = Math.min(st.tech, 0.15 + size * 0.95);
+        const era = lapse < 1 ? Math.min(eraNow, 0.12 + (eraNow - 0.12) * Math.pow(lapse, 0.8)) : eraNow;
+        // ---- the town is laid out on its plan: roads, streets, plots in the order they were built, walls
+        const plan = this.planFor(st, c, east, north, nat, cells!);
+        const U = 0.00062 * boost;
+        const full = Math.min(plan.plots.length, townPlots(st.pop, st.tech));
+        const count = Math.max(lapse < 1 ? 3 : 0, Math.round(full * lapse * lapse));
+        const at = (x: number, y: number): Vector3 => up.copy(c).addScaledVector(east, x * U).addScaledVector(north, y * U).normalize();
+        const toward = (h: number): Vector3 => fwd.copy(east).multiplyScalar(Math.cos(h)).addScaledVector(north, Math.sin(h));
+        const wet = (): boolean => {
+          // by the ground as it is drawn, where that can be sampled; else by the nearest cell
+          if (this.ground) return this.ground.heightAt(up.x, up.y, up.z, this.ground.cellAt(up.x, up.y, up.z, st.cell)) <= this.ground.sea + 0.012;
           let cell = st.cell, best = up.x * pos[cell * 3]! + up.y * pos[cell * 3 + 1]! + up.z * pos[cell * 3 + 2]!;
           for (let j = 0; j < ncount[st.cell]!; j++) { const nb = neighbors[st.cell * 6 + j]!; const d = up.x * pos[nb * 3]! + up.y * pos[nb * 3 + 1]! + up.z * pos[nb * 3 + 2]!; if (d > best) { best = d; cell = nb; } }
-          if (elevation[cell]! <= seaLevel + 0.01) continue;
-          const central = ring < 0.3;
-          let kind: Building;
-          if (era < 0.3) kind = 'hut';
-          else if (era < 0.6) kind = central && h3 < 0.25 ? 'hall' : h3 < 0.2 ? 'hut' : 'house';
-          else if (era < 0.85) kind = central ? (h3 < 0.45 ? 'tower' : 'hall') : h3 < 0.12 ? 'tower' : 'house';
-          else kind = central ? (h3 < 0.3 ? 'spire' : h3 < 0.75 ? 'tower' : 'dome') : h3 < 0.25 ? 'tower' : h3 < 0.35 ? 'dome' : 'house';
+          return elevation[cell]! <= seaLevel + 0.01;
+        };
+        if (st.temple && plan.temple && lapse > 0.3) { at(plan.temple[0], plan.temple[1]); this.put('temple', up, hash(st.id * 31) * 6.28, 0.0009 * boost, hash(st.id), lit, st.tech, tint, light); total++; }
+        // streets: a stretch of road for every step of every street the town has reached (lanes stay footpaths)
+        for (const street of plan.streets) {
+          if (street.order > count || street.rank > 1) continue;
+          const pts = street.points;
+          // a road out of town is only made as far as the town has grown along it
+          const made = street.rank === 0 ? Math.min(pts.length - 1, 2 + Math.ceil(Math.sqrt(count) * 1.25)) : pts.length - 1;
+          for (let i = 1; i <= made; i++) {
+            const [x0, y0] = pts[i - 1]!, [x1, y1] = pts[i]!;
+            at((x0 + x1) / 2, (y0 + y1) / 2);
+            if (wet()) continue;
+            this.put('road', up, 0, U, 0.5, 0, era, tint, light, toward(Math.atan2(y1 - y0, x1 - x0)));
+          }
+        }
+        // walls: each as it was built, round the town of its day, with gates where the roads go through
+        for (const wall of plan.walls) {
+          if (wall.order > count) continue;
+          const pts = wall.points;
+          for (let i = 1; i < pts.length; i++) {
+            const [x0, y0] = pts[i - 1]!, [x1, y1] = pts[i]!;
+            if (Number.isNaN(x0) || Number.isNaN(x1)) continue;
+            // (not across a gateway)
+            const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+            if (wall.gates.some((g) => (g[0] - mx) * (g[0] - mx) + (g[1] - my) * (g[1] - my) < 0.5)) continue;
+            // in stretches about a plan unit long, however far apart the corners of the wall are
+            const len = Math.hypot(x1 - x0, y1 - y0), parts = Math.max(1, Math.round(len)), heading = Math.atan2(y1 - y0, x1 - x0);
+            for (let k = 0; k < parts; k++) {
+              const t = (k + 0.5) / parts;
+              at(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
+              if (!wet()) this.put('wall', up, 0, U * (len / parts), 0.3, 0, era, tint, light, toward(heading));
+            }
+          }
+          for (const g of wall.gates) { at(g[0], g[1]); if (!wet()) this.put('gate', up, 0, U * 1.25, 0.7, 0, era, tint, light, toward(Math.atan2(g[1], g[0]))); }
+        }
+        for (let k = 0; k < count && total < this.budget; k++) {
+          const plot = plan.plots[k]!;
+          const h3 = hash(st.id * 1299709 + k * 7), h2 = hash(st.id * 104729 + k * 17);
+          at(plot.x, plot.y);
+          // not in the sea
+          if (wet()) continue;
+          const kind = buildingFor(plot.district, plot.central, era, h3);
           // towers and spires stand above the trees and the largest animals (on a real GPU, animals on the skyline were
           // as tall as tower blocks, and from low altitude the blocks read as pins)
-          const sz = (kind === 'hut' ? 0.00026 : kind === 'house' ? 0.00034 : kind === 'hall' ? 0.0005 : kind === 'dome' ? 0.00072 : 0.00072) * boost * (0.8 + 0.5 * h3);
-          // keep clear of what already stands here: placed purely by chance, buildings grew through one another
-          const bx = Math.cos(a) * r, by = Math.sin(a) * r;
-          let clash = false;
-          for (let j = 0; j < placedN && !clash; j++) { const dx = placedX[j]! - bx, dy = placedY[j]! - by, gap = (placedS[j]! + sz) * 0.62; clash = dx * dx + dy * dy < gap * gap; }
-          if (clash) continue;
-          if (placedN < placedX.length) { placedX[placedN] = bx; placedY[placedN] = by; placedS[placedN] = sz; placedN++; }
-          // face along the ring, like buildings along a street
-          this.put(kind, up, a + (h3 < 0.5 ? 0 : Math.PI / 2) + (h1 - 0.5) * 0.3, sz, h2, lit, era, tint, light);
+          const sz = (kind === 'hut' ? 0.00028 : kind === 'house' ? 0.0004 : kind === 'hall' ? 0.00048 : 0.00064) * boost * (0.85 + 0.3 * h3);
+          // it faces its street
+          this.put(kind, up, 0, sz, h2, lit, era, tint, light, toward(plot.yaw));
           total++;
         }
       }

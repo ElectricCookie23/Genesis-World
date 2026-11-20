@@ -197,6 +197,8 @@ export const actions = {
   /** Open the knowledge and rulers of a nation (by the simulation's nation id). */
   openNation: (_id: number) => {},
   openDynasty: (_id: number) => {},
+  /** Fly to a town and replay its growth. */
+  timelapse: (_id: number, _cell: number) => {},
   setEarthNotes: (_on: boolean) => {},
   selectCreatureKey: (_key: number) => {},
   /** Swap places with the other future, or stop running it. */

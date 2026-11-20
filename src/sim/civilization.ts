@@ -47,6 +47,8 @@ export interface Settlement {
   relic: number;
   /** Founded by settlers who came across the sea. */
   overseas?: boolean;
+  /** The walls it has built (system E11): how many people it held and what it knew each time it was threatened and walled itself in. */
+  walls?: { pop: number; tech: number; year: number }[];
   /** Great works raised here in golden ages (system E10). */
   monuments?: number;
   /** How warm its land was when its people last chose to live here: what a later cold is measured against. */
@@ -386,6 +388,8 @@ export class Civilization {
             else { let top = -1; for (let i = 0; i < WEB.length; i++) if (weak.know.way[i]! >= 0 && (top < 0 || WEB[i]!.level > WEB[top]!.level)) top = i; if (top >= 0) weak.know.way[top] = -1; }
           }
         }
+        // a town that has been fought over walls itself in, and again when it has outgrown its walls (system E11)
+        this.fortify(st, year); this.fortify(o, year);
         const warAt = sim.events.events.length;
         sim.civEvent('war', st.species, st.cell, st.id, o.id);
         const warEvent = sim.events.events.length > warAt ? warAt : -1;
@@ -1400,6 +1404,15 @@ export class Civilization {
       causes: [g.eventId, cause].filter((x, i, a) => x >= 0 && sim.events.events[x] && a.indexOf(x) === i), importance: lasted >= 100 ? 2 : 1, speciesIds: [n.species], data: { nation: n.id, years: lasted, works: g.works, reason },
     });
     this.credit(sim, null, n, ev.id, 'It ended in the reign of {name}.');
+  }
+
+  /** A threatened town builds a wall round itself as it then stands; a town that has doubled since builds another further out. */
+  private fortify(st: Settlement, year: number): void {
+    if (st.tech < 0.3 || st.ruined >= 0) return;
+    const walls = (st.walls ??= []);
+    const last = walls[walls.length - 1];
+    if (walls.length >= 4 || (last && st.pop < last.pop * 2.2)) return;
+    walls.push({ pop: st.pop, tech: st.tech, year });
   }
 
   /** The count of years a nation keeps. */
