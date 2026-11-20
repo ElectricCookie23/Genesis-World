@@ -22,7 +22,7 @@ export interface Culture {
   hue: number;
 }
 
-export type Role = 'ruler' | 'founder' | 'inventor' | 'prophet' | 'general' | 'explorer' | 'artist' | 'scholar';
+export type Role = 'ruler' | 'founder' | 'inventor' | 'prophet' | 'general' | 'explorer' | 'artist' | 'scholar' | 'consort' | 'claimant';
 
 /** Someone history remembers. Ordinary people are never stored: see citizens.ts. */
 export interface Person {
@@ -57,6 +57,14 @@ export interface Person {
   rose: number;
   /** The age their nation was in when they rose (it sets the style of their portrait). */
   era: number;
+  /** Generation in the family line, counted from the first of the house (a child is one more than its parent). */
+  gen?: number;
+  /** Husband or wife among the people on record, or -1. */
+  spouse?: number;
+  /** For a ruler married into another ruling house: the nation that house rules. */
+  match?: number;
+  /** A nation whose throne this person could claim through a parent, or -1. */
+  claim?: number;
 }
 
 export interface Dynasty {
@@ -71,6 +79,10 @@ export interface Dynasty {
   rulers: number[];
   /** How many reigns the house has had in all, recorded or not. */
   reigns: number;
+  /** How many generations of the family have ruled. */
+  generations?: number;
+  /** The house this one is a branch of (a younger child who took a throne of their own), or undefined. */
+  branchOf?: number;
 }
 
 export type Government = 'band' | 'chiefdom' | 'kingdom' | 'republic' | 'empire' | 'council' | 'custom';
@@ -122,6 +134,8 @@ export interface Nation {
   woes: { kind: string; eventId: number; year: number }[];
   /** Every nation this one has ever met. */
   met?: number[];
+  /** Nations it will not fight while a marriage between the ruling houses is remembered. */
+  allies?: { nation: number; until: number; eventId: number }[];
   /** The year it was at its greatest extent, and how many towns it then held. */
   peakYear: number;
   peakTowns: number;

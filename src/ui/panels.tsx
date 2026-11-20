@@ -100,7 +100,7 @@ export function Why() {
             </div>
           </>
         ))}
-        {chain.length === 1 && <p class={css.sub} style={{ marginLeft: 46 }}>Nothing caused this. It is where a story begins.</p>}
+        {chain.length === 1 && <p class={css.sub} style={{ marginLeft: '46px' }}>Nothing caused this. It is where a story begins.</p>}
       </div>
     </div>
   );
@@ -156,7 +156,7 @@ export function SpeciesCard() {
           {lineage.map((p) => <div key={p.id}><button class={css.link} onClick={() => actions.selectSpecies(p.id)}>{p.name}</button></div>)}
         </>
       )}
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: '12px' }}>
         {sp.extinctYear < 0 && <button class={css.link} onClick={() => actions.flyToCell(sp.homeCell, 0.5)}>fly there</button>}
         {sp.eventId >= 0 && <button class={css.link} onClick={() => update({ whyEvent: sp.eventId })}>why did it appear?</button>}
       </div>
@@ -194,7 +194,7 @@ export function CreatureCard() {
       <FamilyTreeView creature={c.key} />
       {lineage.length > 0 && <div style={{ margin: '10px 0 2px' }} class={css.sub}>LINEAGE</div>}
       {lineage.map((p) => <div key={p.id}><button class={css.link} onClick={() => actions.selectSpecies(p.id)}>{p.name}</button></div>)}
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: '12px' }}>
         <button class={css.link} onClick={() => actions.followCreature(!c.following)}>{c.following ? 'stop following' : 'follow (F)'}</button>
         <button class={css.link} onClick={() => actions.selectSpecies(sp.id)}>about the species</button>
       </div>
@@ -246,7 +246,7 @@ function renderTree(s: UIState) {
       </div>
       <div class={css.scroll}>
         {all.length === 0 && <p class={css.sub}>No animals yet. The tree will grow from the first one.</p>}
-        <svg class={css.tree} viewBox={`0 0 ${W} ${H}`} style={{ height: H * 1.0 }}>
+        <svg class={css.tree} viewBox={`0 0 ${W} ${H}`} style={{ height: `${H}px` }}>
           {all.map((sp) => {
             const r = rows.get(sp.id);
             if (r === undefined) return null;
@@ -281,7 +281,7 @@ export function Help() {
       <div class={css.head}><h2>Controls</h2><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
       <div class={css.scroll}>
         <div class={css.help}>{keys.map(([k, v]) => <><kbd>{k}</kbd><span>{v}</span></>)}</div>
-        <p class={css.sub} style={{ marginTop: 14 }}>Click any line in the chronicle to trace what caused it. Click a branch of the tree to meet that species.</p>
+        <p class={css.sub} style={{ marginTop: '14px' }}>Click any line in the chronicle to trace what caused it. Click a branch of the tree to meet that species.</p>
       </div>
     </div>
   );
@@ -351,7 +351,7 @@ export function CrossSection() {
   return (
     <div class={`${css.panel} ${css.side} ${css.wide}`} style={{ bottom: 'auto' }}>
       <div class={css.head}><h2>Cross-section</h2><span class={css.sub}>the ground under the centre of the view, west to east</span><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
-      <div style={{ padding: '0 14px 14px' }}><canvas ref={ref} width={720} height={300} style={{ width: '100%', borderRadius: 8, display: 'block' }} /></div>
+      <div style={{ padding: '0 14px 14px' }}><canvas ref={ref} width={720} height={300} style={{ width: '100%', borderRadius: '8px', display: 'block' }} /></div>
     </div>
   );
 }
@@ -370,7 +370,7 @@ export function FlatMap() {
     <div class={`${css.panel} ${css.side} ${css.wide}`} style={{ bottom: 'auto' }}>
       <div class={css.head}><h2>Map of the world</h2><span class={css.sub}>click to fly there</span><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
       <div style={{ padding: '0 14px 14px' }}>
-        <canvas ref={ref} width={720} height={360} style={{ width: '100%', borderRadius: 8, cursor: 'crosshair', display: 'block' }}
+        <canvas ref={ref} width={720} height={360} style={{ width: '100%', borderRadius: '8px', cursor: 'crosshair', display: 'block' }}
           onClick={(e) => { const r = (e.target as HTMLCanvasElement).getBoundingClientRect(); actions.mapClick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); }} />
       </div>
     </div>
@@ -457,7 +457,7 @@ export function EmblemSvg({ nation, size = 22 }: { nation: Nation; size?: number
   const W = 30, H = 20;
   const star = (cx: number, cy: number, r: number, n: number) => Array.from({ length: n * 2 }, (_, i) => { const rr = i % 2 ? r * 0.45 : r, t = (i * Math.PI) / n - Math.PI / 2; return `${cx + Math.cos(t) * rr},${cy + Math.sin(t) * rr}`; }).join(' ');
   return (
-    <svg width={size * 1.5} height={size} viewBox={`0 0 ${W} ${H}`} style={{ borderRadius: 2, boxShadow: '0 0 0 1px rgba(255,255,255,0.25)', flex: 'none' }}>
+    <svg width={size * 1.5} height={size} viewBox={`0 0 ${W} ${H}`} style={{ borderRadius: '2px', boxShadow: '0 0 0 1px rgba(255,255,255,0.25)', flex: 'none' }}>
       <rect width={W} height={H} fill={a} />
       {e.division === 1 && <rect x={W / 2} width={W / 2} height={H} fill={b} />}
       {e.division === 2 && <rect y={H / 2} width={W} height={H / 2} fill={b} />}
@@ -610,7 +610,7 @@ const FIELD_COLOUR: Record<string, string> = {
 const ERA_NAMES = ['Age of Camps', 'Age of Fields', 'Age of Kilns', 'Age of Walls', 'Age of Sails', 'Age of Presses', 'Age of Engines', 'Age of Signals', 'Age of Orbit', 'Age Beyond'];
 
 /** One nation's knowledge: the tech web era by era, and its rulers on record (expansion system E1). */
-const ROLE_LABEL: Record<string, string> = { ruler: 'Ruler', founder: 'Founder', inventor: 'Inventor', prophet: 'Prophet', general: 'General', explorer: 'Explorer', artist: 'Artist', scholar: 'Scholar' };
+const ROLE_LABEL: Record<string, string> = { ruler: 'Ruler', founder: 'Founder', inventor: 'Inventor', prophet: 'Prophet', general: 'General', explorer: 'Explorer', artist: 'Artist', scholar: 'Scholar', consort: 'Consort', claimant: 'Claimant' };
 
 /** The two strongest sides of a temperament, in plain words. */
 function temperament(p: PersonInfo): string {
@@ -695,6 +695,13 @@ export function NationPanel() {
           </div>
         )}
         {d && d.people.length <= 2 && d.rulers.length > 1 && <p class={css.sub}>Generals, prophets, explorers, artists and scholars are recorded only while time runs at the pace of history or slower.</p>}
+        {d && d.houses.length > 0 && <div class={css.sub} style={{ margin: '8px 0 4px', letterSpacing: '0.08em' }}>RULING HOUSES</div>}
+        {d && d.houses.slice(0, 12).map((x) => (
+          <div key={x.id} class={css.when} style={{ color: '#cfc9bd', margin: '0 0 3px' }}>
+            <button class={css.link} style={{ marginRight: '6px', fontSize: '11.5px' }} onClick={() => actions.openDynasty(x.id)}>{x.name}</button>
+            {x.generations} {x.generations === 1 ? 'generation' : 'generations'}, {x.reigns} {x.reigns === 1 ? 'reign' : 'reigns'}{x.ended < 0 ? ', on the throne now' : `, lost the throne ${ago(x.ended)}`}
+          </div>
+        ))}
         {d && d.rulers.length > 0 && <div class={css.sub} style={{ margin: '8px 0 4px', letterSpacing: '0.08em' }}>RULERS ON RECORD</div>}
         {d && [...d.rulers].reverse().slice(0, 30).map((r) => (
           <div key={`${r.name}${r.from}`} class={css.when} style={{ color: '#cfc9bd', margin: '0 0 3px' }}>
@@ -744,7 +751,7 @@ export function Peoples() {
               </div>
               <span style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
                 {cap && <button class={css.link} style={{ marginRight: 0 }} onClick={() => { actions.setOverlay('nations'); actions.flyToCell(cap.cell, 1.2); }}>map</button>}
-                {(() => { const realm = s.realms.find((r) => r.ended < 0 && r.capital === n.capital) ?? s.realms.find((r) => r.ended < 0 && r.name === n.name); return realm ? <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.id)}>knowledge</button> : null; })()}
+                {(() => { const realm = s.realms.find((r) => r.ended < 0 && r.capital === n.capital) ?? s.realms.find((r) => r.ended < 0 && r.name === n.name); return realm ? <><button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.id)}>knowledge</button>{realm.houseId >= 0 && realm.ruler && <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openDynasty(realm.houseId)}>family tree</button>}</> : null; })()}
               </span>
             </div>
           );
@@ -786,9 +793,9 @@ function Spark({ label, values, color, format }: { label: string; values: number
   const W = 330, H = 54;
   const pts = values.map((v, i) => `${(i / (values.length - 1)) * W},${H - 4 - ((v - min) / Math.max(1e-9, max - min)) * (H - 8)}`).join(' ');
   return (
-    <div style={{ marginBottom: 12 }}>
+    <div style={{ marginBottom: '12px' }}>
       <div class={css.row} style={{ padding: 0 }}><span>{label}</span><span class={css.sub}>{format(values[values.length - 1]!)}</span></div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H }}><polyline points={pts} fill="none" stroke={color} stroke-width="1.6" style={{ filter: `drop-shadow(0 0 3px ${color})` }} /></svg>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: `${H}px` }}><polyline points={pts} fill="none" stroke={color} stroke-width="1.6" style={{ filter: `drop-shadow(0 0 3px ${color})` }} /></svg>
     </div>
   );
 }
@@ -841,7 +848,7 @@ export function Settings() {
         <div class={css.sub} style={{ margin: '12px 0 2px' }}>SETTINGS</div>
         <div class={css.row}>
           <span>Quality</span>
-          <span>{qualities.map((q) => <button class={css.btn} style={{ marginLeft: 4, opacity: s.quality === q ? 1 : 0.55 }} onClick={() => actions.setQuality(q)}>{q}</button>)}</span>
+          <span>{qualities.map((q) => <button class={css.btn} style={{ marginLeft: '4px', opacity: s.quality === q ? 1 : 0.55 }} onClick={() => actions.setQuality(q)}>{q}</button>)}</span>
         </div>
         <div class={css.row}>
           <span>Music</span>
@@ -857,12 +864,12 @@ export function Settings() {
         <div class={css.row}><span>Colour-blind safe overlays</span><button class={css.btn} onClick={() => actions.setColorblind(!s.colorblind)}>{s.colorblind ? 'on' : 'off'}</button></div>
         <div class={css.row}>
           <span>Overlay (O)</span>
-          <span>{(['none', 'temp', 'rain', 'life', 'people', 'fossils', 'nations', 'fungal', 'diversity', 'oxygen'] as const).map((o) => <button class={css.btn} style={{ marginLeft: 4, opacity: s.overlay === o ? 1 : 0.55 }} onClick={() => actions.setOverlay(o)}>{o}</button>)}</span>
+          <span>{(['none', 'temp', 'rain', 'life', 'people', 'fossils', 'nations', 'fungal', 'diversity', 'oxygen'] as const).map((o) => <button class={css.btn} style={{ marginLeft: '4px', opacity: s.overlay === o ? 1 : 0.55 }} onClick={() => actions.setOverlay(o)}>{o}</button>)}</span>
         </div>
         <div class={css.sub} style={{ margin: '12px 0 2px' }}>CAMERA AND KEEPSAKES</div>
         <div class={css.row}>
           <span>Photo filter</span>
-          <span>{['none', 'vivid', 'faded', 'sepia', 'noir'].map((f) => <button class={css.btn} style={{ marginLeft: 4, opacity: s.photoFilter === f ? 1 : 0.55 }} onClick={() => actions.setPhotoFilter(f)}>{f}</button>)}</span>
+          <span>{['none', 'vivid', 'faded', 'sepia', 'noir'].map((f) => <button class={css.btn} style={{ marginLeft: '4px', opacity: s.photoFilter === f ? 1 : 0.55 }} onClick={() => actions.setPhotoFilter(f)}>{f}</button>)}</span>
         </div>
         <div class={css.row}><span>Save a photo</span><button class={css.btn} onClick={() => actions.savePhoto()}>save PNG</button></div>
         <div class={css.row}><span>Record video</span><button class={css.btn} onClick={() => actions.toggleRecording()}>{s.recording ? 'stop and save' : 'record'}</button></div>

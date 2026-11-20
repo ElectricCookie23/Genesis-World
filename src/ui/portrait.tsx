@@ -42,6 +42,8 @@ const EMBLEM: Record<string, string> = {
   explorer: 'M6 0.5 L7.3 4.7 L11.5 6 L7.3 7.3 L6 11.5 L4.7 7.3 L0.5 6 L4.7 4.7 Z',
   artist: 'M1.5 10.5 L6.8 5.2 M6.8 5.2 Q9.6 1.2 11 1 Q10.8 3.6 8.2 6.4 Z',
   scholar: 'M2 2.5 H10 V9.5 H2 Z M4 4.8 H8 M4 7.2 H8',
+  consort: 'M4.3 3.2 A2.9 2.9 0 1 0 4.31 3.2 Z M7.7 3.2 A2.9 2.9 0 1 0 7.71 3.2 Z',
+  claimant: 'M1 9.5 L1 3 L4 6 L5.2 3.6 M6.8 3.6 L8 6 L11 3 L11 9.5 M1 9.5 H4.6 M7.4 9.5 H11',
 };
 
 export interface PortraitProps {
@@ -146,7 +148,7 @@ export function Portrait({ genes: g, era, role, seed, bold = 0.5, cruel = 0.5, w
   // ---- what the calling adds
   const dress: preact.JSX.Element[] = [];
   const halo: preact.JSX.Element[] = [];
-  if (role === 'ruler' || role === 'founder') {
+  if (role === 'ruler' || role === 'founder' || role === 'consort') {
     const a = at(-hr * 0.78, -hr * 0.62), b = at(0, -hr * 1.04), c = at(hr * 0.62, -hr * 0.7);
     dress.push(<path key="band" d={`M ${f(a.x)} ${f(a.y)} Q ${f(b.x)} ${f(b.y)} ${f(c.x)} ${f(c.y)}`} stroke={look.dress} stroke-width={2.6} fill="none" stroke-linecap="round" />);
     if (role === 'ruler') for (let i = 0; i < 3; i++) { const u = 0.2 + i * 0.3, x = a.x + (c.x - a.x) * u, y = a.y + (c.y - a.y) * u - hr * 0.22 * Math.sin(u * Math.PI) - 1; dress.push(<path key={`pt${i}`} d={`M ${f(x - 2)} ${f(y)} L ${f(x)} ${f(y - 5)} L ${f(x + 2)} ${f(y)} Z`} fill={look.dress} />); }
@@ -200,7 +202,7 @@ export function Portrait({ genes: g, era, role, seed, bold = 0.5, cruel = 0.5, w
   const handmade = style <= 2;
 
   return (
-    <svg width={width} height={width * 1.2} viewBox="0 0 100 120" style={{ display: 'block', borderRadius: 3, flex: 'none' }} role="img" aria-label={`Portrait, ${ART_NAMES[style]}`}>
+    <svg width={width} height={width * 1.2} viewBox="0 0 100 120" style={{ display: 'block', borderRadius: '3px', flex: 'none' }} role="img" aria-label={`Portrait, ${ART_NAMES[style]}`}>
       <defs>
         <clipPath id={`${id}clip`} dangerouslySetInnerHTML={{ __html: clip }} />
         <clipPath id={`${id}fig`}>{figure.map((d, i) => <path key={i} d={d} />)}</clipPath>
@@ -246,7 +248,7 @@ export function Portrait({ genes: g, era, role, seed, bold = 0.5, cruel = 0.5, w
       {EMBLEM[role] && (
         <g transform={`translate(${emblemAt.x} ${emblemAt.y})`}>
           {style !== 2 && <circle cx="6" cy="6" r="8.5" fill={style === 0 ? '#c9b594' : style === 1 ? '#cf7f4c' : style === 3 ? '#31251b' : '#06131f'} stroke={emblemInk} stroke-width="0.8" opacity={style === 0 ? 0.85 : 1} />}
-          <path d={EMBLEM[role]} fill={role === 'inventor' || role === 'scholar' || role === 'artist' ? 'none' : emblemInk} stroke={emblemInk} stroke-width="1" stroke-linejoin="round" stroke-linecap="round" />
+          <path d={EMBLEM[role]} fill={role === 'inventor' || role === 'scholar' || role === 'artist' || role === 'consort' || role === 'claimant' ? 'none' : emblemInk} stroke={emblemInk} stroke-width="1" stroke-linejoin="round" stroke-linecap="round" />
         </g>
       )}
     </svg>

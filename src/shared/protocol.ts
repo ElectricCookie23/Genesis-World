@@ -146,6 +146,8 @@ export interface NationInfo {
   pop: number; towns: number;
   culture: string; language: string;
   ruler: string; rulerSince: number; house: string; houseReigns: number;
+  /** Id of the ruling house, or -1. */
+  houseId: number;
   eventId: number;
 }
 
@@ -176,9 +178,41 @@ export interface PersonInfo {
   era: number;
   /** The ruler they served and a rival, by name ('' if none). */
   patron: string; rival: string;
-  house: string;
+  house: string; houseId: number;
   /** What they are remembered for: the title and id of the first event they are tied to. */
   deed: string; eventId: number;
+}
+
+/** One member of a ruling house, for its family tree. */
+export interface HouseMember {
+  id: number; name: string; role: string;
+  /** Parent among the members shown, or -1. */
+  parent: number;
+  /** Generation, counted from the first of the house shown. */
+  gen: number;
+  born: number; died: number; fate: string;
+  /** Years of rule (from, to; to is -1 while reigning), or -1 and -1 for one who never ruled. */
+  reignFrom: number; reignTo: number;
+  /** The nation they ruled or lived in. */
+  nation: string;
+  /** Husband or wife, and the house they came from ('' if none on record). */
+  spouse: string; spouseHouse: string;
+  /** A throne they could claim through a parent ('' if none). */
+  claim: string;
+  /** Wars and civil wars that began in their reign: titles, oldest first (at most four). */
+  wars: string[];
+  era: number; bold: number; cruel: number;
+}
+
+/** A ruling house and its family tree (system E7). */
+export interface DynastyDetail {
+  id: number; name: string; nation: number; nationName: string; species: number;
+  founded: number; ended: number; reigns: number; generations: number;
+  /** The house it is a branch of ('' if none), and that house's id (-1 if none). */
+  branchOf: string; branchId: number;
+  /** Houses that branched from this one. */
+  branches: { id: number; name: string; nation: string }[];
+  members: HouseMember[];
 }
 
 /** Everything about one nation that is too big to send all the time. */
@@ -190,7 +224,9 @@ export interface NationDetail {
   people: PersonInfo[];
   tech: TechCell[];
   /** Its rulers on record, oldest first. */
-  rulers: { name: string; from: number; to: number; fate: string; house: string }[];
+  rulers: { name: string; from: number; to: number; fate: string; house: string; houseId: number }[];
+  /** Its ruling houses, latest first. */
+  houses: { id: number; name: string; founded: number; ended: number; reigns: number; generations: number }[];
 }
 
 /** A point in history the user can rewind to. */
@@ -220,6 +256,7 @@ export type ToWorker =
   | { type: 'load'; save: unknown; diverge?: boolean }
   | { type: 'requestLayer'; kind: 'diversity' | 'oxygen' }
   | { type: 'requestNation'; id: number }
+  | { type: 'requestDynasty'; id: number }
   | { type: 'rewindLimit'; count: number }
   /** Jump ahead by running the sim flat out (used by automated checks). */
   /** Jump ahead. It stops where a history begins, unless `through` is set (for scripts that need to reach a date). */
@@ -236,6 +273,7 @@ export type FromWorker =
   | { type: 'saved'; slot: string; save: unknown }
   | { type: 'layer'; kind: 'diversity' | 'oxygen'; values: Float32Array }
   | { type: 'nation'; detail: NationDetail }
+  | { type: 'dynasty'; detail: DynastyDetail }
   | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[] }
   | { type: 'timeline'; points: TimelinePoint[] }
   | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }

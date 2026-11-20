@@ -51,6 +51,37 @@ Settlement dressing that the reviews found missing (bare ground between building
 - **Harbour:** watercraft 37, 38 `ramp` (jetty), 28, 29 buoys, 30 to 32 cargo containers (modern).
 - **Rocks:** survival 38 to 45 (grey and sand-coloured), fantasy town 49 to 51.
 
+## Second pass: Poly Pizza (poly.pizza), CC0 models only
+
+3,521 Poly Pizza models are on the Mac; the sheets below show only those whose page says **Public Domain (CC0)** (folder `polypizza/`). The credit-required ones (`polypizza-attribution/`, CC-BY) are a larger set and have not been previewed. Four of eight sheets were looked at: `pp-trees.jpg`, `pp-coral-kelp-mushroom.jpg`, `pp-temples-towers.jpg`, `pp-huts-houses.jpg`. Not looked at: `pp-pine-palm`, `pp-rocks-bones`, `pp-modern`, `pp-boats`. Authors vary per model; each model's page and author are in the Mac's `MANIFEST.md`. Triangle counts run from tens to tens of thousands, so check the `.json` beside each sheet before picking.
+
+These fill the gaps the Kenney packs left:
+
+| Need | Candidates (sheet, tile) | Fit |
+|---|---|---|
+| **umbrella tree** (no Kenney match) | `pp-trees` 16 `Tree`: flat spreading dark-green crown on a forked trunk | The right silhouette. |
+| **broadleaf with a branch structure** | `pp-trees` 33 to 36 `Twisted_Tree` (red tufted foliage on gnarled branches), 22, 26, 29 `Tree` (leafy clumps on bent trunks), 28 `Tree` (smooth rounded lobes) | Closest to "real leaf volume" seen so far; the twisted trees have clumped foliage rather than cards. |
+| **alien-looking trees** | `pp-trees` 21 `Tree_Light` (purple curling stem with yellow globes), 24 `Tree_Spiral` (dark ribbon spiral) | Suit a non-Earth world better than anything else collected. |
+| dead trees, stumps | `pp-trees` 3 to 6, 25 | For burnt, drowned or winter ground. |
+| palm, conifer | `pp-trees` 8, 9 palms; 10, 15 detailed pines; 12 snowy pine | Good. |
+| **giant mushroom** | `pp-coral-kelp-mushroom` 6, 7, 14 (cap on stalk), 13 (cluster of thin-stalked caps), 11 `Mushroom_Laetiporus` (bracket fungus) | Good. |
+| fern | `pp-coral-kelp-mushroom` 4 `Fern` | A true frond rosette, which Kenney lacked. |
+| kelp | `pp-coral-kelp-mushroom` 18 `Seaweed` | One thin stalk with leaves; usable. |
+| **coral fan** | none | The "coral" search returned fish and a row of tiny pieces (tile 2 `Coral_Reef_Set`, too small to judge). Still a gap. |
+| bottle tree | none | Still a gap. |
+| **hut** (complete buildings, not parts) | `pp-huts-houses` 30 to 32 `Hut` (thatched open-sided), 33 `Huts`, 29 `Gazebo`, 36 `Wood_Tent_2`, 39 to 41 tents, 38 `Campfire` (with cooking pot) | Good for camps and first villages. |
+| **house** | `pp-huts-houses` 2, 4 `House` (tiled gable roof), 15 `House` (plain thatch), 16 (half-timbered), 28 `Cottage`, 27 `Cabin_Shed`, 6 `Blacksmith`, 7, 8, 10 `Farm` (house with fenced field rows) | Good, and complete. The farms come with their plots, which is what the towns lack. |
+| **hall / town house** | `pp-huts-houses` 12 `Fantasy_House`, 14, 17 `House` (slate roof), 21, 23 to 25 `Town_House` | Good for mid eras. |
+| **tower blocks** (late eras) | `pp-huts-houses` 11 `Big_Building`, 19, 20 `Large_Building`; `pp-temples-towers` 25, 26, 41 skyscrapers | Better than plain window-grid boxes. |
+| **temple** | `pp-temples-towers` 35, 37, 38 `Temple` (grey stone with red spire), 36 `Temple_First_Age` (stepped wooden), 34 `Shrine`, 33 `Church` | Good; several eras. |
+| **tower / castle** | `pp-temples-towers` 39 `Bell_Tower`, 40 `Guard_Tower`, 43, 46, 47 watch towers; 1, 2, 5 to 9 castles and fortresses | Good. |
+| **dome** | `pp-temples-towers` 10 `Base_Large`, 12 `Geodesic_Dome`, 13 `House_Cylinder`, 11 `Cloche` | Good for far-future settlements. |
+| **monuments, statues** | `pp-temples-towers` 19 `Fox_Statue`, 22 `Stag_Statue`, 31, 32 `Town_Center` (statue in a pool with hedges), 18 pillar, 23 `Wooden_Monument` | Good. |
+| ruins | `pp-temples-towers` 29 `Fortress`, 30 `Modular_Ruins_Pack` | Usable for dead towns, which the game now has many of. |
+| power lines | `pp-temples-towers` 44, 45 `Transmission_Tower` | For industrial eras. |
+
+Not suitable although they matched the search: cartoon characters (`pp-coral-kelp-mushroom` 5, 8, 10, 16), fish (1, 3), a pickaxe (17), a target (`pp-temples-towers` 16) and a can (27).
+
 ## Caveats
 
 - These are bright, toy-like and Earth-coloured. The game's worlds have their own pigments (the review world is violet), so they need the tint treatment above or they will clash.
