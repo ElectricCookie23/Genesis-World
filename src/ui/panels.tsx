@@ -775,6 +775,7 @@ export function NationPanel() {
           <p class={css.sub} style={{ margin: '0 0 8px' }}>
             {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}){realm.ended >= 0 ? ' (the nation is gone)' : ''}. {realm.calendar && realm.ended < 0 ? `${dateIn({ name: realm.calendar, epoch: realm.calendarEpoch }, year)} (sim year ${Math.floor(year).toLocaleString('en-US')}). ` : ''}{d.tech.filter((t) => t.state === 1).length} of {d.tech.filter((t) => t.state !== 2).length} things its land allows are known.
             {' '}Its land offers {d.land.length ? d.land.join(', ') : 'little'}{d.land.includes('ore') ? '' : '; no ore, so no metal'}.
+            {' '}Its people are the {realm.culture} and speak <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openLanguages(realm.language)}>{realm.language}</button>.
           </p>
         )}
         {d && ERA_NAMES.map((era, e) => {
@@ -847,6 +848,7 @@ export function Peoples() {
         {(s.stats?.longPeace ?? -1) >= 0 && s.nations.length > 0 && (
           <p class={css.sub} style={{ margin: '0 0 8px' }}>The long peace, {Math.max(0, Math.round((s.stats?.simYear ?? 0) - (s.stats?.longPeace ?? 0))).toLocaleString('en-US')} years old. History is no longer made here: these nations and their towns live on as they are, by custom, until the planet disturbs them.</p>
         )}
+        {s.realms.some((r) => r.ended < 0) && <p class={css.sub} style={{ margin: '0 0 6px' }}><button class={css.link} title="The family tree of the languages spoken now, and their words side by side" onClick={() => actions.openLanguages()}>the languages they speak</button></p>}
         {s.nations.length > 0 && <div class={css.sub} style={{ margin: '4px 0 6px' }}>NATIONS</div>}
         {[...s.nations].sort((a, b) => b.pop - a.pop).slice(0, 24).map((n) => {
           const cap = s.settlements.find((x) => x.id === n.capital);
@@ -871,7 +873,7 @@ export function Peoples() {
               </div>
               <span style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
                 {cap && <button class={css.link} style={{ marginRight: 0 }} onClick={() => { actions.setOverlay('nations'); actions.flyToCell(cap.cell, 1.2); }}>map</button>}
-                {(() => { const realm = s.realms.find((r) => r.ended < 0 && r.capital === n.capital) ?? s.realms.find((r) => r.ended < 0 && r.name === n.name); return realm ? <><button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.id)}>knowledge</button>{realm.houseId >= 0 && realm.ruler && <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openDynasty(realm.houseId)}>family tree</button>}{realm.calendarEvent >= 0 && s.events[realm.calendarEvent] && <button class={css.link} style={{ marginRight: 0 }} title="The event their years are counted from" onClick={() => update({ whyEvent: realm.calendarEvent })}>year one</button>}</> : null; })()}
+                {(() => { const realm = s.realms.find((r) => r.ended < 0 && r.capital === n.capital) ?? s.realms.find((r) => r.ended < 0 && r.name === n.name); return realm ? <><button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.id)}>knowledge</button>{realm.houseId >= 0 && realm.ruler && <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openDynasty(realm.houseId)}>family tree</button>}{realm.calendarEvent >= 0 && s.events[realm.calendarEvent] && <button class={css.link} style={{ marginRight: 0 }} title="The event their years are counted from" onClick={() => update({ whyEvent: realm.calendarEvent })}>year one</button>}<button class={css.link} style={{ marginRight: 0 }} title={`They speak ${realm.language}`} onClick={() => actions.openLanguages(realm.language)}>language</button></> : null; })()}
               </span>
             </div>
           );

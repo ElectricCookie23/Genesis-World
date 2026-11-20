@@ -1,7 +1,7 @@
 // Tiny observable store shared by the Preact UI and the app.
 import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
-import type { DynastyDetail, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
+import type { DynastyDetail, LanguageInfo, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 import type { Nation } from '../render/gfx/nations';
 import type { GoalRecord, GoalState } from '../game/goals';
 import type { CosmosInfo } from '../sim/cosmos';
@@ -11,7 +11,7 @@ import type { StrangeInfo } from '../sim/strange';
 import type { FutureInfo } from '../sim/future';
 import type { IndustryInfo } from '../sim/industry';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'goals' | 'system' | 'microscope';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'tongues' | 'goals' | 'system' | 'microscope';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
 
 /** One person in an individual's family tree; key is set when that relative is drawn in the world and can be selected. */
@@ -66,6 +66,9 @@ export interface UIState {
   siteDetail: SiteDetail | null;
   /** The ruling house whose family tree is open. */
   dynastyDetail: DynastyDetail | null;
+  /** The languages of the world, when they have arrived (system E21), and the one being looked at (its id, or -1 for the most spoken). */
+  languages: { lexicon: string[]; sayings: string[]; list: LanguageInfo[] } | null;
+  tongue: number;
   timeline: TimelinePoint[];
   /** Set while two futures run side by side. */
   other: OtherFuture | null;
@@ -145,6 +148,8 @@ export const state: UIState = {
   realms: [],
   nationDetail: null,
   dynastyDetail: null,
+  languages: null,
+  tongue: -1,
   siteDetail: null,
   timeline: [],
   other: null,
@@ -231,6 +236,8 @@ export const actions = {
   /** Open the knowledge and rulers of a nation (by the simulation's nation id). */
   openNation: (_id: number) => {},
   openDynasty: (_id: number) => {},
+  /** Open the languages of the world, at one of them if its name is given. */
+  openLanguages: (_name?: string) => {},
   /** Open the dig view of a town's site. */
   openSite: (_id: number) => {},
   /** How a town's builders build and of what, in a sentence. */

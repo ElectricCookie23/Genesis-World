@@ -88,6 +88,8 @@ async function boot(): Promise<void> {
   const autoKey = `genesis:auto:${seed}`;
   // a save to load as soon as the world is ready: a named slot (?slot=n) or this seed's autosave
   let pendingLoad: unknown = null;
+  /** The name of a language the panel was asked to open before the list of languages had arrived. */
+  let pendingTongue = '';
   try {
     const slot = params.get('slot');
     const saved = params.has('fresh') ? null : slot ? await get(`genesis:slot:${slot}`) : await get(autoKey);
@@ -263,6 +265,12 @@ async function boot(): Promise<void> {
   actions.cellDir = (cell) => { const p = grid.pos; return [p[cell * 3]!, p[cell * 3 + 1]!, p[cell * 3 + 2]!]; };
   actions.timelapse = (id, cell) => { actions.flyToCell(cell, 0.045); update({ panel: 'none' }); window.setTimeout(() => scene.timelapse(id), 1800); };
   actions.openSite = (id) => { update({ panel: 'site', siteDetail: state.siteDetail?.id === id ? state.siteDetail : null }); send({ type: 'requestSite', id }); };
+  actions.openLanguages = (name) => {
+    const known = name ? state.languages?.list.find((l) => l.name === name) : undefined;
+    pendingTongue = known || !name ? '' : name;
+    update({ panel: 'tongues', tongue: known ? known.id : name ? state.tongue : -1 });
+    send({ type: 'requestLanguages' });
+  };
   actions.openDynasty = (id) => { update({ panel: 'dynasty', dynastyDetail: state.dynastyDetail?.id === id ? state.dynastyDetail : null }); send({ type: 'requestDynasty', id }); };
   actions.openNation = (id) => { update({ panel: 'nation', nationDetail: state.nationDetail?.id === id ? state.nationDetail : null }); send({ type: 'requestNation', id }); };
   actions.setOverlay = (o) => {
@@ -738,6 +746,12 @@ async function boot(): Promise<void> {
       case 'site':
         update({ siteDetail: msg.detail });
         break;
+      case 'languages': {
+        const want = pendingTongue ? msg.list.find((l) => l.name === pendingTongue) : undefined;
+        pendingTongue = '';
+        update(want ? { languages: { lexicon: msg.lexicon, sayings: msg.sayings, list: msg.list }, tongue: want.id } : { languages: { lexicon: msg.lexicon, sayings: msg.sayings, list: msg.list } });
+        break;
+      }
       case 'dynasty':
         update({ dynastyDetail: msg.detail });
         break;

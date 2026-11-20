@@ -5,6 +5,7 @@ import { SkyMessage, System } from './system';
 import { Microscope, Pulse } from './strange';
 import { bigNumber, formatYear } from './format';
 import { DynastyPanel } from './dynasty';
+import { LanguagesPanel } from './tongues';
 import { SitePanel } from './site';
 import { Chronicle, CreatureCard, CrossSection, Designer, FlatMap, Experiments, Graphs, Guide, Futures, Help, NationLabels, NationPanel, Num, Peoples, Settings, SpeciesCard, TimelineStrip, Tree, Why } from './panels';
 import css from './ui.module.css';
@@ -60,6 +61,7 @@ export function App() {
           {s.panel === 'peoples' && <Peoples />}
           {s.panel === 'nation' && <NationPanel />}
           {s.panel === 'dynasty' && <DynastyPanel />}
+          {s.panel === 'tongues' && <LanguagesPanel />}
           {s.panel === 'site' && <SitePanel />}
           {s.panel === 'graphs' && <Graphs />}
           {s.panel === 'goals' && <Goals />}

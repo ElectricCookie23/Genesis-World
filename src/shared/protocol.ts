@@ -142,6 +142,26 @@ export interface PlantInfo {
   cover: number;
 }
 
+/** A language as the page sees it (system E21): where it stands in its family, who speaks it, and how it sounds. */
+export interface LanguageInfo {
+  id: number;
+  /** The language it split from (-1 for the first of a family), and the family it belongs to. */
+  parent: number; family: number;
+  name: string;
+  /** The year it parted from its parent (or was first spoken). */
+  born: number;
+  /** Who speaks it now, in words ("" if no one does), and how many they are, in thousands. */
+  speakers: string; people: number;
+  /** Its sounds and its grammar, each in a sentence or two. */
+  sounds: string; grammar: string;
+  /** Its words for the shared list of meanings, in the order of that list. */
+  words: string[];
+  /** The sound changes it has been through since its family began: the year and what happened. */
+  changes: { year: number; note: string }[];
+  /** The same few sentences said in it: the words, and under each what it means. */
+  samples: { text: string; gloss: string }[];
+}
+
 /** A wonder as the page sees it (system E19): what it is, who raised it and when, and the event that inspired it. */
 export interface WonderInfo {
   id: number;
@@ -340,6 +360,7 @@ export type ToWorker =
   | { type: 'requestLayer'; kind: 'diversity' | 'oxygen' }
   | { type: 'requestNation'; id: number }
   | { type: 'requestDynasty'; id: number }
+  | { type: 'requestLanguages' }
   | { type: 'requestSite'; id: number }
   | { type: 'rewindLimit'; count: number }
   /** Jump ahead by running the sim flat out (used by automated checks). */
@@ -358,6 +379,7 @@ export type FromWorker =
   | { type: 'layer'; kind: 'diversity' | 'oxygen'; values: Float32Array }
   | { type: 'nation'; detail: NationDetail }
   | { type: 'dynasty'; detail: DynastyDetail }
+  | { type: 'languages'; lexicon: string[]; sayings: string[]; list: LanguageInfo[] }
   | { type: 'site'; detail: SiteDetail }
   | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[] }
   | { type: 'timeline'; points: TimelinePoint[] }

@@ -203,6 +203,8 @@ export interface HistoryState {
   peacePop?: number;
   /** The year the leading nation reached the top of knowledge, or -1. */
   topSince?: number;
+  /** The event of the first time a people was found to speak a language of its own (system E21), if it has happened. */
+  firstTongue?: number;
   /** The first building law of each kind anywhere (system E20): the events that recorded them. */
   firstCodes?: { fire?: number; quake?: number; flood?: number };
   /** The wonders of this history (system E19): giant works, each raised because of something that really happened. */
