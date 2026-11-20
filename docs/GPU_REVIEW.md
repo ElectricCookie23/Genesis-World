@@ -13,6 +13,34 @@ This is the second version. The first was cut short by a flat battery; this one 
 - Roughly 60 of about 230 captures were looked at. Each finding names the files it rests on; the rest are listed at the end.
 - For part of the second run the machine's owner was also using the same browser window, so the Genesis tab may have been in the background at times. The frame-rate table was finished before that; the creature captures after it were checked to be in a visible tab.
 
+## Check of commit 6dddd2d (2026-11-21)
+
+Deploy run for `6dddd2d` green before testing; the page served `assets/index-DySXvzft.js` from start to end (a docs-only push of mine redeployed the site during the run; the open page kept its bundle). WebGPU, High, seed `amber-reef-101`, mains power. One world: a plain warp to the dawn of history, `through: true` for 100,000 years (town captures), then `through: true` on to 200 My (everything else). Files start `retest6-`; 10 of about 30 were looked at. Console over the run: `x2 Failed to load resource: the server responded with a status of 404 ()`, `x42 Max polyphony exceeded. Note dropped.`
+
+**Both blockers are fixed.** The plain warp stopped by itself at 59.03 My (3 towns, 1 realm). After 100,000 more years: 1,001 living towns, 95 realms, `tech` 0.06 to 1.2. At 200 My: 1,287 living towns of 1,587 records, 87 realms, `tech` 0.44 to 0.72. `through: true` ran without stopping and `simYear` advanced during the warp. The 141 My leg took about 12 minutes with a live civilization (it was about 2 minutes on a dead world).
+
+| # | Item | Result | Evidence |
+|---|---|---|---|
+| 1 | Large town at night ("Mounpoke", `pop` 613, `tech` 1.17, `(0.767, -0.466)`) | **Fixed.** From `dist 0.08` and `0.02` there are no painted patches and no glowing ribbon; lit windows carry the scene, and the town reads clearly from 0.08 as clusters of warm points. From the ground each lit tower has a wide pink-white halo and the air between them glows red, so it is on the bright side, but it reads as a city at night. From 0.3 and orbit: captured, not looked at. | `retest6-webgpu-large-night-0.08.jpg`, `-large-night-0.02.jpg`, sun +2.8 |
+| 2 | Early village at night ("Chattactewa", `pop` 13.3, `tech` 0.06, `(0.668, -0.138, 0.006)`) | **Fixed for fires.** Three small flame-shaped lights sit on the ground among the trees and light nothing around them. No hut is recognisable in the frame (dark, under a broadleaf canopy), so "a fire by each hut" was not confirmed. Houses with lit windows: captured (`-houses-night-0.02.jpg`), not looked at. | `-early-night-0.006.jpg` |
+| 3a | Worked earth between buildings | **Not fixed, as far as this view shows.** In the large town by day the ground between domes and towers is the same hummocky terrain thick with tall purple grass tufts, right up to the walls. No bare or trodden ground is visible. | `-large-day-0.006.jpg` |
+| 3b | Buildings overlapping | **Fixed** in the frames seen: buildings stand apart. | `-large-day-0.006.jpg`, `-wader-close.jpg` |
+| 3c | Huts in the surf | **Fixed** at the coastal town checked ("Kimanarap", 0.01 km above sea): houses sit on the hilltop, none at the waterline. | `-coastal-day-0.006.jpg`, `(2.848, -0.246)` |
+| 4 | Night Map labels | **Overlap fixed.** Five labels shown, none overlapping. Two of them ("Momarori", "Momakesri") sit outside the planet's left edge, pointing at territory on the limb. Only 5 names for 95 realms. | `-night-map.jpg` |
+| 5 | Broadleaf forest from inside | **Partly seen.** My forest pick landed on a bay, so there is no inside view. The broadleaf crowns in the foreground of the holes view are full, rounded masses of rosettes with no edge-on spikes, clearly better than before. Trunks, boughs and bark were not seen. | `-holes-view.jpg` |
+| 6 | Land animals on the sea | **Fixed by the numbers.** Across five land species near their home cells, 1,543 individuals, 767 of them land walkers: 8 were over water, all in the shallows (water 0.06 to 0.54 units deep), none over deep water, **none standing on the surface** (feet 0.06 to 0.54 below it). The close-up meant to show a wader shows a shoreline with towers and no animal identifiable, so how a wading animal *looks* is not judged. | logs; `-wader-close.jpg` |
+| 7 | Night side from orbit | **A little better.** Land shows as dark red-brown patches near the lights and the cloud belt is clear, but away from settlements land and sea are still the same near-black. City lights are plentiful and attractive. A hard white dot sits on the cloud belt. | `-night-orbit.jpg` |
+| 8 | Sky at altitude on WebGL2; small island | **Not done** in this run. | |
+| 9 | **Holes in the land** at `setImmediate(2.86, 0.18, 0.06)`, tilt -0.35, sun +0.5, 200 My | **Not reproduced.** The view is a solid forested hill: dense conifers, broadleaf crowns in front, a strip of water and a bare hill behind. No openings, no coloured lines. With `scene.ocean.sphere.mesh.visible = false` the luminance barely changed (0.216 to 0.221). Recorded there: terrain `patchCount` 413 of `max` 1200, ocean `patchCount` 187 of `max` 1000, `stats.seaLevel` 0.0204, focus cell 8851 at 3.571 km above sea with neighbours 3.472, 3.183, 2.001, 1.596, 3.099, 1.474, camera radius 1.03281. A diagnostic dump was saved as `retest6-webgpu-holes-view-diagnose.json` for comparison. In the broken capture this cell was coast or sea, so the two worlds differ at this spot; the earlier world came from bundle `Btwbmnw6`. | `-holes-view.jpg`, `-holes-view-no-ocean.jpg` (not looked at), `-holes-view-diagnose.json` |
+| 10 | Anything worse | Nothing worse seen. | |
+
+**New observations**
+
+1. In the coastal view a **hard straight foam line runs the full width of the frame** between a strip of land and the sea in front of it, where turquoise shallows meet the shore in a step rather than a shoreline (`-coastal-day-0.006.jpg`).
+2. Large-town buildings are still plain white boxes with window grids and pink roofs; the two spired towers and red domes read well from a distance.
+3. Large animals are visible walking the skyline behind the town at about the height of a tower block (`-large-day-0.006.jpg`, top left).
+4. Rain streaks show over the forest in the holes view.
+
 ## Check of commit 6249d6c: not completed (2026-11-20)
 
 **None of the nine requested items could be judged.** The builds that were live during this check behave differently under a fast-forward, and by the time the worlds reached the usual test age there was no living civilization to look at. What follows is what happened, as findings in their own right. WebGPU, High, seed `amber-reef-101`, mains power. Files start `retest5-`; one was looked at.
