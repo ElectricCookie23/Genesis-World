@@ -11,6 +11,7 @@
 import { G, GENE_COUNT, P, PHEN_COUNT, computePhenotype } from './genetics';
 import { RNG, hashSeed } from './rng';
 import type { Simulation } from './simulation';
+import { calendarName, dateIn, type Calendar, type CalendarKind } from './history/calendar';
 import { Log } from './history/celllog';
 import { eraOf, eraSlot, eraTitle, earthNote } from './history/eras';
 import { hash32 } from './history/hash';
@@ -67,6 +68,7 @@ const LAST_WAR_MEMORY = 6000;
 const LONGEST_HISTORY = 40000;
 
 const sat = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
+const NTH = ['Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth'];
 /** How far from its capital a nation of each era can hold a town, counted in regions (the spacing of neighbouring towns). */
 const REACH = [2.5, 3.5, 4.5, 6, 10, 14, 22, 45, 99, 99];
 
@@ -256,6 +258,8 @@ export class Civilization {
       }
       // ---- how well it holds together, and what happens when it does not (system E4)
       if (this.fate(sim, rng, n, towns, y, year)) continue;
+      // ---- a people that charts the stars fixes its count of years (system E8)
+      if (this.fine && n.know.way[SLOT_INDEX.get('sky2')!]! >= 0 && this.calendarOf(n)?.kind === 'founding' && rng.chance(1 - Math.exp(-y / 40))) this.reformCalendar(sim, rng, n, year);
       // ---- in hard years a preacher may rise
       if (this.fine && n.woes.length && year - n.woes[n.woes.length - 1]!.year < 25 && rng.chance(1 - Math.exp(-y * 0.006))) this.preacher(sim, rng, n, year);
       // ---- a new era
@@ -300,6 +304,8 @@ export class Civilization {
       this.departed = true; this.departedYear = year;
       { const at = sim.events.events.length, lead = this.leadTown(); sim.civEvent('departure', this.sapient[0]!, -1, -1); if (lead) this.stepForward(sim, lead, at, 'The captain of the first ship out was {name}.', 'explorer'); }
     }
+    // ---- the sky as people see it (system E8); nothing is recorded of it under a fast-forward
+    if (this.fine) this.sky(sim, rng, y, year);
     // ---- the long peace: a history does not go on for ever
     let top = 0;
     for (const n of h.nations) if (n.ended < 0 && n.tech > top) top = n.tech;
@@ -1106,6 +1112,104 @@ export class Civilization {
     } else { house.reigns += reigns; house.generations = (house.generations ?? 1) + Math.round(reigns * 0.8); }
   }
 
+  /** The count of years a nation keeps. */
+  calendarOf(n: Nation): Calendar | undefined {
+    return this.h.calendars?.[n.calendar ?? -1];
+  }
+
+  /** A date in a nation's own count: "Year 412 of the Falling Light". */
+  dateFor(n: Nation, year: number): string {
+    const cal = this.calendarOf(n);
+    return cal ? dateIn(cal, year) : '';
+  }
+
+  /**
+   * A new count of years (system E8), tied to an event in the cause graph. If the event was never recorded
+   * (it happened under a fast-forward) the count is tied to the nearest thing that was: the nation's own
+   * founding, or the dawn of its history.
+   */
+  private newCalendar(sim: Simulation, n: Nation, year: number, kind: CalendarKind, eventId: number, epoch: number, detail: string, who: string): Calendar {
+    const h = this.h;
+    const list = (h.calendars ??= []);
+    const real = eventId >= 0 && sim.events.events[eventId] ? eventId : n.eventId >= 0 ? n.eventId : h.dawnEvent ?? -1;
+    let [name, head, modifier] = calendarName(kind, hash32(this.seedNum, list.length, n.id), detail, who);
+    // two peoples may count from different returns of the same comet: their counts must not share a name
+    for (let salt = 1; salt < 7 && list.some((c) => c.name === name && Math.floor(c.epoch) !== Math.floor(epoch)); salt++) [name, head, modifier] = calendarName(kind, hash32(this.seedNum, list.length, n.id, salt), detail, who);
+    const taken = (text: string) => list.some((c) => c.name === text && Math.floor(c.epoch) !== Math.floor(epoch));
+    if (taken(name)) name = `${name} of ${this.settlements[n.capital]?.name ?? n.name}`;
+    // (the same town can be the seat of more than one beginning)
+    if (taken(name)) { const base = name.replace(/^the /, ''); let k = 2; while (taken(`the ${NTH[Math.min(k, NTH.length) - 2]} ${base}`) && k < NTH.length + 1) k++; name = `the ${NTH[Math.min(k, NTH.length + 1) - 2] ?? 'Later'} ${base}`; if (taken(name)) name = `${name}, as counted in ${n.name}`; }
+    const cal: Calendar = { id: list.length, name, own: compound(this.languageOf(n), head, modifier, year), epoch, eventId: real, kind, nation: n.id, set: year };
+    list.push(cal);
+    return cal;
+  }
+
+  /**
+   * A nation that can chart the stars fixes its count of years on the thing its people remember best: a sight
+   * in the sky, a disaster they lived through, a prophet's teaching, or the crowning of the house that rules them.
+   */
+  private reformCalendar(sim: Simulation, rng: RNG, n: Nation, year: number): void {
+    const h = this.h;
+    const culture = h.cultures[n.culture]!;
+    const house = h.dynasties[n.dynasty];
+    type Memory = { kind: CalendarKind; eventId: number; year: number; detail: string; who: string; weight: number };
+    const memories: Memory[] = [];
+    const ev = (id: number) => (id >= 0 ? sim.events.events[id] : undefined);
+    if (h.sign && year - h.sign.year < 120 && ev(h.sign.eventId)) memories.push({ kind: h.sign.kind, eventId: h.sign.eventId, year: h.sign.year, detail: '', who: '', weight: h.sign.kind === 'eclipse' ? 0.9 : 0.55 });
+    for (const w of n.woes) { const e = ev(w.eventId); if (e && (w.kind === 'disaster' || w.kind === 'plague')) memories.push({ kind: 'disaster', eventId: e.id, year: w.year, detail: `${e.type} ${e.title}`, who: '', weight: 0.9 }); }
+    for (let i = h.people.length - 1, seen = 0; i >= 0 && seen < 400; i--, seen++) {
+      const p = h.people[i]!;
+      if (p.role === 'prophet' && p.nation === n.id && year - p.rose < 150 && ev(p.events[0] ?? -1)) { memories.push({ kind: 'prophet', eventId: p.events[0]!, year: p.rose, detail: '', who: p.name, weight: 0.7 + 0.6 * culture.faith }); break; }
+    }
+    if (house && house.ended < 0) {
+      const crowned = ev(h.people[house.founder]?.events[0] ?? -1);
+      if (crowned && house.reigns >= 2) memories.push({ kind: 'crown', eventId: crowned.id, year: house.founded, detail: '', who: house.name, weight: 0.5 + 0.1 * Math.min(6, house.reigns) });
+    }
+    if (!memories.length) return;
+    let total = 0;
+    for (const m of memories) total += m.weight;
+    let roll = rng.next() * total, chosen = memories[0]!;
+    for (const m of memories) { roll -= m.weight; if (roll <= 0) { chosen = m; break; } }
+    const cal = this.newCalendar(sim, n, year, chosen.kind, chosen.eventId, chosen.year, chosen.detail, chosen.who);
+    n.calendar = cal.id;
+    const cap = this.settlements[n.capital]!;
+    const first = !h.calendars!.some((c) => c.id !== cal.id && c.kind !== 'founding');
+    const remembered = sim.events.events[cal.eventId]!;
+    const out = sim.emit({
+      type: 'calendar', year, cellId: cap.cell, title: first ? 'The first calendar' : `${n.name} counts its years anew`,
+      description: `The star-watchers of ${cap.name} fix the count of years for ${n.name}. Year 1 is the year of ${cal.name}: "${remembered.title}". In their own tongue the count is ${cal.own}. By it, this is ${dateIn(cal, year)}.`,
+      causes: [cal.eventId, n.eventId].filter((x, i, a) => x >= 0 && a.indexOf(x) === i), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, calendar: cal.id },
+    });
+    this.credit(sim, rng, n, out.id, '{name} worked out the count.', 'scholar', year);
+  }
+
+  /** The sky on a human clock: a small comet that comes back within living memory, and now and then an eclipse. */
+  private sky(sim: Simulation, rng: RNG, y: number, year: number): void {
+    const h = this.h;
+    const watchers = h.nations.filter((n) => n.ended < 0 && n.know.way[SLOT_INDEX.get('sky1')!]! >= 0);
+    if (!watchers.length) return;
+    const v = (h.visitor ??= { period: 46 + (hash32(this.seedNum, 0xc0e7) % 70), next: year + (hash32(this.seedNum, 0xc0e8) % 60), last: -1 });
+    if (year >= v.next) {
+      v.next += v.period * Math.max(1, Math.ceil((year - v.next + 1) / v.period));
+      const seen = rng.pick(watchers), cap = this.settlements[seen.capital]!;
+      const ev = sim.emit({
+        type: 'comet', year, cellId: cap.cell, title: 'The Visitor returns',
+        description: v.last < 0 ? `A small comet hangs in the dusk over ${cap.name}. Those who keep the count of days mark it, in case it comes again.` : `The small comet is back over ${cap.name}, ${v.period} years after it was last seen, as the count said it would be.`,
+        causes: v.last >= 0 ? [v.last] : [], importance: 0, speciesIds: [seen.species], data: { nation: seen.id },
+      });
+      if (ev.id >= 0) { v.last = ev.id; h.sign = { eventId: ev.id, year, kind: 'comet' }; this.credit(sim, null, seen, ev.id, 'It was seen in the reign of {name}.'); }
+    }
+    if (rng.chance(1 - Math.exp(-y / 170))) {
+      const seen = rng.pick(watchers), cap = this.settlements[seen.capital]!;
+      const ev = sim.emit({
+        type: 'eclipse', year, cellId: cap.cell, title: `Eclipse over ${cap.name}`,
+        description: `At noon the sun goes dark over ${cap.name}. For a few minutes the stars come out and no one in the streets speaks.`,
+        causes: [], importance: 0, speciesIds: [seen.species], data: { nation: seen.id },
+      });
+      if (ev.id >= 0) { h.sign = { eventId: ev.id, year, kind: 'eclipse' }; this.credit(sim, null, seen, ev.id, 'It was the reign of {name}.'); }
+    }
+  }
+
   /** True while a marriage between the ruling houses keeps nation `n` from fighting nation `other`. */
   private allied(n: Nation, other: number, year: number): boolean {
     if (!n.allies || other < 0) return false;
@@ -1420,6 +1524,12 @@ export class Civilization {
     });
     n.eventId = ev.id;
     first.events.push(ev.id);
+    if (dawn || (h.dawnEvent ?? -1) < 0) h.dawnEvent = ev.id;
+    // its count of years (system E8): settlers and successors keep the count they were born under; a country that
+    // broke away in anger, or began on its own, counts from its own beginning
+    const old = from ? this.calendarOf(from) : undefined;
+    if (old && why !== 'successor' && !(why === 'breakaway' && rng.chance(0.5))) n.calendar = old.id;
+    else n.calendar = this.newCalendar(sim, n, year, 'founding', ev.id, year, dawn || !from ? 'dawn' : why === 'far' ? (st.overseas ? 'sea' : 'land') : why, from ? from.name : '').id;
     sim.cellLog.note(st.cell, year, Log.Owner, n.id);
     sim.cellLog.note(st.cell, year, Log.Era, n.era);
     return n;
