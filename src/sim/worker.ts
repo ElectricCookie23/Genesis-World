@@ -278,7 +278,7 @@ function stats(s: Simulation): WorldStats {
     population: s.creatures.totalPop,
     landCover: s.plants.totalLandCover / Math.max(1, s.regions.count),
     storms: s.storms.map((x) => x.cell),
-    solar: s.climate.solar, starSwell: s.cosmos.swell, starPhase: s.cosmos.starPhase,
+    solar: s.climate.solar, starSwell: s.cosmos.swell, starPhase: s.cosmos.starPhase, pulseRate: s.strange.pulseRate, health: s.strange.health, poleSign: s.strange.poleSign, poleFlip: s.strange.flipProgress(s.simYear),
     cyclones: s.storms.filter((x) => x.hurricane || x.eternal).map((x) => x.cell),
     moons: s.moons,
     ring: s.ring,
@@ -378,7 +378,7 @@ function tick(): void {
     lastCells = now;
   }
   // the rest of the star system changes slowly: told about now and then
-  if (now - lastCosmos > 1500) { lastCosmos = now; post({ type: 'cosmos', cosmos: s.cosmos.info(s), messages: s.legacy.messages, archives: s.legacy.archives, link: s.neighbor ? linkInfo(s, s.neighbor) : undefined }); }
+  if (now - lastCosmos > 1500) { lastCosmos = now; post({ type: 'cosmos', cosmos: s.cosmos.info(s), messages: s.legacy.messages, archives: s.legacy.archives, link: s.neighbor ? linkInfo(s, s.neighbor) : undefined, strange: s.strange.info(s, focus ? nearestCell(s.regions.grid, focus.x, focus.y, focus.z, focusRegion) : 0) }); }
   if (now - lastStats > 100) {
     post({ type: 'stats', stats: stats(s) });
     lastStats = now;

@@ -885,7 +885,8 @@ describe('migrations of peoples (E9)', () => {
   };
 
   it('an ice age sets a people moving, and the chronicle says why', () => {
-    const { sim, strike, before } = struck('iceage');
+    // (two strikes: how hard a world must be hit before a people leaves depends on where its towns happen to stand)
+    const { sim, strike, before } = struck('iceage', 2);
     const moves = sim.events.events.slice(before).filter((e) => e.type === 'migration');
     expect(moves.length).toBeGreaterThanOrEqual(1);
     checkMoves(sim, moves);

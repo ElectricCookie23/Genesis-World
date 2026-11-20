@@ -98,7 +98,9 @@ export class CreatureLayer {
   season = 0;
   private chase = 0;
   mounds?: InstancedMesh;
-  private moundData: { ind: Individual; size: number; hive: boolean }[] = [];
+  private moundData: { ind: Individual; size: number; hive: boolean; tower: boolean }[] = [];
+  /** Species that build their nests as narrow towers, in imitation of ruins. */
+  mimics: number[] = [];
 
 
   private material: MeshBasicNodeMaterial;
@@ -276,11 +278,12 @@ export class CreatureLayer {
       if (!info) continue;
       const hive = info.genes[G.Sociality]! > 0.8 && info.genes[G.Size]! < 0.3;
       const nest = info.genes[G.Care]! > 0.55;
-      if (!hive && !nest) continue;
+      const tower = this.mimics.includes(ind.species);
+      if (!hive && !nest && !tower) continue;
       seen.add(key);
       // Sized from the animals that build them: a hive stands about twice as tall as its builders are long, and a
       // nest is a low ring about one body wide. (Fixed sizes made hives taller than the trees around them.)
-      this.moundData.push({ ind, size: hive ? ind.size * 0.9 : ind.size * 0.5, hive });
+      this.moundData.push({ ind, size: hive ? ind.size * 0.9 : ind.size * 0.5, hive, tower });
     }
   }
 
@@ -409,7 +412,8 @@ export class CreatureLayer {
         mq.setFromUnitVectors(Y, mp);
         // nothing is built on water: a home on the shore can lie below the tide line
         const sc = r <= sea + 1e-7 ? 0 : d.size * boost;
-        ms.set(sc, sc * (d.hive ? 1.4 : 0.35), sc);
+        // a mimic's nest is a narrow stack, three times as tall as it is wide
+        if (d.tower) ms.set(sc * 0.55, sc * 2.6, sc * 0.55); else ms.set(sc, sc * (d.hive ? 1.4 : 0.35), sc);
         mm.compose(mp.clone().multiplyScalar(r), mq, ms);
         this.mounds!.setMatrixAt(i, mm);
       });

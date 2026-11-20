@@ -65,6 +65,16 @@ In their words: "i want the game to have a feature where you could play with goa
 - Platform: a download is acceptable as long as it stays easy to share; the browser version remains the base.
 - The owner also said the sessions may proceed as they judge best ("you can do whatever you want, however you want whenever you want").
 
+## Decided by the owner (2026-11-21): educational, no religion, nothing omnipotent, not Earth
+
+In their words: "it's an educational game. The whole thing is educational in nature ... the species and the animals ... they're all supposed to be unique and new, but they're not supposed to look like something that would exist on planet Earth ... No one is supposed to play like ... omnipotent in this. It's just educational in nature, and that's something that's really important to me, because I don't want this game to be blasphemous in any way ... please remove any mention of God ... There's no religion in this game, there's nothing of that sort. This is a purely educational thing in which you have environmental, geographical, ecological, and other kinds of ... factors ... rename the God tools and separate them in terms of their categories. So like environmental, ecological, genetic, etc."
+
+What this means for the work:
+- **No religion anywhere in the game.** No gods, faiths, temples, priests, prophets, prayers, omens taken as signs, holy or sacred things, worship, or peoples addressing whoever is watching. This removes or changes: the belief field on towns and the events founded on it, temples (original feature 46), prophets and preachers (E6), Religions (E24) and The Observer Faith (E25), Messages to the Observer (E99), and words such as "god" and "holy" in the generated languages' vocabularies. Festivals, stories about the past, customs, art, music, calendars and science all stay.
+- **The player is not a god.** The "God tools" become tools for an experiment, named for what they change and grouped by kind: environmental (climate, sea, land), ecological (life seeded, moved, sickened), genetic (mutation, designed species), astronomical (meteor, comet, moon, wandering planet, burst). Event types and code names that say "god" are renamed too. The framing is "what if": try a change, see how life lasts or does not.
+- **Look: plausible and readable, not realistic and not Earth.** An animal should be recognisable as an animal and as its own kind, and should not look like a species from Earth. This steers the sculpting work: anatomy that makes sense for how the creature lives, but invented forms, not wolves and deer.
+- The owner asked for the removal and the renaming to be done in the fix session's last phase, with the animal sculpting. New work by either session should follow it from now on.
+
 ## Questions still open
 
 1. Is progression wanted inside the goals mode (unlocking missions as you go), or all missions open from the start? Default if unanswered: all open.

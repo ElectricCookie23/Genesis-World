@@ -80,6 +80,8 @@ export class Plants {
   readonly seaCover: Float32Array;
   /** Set by the creature step: how hard each region's plants were grazed (0..1+). */
   readonly grazeLand: Float32Array;
+  /** How worn each region's land is, 0..1 (expansion E89): overworked ground grows less for centuries. */
+  readonly scar: Float32Array;
   readonly grazeSea: Float32Array;
   /** Dominant land plant per region, -1 if none. */
   readonly dominant: Int32Array;
@@ -120,6 +122,7 @@ export class Plants {
     this.landCover = new Float32Array(R);
     this.seaCover = new Float32Array(R);
     this.grazeLand = new Float32Array(R);
+    this.scar = new Float32Array(R);
     this.grazeSea = new Float32Array(R);
     this.dominant = new Int32Array(R).fill(-1);
     this.groundHue = new Float32Array(R).fill(0.09);
@@ -192,7 +195,7 @@ export class Plants {
     if (land <= 0) return 0;
     // without an ozone layer the land surface is sterilised by ultraviolet light
     const uv = sat((this.oxygen - 0.06) / 0.05) * (1 - this.ozoneHole * 0.8);
-    return land * (1 - reg.ice[r]!) * (0.55 + 0.45 * reg.fertility[r]!) * landSuitability(sp.genes, reg.landTemp[r]!, reg.moisture[r]!) * uv;
+    return land * (1 - reg.ice[r]!) * (0.55 + 0.45 * reg.fertility[r]!) * (1 - 0.6 * this.scar[r]!) * landSuitability(sp.genes, reg.landTemp[r]!, reg.moisture[r]!) * uv;
   }
 
   /** One ecological step. tau is the step size (1 = a full step at Epoch speed). */

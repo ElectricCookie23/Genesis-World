@@ -3,6 +3,7 @@ import type { SimEvent } from '../sim/events';
 import type { CosmosInfo } from '../sim/cosmos';
 import type { Archive, ObserverMessage } from '../sim/legacy';
 import type { LinkInfo } from '../sim/link';
+import type { StrangeInfo } from '../sim/strange';
 
 export const SPEEDS = [
   { key: 'pause', label: 'Pause', yearsPerSecond: 0 },
@@ -93,6 +94,11 @@ export interface WorldStats {
   /** How much larger than in its prime the star looks (1 until it leaves its long steady life), and 0 steady, 1 swelling, 2 red giant. */
   starSwell?: number;
   starPhase?: number;
+  /** The planet's pulse in beats a minute and its health 0..1 (expansion E90); which way the magnetic field points and how far through a reversal it is. */
+  pulseRate?: number;
+  health?: number;
+  poleSign?: number;
+  poleFlip?: number;
   moons: number;
   ring: boolean;
   binary: boolean;
@@ -301,6 +307,6 @@ export type FromWorker =
   | { type: 'dynasty'; detail: DynastyDetail }
   | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[] }
   | { type: 'timeline'; points: TimelinePoint[] }
-  | { type: 'cosmos'; cosmos: CosmosInfo; messages: ObserverMessage[]; archives: Archive[]; link?: LinkInfo }
+  | { type: 'cosmos'; cosmos: CosmosInfo; messages: ObserverMessage[]; archives: Archive[]; link?: LinkInfo; strange: StrangeInfo }
   | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }
   | { type: 'error'; message: string };

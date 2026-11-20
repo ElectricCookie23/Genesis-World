@@ -2,6 +2,7 @@ import { SPEEDS } from '../shared/protocol';
 import { actions, togglePanel, useStore } from './store';
 import { GoalMarker, Goals } from './goals';
 import { SkyMessage, System } from './system';
+import { Microscope, Pulse } from './strange';
 import { bigNumber, formatYear } from './format';
 import { DynastyPanel } from './dynasty';
 import { Chronicle, CreatureCard, CrossSection, Designer, FlatMap, GodTools, Graphs, Guide, Futures, Help, NationLabels, NationPanel, Num, Peoples, Settings, SpeciesCard, TimelineStrip, Tree, Why } from './panels';
@@ -28,7 +29,7 @@ export function App() {
         <div class={`${css.fade} ${hidden ? css.hidden : ''}`}>
           <div class={css.topRow}>
           <div class={`${css.panel} ${css.top}`}>
-            <div class={css.title}>GENESIS</div>
+            <div class={css.title}>GENESIS <Pulse /></div>
             <div class={css.year}>{st ? formatYear(st.simYear) : ''}</div>
             <div class={css.sub}>{st ? [st.settlements > 0 ? (st.maxTech >= 0.6 ? 'age of cities' : st.maxTech >= 0.3 ? 'age of villages' : 'first fires') : STAGE[st.stage] ?? '', ERA[st.era] ?? ''].filter(Boolean).join(' · ') : ''}</div>
           </div>
@@ -61,6 +62,7 @@ export function App() {
           {s.panel === 'graphs' && <Graphs />}
           {s.panel === 'goals' && <Goals />}
           {s.panel === 'system' && <System />}
+          {s.panel === 'microscope' && <Microscope />}
           {s.whyEvent >= 0 && <Why />}
           {s.selectedSpecies >= 0 && s.whyEvent < 0 && <SpeciesCard />}
           {s.creature && s.selectedSpecies < 0 && s.whyEvent < 0 && <CreatureCard />}

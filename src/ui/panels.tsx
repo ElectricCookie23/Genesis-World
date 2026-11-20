@@ -8,6 +8,7 @@ import type { NationInfo, PersonInfo, SpeciesInfo } from '../shared/protocol';
 import { dateIn } from '../sim/history/calendar';
 import { actions, state, update, useStore, type Relative, type UIState } from './store';
 import { bigNumber, eventColor, eventGlyph, formatYear, hsl, metres, shortYear } from './format';
+import { Strata } from './strange';
 import css from './ui.module.css';
 
 /** The date of an event in the count of years of the nation it belongs to, when the page knows that nation (system E8). */
@@ -282,7 +283,7 @@ function renderTree(s: UIState) {
 export function Help() {
   const keys: [string, string][] = [
     ['drag', 'orbit the planet'], ['scroll / pinch', 'zoom, from deep space to the ground'], ['right-drag', 'turn and tilt near the surface'],
-    ['Space', 'pause or play'], ['1 – 6', 'time speed'], ['C', 'chronicle'], ['T', 'tree of life'], ['G', 'god tools'], ['J', 'goals, if you want some'], ['S', 'the star system'],
+    ['Space', 'pause or play'], ['1 – 6', 'time speed'], ['C', 'chronicle'], ['T', 'tree of life'], ['G', 'god tools'], ['J', 'goals, if you want some'], ['S', 'the star system'], ['N', 'the microscope'],
     ['M', 'flat map'], ['X', 'cross-section'], ['U', 'dive under water'], ['V', 'first-person view while following'], ['O', 'overlays'], ['F', 'follow the selected creature'], ['P', 'postcard mode'], ['H', 'hide the interface'], ['Esc', 'close panels'], ['?', 'this list'],
   ];
   return (
@@ -309,6 +310,7 @@ const GOD_TOOLS: [string, string, string][] = [
   ['monolith', 'Monolith', 'Animals living beside it grow clever.'],
   ['comet', 'Summon comet', 'Call a comet into the sky. Peoples will remember it.'],
   ['shatter', 'Shatter the moon', 'Break the moon into a ring. Its shadow lays a cold stripe along the equator.'],
+  ['flip', 'Flip the poles', 'Turn the magnetic field over. Auroras wander, travellers lose their way, strange births follow.'],
   ['rogue', 'Rogue planet', 'Send a wandering world through the system. The orbit shifts, the axis rocks, comets fall.'],
   ['burst', 'Gamma-ray burst', 'A dying star\'s beam strikes the side of the world you click.'],
   ['tilt', 'Tilt the axis', 'Change the seasons for good.'],
@@ -366,7 +368,8 @@ export function CrossSection() {
   return (
     <div class={`${css.panel} ${css.side} ${css.wide}`} style={{ bottom: 'auto' }}>
       <div class={css.head}><h2>Cross-section</h2><span class={css.sub}>the ground under the centre of the view, west to east</span><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
-      <div style={{ padding: '0 14px 14px' }}><canvas ref={ref} width={720} height={300} style={{ width: '100%', borderRadius: '8px', display: 'block' }} /></div>
+      <div style={{ padding: '0 14px 10px' }}><canvas ref={ref} width={720} height={300} style={{ width: '100%', borderRadius: '8px', display: 'block' }} /></div>
+      <Strata />
     </div>
   );
 }
@@ -965,6 +968,7 @@ export function Settings() {
         <div class={css.row}><span>Slow down on big events</span><button class={css.btn} onClick={() => actions.setSlowOnEvents(!s.slowOnEvents)}>{s.slowOnEvents ? 'on' : 'off'}</button></div>
         <div class={css.row}><span>Documentary director<br /><span class={css.sub}>The camera flies to whatever just happened.</span></span><button class={css.btn} onClick={() => update({ director: !s.director })}>{s.director ? 'on' : 'off'}</button></div>
         <div class={css.row}><span>Compare ages to Earth's</span><button class={css.btn} onClick={() => actions.setEarthNotes(!s.earthNotes)}>{s.earthNotes ? 'on' : 'off'}</button></div>
+        <div class={css.row}><span>Hear the planet's pulse in a crisis</span><button class={css.btn} onClick={() => actions.setPulseSound(!s.pulseSound)}>{s.pulseSound ? 'on' : 'off'}</button></div>
         <div class={css.row}><span>Colour-blind safe overlays</span><button class={css.btn} onClick={() => actions.setColorblind(!s.colorblind)}>{s.colorblind ? 'on' : 'off'}</button></div>
         <div class={css.row}>
           <span>Overlay (O)</span>

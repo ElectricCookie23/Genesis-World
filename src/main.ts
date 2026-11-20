@@ -143,6 +143,16 @@ async function boot(): Promise<void> {
     }
   };
   window.setInterval(judgeGoals, 1000);
+  // the planet's pulse, heard: two soft thuds a beat, louder the worse things are, silent when all is well
+  update({ pulseSound: store.get('genesis:pulse') !== '0' });
+  actions.setPulseSound = (on) => { update({ pulseSound: on }); store.set('genesis:pulse', on ? '1' : '0'); };
+  const heartbeat = () => {
+    const st = state.stats;
+    const rate = st?.pulseRate ?? 60, health = st?.health ?? 1;
+    if (state.pulseSound && st && !state.opening && health < 0.8 && st.yearsPerSecond > 0) music.beat(Math.min(1, (0.8 - health) * 2.2));
+    window.setTimeout(heartbeat, 60000 / Math.max(30, Math.min(160, rate)));
+  };
+  window.setTimeout(heartbeat, 2000);
   actions.trackGoal = (id) => { goalRecord.tracked = id; saveGoals(); judgeGoals(); update({ goalTracked: id }); };
   actions.resetGoals = () => { goalRecord.done = {}; goalRecord.memo = {}; saveGoals(); judgeGoals(); };
   actions.copySeedLink = () => {
@@ -706,7 +716,8 @@ async function boot(): Promise<void> {
       case 'cosmos': {
         // a message that has just been written is held over the globe for a while (not the ones a loaded world already had)
         const fresh = state.cosmos && msg.messages.length > state.skyMessages.length ? { id: msg.messages.length - 1, until: performance.now() + 60000 } : state.skyMessage;
-        update({ cosmos: msg.cosmos, link: msg.link ?? null, skyMessages: msg.messages, archives: msg.archives, skyMessage: fresh && fresh.until > performance.now() ? fresh : null });
+        scene.setMimics(msg.strange.mimics);
+        update({ cosmos: msg.cosmos, strange: msg.strange, link: msg.link ?? null, skyMessages: msg.messages, archives: msg.archives, skyMessage: fresh && fresh.until > performance.now() ? fresh : null });
         break;
       }
       case 'settlements':
@@ -842,6 +853,7 @@ async function boot(): Promise<void> {
     else if (k === 'g') togglePanel('god');
     else if (k === 'j') togglePanel('goals');
     else if (k === 's') togglePanel('system');
+    else if (k === 'n') togglePanel('microscope');
     else if (e.key === '?' || k === '/') togglePanel('help');
     else if (k === 'p') { update({ postcard: !state.postcard }); scene.cam.idle = state.postcard ? 100 : 0; }
     else if (k === 'm') togglePanel('map');

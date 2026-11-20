@@ -183,6 +183,16 @@ export class Music {
     } catch { /* ignore */ }
   }
 
+  /** One beat of the planet's pulse: a low double thud. strength 0..1. */
+  beat(strength: number): void {
+    if (!this.tone || !this.voice || strength <= 0.02 || this.sfx <= 0.01) return;
+    try {
+      const now = this.tone.now(), v = 0.12 + 0.5 * strength;
+      this.voice.triggerAttackRelease(46, 0.09, now, v);
+      this.voice.triggerAttackRelease(41, 0.12, now + 0.16, v * 0.7);
+    } catch { /* ignore */ }
+  }
+
   /** Distant thunder. */
   thunder(): void {
     if (!this.tone || !this.rumble) return;

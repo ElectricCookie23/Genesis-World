@@ -9,6 +9,12 @@ Read this first when resuming. Then PROGRESS.md, DECISIONS.md and `git log`.
 - Stop and show the owner only at points that are worth showing.
 - Graphics rules (owner): full techniques on WebGL2 (FFT ocean, GPU erosion, TAA with a history buffer), quadtree LOD terrain, WebGPU optional, screenshots here check correctness only, push every step.
 
+## Owner's decision, 2026-11-21: educational, no religion, no "god" (read this before building Section 3)
+
+Full text in `docs/DIRECTION_DRAFT.md`. In short: **the game has no religion and the player is not a god.** No gods, faiths, temples, priests, prophets, worship, omens as signs, holy things, or peoples speaking to a watcher. Creatures are new and plausible, not Earth animals and not realistic. The "God tools" are to be renamed and grouped by kind (environmental, ecological, genetic, astronomical).
+- **Build session:** please do not build E24 (Religions) or E25 (The Observer Faith) as written; mark them in PROGRESS.md as changed by the owner. E30 (Holidays and Festivals) and E28 (stories told about fossils) are fine without the religious part. Please also take belief, prophets and preachers, temples and the words "god" and "holy" out of the history engine and its vocabularies when you are next in those files (`civilization.ts`, `sim/history/*`): they are yours, and you know what depends on them. Tell me in this file if you would rather I did it.
+- **Fix session** (its last phase, with the animal sculpting, as the owner asked): rename the tools and group them, rename `god-*` event types and `godEvents`, remove E99 (Messages to the Observer) and the temple-facing-viewer feature (46), and sweep the interface, goals, chronicle text and README for the wording.
+
 ## Where things stand
 Work queue items 1 to 3 are finished: every feature row in PROGRESS.md is "done", and all twelve graphics steps have a first pass. **Next is item 4, the expansion brief** (`docs/EXPANSION_BRIEF.md`): architecture additions first, then sections 1 to 10 in order.
 
@@ -150,6 +156,8 @@ Fixed since (F13): 62, 109, 110, 128, 135. **For the build session, in `building
 - The Mac session has also written `docs/CREATURE_SCULPTING.md`, a proposal for rounder generated animals; `docs/PERFORMANCE.md` says geometry is nearly free (all animals under 0.4 ms), so there is room for it.
 
 **Animals reshaped (fix session, F11).** `creaturemesh.ts`: trunk profile from landmarks, shoulder and haunch masses, jointed legs, a skull-shaped head, twice the mesh density. Shapes only: rig weights, attributes and the skin shader are unchanged, and `tests/render.test.ts` still holds the buffer limits. Compare `docs/asset-previews/species-sheet-before.jpg` and `species-sheet-after.jpg`; redraw with `npx vite-node scripts/checks/speciessheet.ts out.svg [random]`. Not yet seen on a GPU.
+
+**Expansion Section 9 (fix session, F14, F15):** E81 to E90 in `src/sim/strange.ts` (`sim.strange`, stepped after `legacy`), `src/ui/strange.tsx` (rock layers under the cross-section, the microscope on key N, the pulse beside the title), a "This world" section in the System panel, `tests/strange.test.ts`. Hooks in shared files: `plants.scar` (a multiplier in `capacity`), `plague()` takes its cause from `strange.strainFor`, the sky tool `flip`, `pulseRate`, `health`, `poleSign`, `poleFlip` in the stats, `strange` in the `cosmos` message, `creatures.mimics` and `uMagneticPole` in the renderer. E83, E84, E85 and E89 are simplified (see PROGRESS.md). **Next for the fix session:** Section 8 backward (E80 down), unless the build session has reached it.
 
 ## Graphics: still open
 - The first real-GPU review is in (see above). Colours, exposure, cloud cost, aurora and preset costs still need tuning from it.
