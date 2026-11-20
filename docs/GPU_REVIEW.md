@@ -13,6 +13,53 @@ This is the second version. The first was cut short by a flat battery; this one 
 - Roughly 60 of about 230 captures were looked at. Each finding names the files it rests on; the rest are listed at the end.
 - For part of the second run the machine's owner was also using the same browser window, so the Genesis tab may have been in the background at times. The frame-rate table was finished before that; the creature captures after it were checked to be in a visible tab.
 
+## Check of commit 4424753 (2026-11-21)
+
+Newest green deploy when testing began was `4424753` (it contains `b93d708`); the page served `assets/index-u3vNpV0q.js` throughout. WebGPU, High, seed `amber-reef-101`, mains power. Plain warp to the dawn (stopped at 59.03 My), `through: true` for 100,000 years (588 living towns, 104 realms; town, coast and Night Map captures), then on to 200 My (1,023 living towns, 70 realms, `maxTech` 0.23; everything else). Files start **`retest8-`** (`retest7-` was already used by the follow-up below). Ten files are cited and all ten were looked at; about 25 were captured. Console: `x2 Failed to load resource: the server responded with a status of 404 ()`, `x17 Max polyphony exceeded. Note dropped.` WebGL2 console on the same bundle is in the follow-up below (one 404, nothing else).
+
+"Mounpoke" exists again but is a different town in this build: `pop` 38.4, `tech` 0.76, on a small island at `(-1.315, -0.125)`. The largest town was "Du" (`pop` 597), not captured.
+
+| # | Item | Result | Evidence |
+|---|---|---|---|
+| 1 | Ground between buildings | **Fixed.** The island town's ground is bare brown earth with no grass or tufts, and no trees left on it. It reads as worked earth, helped by pale grey paved strips between the houses. | `retest8-webgpu-town-day-0.006.jpg`, `setImmediate(-1.315, -0.125, 0.006)`, tilt -0.6 |
+| 2 | Taller towers | Three tower blocks stand about twice the height of the houses and dominate the skyline. No trees or large animals in this frame to compare against. **From `dist 0.08` the capture is unusable**: the camera was inside cloud and the frame is blank grey-white. | same; `retest8-webgpu-town-day-0.08.jpg` |
+| 3 | Night windows | **Fixed.** From `dist 0.02` roughly half the windows are lit, the halo is small, and the town reads clearly as a lit settlement with its lights glittering on the sea around it. 0.006, 0.08 and 0.3 were captured but not looked at. | `retest8-webgpu-town-night-0.02.jpg`, sun +2.8 |
+| 4 | Night Map | From the one side looked at: **2 names** ("Nonadari", "Momeratar") for 104 realms, no overlap, both inside the disc. The other two sides were captured, not looked at. My script's label count found nothing, so there is no count for them. | `retest8-webgpu-night-map-0.jpg` |
+| 5 | Lightning from orbit | **No white ball** over a storm cell in the frame looked at; `scene.flashLevel` read 0 in all five frames across 25 s, so no flash happened to be caught and a flicker was not seen either. A small dark dot sits on the cloud belt. | `retest8-webgpu-lightning-2.jpg` |
+| 6 | Shoreline foam | **Not fixed.** At "Kimanarap" the hard straight white rim still runs the full width of the frame at the water's edge. The island town shows the same thing worse: its foam outline is a polygon with sharp corners around the whole island. | `retest8-webgpu-coast-0.006.jpg`, `(2.848, -0.246, 0.006)`; `-town-day-0.006.jpg` |
+| 7 | Animal feet | **Fixed on the animal seen.** A purple two-legged animal stands on flat oval pads resting on the ground; they do not look like balls and do not hover. It has a flat pale skirt-like flap under the body between the legs. Only one animal's feet were looked at. | `retest8-webgpu-forest-0.004.jpg` (right side) |
+| 8 | Goals | Panel opens on J and reads well: title, a line of explanation, "8 of 11 reached", each goal with a tick, progress bar, current figure, and "a hint / why did this happen? / share this world" links. **8 of 11 reached** at 200 My ("Giants" not: largest land animal 4.4 m of 5; "A crowded world" not: 40 of 50). The stats box at top right is hidden while the panel is open and back when it closes. Pressing "follow" puts a small box ("A green world", bar, "15% of the land is green") beside the title at top left; with a species card open it sits above the card and does not overlap it. "why did this happen?" set `whyEvent` and closed the goals panel; that screen was captured (`-goals-why.jpg`) but not looked at. | `retest8-webgpu-goals-panel.jpg`, `-goal-box-with-card.jpg` |
+| 9 | Broadleaf forest from inside | **Seen.** Thick dark trunks, plain and untextured, one with a square-cut branch stub; no visible flare at the ground and no bark grooves at this distance. Crowns are full masses of rosettes made of crossed cards, with no edge-on spikes. Leaves are still flat, single-colour ovals. | `retest8-webgpu-feet-0.jpg`, in a forest at dist about 0.008 |
+| 9 | Other carried-over items (sky at 5 km on WebGL2, small island, wader) | Done in the follow-up section below. In this run the species-card capture also shows purple animals at the water's edge with foam rings round their legs, which looks right. | `-goal-box-with-card.jpg` |
+| 10 | Worse than before | See 1 to 3 below. | |
+
+**New or worse**
+
+1. **Square slabs in the sea are back.** Around the island town, flat pale translucent rectangles with straight edges and right-angle corners extend from the shore out over the water, and the foam line follows their corners (`retest8-webgpu-town-day-0.006.jpg`). Some of the grey "paving" strips on the land run straight off the shore into the sea.
+2. **The day side from orbit is blown out** in the Goals capture: the cloud belt and much of the disc are flat white with a wide white glow round the planet, and a soft dark blotch sits on the belt (`retest8-webgpu-goals-panel.jpg`, `setImmediate(-1.46, 0.1, 2.6)`, sun +0.5). Earlier checks showed the same view correctly exposed.
+3. **A nest mound close up is a huge plain tan cone** filling the centre of the screen, far larger than the animals beside it (`-goal-box-with-card.jpg`).
+4. In the forest, a large animal's legs are blue and green striped columns as thick as the tree trunks (`-feet-0.jpg`).
+5. Houses are large barrack-like blocks with three rows of windows; the smallest are still two storeys.
+6. One or two stars are visible in the daytime sky near sea level in the town view.
+
+No holes in the land or lines across the sea were seen, so no diagnostic was saved.
+
+## Follow-up on WebGL2: sky at altitude, a wader, an island (2026-11-21)
+
+The items the check below left open. WebGL2, High, seed `amber-reef-101`, bundle `assets/index-u3vNpV0q.js` (newer than the `DySXvzft` of the check below; I did not record its commit). Plain warp to the dawn, then `through: true` for 100,000 years. Files start `retest7-`; 4 of 9 were looked at. Console: `x1 Failed to load resource: the server responded with a status of 404 ()`.
+
+**Worlds differ by backend or build:** here the plain warp stopped at 81.70 My, against 59.03 My on WebGPU in the check below.
+
+| Item | Result | Evidence |
+|---|---|---|
+| Daytime sky at altitude, WebGL2, sun +0.3, camera toward the horizon (`dist 0.055`, tilt -0.35) | **Fixed at 3 km**: an even lavender sky, no stars (`(-2.74, 1.04)`, 2.92 km). **Nearly fixed at 5 km**: lavender at the horizon darkening to deep violet overhead, with one or two faint stars still visible near the top of the frame (`(1.66, -1.08)`, 4.91 km). The 1.7 km capture was not looked at. | `retest7-webgl-sky-3km.jpg`, `-sky-5km.jpg` |
+| A wading animal close up | **Looks wrong.** A two-legged evolved animal (species 187, in water 0.36 units deep, 0.36 below the surface by its recorded position) is drawn **standing on top of the sea**: both legs and feet are fully visible down to the toes, with no waterline across the legs and no splash or ripple. The numbers say it is on the bottom; the picture says it is walking on water. The water here is clear turquoise shallows, so the legs may simply be showing through an untinted surface. | `retest7-webgl-wader-close.jpg` (camera held on individual 5832780 at 5x its size, tilt -0.15, sun +0.4) |
+| Same animal | Body is a smooth blue-grey shape with a fine scale pattern, a bulbous two-lobed head with no visible eye from this side, wing-like flaps folded along the back, thin legs with small feet. Reads as an animal. | same |
+| A small island | **No missing-sea squares.** A snow-covered islet (`(1.361, 0.998)`, 0.35 km) with sea right up to its shore on all sides and a soft pale shallows ring; the mainland shore behind is also clean. | `retest7-webgl-island-0.05.jpg` |
+| Broadleaf forest from inside | **Not done.** No warm, fully inland, dense forest cell existed in this world. | |
+
+At 5 km the snow terrain is a harsh dark-and-white speckle that reads as gravel rather than snow (`-sky-5km.jpg`).
+
 ## Check of commit 6dddd2d (2026-11-21)
 
 Deploy run for `6dddd2d` green before testing; the page served `assets/index-DySXvzft.js` from start to end (a docs-only push of mine redeployed the site during the run; the open page kept its bundle). WebGPU, High, seed `amber-reef-101`, mains power. One world: a plain warp to the dawn of history, `through: true` for 100,000 years (town captures), then `through: true` on to 200 My (everything else). Files start `retest6-`; 10 of about 30 were looked at. Console over the run: `x2 Failed to load resource: the server responded with a status of 404 ()`, `x42 Max polyphony exceeded. Note dropped.`
