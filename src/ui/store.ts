@@ -1,14 +1,14 @@
 // Tiny observable store shared by the Preact UI and the app.
 import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
-import type { DynastyDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
+import type { DynastyDetail, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 import type { Nation } from '../render/gfx/nations';
 import type { GoalRecord, GoalState } from '../game/goals';
 import type { CosmosInfo } from '../sim/cosmos';
 import type { Archive, ObserverMessage } from '../sim/legacy';
 import type { LinkInfo } from '../sim/link';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'goals' | 'system';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'goals' | 'system';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
 
 /** One person in an individual's family tree; key is set when that relative is drawn in the world and can be selected. */
@@ -59,6 +59,8 @@ export interface UIState {
   realms: NationInfo[];
   /** The nation whose knowledge and rulers are being looked at, when it has arrived. */
   nationDetail: NationDetail | null;
+  /** The town site whose layers are open (system E17). */
+  siteDetail: SiteDetail | null;
   /** The ruling house whose family tree is open. */
   dynastyDetail: DynastyDetail | null;
   timeline: TimelinePoint[];
@@ -132,6 +134,7 @@ export const state: UIState = {
   realms: [],
   nationDetail: null,
   dynastyDetail: null,
+  siteDetail: null,
   timeline: [],
   other: null,
   overlay: 'none',
@@ -213,6 +216,8 @@ export const actions = {
   /** Open the knowledge and rulers of a nation (by the simulation's nation id). */
   openNation: (_id: number) => {},
   openDynasty: (_id: number) => {},
+  /** Open the dig view of a town's site. */
+  openSite: (_id: number) => {},
   /** How a town's builders build and of what, in a sentence. */
   architecture: (_st: SettlementInfo): string => '',
   /** What is being built in a town just now, if it is in view from close by. */

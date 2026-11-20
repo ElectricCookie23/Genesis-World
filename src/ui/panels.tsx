@@ -873,6 +873,7 @@ export function Peoples() {
               <button class={css.link} onClick={() => actions.flyToCell(st.cell, 0.25)}>fly there</button>
               {st.tech >= 0.3 && <button class={css.link} title="Fly down and replay this town from its first huts to what it is now" onClick={() => actions.timelapse(st.id, st.cell)}>watch it grow</button>}
               {st.eventId >= 0 && <button class={css.link} onClick={() => update({ whyEvent: st.eventId })}>its story</button>}
+              {(st.layers ?? 1) >= 2 && <button class={css.link} title="What lies in the ground under this town" onClick={() => actions.openSite(st.id)}>{st.layers} layers under it</button>}
               {belief && <button class={css.link} onClick={() => update({ whyEvent: st.belief })}>its faith</button>}
             </div>
           );
@@ -884,6 +885,7 @@ export function Peoples() {
             <div class={css.what} style={{ color: '#cfc9bd' }}>{st.name}</div>
             <div class={css.when} style={{ color: '#ece7db' }}>Abandoned {formatYear(st.ruined).toLowerCase()}.</div>
             <button class={css.link} onClick={() => actions.flyToCell(st.cell, 0.25)}>visit the ruins</button>
+            <button class={css.link} onClick={() => actions.openSite(st.id)}>dig here</button>
           </div>
         ))}
       </div>

@@ -4,6 +4,7 @@ import { GoalMarker, Goals } from './goals';
 import { SkyMessage, System } from './system';
 import { bigNumber, formatYear } from './format';
 import { DynastyPanel } from './dynasty';
+import { SitePanel } from './site';
 import { Chronicle, CreatureCard, CrossSection, Designer, FlatMap, GodTools, Graphs, Guide, Futures, Help, NationLabels, NationPanel, Num, Peoples, Settings, SpeciesCard, TimelineStrip, Tree, Why } from './panels';
 import css from './ui.module.css';
 
@@ -58,6 +59,7 @@ export function App() {
           {s.panel === 'peoples' && <Peoples />}
           {s.panel === 'nation' && <NationPanel />}
           {s.panel === 'dynasty' && <DynastyPanel />}
+          {s.panel === 'site' && <SitePanel />}
           {s.panel === 'graphs' && <Graphs />}
           {s.panel === 'goals' && <Goals />}
           {s.panel === 'system' && <System />}

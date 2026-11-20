@@ -20,6 +20,27 @@ import { clearedCover } from './plants';
 import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role } from './history/model';
 import { SLOT_INDEX, WEB, borrowable, chooseNext, copyKnowledge, forget, levelOf, newKnowledge, shed, wayFor, type Land, type Leaning } from './history/tech';
 
+/** One layer in the ground of a town site (system E17). */
+export interface Stratum {
+  year: number;
+  /** A building phase ('camp', 'village', 'town', 'city', 'great city'), a destruction ('burnt', 'flood', 'ash', 'shaken'), a falling back ('decay') or the end ('abandoned'). */
+  kind: string;
+  /** What the town knew then: it sets what the layer is made of. */
+  tech: number;
+  /** The event behind it, or -1. */
+  eventId: number;
+}
+
+/** A town site with everything under it, for the dig view (system E17): the towns that stood here, oldest first. */
+export interface SiteStack {
+  cell: number;
+  towns: { id: number; name: string; species: number; founded: number; ruined: number; strata: Stratum[] }[];
+  /** How many layers in all. */
+  layers: number;
+}
+
+const PHASE = ['camp', 'village', 'town', 'city', 'great city'];
+
 export interface Settlement {
   id: number;
   name: string;
@@ -48,6 +69,10 @@ export interface Settlement {
   relic: number;
   /** Founded by settlers who came across the sea. */
   overseas?: boolean;
+  /** What lies in the ground here (system E17): each building phase and each destruction of this town, oldest first. */
+  strata?: Stratum[];
+  /** The ruin this town was founded on top of, if any. */
+  over?: number;
   /** Where it has dammed a river, and where it mines (cells), once it has (system E16). */
   dam?: number;
   mine?: number;
@@ -382,7 +407,13 @@ export class Civilization {
     if (!st.temple && st.tech > 0.3 && sim.godEvents.length >= 3) { st.temple = true; const at = sim.events.events.length; sim.civEvent('temple', st.species, st.cell, st.id); this.stepForward(sim, st, at, 'Its carvings are the work of {name}.', 'artist'); }
     if (st.tech >= 0.3 && before < 0.3) { const at = sim.events.events.length; sim.civEvent('village', st.species, st.cell, st.id); if (sim.events.events.length > at) this.credit(sim, null, n, at, 'It answers to {name}.'); }
     if (st.tech >= 0.6 && before < 0.6) { const at = sim.events.events.length; sim.civEvent('city', st.species, st.cell, st.id); if (sim.events.events.length > at) this.credit(sim, rng, n, at, `Its great hall is the work of {name}.`, 'artist', year); }
-    if (sizeClass(st.tech) !== sizeClass(before)) sim.cellLog.note(st.cell, year, Log.Size, sizeClass(st.tech));
+    // (a town founded by settlers who already knew how to build one begins as what it is, not as a camp)
+    if (st.strata && st.strata.length === 1 && st.strata[0]!.kind === 'camp' && sizeClass(before) > 0) { st.strata[0]!.kind = PHASE[sizeClass(before)]!; st.strata[0]!.tech = before; }
+    if (sizeClass(st.tech) !== sizeClass(before)) {
+      sim.cellLog.note(st.cell, year, Log.Size, sizeClass(st.tech));
+      // a town that has grown into a larger kind of place is rebuilt as one; one that has slipped back decays (system E17)
+      this.layer(st, year, sizeClass(st.tech) > sizeClass(before) ? PHASE[sizeClass(st.tech)]! : 'decay', -1);
+    }
     if (!this.hasMusic && st.tech > 0.35) { this.hasMusic = true; const at = sim.events.events.length; sim.civEvent('music', st.species, st.cell, st.id); if (sim.events.events.length > at) this.credit(sim, rng, n, at, `The first tune anyone wrote down is by {name}.`, 'artist', year); }
     // star lore: villagers name a constellation after a vanished animal whose bones they find
     if (!st.stars && st.tech > 0.4) {
@@ -415,9 +446,12 @@ export class Civilization {
         }
         // a town that has been fought over walls itself in, and again when it has outgrown its walls (system E11)
         this.fortify(st, year); this.fortify(o, year);
+        const struck = o;
         const warAt = sim.events.events.length;
         sim.civEvent('war', st.species, st.cell, st.id, o.id);
         const warEvent = sim.events.events.length > warAt ? warAt : -1;
+        // the town that was attacked burns, and is rebuilt on its own ashes (system E17)
+        if (struck.tech >= 0.3) this.layer(struck, year, 'burnt', warEvent, 120);
         this.woe(n, 'war', warEvent, year, 0.07);
         const general = this.credit(sim, rng, n, warEvent, `{name} led the host of ${n.name}.`, 'general', year);
         if (foe && foe.ended < 0 && foe.id !== n.id) {
@@ -1432,6 +1466,37 @@ export class Civilization {
     this.credit(sim, null, n, ev.id, 'It ended in the reign of {name}.');
   }
 
+  /** A new layer in the ground of a town (system E17). Destructions of one kind closer together than `apart` years are one layer. */
+  private layer(st: Settlement, year: number, kind: string, eventId: number, apart = 0): void {
+    const strata = (st.strata ??= [{ year: st.founded, kind: 'camp', tech: 0.03, eventId: -1 }]);
+    const last = strata[strata.length - 1];
+    if (apart > 0 && strata.some((x) => x.kind === kind && year - x.year < apart)) return;
+    if (last && last.kind === kind && kind !== 'burnt') return;
+    strata.push({ year, kind, tech: st.tech, eventId });
+    // a deep site keeps its first layers and its latest; the middle is thinned
+    if (strata.length > 14) strata.splice(4, 1);
+  }
+
+  /** Everything in the ground at a town's site (system E17): this town, the ruin it was built on, the ruin under that, and any town built later on top. */
+  siteOf(id: number): SiteStack | null {
+    const start = this.settlements[id];
+    if (!start) return null;
+    // down to the bottom
+    let bottom = start;
+    for (let guard = 0; guard < 40 && bottom.over !== undefined && this.settlements[bottom.over]; guard++) bottom = this.settlements[bottom.over]!;
+    // and up again through everything built on it
+    const towns: Settlement[] = [bottom];
+    for (let guard = 0; guard < 40; guard++) {
+      const top = towns[towns.length - 1]!;
+      const next = this.settlements.find((x) => x.over === top.id);
+      if (!next) break;
+      towns.push(next);
+    }
+    let layers = 0;
+    const out = towns.map((t) => { const strata = t.strata ?? [{ year: t.founded, kind: 'camp', tech: 0.03, eventId: -1 }]; layers += strata.length; return { id: t.id, name: t.name, species: t.species, founded: t.founded, ruined: t.ruined, strata }; });
+    return { cell: bottom.cell, towns: out, layers };
+  }
+
   /** A threatened town builds a wall round itself as it then stands; a town that has doubled since builds another further out. */
   private fortify(st: Settlement, year: number): void {
     if (st.tech < 0.3 || st.ruined >= 0) return;
@@ -2125,6 +2190,7 @@ export class Civilization {
 
   private abandon(sim: Simulation, st: Settlement, year: number): void {
     st.ruined = year;
+    this.layer(st, year, 'abandoned', -1);
     this.occupied.delete(st.region);
     sim.cellLog.note(st.cell, year, Log.Ruined, st.id);
     sim.cellLog.note(st.cell, year, Log.Owner, -1);
@@ -2221,6 +2287,11 @@ export class Civilization {
       if (score > best) { best = score; cell = c; }
     }
     if (cell < 0) return null;
+    // People build where people built before (system E17): on the mound of the last town that stood in this country,
+    // if its site is still dry land.
+    let under: Settlement | undefined;
+    for (let i = this.settlements.length - 1; i >= 0 && !under; i--) { const x = this.settlements[i]!; if (x.region === region && x.ruined >= 0 && w.elevation[x.cell]! - w.seaLevel > 0.01) under = x; }
+    if (under) cell = under.cell;
     // named in the people's own language, from what the name means
     const id = this.settlements.length;
     const lang = this.h.languages[this.cultureFor(sim, species, year).language]!;
@@ -2230,6 +2301,7 @@ export class Civilization {
     const st: Settlement = {
       id, name, cell, region, species, pop: 0.2, tech: 0.03, founded: year, belief: -1, eventId: -1, ruined: -1, painted: false, temple: false, farms: false, stars: false,
       nation: -1, head: meanings.head, modifier: meanings.modifier ?? '', relic: -1, homeTemp: reg.landTemp[region]!,
+      strata: [{ year, kind: 'camp', tech: 0.03, eventId: -1 }], over: under ? under.id : undefined,
     };
     this.settlements.push(st);
     this.occupied.set(region, st.id);
@@ -2248,6 +2320,11 @@ export class Civilization {
       if (id === undefined) continue;
       const st = this.settlements[id]!;
       st.pop *= 1 - Math.min(0.9, kill[k]!);
+      // what struck it lies in its ground afterwards (system E17): ash, silt, or the rubble of fallen walls
+      if (kill[k]! >= 0.2) {
+        const what = sim.events.events[eventId]?.type ?? '';
+        this.layer(st, sim.simYear, /erupt|impact|winter|volcan/.test(what) ? 'ash' : /tsunami|flood|sea|wave|storm/.test(what) ? 'flood' : /quake/.test(what) ? 'shaken' : 'burnt', eventId, 60);
+      }
       const nation = st.nation >= 0 ? this.h.nations[st.nation] : undefined;
       if (nation && nation.ended < 0) this.woe(nation, 'disaster', eventId, sim.simYear, 0.06 + 0.2 * Math.min(0.9, kill[k]!) / Math.max(1, nation.towns));
       if (st.belief < 0 && st.tech < 0.7) {

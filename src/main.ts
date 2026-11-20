@@ -252,6 +252,7 @@ async function boot(): Promise<void> {
   actions.architecture = (st) => scene.architecture(st);
   actions.cellDir = (cell) => { const p = grid.pos; return [p[cell * 3]!, p[cell * 3 + 1]!, p[cell * 3 + 2]!]; };
   actions.timelapse = (id, cell) => { actions.flyToCell(cell, 0.045); update({ panel: 'none' }); window.setTimeout(() => scene.timelapse(id), 1800); };
+  actions.openSite = (id) => { update({ panel: 'site', siteDetail: state.siteDetail?.id === id ? state.siteDetail : null }); send({ type: 'requestSite', id }); };
   actions.openDynasty = (id) => { update({ panel: 'dynasty', dynastyDetail: state.dynastyDetail?.id === id ? state.dynastyDetail : null }); send({ type: 'requestDynasty', id }); };
   actions.openNation = (id) => { update({ panel: 'nation', nationDetail: state.nationDetail?.id === id ? state.nationDetail : null }); send({ type: 'requestNation', id }); };
   actions.setOverlay = (o) => {
@@ -722,6 +723,9 @@ async function boot(): Promise<void> {
       case 'plants':
         for (const pl of msg.plants) state.plants.set(pl.id, pl);
         scene.setPlants(state.plants);
+        break;
+      case 'site':
+        update({ siteDetail: msg.detail });
         break;
       case 'dynasty':
         update({ dynastyDetail: msg.detail });
