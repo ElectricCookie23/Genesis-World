@@ -17,6 +17,7 @@ import { eraOf, eraSlot, eraTitle, earthNote } from './history/eras';
 import { hash32 } from './history/hash';
 import { capital, compound, makeLanguage, personName, placeMeanings, soundChange, splitLanguage, word, type Language } from './history/language';
 import { clearedCover } from './plants';
+import { driftSpan } from './history/syntax';
 import { stillCleared } from './history/decay';
 import { answer, damage, hazards, type CalamityKind, type Ground, type Rebuild, type Scar } from './history/calamity';
 import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role, type Wonder, type WonderKind } from './history/model';
@@ -381,6 +382,9 @@ export class Civilization {
       this.departed = true; this.departedYear = year;
       { const at = sim.events.events.length, lead = this.leadTown(); sim.civEvent('departure', this.sapient[0]!, -1, -1); if (lead) this.stepForward(sim, lead, at, 'The captain of the first ship out was {name}.', 'explorer'); }
     }
+    // ---- every living language wears a little, and peoples long apart come to speak differently (system E21)
+    this.drift(y, year);
+    this.partTongues(sim, year);
     // ---- the sky as people see it (system E8); nothing is recorded of it under a fast-forward
     if (this.fine) this.sky(sim, rng, y, year);
     // ---- the long peace: a history does not go on for ever
@@ -558,19 +562,33 @@ export class Civilization {
   }
 
   /** A people that has grown apart from its parent: its speech has drifted and its values have shifted a little. */
-  private daughterCulture(rng: RNG, parent: Culture, year: number): Culture {
+  private daughterCulture(rng: RNG, parent: Culture, year: number, home?: Settlement): Culture {
     const h = this.h;
     const lang = splitLanguage(h.languages[parent.language]!, h.languages.length, year);
     for (let k = 0; k < 3; k++) soundChange(lang, rng, year);
     h.languages.push(lang);
     const nudge = (v: number) => sat(v + (rng.next() - 0.5) * 0.3);
+    // What they call themselves: "the people" in their own tongue, as every people does. Where that is what a
+    // sister people already calls itself, they are the people of their chief town, or of its river or hill.
+    const name = this.peopleName(lang, capital(word(lang, 'people')), year, home);
     const c: Culture = {
-      id: h.cultures.length, name: capital(word(lang, 'people')), species: parent.species, language: lang.id, parent: parent.id, born: year,
+      id: h.cultures.length, name, species: parent.species, language: lang.id, parent: parent.id, born: year,
       war: nudge(parent.war), custom: nudge(parent.custom), trade: nudge(parent.trade), craft: nudge(parent.craft), hue: (parent.hue + 0.06 + rng.next() * 0.12) % 1,
     };
     lang.name = c.name;
     h.cultures.push(c);
     return c;
+  }
+
+  /** A name for a new people that no other people has: the one offered, or failing that the people of their town, river or hill. */
+  private peopleName(lang: Language, offered: string, year: number, home?: Settlement): string {
+    const h = this.h;
+    const taken = (x: string): boolean => h.cultures.some((o) => o.name === x);
+    let name = offered;
+    const marks = home ? [home.modifier, home.head, 'new', 'high', 'far', 'low', 'old'] : ['new', 'high', 'far', 'low', 'old', 'sea', 'hill'];
+    for (let k = 0; taken(name) && k < marks.length; k++) if (marks[k]) name = compound(lang, 'people', marks[k]!, year);
+    for (let k = 2; taken(name) && k < 60; k++) name = `${capital(word(lang, 'people'))} ${k}`;
+    return name;
   }
 
   /**
@@ -591,7 +609,7 @@ export class Civilization {
     const mid = (a: number, b: number) => sat(a * (1 - share) + b * share);
     const cut = Math.max(2, Math.ceil(old.name.length / 2));
     const c: Culture = {
-      id: h.cultures.length, name: capital(`${old.name.slice(0, cut)}${guest.name.slice(Math.floor(guest.name.length / 2)).toLowerCase()}`), species: old.species, language: lang.id, parent: old.id, born: year,
+      id: h.cultures.length, name: this.peopleName(lang, capital(`${old.name.slice(0, cut)}${guest.name.slice(Math.floor(guest.name.length / 2)).toLowerCase()}`), year, this.settlements[host.capital]), species: old.species, language: lang.id, parent: old.id, born: year,
       war: mid(old.war, guest.war), custom: mid(old.custom, guest.custom), trade: sat(mid(old.trade, guest.trade) + 0.05), craft: mid(old.craft, guest.craft),
       hue: (old.hue + (((guest.hue - old.hue + 1.5) % 1) - 0.5) * share + 1) % 1, mixedWith: guest.id,
     };
@@ -1996,6 +2014,76 @@ export class Civilization {
     return w;
   }
 
+  /**
+   * Languages change (system E21). Every language still spoken loses or shifts a sound every few centuries:
+   * more slowly once it is written down, and more slowly the more it has already changed. Which sound is luck,
+   * so sisters that began identical drift apart, while the words they began with stay recognisable in both.
+   * (The luck comes from the language and the year, not from the stream that decides wars and reigns.)
+   */
+  private drift(y: number, year: number): void {
+    const h = this.h;
+    const write = SLOT_INDEX.get('write')!;
+    const written = new Map<number, boolean>();
+    for (const n of h.nations) {
+      if (n.ended >= 0) continue;
+      const lang = h.cultures[n.culture]!.language;
+      written.set(lang, (written.get(lang) ?? false) || n.know.way[write]! >= 0);
+    }
+    for (const [id, w] of written) {
+      const lang = h.languages[id]!;
+      if (lang.changes.length >= 64) continue;
+      const luck = new RNG(hash32(this.seedNum, id, Math.floor(year), 0xd41f7));
+      if (luck.chance(1 - Math.exp(-y / driftSpan(lang.changes.length, w)))) soundChange(lang, luck, year);
+    }
+  }
+
+  /**
+   * Daughter languages (system E21). Countries that share a people and a tongue do not share them for ever. The
+   * oldest of them keeps the name; each of the others, once it has been a country of its own for long enough,
+   * is found to be speaking something a traveller from the old country can no longer follow: sooner if the two
+   * have lost touch, later if they trade and read each other's writing. From then on it is a people of its own,
+   * with a daughter language that starts from the parent's words and drifts its own way.
+   */
+  private partTongues(sim: Simulation, year: number): void {
+    const h = this.h;
+    const sharing = new Map<number, Nation[]>();
+    for (const n of h.nations) {
+      if (n.ended >= 0) continue;
+      let list = sharing.get(n.culture);
+      if (!list) sharing.set(n.culture, (list = []));
+      list.push(n);
+    }
+    const write = SLOT_INDEX.get('write')!;
+    for (const [cid, list] of sharing) {
+      if (list.length < 2) continue;
+      const old = h.cultures[cid]!;
+      let home = list[0]!;
+      for (const n of list) if (n.founded < home.founded) home = n;
+      for (const n of list) {
+        if (n === home || n.founded >= year) continue;
+        const touch = n.contacts.includes(home.id) || home.contacts.includes(n.id);
+        const written = n.know.way[write]! >= 0 && home.know.way[write]! >= 0;
+        const wait = (touch ? 1100 : 420) * (written && touch ? 1.4 : 1) * (0.7 + 0.6 * ((hash32(this.seedNum, n.id, 0x7019) % 1000) / 1000));
+        const since = Math.max(n.founded, old.born);
+        if (year - since < wait) continue;
+        const was = h.languages[old.language]!;
+        const c = this.daughterCulture(new RNG(hash32(this.seedNum, n.id, 0x701a)), old, year, this.settlements[n.capital]);
+        n.culture = c.id;
+        const now = h.languages[c.language]!;
+        // two words that show it: the ones that have moved furthest apart
+        const shown = ['water', 'sun', 'people', 'fire', 'star', 'river', 'stone', 'child'].map((m) => [m, word(was, m), word(now, m)] as const).filter((x) => x[1] !== x[2]).slice(0, 2);
+        const first = !h.firstTongue;
+        const cap = this.settlements[n.capital]!;
+        const ev = sim.emit({
+          type: 'language', year, cellId: cap.cell, title: first ? `The first parting of tongues: ${c.name} and ${old.name}` : `${n.name} speaks a tongue of its own`,
+          description: `It is ${Math.round((year - since) / 10) * 10} years since ${n.name} and ${home.name} were one people${touch ? '' : ', and for most of them neither has had word of the other'}. A traveller from one can still pick out words in the other${shown.length ? ` (${shown.map((x) => `"${x[0]}" is ${x[1]} there and ${x[2]} here`).join(', ')})` : ''}, but can no longer follow what is said. The speech of ${n.name} is now a language of its own, ${c.name}.`,
+          causes: [n.eventId].filter((x) => x >= 0 && sim.events.events[x]), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, culture: c.id, parent: old.id },
+        });
+        if (first && ev.id >= 0) h.firstTongue = ev.id;
+      }
+    }
+  }
+
   /** The sky on a human clock: a small comet that comes back within living memory, and now and then an eclipse. */
   private sky(sim: Simulation, rng: RNG, y: number, year: number): void {
     const h = this.h;
@@ -2295,7 +2383,7 @@ export class Civilization {
     // their own, and farmers who began apart from every other nation, become a people of their own
     const root = from ? h.cultures[from.culture]! : this.cultureFor(sim, st.species, year);
     const apart = from ? (why === 'far' ? !!st.overseas || rng.chance(0.2) : rng.chance(why === 'successor' ? 0.15 : 0.08)) : h.nations.some((x) => x.species === st.species);
-    const culture = apart ? this.daughterCulture(rng, root, year) : root;
+    const culture = apart ? this.daughterCulture(rng, root, year, st) : root;
     const lang = h.languages[culture.language]!;
     // named for its first town, in its own tongue
     let name = compound(lang, 'land', st.modifier || st.head, year);

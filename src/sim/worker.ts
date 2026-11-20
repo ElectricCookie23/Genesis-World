@@ -12,6 +12,8 @@ import {
 } from '../shared/protocol';
 import { ERAS, earthNote, eraOf } from './history/eras';
 import { CALAMITIES, REBUILDS } from './history/calamity';
+import { LEXICON, SAYINGS } from './history/syntax';
+import { languageList } from './history/tongues';
 import { compound } from './history/language';
 import { WEB, wayFor } from './history/tech';
 
@@ -511,6 +513,9 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
             : { what: 'place', data: placeAt(sim, a.id, a.year) };
           post({ type: 'memory', answer });
         }
+        break;
+      case 'requestLanguages':
+        if (sim) post({ type: 'languages', lexicon: [...LEXICON], sayings: SAYINGS.map((x) => x.english), list: languageList(sim.civ.h) });
         break;
       case 'requestDynasty':
         if (sim) { const detail = dynastyDetail(sim, msg.id); if (detail) post({ type: 'dynasty', detail }); }

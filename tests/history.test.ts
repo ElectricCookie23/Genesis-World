@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { RNG } from '../src/sim/rng';
 import { hash32, unit } from '../src/sim/history/hash';
-import { applyChange, compound, makeLanguage, personName, placeMeanings, soundChange, splitLanguage, word, wordAt, wordDistance, type Voice } from '../src/sim/history/language';
+import { applyChange, compound, makeLanguage, personName, placeMeanings, soundChange, splitLanguage, word, wordAt, wordDistance, type Language, type Voice } from '../src/sim/history/language';
 import { count, listing, ordinal, write } from '../src/sim/history/grammar';
 
 const big: Voice = { size: 0.9, water: 0.1, flight: 0, hearing: 0.3, harsh: 0.7 };
@@ -1036,6 +1036,7 @@ describe('golden ages (E10)', () => {
 });
 
 import { NETWORKS, WONDER_KINDS } from '../src/sim/history/model';
+import { LEXICON, SAYINGS, describeGrammar, describeSounds, driftSpan, grammarOf, say } from '../src/sim/history/syntax';
 import { CALAMITIES, REBUILDS, answer, brittle, damage, describeScar, hazards, plotFate, rebuildYears, woodShare, type Ground, type Scar } from '../src/sim/history/calamity';
 
 describe('infrastructure networks (E15)', () => {
@@ -1528,5 +1529,86 @@ describe('disasters in cities (E20)', () => {
     expect(laws).toBeGreaterThan(5);
     expect(stone).toBeGreaterThan(5);
     expect(kinds.size).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('generated languages (E21)', () => {
+  it('a family shares its grammar, and its endings are words that wear down with the rest', () => {
+    const mother = makeLanguage(0, 4242, big, 0);
+    const rng = new RNG(5);
+    for (let y = 100; y <= 300; y += 100) soundChange(mother, rng, y);
+    const east = splitLanguage(mother, 1, 400), west = splitLanguage(mother, 2, 400);
+    for (let y = 500; y <= 1500; y += 100) { soundChange(east, rng, y); soundChange(west, rng, y); }
+    const stranger = makeLanguage(3, 9911, small, 0);
+    expect(grammarOf(east)).toEqual(grammarOf(west));
+    expect(LEXICON.length).toBeGreaterThanOrEqual(30);
+    expect(new Set(LEXICON).size).toBe(LEXICON.length);
+    for (const what of SAYINGS) {
+      const a = say(east, what), b = say(west, what), c = say(stranger, what);
+      // every word of the sentence is a word of the language, and the gloss names each meaning
+      for (const m of [what.s, what.v, what.o]) { expect(a.gloss).toContain(m); expect(a.text.toLowerCase()).toContain(word(east, m).slice(0, 3)); }
+      if (what.past) expect(a.gloss).toMatch(/BEFORE/);
+      expect(a.text.endsWith('.')).toBe(true);
+      // sisters say it with the same shape (as many words in the same order of meanings), strangers need not
+      expect(a.gloss).toBe(b.gloss);
+      expect(a.text).not.toBe(c.text);
+      // a sentence said in the year the two parted is the same in both; said now it is not, but is close
+      expect(say(east, what, 400).text).toBe(say(west, what, 400).text);
+    }
+    const now = SAYINGS.map((w) => [say(east, w).text, say(west, w).text, say(stranger, w).text] as const);
+    expect(now.some(([a, b]) => a !== b)).toBe(true);
+    let kin = 0, far = 0;
+    for (const [a, b, c] of now) { kin += wordDistance(a, b); far += wordDistance(a, c); }
+    expect(kin).toBeLessThan(far * 0.75);
+    expect(describeGrammar(east)).toBe(describeGrammar(east));
+    expect(describeGrammar(east).length).toBeGreaterThan(60);
+    expect(describeSounds(east)).toMatch(/Consonants .*; vowels /);
+    // writing slows the wearing of sounds, and so does age
+    expect(driftSpan(0, true)).toBeGreaterThan(driftSpan(0, false) * 1.5);
+    expect(driftSpan(30, false)).toBeGreaterThan(driftSpan(0, false) * 2.5);
+  });
+
+  it('two related languages share visibly similar words for the same things', () => {
+    const runs = fiveHistories();
+    let pairs = 0, partings = 0;
+    for (const { sim } of runs) {
+      const h = sim.civ.h, ev = sim.events.events;
+      const spoken = [...new Set(h.nations.filter((n) => n.ended < 0).map((n) => h.cultures[n.culture]!.language))].map((id) => h.languages[id]!);
+      // every living people has a name of its own
+      const peoples = [...new Set(h.nations.filter((n) => n.ended < 0).map((n) => n.culture))].map((id) => h.cultures[id]!.name);
+      expect(new Set(peoples).size).toBe(peoples.length);
+      for (const lang of spoken) {
+        // it has a word for everything on the list, each sayable
+        for (const m of LEXICON) { const w = word(lang, m); expect(w.length).toBeGreaterThanOrEqual(2); expect(w).toMatch(/[aeiou]/); }
+        // it has worn since history began, and no change is dated before the language's family or after today
+        expect(lang.changes.some((c) => c.year >= h.began)).toBe(true);
+        for (const c of lang.changes) expect(c.year).toBeLessThanOrEqual(sim.simYear + 1e-6);
+        expect(lang.changes.length).toBeLessThanOrEqual(64);
+      }
+      const root = (l: Language): number => { let x = l; while (x.parent >= 0) x = h.languages[x.parent]!; return x.id; };
+      for (const a of spoken) for (const b of spoken) {
+        if (a.id >= b.id || a.family !== b.family) continue;
+        expect(root(a)).toBe(root(b));
+        pairs++;
+        let sum = 0, close = 0, same = 0;
+        for (const m of LEXICON) { const d = wordDistance(word(a, m), word(b, m)); sum += d; if (d <= 0.5) close++; if (d === 0) same++; }
+        // sisters: most words still plainly the same word, but not the same language
+        expect(sum / LEXICON.length).toBeLessThan(0.62);
+        expect(close).toBeGreaterThanOrEqual(LEXICON.length * 0.4);
+        expect(same).toBeLessThan(LEXICON.length);
+        expect(grammarOf(a)).toEqual(grammarOf(b));
+      }
+      for (const e of ev) {
+        if (e.type !== 'language') continue;
+        partings++;
+        const c = h.cultures[Number(e.data!.culture)]!, old = h.cultures[Number(e.data!.parent)]!;
+        expect(c.parent).toBe(old.id);
+        expect(h.languages[c.language]!.parent).toBe(old.language);
+        expect(h.languages[c.language]!.bornYear).toBe(e.simYear);
+        expect(e.description).toContain(c.name);
+      }
+    }
+    expect(pairs).toBeGreaterThan(3);
+    expect(partings).toBeGreaterThan(0);
   });
 });
