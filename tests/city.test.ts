@@ -165,3 +165,89 @@ describe('watch it being built (E12)', () => {
     for (const kind of ['hut', 'house', 'hall', 'tower', 'dome', 'spire', 'temple'] as const) expect(Math.abs(top(kind) - HEIGHT[kind]!)).toBeLessThan(0.12);
   });
 });
+
+import { architectureDistance, architectureOf, describeArchitecture, materialOf } from '../src/render/gfx/architecture';
+import { G, GENE_COUNT } from '../src/sim/genetics';
+
+/** A genome with every gene at the middle, then some set by name. */
+function genome(set: Partial<Record<keyof typeof GENES, number>>): Float32Array {
+  const g = new Float32Array(GENE_COUNT).fill(0.5);
+  for (const [k, v] of Object.entries(set)) g[GENES[k as keyof typeof GENES]] = v as number;
+  return g;
+}
+const GENES = { Neck: G.Neck, LimbType: G.LimbType, LimbPairs: G.LimbPairs, LimbLength: G.LimbLength, BodyRatio: G.BodyRatio, Burrow: G.Burrow, Water: G.Water, Ornament: G.Ornament, Horn: G.Horn, EyeCount: G.EyeCount, Sociality: G.Sociality, Size: G.Size, Insulation: G.Insulation } as const;
+
+describe('architecture from biology (E13)', () => {
+  const walker = architectureOf(genome({ Neck: 0.9, LimbType: 0.6, LimbLength: 0.9, BodyRatio: 0.1, Burrow: 0.05, Water: 0.05 }));
+  const digger = architectureOf(genome({ Neck: 0.1, LimbType: 0.6, LimbLength: 0.2, BodyRatio: 0.8, Burrow: 0.95, Water: 0.1 }));
+  const flier = architectureOf(genome({ Neck: 0.4, LimbType: 0.95, LimbLength: 0.7, BodyRatio: 0.3, Burrow: 0.05, Water: 0.05 }));
+  const swimmer = architectureOf(genome({ Neck: 0.2, LimbType: 0.35, LimbLength: 0.4, BodyRatio: 0.7, Burrow: 0.1, Water: 0.95 }));
+
+  it('a people builds like the body that builds', () => {
+    // tall builders build tall and narrow
+    expect(walker.rise).toBeGreaterThan(1.4);
+    expect(walker.girth).toBeLessThan(0.95);
+    expect(walker.lift).toBe(0);
+    // burrowers dig down: low, broad, round, the floor under the ground
+    expect(digger.rise).toBeLessThan(0.8);
+    expect(digger.girth).toBeGreaterThan(walker.girth + 0.25);
+    expect(digger.lift).toBeLessThan(-0.3);
+    expect(digger.round).toBeGreaterThan(0.6);
+    // fliers build high perches on posts
+    expect(flier.lift).toBeGreaterThan(0.9);
+    expect(flier.rise).toBeGreaterThan(1);
+    // a people of the water builds out into the shallows; nobody else does
+    expect(swimmer.wade).toBeGreaterThan(0.6);
+    expect(walker.wade + digger.wade + flier.wade).toBe(0);
+    // each is unlike every other, and each is described differently
+    const all = [walker, digger, flier, swimmer];
+    for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) expect(architectureDistance(all[i]!, all[j]!)).toBeGreaterThan(0.45);
+    expect(new Set(all.map((a) => describeArchitecture(a, 'timber'))).size).toBe(4);
+    expect(describeArchitecture(flier, 'timber')).toMatch(/on high posts, with no stairs/);
+    expect(describeArchitecture(digger, 'stone')).toMatch(/sunk into the ground/);
+    expect(describeArchitecture(swimmer, 'coral and shell')).toMatch(/out into the shallows/);
+    expect(describeArchitecture(walker, 'mud brick')).toMatch(/tall and narrow, in mud brick\. Their doorways are tall/);
+    // the same body always builds the same way, and every number stays in its range
+    expect(JSON.stringify(architectureOf(genome({ Neck: 0.9 })))).toBe(JSON.stringify(architectureOf(genome({ Neck: 0.9 }))));
+    const rng = new Float32Array(GENE_COUNT);
+    for (let k = 0; k < 200; k++) {
+      for (let i = 0; i < GENE_COUNT; i++) rng[i] = ((k * 7919 + i * 104729) % 1000) / 1000;
+      const a = architectureOf(rng);
+      expect(a.rise).toBeGreaterThanOrEqual(0.55); expect(a.rise).toBeLessThanOrEqual(1.9);
+      expect(a.girth).toBeGreaterThanOrEqual(0.7); expect(a.girth).toBeLessThanOrEqual(1.5);
+      expect(a.pitch).toBeGreaterThanOrEqual(0.6); expect(a.pitch).toBeLessThanOrEqual(2.2);
+      expect(a.lift).toBeGreaterThanOrEqual(-0.5); expect(a.lift).toBeLessThanOrEqual(1.4);
+      for (const v of [a.wade, a.round, a.ornament]) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(1); }
+    }
+  });
+
+  it('what they build with comes from the land', () => {
+    const place = { temperature: 15, moisture: 0.5, canopy: 0.1, height: 0.4, coast: false, river: 0 };
+    expect(materialOf({ ...place, canopy: 0.7 }).name).toBe('timber');
+    expect(materialOf({ ...place, moisture: 0.1 }).name).toBe('mud brick');
+    expect(materialOf({ ...place, height: 2.2, moisture: 0.4 }).name).toBe('stone');
+    expect(materialOf({ ...place, moisture: 0.9, canopy: 0.2 }).name).toBe('reed');
+    expect(materialOf({ ...place, temperature: -9 }).name).toBe('packed snow');
+    expect(materialOf({ ...place, coast: true, temperature: 24 }, 0.9).name).toBe('coral and shell');
+    expect(materialOf({ ...place, coast: true, temperature: 24 }, 0).name).not.toBe('coral and shell');
+    // different materials are different colours
+    const colours = [materialOf({ ...place, canopy: 0.7 }), materialOf({ ...place, moisture: 0.1 }), materialOf({ ...place, temperature: -9 })].map((m) => m.wall.join(','));
+    expect(new Set(colours).size).toBe(3);
+  });
+
+  it('builders who dig build domes where others raise towers, and fliers build towers to live in', () => {
+    let towers = 0, domes = 0, perches = 0, plainTowers = 0;
+    for (let k = 0; k < 400; k++) {
+      const r = (k * 37 % 400) / 400, central = (k * 91 % 400) / 400;
+      const d = (['market', 'temple', 'homes', 'workshops', 'docks'] as const)[k % 5]!;
+      const mine = buildingFor(d, central, 0.7, r, digger), plain = buildingFor(d, central, 0.7, r), theirs = buildingFor(d, central, 0.7, r, flier);
+      if (mine === 'tower' || mine === 'spire') towers++;
+      if (mine === 'dome') domes++;
+      if (plain === 'tower') plainTowers++;
+      if (theirs === 'tower') perches++;
+    }
+    expect(towers).toBe(0);
+    expect(domes).toBeGreaterThan(20);
+    expect(perches).toBeGreaterThan(plainTowers + 20);
+  });
+});

@@ -19,6 +19,8 @@ import { settlementSize, type Nation } from './nations';
 import { MAX_PLOTS, buildingSites, planCity, stageOf, watchable, type CityPlan, type CitySite, type District, type Site } from './cityplan';
 import type { PlanetData } from './planetdata';
 import type { GroundSampler } from './ground';
+import { architectureOf, materialOf, type Architecture } from './architecture';
+import type { SpeciesInfo } from '../../shared/protocol';
 import { groundRadiusNode } from './terrain';
 import { eclipseLight } from './eclipse';
 
@@ -27,6 +29,8 @@ type N = any;
 
 const PART = { wall: 0, roof: 1, windows: 2, flame: 3, sail: 4, hull: 5, road: 6 } as const;
 export const BUILDINGS = ['hut', 'house', 'hall', 'tower', 'dome', 'spire', 'temple', 'boat', 'road', 'wall', 'gate', 'scaffold', 'hoist', 'crane', 'worker'] as const;
+/** Where the roof of each kind begins, in the units its model is drawn in. */
+const EAVES: Partial<Record<(typeof BUILDINGS)[number], number>> = { hut: 0.42, house: 0.5, hall: 0.75, tower: 2.3, dome: 0.5, spire: 1.6 };
 /** How tall each kind of building stands, in the units its model is drawn in: what scaffolding has to reach. */
 export const HEIGHT: Partial<Record<(typeof BUILDINGS)[number], number>> = { hut: 1.0, house: 0.92, hall: 1.25, tower: 2.55, dome: 1.2, spire: 4.3, temple: 1.72 };
 export type Building = (typeof BUILDINGS)[number];
@@ -95,6 +99,13 @@ class Shape {
 /** Models are about one unit wide and stand on the origin. */
 export function buildBuilding(kind: Building): BufferGeometry {
   const s = new Shape();
+  // Under every building is the post it would stand on if its builders lifted their floors (system E13): below the
+  // ground, and so unseen, for everyone else. And in its front wall a doorway, which is as tall as its builders make it.
+  if (HEIGHT[kind] !== undefined && kind !== 'temple') {
+    for (const [x, z] of [[-0.24, -0.18], [0.24, -0.18], [-0.24, 0.18], [0.24, 0.18]] as [number, number][]) s.box(x, -2.2, z, 0.07, 2.2, 0.07, PART.hull, PART.hull);
+    const front = kind === 'hut' ? 0.47 : kind === 'house' ? 0.36 : kind === 'hall' ? 0.46 : kind === 'tower' ? 0.32 : kind === 'dome' ? 0.71 : 0.5;
+    s.box(0, 0, front, 0.16, 0.3, 0.03, PART.hull, PART.hull);
+  }
   switch (kind) {
     case 'hut':
       s.ring(0, 0, 0, 0.45, 0.42, 0.45, 9, PART.wall);
@@ -198,7 +209,7 @@ export function buildBuilding(kind: Building): BufferGeometry {
   return s.build();
 }
 
-interface Slot { mesh: Copies; iDir: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; iLight: InterleavedBufferAttribute; cap: number; n: number; }
+interface Slot { mesh: Copies; iDir: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; iLight: InterleavedBufferAttribute; iForm: InterleavedBufferAttribute; iWall: InterleavedBufferAttribute; iStyle: InterleavedBufferAttribute; cap: number; n: number; }
 
 function hash(n: number): number {
   let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
@@ -217,7 +228,20 @@ export function townPlots(pop: number, tech: number): number {
 }
 
 /** What stands on a plot: by its quarter, how near the middle it is, and how far the town has come. `r` is the plot's own luck. */
-export function buildingFor(district: District, central: number, era: number, r: number): Building {
+export function buildingFor(district: District, central: number, era: number, r: number, arch?: Architecture): Building {
+  const kind = plainBuilding(district, central, era, r);
+  if (!arch) return kind;
+  // Builders who dig, or who are at home in water, build round and low: no towers until their engineers insist,
+  // and domes where others raise halls. Fliers want height from the start: their homes are towers to perch on.
+  const lowly = arch.round > 0.6 || arch.lift < -0.2;
+  if (lowly && (kind === 'tower' || kind === 'spire') && era < 0.9) return 'dome';
+  if (lowly && kind === 'house' && r > 0.55) return 'hut';
+  if (lowly && kind === 'hall' && r > 0.5) return 'dome';
+  if (arch.flier > 0.5 && kind === 'house' && era >= 0.3 && r < 0.35 + 0.25 * arch.flier) return 'tower';
+  return kind;
+}
+
+function plainBuilding(district: District, central: number, era: number, r: number): Building {
   if (era < 0.3) return district === 'market' && r < 0.2 && era > 0.22 ? 'house' : 'hut';
   if (district === 'market') return era < 0.6 ? (r < 0.5 ? 'hall' : 'house') : era < 0.85 ? (r < 0.4 ? 'tower' : 'hall') : r < 0.3 ? 'spire' : r < 0.8 ? 'tower' : 'dome';
   if (district === 'temple') return era < 0.6 ? (r < 0.6 ? 'hall' : 'house') : r < 0.5 ? 'dome' : 'hall';
@@ -250,10 +274,15 @@ export class Towns {
       const slotCap = boat ? 96 : kind === 'house' || kind === 'road' ? cap : kind === 'hut' || kind === 'wall' ? Math.ceil(cap / 2) : kind === 'temple' || kind === 'gate' ? 64 : kind === 'scaffold' || kind === 'hoist' || kind === 'crane' ? 48 : kind === 'worker' ? 160 : Math.ceil(cap / 4);
       const g = buildBuilding(kind);
       // per-building data in one shared buffer (WebGPU allows 8 vertex buffers per draw; separately these made 9)
-      const { iDir, iQuat, iData, iTint, iLight } = packAttributes(g, [
+      const { iDir, iQuat, iData, iTint, iLight, iForm, iWall, iStyle } = packAttributes(g, [
         { name: 'iDir', size: 3 }, { name: 'iQuat', size: 4 }, { name: 'iData', size: 4 }, // iData: size, seed, share of windows lit at night, technology
         { name: 'iTint', size: 3 }, { name: 'iLight', size: 3 },
-      ], slotCap, { instanced: true, dynamic: true }) as { iDir: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; iLight: InterleavedBufferAttribute };
+        // how its builders build (system E13): height and width as multiples of the plain model, floor lifted on posts
+        // (positive) or sunk (negative), how far out into the water they will build; and what their walls are made of
+        { name: 'iForm', size: 4 }, { name: 'iWall', size: 3 },
+        // its style: how steep its roof, how many windows, how much ornament
+        { name: 'iStyle', size: 3 },
+      ], slotCap, { instanced: true, dynamic: true }) as { iDir: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; iLight: InterleavedBufferAttribute; iForm: InterleavedBufferAttribute; iWall: InterleavedBufferAttribute; iStyle: InterleavedBufferAttribute };
       const material = new MeshBasicNodeMaterial({ side: DoubleSide });
       const aDir: N = attribute('iDir', 'vec3'), aQuat: N = attribute('iQuat', 'vec4'), aData: N = attribute('iData', 'vec4');
       // boats ride the sea, rocking a little; everything else stands on the ground
@@ -264,7 +293,13 @@ export class Towns {
       // Nothing is built in the water. Sites are chosen by the nearest cell, but the drawn ground is blended between
       // cells and can dip under the tide inside a land cell: such a building shrinks to nothing (huts stood half
       // under water in the surf).
-      const dry: N = boat ? float(1) : step(float(1).add(uSeaKm.mul(EXAG)).add(0.00002), radius);
+      const aForm: N = attribute('iForm', 'vec4');
+      const shaped = HEIGHT[kind] !== undefined;
+      // A people of the water builds out into the shallows (system E13): its buildings stand where the bottom is a
+      // little under the surface, with their floors no deeper than a part of their own height.
+      const seaR: N = float(1).add(uSeaKm.mul(EXAG));
+      const depthOk: N = shaped ? aForm.w.mul(0.00011) : float(0);
+      const dry: N = boat ? float(1) : step(seaR.add(0.00002).sub(depthOk), radius);
       if (kind === 'road' || kind === 'wall') {
         // Streets and walls lie along the ground: every corner finds the ground under itself, where a building
         // stands level on the ground under its middle. (As rigid slabs, stretches of road on a slope were half
@@ -285,9 +320,18 @@ export class Towns {
           // A building under construction (system E12) carries how far along it is as a negative number where a
           // finished one carries its share of lit windows. It is drawn up to that height and no further: the
           // foundation first, the walls rising, the roof closing over last.
-          const built: N = aData.z.negate().mul(HEIGHT[kind]! * 1.02);
+          // the roof first, as steep as its builders like it: everything above the eaves is stretched
+          const eave = EAVES[kind] ?? HEIGHT[kind]!;
+          const aStyle: N = attribute('iStyle', 'vec3');
+          geo = (vec3 as any)(geo.x, (min as any)(geo.y, eave).add((max as any)(geo.y.sub(eave), 0).mul(aStyle.x)), geo.z);
+          // then its builders' proportions (system E13): as tall and as wide as they build
+          geo = geo.mul((vec3 as any)(aForm.y, aForm.x, aForm.y));
+          const built: N = aData.z.negate().mul(HEIGHT[kind]! * 1.02).mul(aForm.x);
           const rising: N = step(aData.z, -0.0005);
           geo = (vec3 as any)(geo.x, (min as any)(geo.y, mix(float(1e3), built, rising)), geo.z);
+          // then its floor is lifted on its posts, or sunk into the ground so that only the top shows
+          // (a lift is a height in model units; a sink is a share of the building's own height, so that a mound always shows)
+          geo = geo.add((vec3 as any)(0, mix(aForm.z, aForm.z.mul(aForm.x).mul(HEIGHT[kind]!), step(aForm.z, 0)), 0));
         } else if (kind === 'scaffold') {
           // as tall as what it stands round
           geo = geo.mul((vec3 as any)(1, aData.w, 1));
@@ -299,7 +343,9 @@ export class Towns {
           // builders going to and fro along the front of the site
           geo = geo.add((vec3 as any)(sin(uTime.mul(1.1).add(aData.y.mul(50))).mul(2.6), 0, sin(uTime.mul(0.7).add(aData.y.mul(31))).mul(0.9)));
         }
-        material.positionNode = base.add(rotate(geo.mul(aData.x).mul(dry), aQuat));
+        // (standing in the shallows, a building's floor is at the surface less a part of its height, not on the bottom)
+        const stand: N = shaped ? (max as any)(radius, seaR.sub(aData.x.mul(HEIGHT[kind] ?? 1).mul(aForm.x).mul(0.45))) : radius;
+        material.positionNode = aDir.mul(stand).add(rotate(geo.mul(aData.x).mul(dry), aQuat));
       }
       const nW: N = varying(normalize(rotate(normalGeometry, aQuat)));
       const vPart: N = varying(attribute('bpart', 'float'));
@@ -310,12 +356,18 @@ export class Towns {
       const is = (k: number): N => step(abs(vPart.sub(k)), 0.5);
       const tech: N = vData.w;
       // walls go from mud and timber to stone to pale composite as a people learns to build
-      const wall: N = mix(mix(vec3(0.5, 0.38, 0.27), vec3(0.56, 0.54, 0.5), smoothstep(0.25, 0.6, tech)), vec3(0.78, 0.8, 0.82), smoothstep(0.75, 0.98, tech))
+      // (system E13) what the land gives: a town's walls are of its own material while it is young, dressed stone
+      // of the same cast in its middle ages, and keep a memory of it under the pale composites of a late age
+      const local: N = varying(attribute('iWall', 'vec3'));
+      const wall: N = mix(mix(local, mix(vec3(0.56, 0.54, 0.5), local, 0.45), smoothstep(0.25, 0.6, tech)), mix(vec3(0.78, 0.8, 0.82), local, 0.22), smoothstep(0.75, 0.98, tech))
         .mul(fract(vData.y.mul(7.3)).mul(0.3).add(0.82));
       const roof: N = mix(vec3(0.42, 0.34, 0.18), vTint.mul(0.55).add(0.08), smoothstep(0.3, 0.55, tech));
       // windows: a grid on the wall; each pane is lit or dark for the whole night
-      const cell: N = floor(vUv);
-      const inPane = step(0.22, fract(vUv.x)).mul(step(fract(vUv.x), 0.78)).mul(step(0.3, fract(vUv.y))).mul(step(fract(vUv.y), 0.8));
+      // (system E13) a people that wants many windows cuts them closer together
+      const vStyle: N = varying(attribute('iStyle', 'vec3'));
+      const wUv: N = (vec2 as any)(vUv.x.mul(vStyle.y), vUv.y);
+      const cell: N = floor(wUv);
+      const inPane = step(0.22, fract(wUv.x)).mul(step(fract(wUv.x), 0.78)).mul(step(0.3, fract(vUv.y))).mul(step(fract(vUv.y), 0.8));
       const paneRnd = fract(sin(dot(cell.add(vData.y.mul(91)), vec2(127.1, 311.7))).mul(43758.5453));
       const litPane = step(paneRnd, vData.z).mul(inPane);
       const glass = inPane.mul(is(PART.windows));
@@ -328,6 +380,8 @@ export class Towns {
         // streets go from trodden earth to paving as a people learns to build
         .add(mix(vec3(0.4, 0.32, 0.22), vec3(0.47, 0.46, 0.44), smoothstep(0.4, 0.75, tech)).mul(is(PART.road)));
       albedo = mix(albedo, vec3(0.06, 0.08, 0.1), glass.mul(0.85));
+      // and one that decorates bands every floor of its walls in its own colour
+      albedo = mix(albedo, vTint.mul(0.6).add(0.12), vStyle.z.mul(0.75).mul(step(0.86, fract(vUv.y))).mul(is(PART.wall).add(is(PART.windows))));
       const sunColor: N = mix(vec3(uLook.dusk), vec3(uLook.star), smoothstep(-0.05, 0.4, sunH));
       const sunVis = smoothstep(-0.08, 0.1, sunH).mul(cloudShadow(vBase)).mul(eclipseLight(vBase));
       const sky: N = mix(vec3(uHazeTint), vec3(0.6, 0.6, 0.6), 0.45).mul(0.4).mul(day).mul(dot(nW, up).mul(0.35).add(0.65));
@@ -344,7 +398,7 @@ export class Towns {
       mesh.count = 0;
       mesh.frustumCulled = false;
       this.meshes.push(mesh);
-      this.slots.set(kind, { mesh, iDir, iQuat, iData, iTint, iLight, cap: slotCap, n: 0 });
+      this.slots.set(kind, { mesh, iDir, iQuat, iData, iTint, iLight, iForm, iWall, iStyle, cap: slotCap, n: 0 });
     }
   }
 
@@ -356,6 +410,36 @@ export class Towns {
   readonly sites = new Map<number, { what: string; progress: number; years: number; stage: string }[]>();
   private lastYear = -1;
   private lastBuilt = 0;
+
+  /** The species on record: what a town's builders are like (system E13). */
+  species: Map<number, SpeciesInfo> | null = null;
+  private form: number[] = [1, 1, 0, 0];
+  private wallColour: number[] = [0.5, 0.38, 0.27];
+  private style: number[] = [1, 1, 0];
+  private builders = new Map<number, Architecture>();
+
+  /** How the builders of a town build, and of what: for the info card (system E13). */
+  architecture(st: TownInfo): { arch: Architecture; material: string } | null {
+    const arch = this.architectureFor(st.species);
+    return arch && this.cells ? { arch, material: this.materialAt(st, arch).name } : null;
+  }
+
+  private architectureFor(species: number): Architecture | null {
+    const known = this.builders.get(species);
+    if (known) return known;
+    const sp = this.species?.get(species);
+    if (!sp) return null;
+    const a = architectureOf(sp.genes);
+    this.builders.set(species, a);
+    return a;
+  }
+
+  private materialAt(st: TownInfo, arch: Architecture): ReturnType<typeof materialOf> {
+    const c = this.cells!, i = st.cell;
+    let coast = false;
+    for (let j = 0; j < this.grid.ncount[i]!; j++) if (c.elevation[this.grid.neighbors[i * 6 + j]!]! <= c.seaLevel) coast = true;
+    return materialOf({ temperature: c.temperature[i]!, moisture: c.moisture[i]!, canopy: c.canopy[i]!, height: c.elevation[i]! - c.seaLevel, coast, river: Math.min(1, c.flow[i]! * 4) }, arch.swimmer);
+  }
 
   /** The drawn ground, sampled here on the page: where the shore really is and which way the land rises. */
   ground: GroundSampler | null = null;
@@ -379,7 +463,7 @@ export class Towns {
    * The plan of a town, from where it stands and what has happened to it: the roads lead toward its
    * neighbours, the shore is where the sea is, the land rises where it rises. Kept until those facts change.
    */
-  private planFor(st: TownInfo, c: Vector3, east: Vector3, north: Vector3, nat: Nation | undefined, cells: CellSnapshot): { plan: CityPlan; wet: Map<number, boolean> } {
+  private planFor(st: TownInfo, c: Vector3, east: Vector3, north: Vector3, nat: Nation | undefined, cells: CellSnapshot, wade = 0): { plan: CityPlan; wet: Map<number, boolean> } {
     // (the ground is read again every few seconds at most: a town is redrawn many times a second while its building
     // sites are being watched, and the shore does not move that fast)
     const now = performance.now();
@@ -432,10 +516,11 @@ export class Towns {
       seed: (st.id * 2654435761) >>> 0,
       roads: near.slice(0, 4).map((x) => Math.round(x.a * 8) / 8),
       coast: coastal ? Math.round(Math.atan2(wy, wx) * 8) / 8 : 0,
-      shore: coastal ? Math.max(2, Math.round(shore) - 1) : Infinity,
+      // (a people of the water counts the shallows as ground to build on: its plan reaches out past the shore)
+      shore: coastal ? Math.max(2, Math.round(shore) - 1) + Math.round(5 * wade) : Infinity,
       uphill: Math.round(Math.atan2(gy, gx) * 8) / 8,
       slope: Math.round(Math.min(1, steep * 2.5) * 10) / 10,
-      temple: !!st.temple, port: coastal && (!!st.overseas || st.tech > 0.36), capital: !!nat && nat.capital === st.id, walls,
+      temple: !!st.temple, port: coastal && (!!st.overseas || st.tech > 0.36 || wade > 0.3), capital: !!nat && nat.capital === st.id, walls,
     };
     const key = JSON.stringify(site);
     const have = this.plans.get(st.id);
@@ -482,6 +567,11 @@ export class Towns {
     s.iData.setXYZW(i, size, seed, lit, tech);
     s.iTint.setXYZ(i, tint[0]!, tint[1]!, tint[2]!);
     s.iLight.setXYZ(i, light[0]!, light[1]!, light[2]!);
+    const f = this.form, w = this.wallColour;
+    s.iForm.setXYZW(i, f[0]!, f[1]!, f[2]!, f[3]!);
+    s.iWall.setXYZ(i, w[0]!, w[1]!, w[2]!);
+    const look = this.style;
+    s.iStyle.setXYZ(i, look[0]!, look[1]!, look[2]!);
   }
   private static q = new Quaternion();
   private static y = new Quaternion();
@@ -538,20 +628,31 @@ export class Towns {
         const eraNow = Math.min(st.tech, 0.15 + size * 0.95);
         const era = lapse < 1 ? Math.min(eraNow, 0.12 + (eraNow - 0.12) * Math.pow(lapse, 0.8)) : eraNow;
         // ---- the town is laid out on its plan: roads, streets, plots in the order they were built, walls
-        const laid = this.planFor(st, c, east, north, nat, cells!);
+        // ---- how these builders build, and with what (system E13)
+        const arch = this.architectureFor(st.species);
+        const stuff = arch ? this.materialAt(st, arch) : null;
+        const plain = [1, 1, 0, 0];
+        const shapedForm = arch ? [arch.rise, arch.girth, arch.lift, arch.wade] : plain;
+        this.wallColour = stuff ? stuff.wall : [0.5, 0.38, 0.27];
+        this.style = arch ? [arch.pitch, arch.windows, arch.ornament] : [1, 1, 0];
+        this.form = plain;
+        const laid = this.planFor(st, c, east, north, nat, cells!, arch ? arch.wade : 0);
         const plan = laid.plan, wetAt = laid.wet;
-        const U = 0.00062 * boost;
+        // (a people that lives packed together builds its streets closer)
+        const U = 0.00062 * boost * (arch ? arch.spacing : 1);
         const full = Math.min(plan.plots.length, townPlots(st.pop, st.tech));
         const count = Math.max(lapse < 1 ? 3 : 0, Math.round(full * lapse * lapse));
         let px = 0, py = 0;
         const at = (x: number, y: number): Vector3 => { px = x; py = y; return up.copy(c).addScaledVector(east, x * U).addScaledVector(north, y * U).normalize(); };
         const toward = (h: number): Vector3 => fwd.copy(east).multiplyScalar(Math.cos(h)).addScaledVector(north, Math.sin(h));
+        // (streets and walls keep to dry land; buildings of a people that wades may stand in the shallows)
+        let shallows = false;
         const wet = (): boolean => {
           // by the ground as it is drawn, where that can be sampled (and remembered for this place in this town); else by the nearest cell
           if (this.ground) {
-            const k = Math.round(px * 4) * 8192 + Math.round(py * 4) + Math.round(boost * 8) * 67108864;
+            const k = Math.round(px * 4) * 8192 + Math.round(py * 4) + Math.round(boost * 8) * 67108864 + (shallows ? 1073741824 : 0);
             let w = wetAt.get(k);
-            if (w === undefined) { w = this.ground.heightAt(up.x, up.y, up.z, this.ground.cellAt(up.x, up.y, up.z, st.cell)) <= this.ground.sea + 0.012; wetAt.set(k, w); }
+            if (w === undefined) { w = this.ground.heightAt(up.x, up.y, up.z, this.ground.cellAt(up.x, up.y, up.z, st.cell)) <= this.ground.sea + 0.012 - (shallows ? 0.1 * (arch ? arch.wade : 0) : 0); wetAt.set(k, w); }
             return w;
           }
           let cell = st.cell, best = up.x * pos[cell * 3]! + up.y * pos[cell * 3 + 1]! + up.z * pos[cell * 3 + 2]!;
@@ -597,9 +698,11 @@ export class Towns {
         const shown: { what: string; progress: number; years: number; stage: string }[] = [];
         const raise = (kind: Building, sz: number, seed: number, progress: number, heading: number, x: number, y: number): void => {
           // scaffolding to the height the work has reached, a crane of the age beside anything tall, builders in the street
-          const tall = HEIGHT[kind] ?? 1;
+          const tall = (HEIGHT[kind] ?? 1) * (arch ? arch.rise : 1);
+          this.form = arch ? [1, arch.girth, Math.max(0, arch.lift), 0] : plain;
           this.put('scaffold', up, 0, sz * (kind === 'dome' || kind === 'hall' || kind === 'temple' ? 1.45 : 1), seed, 0, tall * Math.min(1, progress + 0.2), tint, light, toward(heading));
           if (kind !== 'hut' && kind !== 'house' && progress < 0.96) { at(x + Math.cos(heading + 2.2) * 0.62, y + Math.sin(heading + 2.2) * 0.62); this.put(era >= 0.85 ? 'crane' : 'hoist', up, 0, sz * (era >= 0.85 ? 1 : 0.8) * Math.max(0.8, tall / (era >= 0.85 ? 3 : 1.7)), seed, 0, era, tint, light, toward(heading)); }
+          this.form = plain;
           for (let w = 0; w < (kind === 'hut' ? 2 : 4); w++) { at(x + Math.cos(heading) * 0.5 + Math.cos(heading + 1.57) * (w - 1.5) * 0.22, y + Math.sin(heading) * 0.5 + Math.sin(heading + 1.57) * (w - 1.5) * 0.22); this.put('worker', up, 0, 0.00006 * boost, hash(seed * 977 + w * 31 + st.id), 0, era, tint, light, toward(heading + 1.57)); }
         };
         // great works (system E10): each one built stands on its place near the square; in a golden age the next is going up
@@ -610,6 +713,7 @@ export class Towns {
           if (m >= works && !going) break;
           at(mx, my);
           if (wet()) continue;
+          this.form = shapedForm;
           const kind: Building = m % 2 ? 'dome' : 'spire', sz = 0.00094 * boost, seed = hash(st.id * 53 + m * 7), heading = Math.atan2(-my, -mx);
           // a great work takes a generation: thirty years, which is how often the chronicle records one in a golden age
           const progress = going ? Math.max(0.04, (simYear / 30 + hash(st.id * 3 + m)) % 1) : 1;
@@ -621,22 +725,28 @@ export class Towns {
           const plot = plan.plots[k]!;
           const h3 = hash(st.id * 1299709 + k * 7), h2 = hash(st.id * 104729 + k * 17);
           at(plot.x, plot.y);
-          // not in the sea
-          if (wet()) continue;
-          const kind = buildingFor(plot.district, plot.central, era, h3);
+          // not in the sea (unless its builders wade)
+          shallows = true;
+          const drowned = wet();
+          shallows = false;
+          if (drowned) continue;
+          const kind = buildingFor(plot.district, plot.central, era, h3, arch ?? undefined);
+          this.form = shapedForm;
           const job = jobs.length ? jobs.find((j) => j.plot === k) : undefined;
           // towers and spires stand above the trees and the largest animals (on a real GPU, animals on the skyline were
           // as tall as tower blocks, and from low altitude the blocks read as pins)
-          const sz = (kind === 'hut' ? 0.00028 : kind === 'house' ? 0.0004 : kind === 'hall' ? 0.00048 : 0.00064) * boost * (0.85 + 0.3 * h3);
+          const sz = (kind === 'hut' ? 0.00028 : kind === 'house' ? 0.0004 : kind === 'hall' ? 0.00048 : 0.00064) * boost * (0.85 + 0.3 * h3) * (arch ? arch.scale : 1);
           // it faces its street
           if (job) {
             const progress = Math.max(0.04, job.progress);
             this.put(kind, up, 0, sz, h2, -progress, era, tint, light, toward(plot.yaw));
+            at(plot.x, plot.y);
             raise(kind, sz, h2, progress, plot.yaw, plot.x, plot.y);
             shown.push({ what: `a ${kind} in the ${plot.district === 'homes' ? 'streets of houses' : plot.district === 'market' ? 'market' : plot.district === 'temple' ? 'temple quarter' : plot.district}`, progress, years: job.years, stage: stageOf(progress) });
           } else this.put(kind, up, 0, sz, h2, lit, era, tint, light, toward(plot.yaw));
           total++;
         }
+        this.form = plain;
         if (shown.length) this.sites.set(st.id, shown);
       }
       for (const [k, s] of this.slots) {

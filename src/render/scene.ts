@@ -1,4 +1,5 @@
 // Scene orchestration: owns the renderer, every visual layer, and per-frame updates.
+import { describeArchitecture, type Material } from './gfx/architecture';
 import {
   BoxGeometry, ConeGeometry, DoubleSide, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshBasicNodeMaterial, Quaternion, RingGeometry, Scene, Vector3,
   WebGPURenderer, type Vector4,
@@ -317,6 +318,7 @@ export class GenesisScene {
     }
     this.towns = new Towns(grid, this.data, this.erosion.texture, this.clouds.shadow, this.buildingBudget);
     this.towns.ground = this.ground;
+    this.towns.species = this.speciesMap;
     for (const m of this.towns.meshes) this.scene.add(m);
     this.tornadoes = new Tornadoes(this.data, this.erosion.texture);
     this.scene.add(this.tornadoes.mesh);
@@ -417,6 +419,7 @@ export class GenesisScene {
 
   setSpecies(species: Map<number, SpeciesInfo>): void {
     this.speciesMap = species;
+    if (this.towns) this.towns.species = species;
     if (!this.creatures) return;
     this.creatures.setSpecies(species);
     for (const m of this.creatures.prune()) this.scene.remove(m);
@@ -736,6 +739,12 @@ export class GenesisScene {
   private simYearSeen = 0;
   private simYearShown = 0;
   private yearsPerSecond = 0;
+
+  /** How a town's builders build and of what, in a sentence (system E13). */
+  architecture(st: SettlementInfo): string {
+    const a = this.towns?.architecture(st);
+    return a ? describeArchitecture(a.arch, a.material as Material) : '';
+  }
 
   /** What is being built in a town just now, if it has been drawn from close by lately (system E12). */
   construction(id: number): { what: string; progress: number; years: number; stage: string }[] {
