@@ -269,12 +269,16 @@ export class Towns {
         // Streets and walls lie along the ground: every corner finds the ground under itself, where a building
         // stands level on the ground under its middle. (As rigid slabs, stretches of road on a slope were half
         // buried and a street read as a row of dashes.)
-        const local: N = rotate((positionGeometry as any).mul(aData.x), aQuat);
+        // A stretch whose middle is under water is not drawn at all, and a corner that would fall in the water is
+        // pulled back to the middle of its stretch. (Seen on a real GPU: paving running off the shore into the sea.)
+        const local: N = rotate((positionGeometry as any).mul(aData.x).mul(dry), aQuat);
         const lift: N = dot(local, aDir);
-        const under: N = normalize(aDir.add(local.sub(aDir.mul(lift))));
-        const ground: N = groundRadiusNode(data, erosionTex, under);
-        const above: N = step(float(1).add(uSeaKm.mul(EXAG)).add(0.00002), ground);
-        material.positionNode = under.mul(ground.add(lift.mul(above)).add(0.000003));
+        const flat: N = local.sub(aDir.mul(lift));
+        const shore: N = float(1).add(uSeaKm.mul(EXAG)).add(0.00002);
+        const reach: N = groundRadiusNode(data, erosionTex, normalize(aDir.add(flat)));
+        const above: N = step(shore, reach);
+        const under: N = normalize(aDir.add(flat.mul(above)));
+        material.positionNode = under.mul(mix(radius, reach, above).add(lift.mul(above)).add(0.000003));
       } else {
         let geo: N = (positionGeometry as any).add(roll);
         if (HEIGHT[kind] !== undefined) {
