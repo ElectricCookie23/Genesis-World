@@ -718,7 +718,7 @@ async function boot(): Promise<void> {
         // a message that has just been written is held over the globe for a while (not the ones a loaded world already had)
         const fresh = state.cosmos && msg.messages.length > state.skyMessages.length ? { id: msg.messages.length - 1, until: performance.now() + 60000 } : state.skyMessage;
         scene.setMimics(msg.strange.mimics);
-        update({ cosmos: msg.cosmos, strange: msg.strange, link: msg.link ?? null, skyMessages: msg.messages, archives: msg.archives, skyMessage: fresh && fresh.until > performance.now() ? fresh : null });
+        update({ cosmos: msg.cosmos, strange: msg.strange, future: msg.future, link: msg.link ?? null, skyMessages: msg.messages, archives: msg.archives, skyMessage: fresh && fresh.until > performance.now() ? fresh : null });
         break;
       }
       case 'settlements':

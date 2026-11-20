@@ -19,6 +19,7 @@ import { Cosmos, MAP_H, MAP_W } from './cosmos';
 import { Legacy } from './legacy';
 import { exchange } from './link';
 import { Strange } from './strange';
+import { Future } from './future';
 
 /** Sim years covered by one full ecological step (one tick at Epoch speed). */
 export const ECO_YEARS = 15000;
@@ -95,6 +96,8 @@ export class Simulation {
   neighbor?: Simulation;
   /** Strata, pole flips, microbes, the hive mind, blooms, pollution, mimics, the swarm, scars and the pulse (expansion section 9). */
   strange: Strange;
+  /** What a people does beyond the space age, and how it ends (expansion section 8). */
+  future: Future;
   linkNoted: Record<string, number> = {};
   private cometLast = -1;
   private cometName = '';
@@ -179,6 +182,7 @@ export class Simulation {
     this.cosmos = new Cosmos(this.rng.fork('cosmos'), this.cometPeriod);
     this.legacy = new Legacy(this.rng.fork('legacy'));
     this.strange = new Strange(this.rng.fork('strange'), this.regions.count);
+    this.future = new Future(this.rng.fork('future'));
     this.lifeYear = this.lifeRng.range(0.35e6, 0.9e6);
     this.algaeDelay = this.lifeRng.range(1.2e6, 3e6);
     this.animalDelay = this.lifeRng.range(5e6, 10e6);
@@ -250,7 +254,8 @@ export class Simulation {
     const w = this.world;
     const tc = performance.now();
     // the star as the planet feels it: its age, and how far the planet now is from it
-    c.solar = this.cosmos.solar(this.simYear);
+    // (less whatever a swarm of collectors round the star is catching on the way, E80)
+    c.solar = this.cosmos.solar(this.simYear) * (1 - this.future.shade);
     c.aerosol *= Math.exp(-dt / 6);
     c.forced *= Math.exp(-dt / 30000);
     c.greenhouse += (2.5 - c.greenhouse) * (1 - Math.exp(-dt / 2.5e6));
@@ -280,6 +285,7 @@ export class Simulation {
     this.cosmos.step(this, dt);
     this.legacy.step(this);
     this.strange.step(this, dt);
+    this.future.step(this, dt);
     // the linked world keeps the same years, then the two may notice each other
     if (this.neighbor) { this.neighbor.step(dt); exchange(this, this.neighbor); }
     // continents drift: slow enough that it only shows at high time speeds
@@ -769,16 +775,23 @@ export class Simulation {
   }
 
   /** Release a species the user designed. genes are GENE_COUNT values 0..1. */
-  designSpecies(cell: number, genes: number[]): void {
-    if (this.stage !== 'animals') return;
+  /** Put a new kind of animal into the world around a cell, whole, with a name. Says nothing about where it came from. */
+  releaseSpecies(cell: number, genes: ArrayLike<number>, parent = -1): Species | null {
+    if (this.stage !== 'animals') return null;
     const g = Float32Array.from({ length: GENE_COUNT }, (_, i) => Math.max(0, Math.min(1, genes[i] ?? 0.3)));
     const region = this.regions.regionOf[cell]!;
-    const sp = this.creatures.addSpecies(g, 0, -1, this.simYear, '', '', g.slice());
+    const sp = this.creatures.addSpecies(g, 0, parent, this.simYear, '', '', g.slice());
     sp.home = region;
     const regs = [region];
     for (let j = 0; j < this.regions.grid.ncount[region]!; j++) regs.push(this.regions.grid.neighbors[region * 6 + j]!);
     for (const reg of regs) this.creatures.spawn(sp.id, reg, 4000, g, 0);
     nameSpecies(this.creatures, sp, 'isolation', this.world.biome[cell]!, this.nameRng, this.taken);
+    return sp;
+  }
+
+  designSpecies(cell: number, genes: number[]): void {
+    const sp = this.releaseSpecies(cell, genes);
+    if (!sp) return;
     const ev = this.emit({ type: 'god-species', cellId: cell, title: `${sp.name} is set down`, description: `A creature with no ancestors appears, whole and finished: ${sp.name}, ${this.describeSpecies(sp)}. Whether it lasts is up to the world.`, importance: 2, speciesIds: [sp.id], data: { byHand: 1 } });
     sp.eventId = ev.id;
     this.godEvents.push(ev.id);
@@ -1125,7 +1138,7 @@ export class Simulation {
 
   /** Nudge every random stream, so that a copy of this world takes a different road from here on. */
   diverge(): void {
-    for (let i = 0; i < 7; i++) { this.rng.next(); this.lifeRng.next(); this.civRng.next(); this.nameRng.next(); this.cosmos.rng.next(); this.legacy.rng.next(); this.strange.rng.next(); }
+    for (let i = 0; i < 7; i++) { this.rng.next(); this.lifeRng.next(); this.civRng.next(); this.nameRng.next(); this.cosmos.rng.next(); this.legacy.rng.next(); this.strange.rng.next(); this.future.rng.next(); }
   }
 
   /** A per-cell layer for the overlays: how many kinds of animal live here, or how much oxygen is being made here. 0..1. */

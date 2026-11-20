@@ -8,6 +8,7 @@ import type { CosmosInfo } from '../sim/cosmos';
 import type { Archive, ObserverMessage } from '../sim/legacy';
 import type { LinkInfo } from '../sim/link';
 import type { StrangeInfo } from '../sim/strange';
+import type { FutureInfo } from '../sim/future';
 
 export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'goals' | 'system' | 'microscope';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
@@ -97,6 +98,8 @@ export interface UIState {
   link: LinkInfo | null;
   /** Strata, the magnetic field, microbes under the camera, the hive mind, the swarm (expansion section 9). */
   strange: StrangeInfo | null;
+  /** What a people has done beyond the space age (expansion section 8). */
+  future: FutureInfo | null;
   /** The heartbeat is heard as well as seen. */
   pulseSound: boolean;
 }
@@ -161,6 +164,7 @@ export const state: UIState = {
   skyMessage: null,
   link: null,
   strange: null,
+  future: null,
   pulseSound: true,
 };
 

@@ -4,6 +4,7 @@ import type { CosmosInfo } from '../sim/cosmos';
 import type { Archive, ObserverMessage } from '../sim/legacy';
 import type { LinkInfo } from '../sim/link';
 import type { StrangeInfo } from '../sim/strange';
+import type { FutureInfo } from '../sim/future';
 
 export const SPEEDS = [
   { key: 'pause', label: 'Pause', yearsPerSecond: 0 },
@@ -95,6 +96,9 @@ export interface WorldStats {
   starSwell?: number;
   starPhase?: number;
   /** The planet's pulse in beats a minute and its health 0..1 (expansion E90); which way the magnetic field points and how far through a reversal it is. */
+  /** A people's works in orbit (expansion E71): 0 none, 1 a tether, 2 a ring; and the longitude the tether stands at. */
+  orbitalRing?: number;
+  tetherLon?: number;
   pulseRate?: number;
   health?: number;
   poleSign?: number;
@@ -331,6 +335,6 @@ export type FromWorker =
   | { type: 'site'; detail: SiteDetail }
   | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[] }
   | { type: 'timeline'; points: TimelinePoint[] }
-  | { type: 'cosmos'; cosmos: CosmosInfo; messages: ObserverMessage[]; archives: Archive[]; link?: LinkInfo; strange: StrangeInfo }
+  | { type: 'cosmos'; cosmos: CosmosInfo; messages: ObserverMessage[]; archives: Archive[]; link?: LinkInfo; strange: StrangeInfo; future: FutureInfo }
   | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }
   | { type: 'error'; message: string };
