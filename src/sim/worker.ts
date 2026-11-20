@@ -458,10 +458,10 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
       case 'settings':
         if (msg.slowOnEvents !== undefined) slowOnEvents = msg.slowOnEvents;
         break;
-      case 'god':
+      case 'tool':
         if (sim) {
           if (msg.tool === 'species' && msg.genes) sim.designSpecies(msg.cell, msg.genes);
-          else sim.god(msg.tool, msg.cell, msg.power ?? 0.8);
+          else sim.intervene(msg.tool, msg.cell, msg.power ?? 0.8);
           slowUntil = performance.now() + 6000;
           cellsRequested = true;
         }

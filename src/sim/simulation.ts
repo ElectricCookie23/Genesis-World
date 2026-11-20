@@ -84,14 +84,14 @@ export class Simulation {
   private nameRng: RNG;
   private milestoneTimer = 0;
   /** Events caused by the user's tools. */
-  godEvents: number[] = [];
+  interventions: number[] = [];
   /** Extra sea level from the flood tool, km. Drains away slowly. */
   private seaBias = 0;
   private cometPeriod = 0;
   cometNext = 0;
   /** The rest of the star system, and what reaches the planet from outside it (expansion section 10). */
   cosmos: Cosmos;
-  /** Messages written to the watcher, and the archives peoples leave behind (expansion E99, E100). */
+  /** Messages peoples send to the stars, and the archives they leave behind (expansion E99, E100). */
   legacy: Legacy;
   /** A second world from another seed, running beside this one (expansion E98), and what this world has learned of it (event ids by kind). */
   neighbor?: Simulation;
@@ -111,7 +111,7 @@ export class Simulation {
   private keystone = { year: -1e12, eventId: -1, name: '', followers: 0, declared: true };
   /** Regions under a shield dome until the given year. */
   private shields = new Map<number, number>();
-  /** Regions holding a monolith. */
+  /** Regions marked for a test of wits (the marker stone stands there). */
   monoliths: number[] = [];
   private sunNoted = false;
   private driftAcc = 0;
@@ -245,6 +245,11 @@ export class Simulation {
   /** Rebuild what is derived from the saved state rather than saved itself. Call after loading. */
   refreshDerived(): void {
     this.civ.mend();
+    // a world saved under the old names of the experiment tools is read with the names of today
+    const old = this as unknown as { godEvents?: number[] };
+    if (old.godEvents) { if (!this.interventions.length) this.interventions = old.godEvents; delete old.godEvents; }
+    for (const e of this.events.events) if (e.type.startsWith('god-')) e.type = `tool-${e.type.slice(4)}`;
+    this.legacy.mend(this);
     updateRegions(this.regions, this.world, this.climate);
   }
 
@@ -698,21 +703,21 @@ export class Simulation {
     return ev;
   }
 
-  /** God tools. Every use is an event with consequences, and the peoples of the world notice. */
-  god(tool: string, cell: number, power = 0.8): void {
+  /** The experiment tools: one change made to the world by hand. Every use is an event with consequences, and peoples who see it remember it. */
+  intervene(tool: string, cell: number, power = 0.8): void {
     const w = this.world, c = this.climate;
     const region = this.regions.regionOf[cell]!;
     let ev: SimEvent | null = null;
-    const note = (title: string, description: string) => this.emit({ type: `god-${tool}`, cellId: cell, title, description, importance: 2, data: { byHand: 1 } });
+    const note = (title: string, description: string) => this.emit({ type: `tool-${tool}`, cellId: cell, title, description, importance: 2, data: { byHand: 1 } });
     if (tool === 'meteor') ev = this.meteor(cell, power, true);
-    else if (tool === 'iceage') { c.forced -= 9; ev = note('A sudden cold', 'For no reason any rock or tide can explain, the warmth drains out of the world.'); }
-    else if (tool === 'heat') { c.forced += 9; ev = note('A sudden heat', 'The air itself seems to catch fire. Ice that stood for ages begins to run.'); }
+    else if (tool === 'iceage') { c.forced -= 9; ev = note('The world is cooled', 'Nine degrees of warmth are taken out of the air at a stroke. Ice will spread from the poles, and the sea will fall as it grows.'); }
+    else if (tool === 'heat') { c.forced += 9; ev = note('The world is warmed', 'Nine degrees of warmth are added to the air at a stroke. Ice that stood for ages begins to run, and the sea will rise with it.'); }
     else if (tool === 'mountain') {
       const { cells, dist } = cellsWithin(this.grid, cell, 4);
       for (let k = 0; k < cells.length; k++) w.elevation[cells[k]!] = w.elevation[cells[k]!]! + 2.6 * Math.pow(1 - dist[k]! / 5, 1.5);
       this.terrainDirty = true;
-      ev = note('The land rises', 'The ground heaves upward as if lifted from below. Where there was plain, there are peaks.');
-    } else if (tool === 'flood') { this.seaBias += 0.16; ev = note('The great flood', 'The seas climb their shores without storm or tide. Lowlands vanish under water.'); }
+      ev = note('The land is raised', 'A block of crust is pushed up from below. Where there was plain there are peaks, and the winds and rivers must find new ways around them.');
+    } else if (tool === 'flood') { this.seaBias += 0.16; ev = note('The sea is raised', 'The sea is lifted over its shores, with no storm or tide to do it. Lowlands go under, and what lived on them must move or drown.'); }
     else if (tool === 'plague') ev = this.plague(region, true);
     else if (tool === 'lightning') {
       if (w.elevation[cell]! > w.seaLevel) {
@@ -722,7 +727,7 @@ export class Simulation {
         for (let k = reg.cellStart[region]!; k < reg.cellStart[region + 1]!; k++) { const i = reg.cellList[k]!; if (w.vegetation[i]! > 0.2) { w.ash[i] = Math.max(w.ash[i]!, 0.6); w.lava[i] = Math.max(w.lava[i]!, 0.4); } }
         this.plants.burn(region, 0.7);
       }
-      ev = note('Fire from a clear sky', 'A bolt falls from a cloudless sky and the land below it burns.');
+      ev = note('A fire is started', 'A single bolt is put down on dry ground and the land around it burns. What grows back will not be what stood there before.');
     }
     else if (tool === 'shatter') {
       if (this.moons > 0) {
@@ -732,22 +737,22 @@ export class Simulation {
         ev = note('The moon is broken', 'The moon comes apart in silence. Within an age its wreckage has spread into a bright ring, and a band of permanent shadow lies along the equator.');
       }
     }
-    else if (tool === 'generay') { this.creatures.irradiate(region, this.lifeRng, 4); ev = note('A strange light', 'A beam of unseen light sweeps the land. Everything born there afterwards is a little different from its parents.'); }
+    else if (tool === 'generay') { this.creatures.irradiate(region, this.lifeRng, 4); ev = note('A dose of radiation', 'Hard radiation is turned on one region. Everything born there afterwards carries more changes than its parents did: most of them harmful, a few not.'); }
     else if (tool === 'rogue') ev = this.cosmos.flyby(this, true);
     else if (tool === 'flip') { if (this.strange.flipEnd < 0) ev = this.strange.flip(this); }
     else if (tool === 'burst') { const p = this.grid.pos; ev = this.cosmos.burst(this, [p[cell * 3]!, p[cell * 3 + 1]!, p[cell * 3 + 2]!], true); }
-    else if (tool === 'comet') { this.cometNext = this.simYear; ev = note('A comet is called', 'A new light with a long tail swings in from the dark, as if summoned.'); }
-    else if (tool === 'tilt') { c.tilt = c.tilt > 0.6 ? 0.12 : c.tilt + 0.17; ev = note('The world tips', 'The axis of the world leans to a new angle. The seasons will never be what they were.'); }
-    else if (tool === 'shield') { this.shields.set(region, this.simYear + 3e6); ev = note('A dome of calm', 'Over one stretch of the world, fire, ash and wave simply stop at an unseen wall.'); }
-    else if (tool === 'monolith') { if (!this.monoliths.includes(region)) this.monoliths.push(region); ev = note('The monolith', 'A black slab stands where there was none. The animals that live near it grow curious, and then clever.'); }
+    else if (tool === 'comet') { this.cometNext = this.simYear; ev = note('A comet is sent in', 'A lump of ice is nudged out of the far dark and onto a path past the world. Its tail will be in the sky within the year.'); }
+    else if (tool === 'tilt') { c.tilt = c.tilt > 0.6 ? 0.12 : c.tilt + 0.17; ev = note('The axis is tipped', 'The axis of the world is leaned to a new angle. The seasons will never be what they were.'); }
+    else if (tool === 'shield') { this.shields.set(region, this.simYear + 3e6); ev = note('A sheltered region', 'One region is set apart as a control. For three million years fire, ash and wave are kept out of it, so that what lives inside can be compared with what lives outside.'); }
+    else if (tool === 'monolith') { if (!this.monoliths.includes(region)) this.monoliths.push(region); ev = note('A test of wits', 'In one region food is made hard to reach: shut in shells, hidden, set behind puzzles. The animals that work it out leave more young, and each generation is a little cleverer than the last. A dark marker stone shows the place.'); }
     else if (tool === 'life') {
       if (this.stage === 'barren') this.lifeYear = this.simYear;
       else if (this.stage === 'microbes') this.algaeYear = this.simYear;
       else for (const sp of this.plants.species) { if (sp.extinctYear < 0 && sp.cover > 1) for (let k = 0; k < 12; k++) this.plants.seed(this.lifeRng.int(this.regions.count), sp.id, 0.03); }
-      ev = note('A rain of life', 'Seeds and spores fall from a clear sky onto every shore and plain.');
+      ev = note('Life is seeded', 'Spores and seeds are scattered onto every shore and plain. Most will find nowhere to grow. Some will.');
     }
     if (ev) {
-      this.godEvents.push(ev.id);
+      this.interventions.push(ev.id);
       this.civ.sighting(this, ev.id, this.civRng);
     }
   }
@@ -780,7 +785,6 @@ export class Simulation {
     return true;
   }
 
-  /** Release a species the user designed. genes are GENE_COUNT values 0..1. */
   /** Put a new kind of animal into the world around a cell, whole, with a name. Says nothing about where it came from. */
   releaseSpecies(cell: number, genes: ArrayLike<number>, parent = -1): Species | null {
     if (this.stage !== 'animals') return null;
@@ -798,9 +802,9 @@ export class Simulation {
   designSpecies(cell: number, genes: number[]): void {
     const sp = this.releaseSpecies(cell, genes);
     if (!sp) return;
-    const ev = this.emit({ type: 'god-species', cellId: cell, title: `${sp.name} is set down`, description: `A creature with no ancestors appears, whole and finished: ${sp.name}, ${this.describeSpecies(sp)}. Whether it lasts is up to the world.`, importance: 2, speciesIds: [sp.id], data: { byHand: 1 } });
+    const ev = this.emit({ type: 'tool-species', cellId: cell, title: `${sp.name} is released`, description: `A designed animal is released into the wild: ${sp.name}, ${this.describeSpecies(sp)}. It has no ancestors here. Whether it lasts depends on the world it finds.`, importance: 2, speciesIds: [sp.id], data: { byHand: 1 } });
     sp.eventId = ev.id;
-    this.godEvents.push(ev.id);
+    this.interventions.push(ev.id);
   }
 
   /** Smaller wonders: plagues, eclipses, comets, look-alike species, living fossils, an age of giants. */
@@ -992,7 +996,7 @@ export class Simulation {
     }
   }
 
-  /** A meteor strike. size 0..1. Used by the god tool and by rare natural impacts. */
+  /** A meteor strike. size 0..1. Used by the meteor tool and by rare natural impacts. */
   meteor(cell: number, size: number, byHand: boolean, cause = -1): SimEvent {
     // a people that watches the sky may turn it aside (E70)
     const turned = this.industry.intercept(this, cell, size);

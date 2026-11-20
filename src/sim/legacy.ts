@@ -1,7 +1,9 @@
-// What peoples leave, and what they say to whoever is watching (expansion E99 and E100).
+// What peoples leave, and what they send out (expansion E99 and E100).
 //
-// E99: a people that has seen the sky meddle, and has lights enough to write with, arranges them into a message for
-// the one who did it. What the message says comes from what the player really did to that world.
+// E99: a people with radio and lights to spare sends a message to the stars, the way ours did from Arecibo: a short
+// account of who they are and where, made only of things that are true of that world (their numbers, their place
+// among the planets, their moon, their air, the shape of their bodies). It is addressed to no one. (As first written,
+// this was a message to whoever had been changing their world; the owner took that out with the rest of the religion.)
 // E100: when a people ends, or leaves, it seals an archive: its own account of itself, made from the record. A later
 // people that builds nearby finds it; the player can open any of them.
 //
@@ -9,19 +11,21 @@
 import type { RNG } from './rng';
 import type { Simulation } from './simulation';
 import type { SimEvent } from './events';
+import { G } from './genetics';
 
-/** A message written in lights. `glyphs` are numbers a picture of each sign is drawn from; `text` is what it says. */
-export interface ObserverMessage {
+/** A message sent to the stars. `glyphs` are numbers a picture of each sign is drawn from; `text` is what it says. */
+export interface StarMessage {
   id: number;
   year: number;
-  /** The town whose lights spell it, and where that is. */
+  /** The town that sends it, and where that is. */
   town: string;
   cell: number;
   species: number;
   glyphs: number[];
   text: string;
-  /** The intervention it answers. */
-  about: number;
+  /** The nearest star, and how many years the message takes to pass it. */
+  toward: string;
+  years: number;
   eventId: number;
 }
 
@@ -43,35 +47,16 @@ export interface Archive {
   foundEvent: number;
 }
 
-/** What a people says about each thing the sky did to it, by the kind of event. */
-const ANSWERS: Record<string, string[]> = {
-  impact: ['You threw the stone. We counted our dead and we are still here.', 'The stone you dropped made a sea where our fathers farmed. We sail on it now.'],
-  'god-iceage': ['You took the warmth. We learned fire better because of it.', 'The cold you sent killed the old ways. We kept the new ones.'],
-  'god-heat': ['You lit the air. We remember which rivers died.', 'The summer that did not end: we know now that it was you.'],
-  'god-mountain': ['You raised the mountains. We live in their shadow and we thank you for the rivers.', 'Where you lifted the land we built our highest city.'],
-  'god-flood': ['You sent the sea over our coasts. Our oldest story is about the boat.', 'The flood was yours. So are we, who came through it.'],
-  plague: ['The sickness came from a clear sky. We know its author.', 'You sent the fever. We learned to heal.'],
-  'god-lightning': ['Fire from a cloudless sky. We have kept it burning ever since.', 'You struck the forest. We took a branch from it.'],
-  'god-shatter': ['You broke the moon. Our nights are brighter and our tides are gone.', 'There was a moon in our oldest songs. We know who took it.'],
-  'god-generay': ['You changed what we were. We do not know whether to thank you.', 'The strange births were your doing. Some of them were us.'],
-  'god-comet': ['You called the comet. We named our years by it.', 'The long-tailed star came when you wished it. We watched.'],
-  'god-tilt': ['You tipped the world. We had to learn the seasons twice.', 'The sun does not rise where it did. That was you.'],
-  'god-shield': ['Something kept the fire from us. We think it was you.', 'There is a place the storms never reached. We built our temple there.'],
-  'god-monolith': ['The black stone taught us. Was that what you wanted?', 'We were animals until the slab. We remember that, a little.'],
-  'god-life': ['The seeds fell from an empty sky. Everything we eat came from them.', 'You planted the world. We are tending it.'],
-  'god-species': ['You made a creature and set it down among us. We hunted it, then we herded it.', 'One of the animals here has no ancestors. We noticed.'],
-  'rogue-planet': ['You sent the dark world through our sky. Our year has a different length now.', 'The wandering world was your doing. We had to make new calendars.'],
-  'gamma-burst': ['You burned half the sky. Those of us on the other side lived to write this.', 'The light we could not see killed everything in the open. We know where it came from.'],
-};
-const CLOSING = ['We see you.', 'Are you still there?', 'Do it again and we will be ready.', 'Leave us be.', 'Tell us why.', 'We are grateful. We are afraid.'];
+const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth'];
+const COUNT = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+const count = (n: number) => COUNT[n] ?? String(n);
 
 export class Legacy {
   rng: RNG;
-  messages: ObserverMessage[] = [];
+  messages: StarMessage[] = [];
   archives: Archive[] = [];
-  /** Interventions already answered. */
-  private answered: number[] = [];
-  private nextMessage = 0;
+  /** Peoples that have already sent their message. */
+  private sent: number[] = [];
   private seen = 0;
   /** Peoples that had towns when last looked at, and the town to leave a record in. */
   private alive: Record<number, number> = {};
@@ -178,37 +163,64 @@ export class Legacy {
     }
   }
 
-  // ------------------------------------------------------------------ E99 messages to the observer
+  // ------------------------------------------------------------------ E99 a message to the stars
 
-  /** A people with lights to write with answers something the sky did to it. */
+  /** What a people would say of itself to a stranger: only things that are true of this world, in the order ours chose. */
+  describe(sim: Simulation, species: number): string {
+    const sp = sim.creatures.species[species];
+    const people = sp?.name ?? 'a people';
+    const towns = sim.civ.settlements.filter((st) => st.ruined < 0 && st.species === species);
+    const pop = towns.reduce((n, st) => n + st.pop, 0);
+    const lines = [`We are ${people}. We count ${Math.round(pop).toLocaleString('en-US')} thousand of us, in ${towns.length === 1 ? 'one town' : `${count(towns.length)} towns`}.`];
+    // where: the home world's place among the planets, counted outward from the star
+    const cos = sim.cosmos;
+    const inner = cos.bodies.filter((b) => b.au < cos.au).length;
+    lines.push(`Our world is the ${ORDINAL[inner] ?? `${inner + 1}th`} of ${count(cos.bodies.length + 1)} around the star we call ${cos.starName}.`);
+    lines.push(sim.ring ? 'It wears a ring where its moon used to be.' : sim.moons === 0 ? 'It has no moon.' : sim.moons === 1 ? 'It has one moon.' : `It has ${count(sim.moons)} moons.`);
+    lines.push(`One part in ${Math.max(2, Math.round(1 / Math.max(0.02, sim.plants.oxygen)))} of its air is the gas we breathe; the plants made it.`);
+    // what they are: counted from the genes the renderer draws them from
+    if (sp) {
+      const g = sp.ref;
+      const pairs = g[G.LimbPairs]! > 0.12 ? Math.max(1, Math.round(g[G.LimbPairs]! * 4)) : 0;
+      const eyes = Math.round(g[G.EyeCount]! * 6);
+      lines.push(`We have ${pairs ? `${count(pairs * 2)} limbs` : 'no limbs'} and ${eyes ? (eyes === 1 ? 'one eye' : `${count(eyes)} eyes`) : 'no eyes'}.`);
+    }
+    return lines.join(' ');
+  }
+
+  /** A people that has radio, and lights enough to be seen from space, sends one message out. Each people sends once. */
   private speak(sim: Simulation): void {
-    if (sim.simYear < this.nextMessage || sim.civ.living === 0 || this.messages.length >= 12) return;
-    const open = sim.godEvents.filter((id) => !this.answered.includes(id));
-    if (!open.length) return;
-    // lights enough to be read from above, or a faith built on the sky's doings and a town that keeps it
-    const towns = sim.civ.settlements.filter((st) => st.ruined < 0 && st.tech >= 0.85);
+    if (sim.civ.living === 0 || this.messages.length >= 12) return;
+    const towns = sim.civ.settlements.filter((st) => st.ruined < 0 && st.tech >= 1.0 && !this.sent.includes(st.species));
     if (!towns.length) return;
     const town = towns.reduce((a, b) => (b.tech > a.tech ? b : a));
-    // the one they remember best: the latest thing done to them since they could remember at all
-    const since = sim.civ.settlements.reduce((y, s) => (s.species === town.species ? Math.min(y, s.founded) : y), sim.simYear);
-    // (and not the same season: it takes a generation to decide what to say)
-    const known = open.map((id) => sim.events.events[id]!).filter((e) => e && e.simYear >= since - 1 && sim.simYear - e.simYear >= 20);
-    for (const id of open) { const e = sim.events.events[id]; if (!e || e.simYear < since - 1) this.answered.push(id); } // before their time: never answered
-    if (!known.length) return;
-    const about = known[known.length - 1]!;
-    this.answered.push(about.id);
-    const r = this.rng;
-    const said = r.pick(ANSWERS[about.type] ?? ['Something reached down and changed our world. We know it was not chance.']);
-    const text = `${said} ${r.pick(CLOSING)}`;
+    this.sent.push(town.species);
+    const text = this.describe(sim, town.species);
     const glyphs: number[] = [];
     for (const word of text.split(' ')) { let h = 2166136261; for (let i = 0; i < word.length; i++) h = Math.imul(h ^ word.toLowerCase().charCodeAt(i), 16777619); glyphs.push((h >>> 0) % 4096); }
     const people = sim.creatures.species[town.species]?.name ?? 'They';
+    const near = sim.cosmos.stars.reduce((a, b) => (b.ly < a.ly ? b : a), sim.cosmos.stars[0] ?? { name: 'the nearest star', ly: 4, angle: 0, seed: '' });
+    const years = Math.round(near.ly * 10) / 10;
     const ev = sim.emit({
-      type: 'observer-message', cellId: town.cell, title: `${town.name} writes to the sky`,
-      description: `On the night side, the lights of ${town.name} go out street by street and come back in a pattern: signs, each a district wide, laid out to be read from above. ${people} are speaking to whoever did what was done to them. It says: "${text}"`,
-      causes: [about.id, town.eventId].filter((x) => x >= 0), importance: 3, speciesIds: [town.species], data: { message: this.messages.length },
+      type: 'star-message', cellId: town.cell, title: `${town.name} sends a message to the stars`,
+      description: `${people} of ${town.name} turn their strongest transmitter on the sky and send a short account of themselves, in signs chosen so that a stranger could work them out: numbers first, then where they are, then what they are. It is addressed to no one. At the speed of light it will pass ${near.name} in ${years.toLocaleString('en-US')} years. It says: "${text}"`,
+      causes: [town.eventId].filter((x) => x >= 0), importance: 3, speciesIds: [town.species], data: { message: this.messages.length },
     });
-    this.messages.push({ id: this.messages.length, year: sim.simYear, town: town.name, cell: town.cell, species: town.species, glyphs, text, about: about.id, eventId: ev.id });
-    this.nextMessage = sim.simYear + r.range(300, 2500);
+    this.messages.push({ id: this.messages.length, year: sim.simYear, town: town.name, cell: town.cell, species: town.species, glyphs, text, toward: near.name, years, eventId: ev.id });
+  }
+
+  /** A world saved when peoples still wrote to whoever was changing it is read without those messages. */
+  mend(sim: Simulation): void {
+    const o = this as unknown as Record<string, unknown>;
+    delete o.answered; delete o.nextMessage;
+    if (!this.sent) this.sent = [];
+    this.messages = this.messages.filter((m) => typeof (m as unknown as Record<string, unknown>).about !== 'number');
+    this.messages.forEach((m, i) => { m.id = i; });
+    for (const e of sim.events.events) {
+      if (e.type !== 'observer-message') continue;
+      e.type = 'night-lights';
+      e.title = e.title.replace('writes to the sky', 'lights its streets in a pattern');
+      e.description = 'On the night side, the lights of a town go out street by street and come back in a pattern wide enough to be seen from space.';
+    }
   }
 }

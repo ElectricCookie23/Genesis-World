@@ -53,7 +53,7 @@ export function eventColor(type: string): string {
     case 'painting': case 'tamed': return '#ffcf8a';
     case 'living-fossil': case 'convergence': return '#8fe3a0';
     case 'orbital-shift': return '#d9c8ff';
-    default: return type.startsWith('god-') ? '#fff1c9' : '#e9e4d8';
+    default: return type.startsWith('tool-') ? '#fff1c9' : '#e9e4d8';
   }
 }
 
@@ -102,7 +102,7 @@ export function eventGlyph(type: string): string {
     case 'living-fossil': return '◈';
     case 'convergence': return '≍';
     case 'orbital-shift': return '◔';
-    default: return type.startsWith('god-') ? '✦' : '•';
+    default: return type.startsWith('tool-') ? '✦' : '•';
   }
 }
 

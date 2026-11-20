@@ -286,7 +286,7 @@ function renderTree(s: UIState) {
 export function Help() {
   const keys: [string, string][] = [
     ['drag', 'orbit the planet'], ['scroll / pinch', 'zoom, from deep space to the ground'], ['right-drag', 'turn and tilt near the surface'],
-    ['Space', 'pause or play'], ['1 – 6', 'time speed'], ['C', 'chronicle'], ['T', 'tree of life'], ['G', 'god tools'], ['J', 'goals, if you want some'], ['S', 'the star system'], ['N', 'the microscope'],
+    ['Space', 'pause or play'], ['1 – 6', 'time speed'], ['C', 'chronicle'], ['T', 'tree of life'], ['G', 'experiments'], ['J', 'goals, if you want some'], ['S', 'the star system'], ['N', 'the microscope'],
     ['M', 'flat map'], ['X', 'cross-section'], ['U', 'dive under water'], ['V', 'first-person view while following'], ['O', 'overlays'], ['F', 'follow the selected creature'], ['P', 'postcard mode'], ['H', 'hide the interface'], ['Esc', 'close panels'], ['?', 'this list'],
   ];
   return (
@@ -300,24 +300,38 @@ export function Help() {
   );
 }
 
-const GOD_TOOLS: [string, string, string][] = [
-  ['meteor', 'Meteor', 'Shockwave, crater, impact winter.'],
-  ['lightning', 'Lightning', 'A bolt from a clear sky. Dry land burns.'],
-  ['plague', 'Plague', 'Sickness among the most crowded animals there.'],
-  ['mountain', 'Raise mountains', 'Lift the land where you click.'],
-  ['flood', 'Flood', 'Raise the seas. Lowlands drown.'],
-  ['iceage', 'Ice age', 'Drain the warmth from the world.'],
-  ['heat', 'Heat wave', 'Set the air alight.'],
-  ['generay', 'Gene ray', 'Scramble the genes of everything living there.'],
-  ['shield', 'Shield dome', 'Keep disasters out of one region for three million years.'],
-  ['monolith', 'Monolith', 'Animals living beside it grow clever.'],
-  ['comet', 'Summon comet', 'Call a comet into the sky. Peoples will remember it.'],
-  ['shatter', 'Shatter the moon', 'Break the moon into a ring. Its shadow lays a cold stripe along the equator.'],
-  ['flip', 'Flip the poles', 'Turn the magnetic field over. Auroras wander, travellers lose their way, strange births follow.'],
-  ['rogue', 'Rogue planet', 'Send a wandering world through the system. The orbit shifts, the axis rocks, comets fall.'],
-  ['burst', 'Gamma-ray burst', 'A dying star\'s beam strikes the side of the world you click.'],
-  ['tilt', 'Tilt the axis', 'Change the seasons for good.'],
-  ['life', 'Rain of life', 'Seed the world: start life early, or scatter every plant.'],
+/**
+ * The experiment tools, by the kind of thing each one changes. Each is one change made to the world by hand, so that
+ * what follows from it can be watched: [id, name, what it does].
+ */
+const TOOL_GROUPS: [string, string, [string, string, string][]][] = [
+  ['Astronomical', 'the sky and the orbit', [
+    ['meteor', 'Meteor', 'Shockwave, crater, impact winter.'],
+    ['comet', 'Send a comet', 'Put a comet on a path past the world. Peoples will remember it.'],
+    ['shatter', 'Break up the moon', 'The moon becomes a ring. Its shadow lays a cold stripe along the equator.'],
+    ['rogue', 'Rogue planet', 'A wandering world passes through the system. The orbit shifts, the axis rocks, comets fall.'],
+    ['burst', 'Gamma-ray burst', 'A dying star\'s beam strikes the side of the world you click.'],
+    ['tilt', 'Tilt the axis', 'Change the seasons for good.'],
+  ]],
+  ['Geological', 'the rock and what lies under it', [
+    ['mountain', 'Raise mountains', 'Lift the land where you click. Winds and rivers change with it.'],
+    ['flip', 'Flip the magnetic poles', 'The field turns over. Auroras wander, travellers lose their way, more young are born changed.'],
+  ]],
+  ['Environmental', 'climate, sea and fire', [
+    ['iceage', 'Cool the world', 'Take nine degrees out of the air. Ice spreads, seas fall.'],
+    ['heat', 'Warm the world', 'Add nine degrees to the air. Ice melts, seas rise.'],
+    ['flood', 'Raise the sea', 'Lowlands drown. What lives there must move.'],
+    ['lightning', 'Wildfire', 'One bolt on dry land. See what grows back.'],
+    ['shield', 'Sheltered region', 'A control: keep disasters out of one region for three million years.'],
+  ]],
+  ['Ecological', 'what lives where', [
+    ['plague', 'Disease outbreak', 'Sickness among the most crowded animals there.'],
+    ['life', 'Seed life', 'Start life early on a bare world, or scatter every plant across it.'],
+  ]],
+  ['Genetic', 'what is inherited', [
+    ['generay', 'Radiation', 'Raise the rate of mutation in everything living there.'],
+    ['monolith', 'Test of wits', 'Make food hard to reach in one region. The animals there are selected for cleverness.'],
+  ]],
 ];
 
 const DESIGN_GENES: [number, string, number][] = [
@@ -325,7 +339,7 @@ const DESIGN_GENES: [number, string, number][] = [
   [G.Neck, 'neck', 0.2], [G.Tail, 'tail', 0.4], [G.Horn, 'horns', 0.1], [G.Armor, 'armour', 0.1], [G.Water, 'water or land', 0.05],
   [G.Diet, 'plants or meat', 0.1], [G.Sociality, 'herding', 0.6], [G.Intelligence, 'intelligence', 0.15], [G.WarmBlood, 'warm blood', 0.3],
   [G.Hue, 'colour', 0.5], [G.Hue2, 'second colour', 0.1], [G.PatternType, 'pattern', 0.4], [G.Glow, 'glow', 0.1], [G.EyeCount, 'eyes', 0.34],
-  // traits evolution seldom reaches by itself: here they can be had for the asking
+  // traits evolution seldom reaches by itself: here they can be chosen directly
   [G.Ornament, 'ornaments', 0.1], [G.ColorChange, 'colour change', 0.1], [G.Echo, 'echolocation', 0.1], [G.Electric, 'electric sense', 0.1],
   [G.Metamorphosis, 'larval stage', 0.1], [G.Metabolism, 'slow or fast metabolism', 0.3], [G.Nocturnal, 'day or night', 0.2], [G.Burrow, 'burrowing', 0.1],
 ];
@@ -336,7 +350,7 @@ export function Designer() {
   const value = (gi: number, def: number) => s.design[gi] ?? def;
   return (
     <div class={`${css.panel} ${css.side}`}>
-      <div class={css.head}><h2>Design a species</h2><button class={css.close} onClick={() => update({ panel: 'god', godTool: '' })}>✕</button></div>
+      <div class={css.head}><h2>Design a species</h2><button class={css.close} onClick={() => update({ panel: 'tools', tool: '' })}>✕</button></div>
       <div class={css.scroll}>
         {DESIGN_GENES.map(([gi, label, def]) => (
           <div class={css.row} key={gi} style={{ padding: '3px 0' }}>
@@ -345,12 +359,12 @@ export function Designer() {
           </div>
         ))}
         <div class={css.row}>
-          <span class={css.sub}>{s.godTool === 'species' ? 'Now click the planet where it should live.' : 'Animals must already exist for a new one to survive.'}</span>
+          <span class={css.sub}>{s.tool === 'species' ? 'Now click the planet where it should live.' : 'Animals must already exist for a new one to survive.'}</span>
           <button class={css.btn} onClick={() => {
             const design: Record<number, number> = {};
             for (const [gi, , def] of DESIGN_GENES) design[gi] = value(gi, def);
-            update({ design, godTool: s.godTool === 'species' ? '' : 'species' });
-          }}>{s.godTool === 'species' ? 'cancel' : 'release'}</button>
+            update({ design, tool: s.tool === 'species' ? '' : 'species' });
+          }}>{s.tool === 'species' ? 'cancel' : 'release'}</button>
         </div>
       </div>
     </div>
@@ -453,29 +467,35 @@ export function FlatMap() {
 }
 
 
-export function GodTools() {
+export function Experiments() {
   const s = useStore();
   return (
     <div class={`${css.panel} ${css.side}`}>
-      <div class={css.head}><h2>God tools</h2><button class={css.close} onClick={() => update({ panel: 'none', godTool: '' })}>✕</button></div>
+      <div class={css.head}><h2>Experiments</h2><button class={css.close} onClick={() => update({ panel: 'none', tool: '' })}>✕</button></div>
       <div class={css.scroll}>
+        <p class={css.sub} style={{ margin: '0 0 6px' }}>Change one thing and watch what follows from it. The chronicle records every change you make and traces its effects.</p>
         <div class={css.row}>
           <span>Hands-off mode<br /><span class={css.sub}>Lock every tool and let the world run untouched.</span></span>
-          <button class={css.btn} onClick={() => update({ handsOff: !s.handsOff, godTool: '' })}>{s.handsOff ? 'on' : 'off'}</button>
+          <button class={css.btn} onClick={() => update({ handsOff: !s.handsOff, tool: '' })}>{s.handsOff ? 'on' : 'off'}</button>
         </div>
-        {!s.handsOff && GOD_TOOLS.map(([id, name, what]) => (
-          <div class={css.row} key={id}>
-            <span>{name}<br /><span class={css.sub}>{what}</span></span>
-            <button class={css.btn} style={{ opacity: s.godTool === id ? 1 : 0.8 }} onClick={() => update({ godTool: s.godTool === id ? '' : id })}>{s.godTool === id ? 'cancel' : 'aim'}</button>
+        {!s.handsOff && TOOL_GROUPS.map(([group, about, tools]) => (
+          <div key={group}>
+            <div class={css.toolGroup}><b>{group}</b><span class={css.sub}>{about}</span></div>
+            {tools.map(([id, name, what]) => (
+              <div class={css.row} key={id}>
+                <span>{name}<br /><span class={css.sub}>{what}</span></span>
+                <button class={css.btn} style={{ opacity: s.tool === id ? 1 : 0.8 }} onClick={() => update({ tool: s.tool === id ? '' : id })}>{s.tool === id ? 'cancel' : 'aim'}</button>
+              </div>
+            ))}
+            {group === 'Genetic' && (
+              <div class={css.row}>
+                <span>Design a species<br /><span class={css.sub}>Choose its traits, release it, and see whether it lasts.</span></span>
+                <button class={css.btn} onClick={() => update({ panel: 'designer' })}>open</button>
+              </div>
+            )}
           </div>
         ))}
-        {!s.handsOff && (
-          <div class={css.row}>
-            <span>Design a species<br /><span class={css.sub}>Shape a creature and set it down.</span></span>
-            <button class={css.btn} onClick={() => update({ panel: 'designer' })}>open</button>
-          </div>
-        )}
-        {s.godTool && <p class={css.sub}>Click a spot on the planet to use it there.</p>}
+        {s.tool && <p class={css.sub}>Click a spot on the planet to use it there.</p>}
       </div>
     </div>
   );
@@ -522,7 +542,7 @@ export function Guide() {
   );
 }
 
-/** The peoples of the world: every settlement, its size, and what it believes. */
+/** The peoples of the world: every settlement, its size, and the story it tells. */
 const css3 = (c: [number, number, number], k = 1): string => `rgb(${c.map((v) => Math.round(255 * Math.pow(Math.max(0, Math.min(1, v * k)), 1 / 2.2))).join(',')})`;
 
 /** A nation's flag: a simple geometric design in its two colours. */
@@ -1050,6 +1070,6 @@ export function Settings() {
 
 export function closeAll(): void {
   actions.followCreature(false);
-  update({ panel: 'none', whyEvent: -1, selectedSpecies: -1, godTool: '', creature: null });
+  update({ panel: 'none', whyEvent: -1, selectedSpecies: -1, tool: '', creature: null });
 }
 void state;

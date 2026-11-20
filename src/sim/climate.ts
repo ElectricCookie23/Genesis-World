@@ -12,7 +12,7 @@ export interface ClimateState {
   greenhouse: number;
   /** Aerosol cooling in deg C (ash, impact dust). Decays fast. */
   aerosol: number;
-  /** Extra forcing from god tools, deg C, decays. */
+  /** Extra forcing from the experiment tools, deg C, decays. */
   forced: number;
   /** Current global offset actually applied. */
   globalOffset: number;

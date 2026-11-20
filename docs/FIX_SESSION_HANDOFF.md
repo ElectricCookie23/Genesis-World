@@ -34,6 +34,8 @@ The owner's instruction now: "start creating all the features. go back to the br
 
 **Owner's order of work (2026-11-21):** the older look list, then everything else on the queue, then animal sculpting last. With the sculpting: remove all religion and all "god" from the game, rename and group the tools, and keep animals invented and plausible, not Earth-like or realistic (`docs/DIRECTION_DRAFT.md`, the 2026-11-21 section). Done so far in that order: the look list (F12), the audit's remaining items (F13), expansion Section 9 (F14, F15), expansion Section 8 (F16 to F19). Next: Section 7 backward toward the build session (which is at E19), then the last phase.
 
+**Done 2026-11-20 (F22, F23):** no "god" and no religion on this session's side. Tools are the Experiments panel in five groups; `sim.intervene`, `sim.interventions`, `tool-*` event types; E99 is a message to the stars. Checked in the software renderer (desktop and phone width): the word does not appear anywhere on screen, and a tool use writes the new wording into the chronicle. Not yet seen on a GPU (nothing in it depends on one).
+
 **Queue, in order**
 1. A GPU check of what the Mac has not seen: hunters and the chase, the reshaped animals, the day-side exposure fix, FXAA on Medium, the new designer sliders, the Shatter button. Ask the owner first (standing rule).
 2. Rest of the audit's partials: 46 temples facing the viewer, 50 ruins drawn, 62 giants from high oxygen, 109 caves, 110 vents, 128, 129, 133, 135; 12 and 144 need individual animals in the simulation (large); 40 needs deterministic stepping in the worker (build session's file).

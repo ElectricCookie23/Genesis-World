@@ -100,6 +100,8 @@
 .hint { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); padding: 12px 18px; text-align: center; animation: fade 0.8s ease both; max-width: 86vw; }
 .hint b { display: block; font: 500 19px 'Cormorant Garamond', serif; margin-bottom: 2px; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; }
+.toolGroup { display: flex; align-items: baseline; gap: 10px; margin: 14px 0 2px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+.toolGroup b { font: 500 17px 'Cormorant Garamond', serif; letter-spacing: 0.02em; }
 .btn { all: unset; cursor: pointer; padding: 7px 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.09); }
 .btn:hover { background: rgba(255, 255, 255, 0.18); }
 .goal { padding: 9px 0 10px; border-top: 1px solid #ffffff14; }
