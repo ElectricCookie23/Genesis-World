@@ -160,6 +160,8 @@ export interface NationInfo {
   ruler: string; rulerSince: number; house: string; houseReigns: number;
   /** Id of the ruling house, or -1. */
   houseId: number;
+  /** Its culture's number, the culture it borrows its building fashions from (-1 if none) and how much it borrows, 0..1 (system E14). */
+  cultureId: number; fashionFrom: number; fashionShare: number;
   /** What its people call its golden age while one lasts ('' otherwise), the year it began, and its great works so far (system E10). */
   golden: string; goldenSince: number; goldenWorks: number;
   /** Its count of years (system E8): what Year 1 remembers, the same in its own tongue, the sim year that is Year 1, and the event it is tied to. */

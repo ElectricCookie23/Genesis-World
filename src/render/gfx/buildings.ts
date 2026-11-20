@@ -19,7 +19,7 @@ import { settlementSize, type Nation } from './nations';
 import { MAX_PLOTS, buildingSites, planCity, stageOf, watchable, type CityPlan, type CitySite, type District, type Site } from './cityplan';
 import type { PlanetData } from './planetdata';
 import type { GroundSampler } from './ground';
-import { architectureOf, materialOf, type Architecture } from './architecture';
+import { architectureOf, borrowFashion, builtTech, builtYear, fashionOf, materialOf, type Architecture, type Fashion } from './architecture';
 import type { SpeciesInfo } from '../../shared/protocol';
 import { groundRadiusNode } from './terrain';
 import { eclipseLight } from './eclipse';
@@ -210,6 +210,15 @@ export function buildBuilding(kind: Building): BufferGeometry {
 }
 
 interface Slot { mesh: Copies; iDir: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; iLight: InterleavedBufferAttribute; iForm: InterleavedBufferAttribute; iWall: InterleavedBufferAttribute; iStyle: InterleavedBufferAttribute; cap: number; n: number; }
+
+/** A colour turned round the colour wheel by a share of a full turn, and made lighter or darker. */
+export function turnHue(c: readonly number[], turn: number, tone: number): number[] {
+  // rotate about the grey axis
+  const a = turn * Math.PI * 2, cs = Math.cos(a), sn = Math.sin(a), k = (1 - cs) / 3, q = Math.sqrt(1 / 3) * sn;
+  const r = c[0]!, g = c[1]!, b = c[2]!;
+  const out = [r * (cs + k) + g * (k - q) + b * (k + q), r * (k + q) + g * (cs + k) + b * (k - q), r * (k - q) + g * (k + q) + b * (cs + k)];
+  return out.map((v) => Math.max(0, Math.min(1, v * tone)));
+}
 
 function hash(n: number): number {
   let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
@@ -634,7 +643,24 @@ export class Towns {
         const plain = [1, 1, 0, 0];
         const shapedForm = arch ? [arch.rise, arch.girth, arch.lift, arch.wade] : plain;
         this.wallColour = stuff ? stuff.wall : [0.5, 0.38, 0.27];
-        this.style = arch ? [arch.pitch, arch.windows, arch.ornament] : [1, 1, 0];
+        const ownStyle = arch ? [arch.pitch, arch.windows, arch.ornament] : [1, 1, 0];
+        this.style = ownStyle;
+        // ---- the fashion of the day (system E14): each plot is built in the style of the years it was built in,
+        // so the middle of an old town is old and its edge is new. Fashions are worked out a lifetime at a time.
+        const culture = nat?.cultureId ?? st.species * 7919 + 5, lender = nat?.fashionFrom ?? -1, lent = nat?.fashionShare ?? 0;
+        const fashions = new Map<number, { style: number[]; tint: number[] }>();
+        const fashionAt = (year: number): { style: number[]; tint: number[] } => {
+          const span = Math.floor(year / 40);
+          let f = fashions.get(span);
+          if (!f) {
+            let fashion: Fashion = fashionOf(culture, span * 40);
+            if (lender >= 0 && lent > 0) fashion = borrowFashion(fashion, fashionOf(lender, span * 40), lent);
+            f = { style: [Math.max(0.5, Math.min(2.4, ownStyle[0]! * fashion.pitch)), Math.max(0.5, Math.min(2, ownStyle[1]! * fashion.windows)), Math.max(0, Math.min(1, ownStyle[2]! + fashion.ornament))], tint: turnHue(tint, fashion.hue, fashion.tone) };
+            fashions.set(span, f);
+          }
+          return f;
+        };
+        const nowYear = Math.max(simYear, st.founded);
         this.form = plain;
         const laid = this.planFor(st, c, east, north, nat, cells!, arch ? arch.wade : 0);
         const plan = laid.plan, wetAt = laid.wet;
@@ -733,17 +759,23 @@ export class Towns {
           const kind = buildingFor(plot.district, plot.central, era, h3, arch ?? undefined);
           this.form = shapedForm;
           const job = jobs.length ? jobs.find((j) => j.plot === k) : undefined;
+          // built in the fashion of its day, of the stuff its builders could then work (what is going up now is of today)
+          const look = fashionAt(job ? nowYear : builtYear(k, count, st.founded, nowYear));
+          const age = job ? era : Math.min(era, builtTech(k, count, era));
+          this.style = look.style;
           // towers and spires stand above the trees and the largest animals (on a real GPU, animals on the skyline were
           // as tall as tower blocks, and from low altitude the blocks read as pins)
           const sz = (kind === 'hut' ? 0.00028 : kind === 'house' ? 0.0004 : kind === 'hall' ? 0.00048 : 0.00064) * boost * (0.85 + 0.3 * h3) * (arch ? arch.scale : 1);
           // it faces its street
           if (job) {
             const progress = Math.max(0.04, job.progress);
-            this.put(kind, up, 0, sz, h2, -progress, era, tint, light, toward(plot.yaw));
+            this.put(kind, up, 0, sz, h2, -progress, age, look.tint, light, toward(plot.yaw));
             at(plot.x, plot.y);
+            this.style = ownStyle;
             raise(kind, sz, h2, progress, plot.yaw, plot.x, plot.y);
             shown.push({ what: `a ${kind} in the ${plot.district === 'homes' ? 'streets of houses' : plot.district === 'market' ? 'market' : plot.district === 'temple' ? 'temple quarter' : plot.district}`, progress, years: job.years, stage: stageOf(progress) });
-          } else this.put(kind, up, 0, sz, h2, lit, era, tint, light, toward(plot.yaw));
+          } else this.put(kind, up, 0, sz, h2, lit, age, look.tint, light, toward(plot.yaw));
+          this.style = ownStyle;
           total++;
         }
         this.form = plain;

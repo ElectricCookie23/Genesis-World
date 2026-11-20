@@ -251,3 +251,71 @@ describe('architecture from biology (E13)', () => {
     expect(perches).toBeGreaterThan(plainTowers + 20);
   });
 });
+
+import { FASHION_YEARS, OLDEST_STANDING, borrowFashion, builtTech, builtYear, fashionDistance, fashionOf } from '../src/render/gfx/architecture';
+import { turnHue } from '../src/render/gfx/buildings';
+
+describe('architectural styles over time (E14)', () => {
+  it('a culture\'s fashion drifts with the centuries, and no two cultures keep step', () => {
+    const a = 7919 * 3 + 17, b = 7919 * 4 + 17;
+    // the same culture in the same year is always the same; a generation changes little, a few centuries a lot
+    expect(JSON.stringify(fashionOf(a, 2500))).toBe(JSON.stringify(fashionOf(a, 2500)));
+    let near = 0, far = 0, apart = 0;
+    for (let y = 0; y < 20000; y += 173) {
+      near += fashionDistance(fashionOf(a, y), fashionOf(a, y + 25));
+      far += fashionDistance(fashionOf(a, y), fashionOf(a, y + FASHION_YEARS * 2));
+      apart += fashionDistance(fashionOf(a, y), fashionOf(b, y));
+      const f = fashionOf(a, y);
+      expect(f.pitch).toBeGreaterThanOrEqual(0.65); expect(f.pitch).toBeLessThanOrEqual(1.55);
+      expect(f.windows).toBeGreaterThanOrEqual(0.7); expect(f.windows).toBeLessThanOrEqual(1.5);
+      expect(Math.abs(f.ornament)).toBeLessThanOrEqual(0.35);
+      expect(Math.abs(f.hue)).toBeLessThanOrEqual(0.12);
+    }
+    const n = Math.ceil(20000 / 173);
+    expect(near / n).toBeLessThan(0.08);
+    expect(far / n).toBeGreaterThan(0.3);
+    expect(far / n).toBeGreaterThan((near / n) * 5);
+    expect(apart / n).toBeGreaterThan(0.3);
+    // borrowing brings a culture's fashion toward that of the one it trades with
+    const own = fashionOf(a, 900), other = fashionOf(b, 900);
+    const mixed = borrowFashion(own, other, 0.5);
+    expect(fashionDistance(mixed, other)).toBeLessThan(fashionDistance(own, other) * 0.6);
+    expect(fashionDistance(borrowFashion(own, other, 0), own)).toBe(0);
+  });
+
+  it('a city\'s centre and edge are of different periods', () => {
+    const founded = 1000, now = 4000, plots = 240, culture = 7919 * 2 + 17;
+    // the first plots are old, the last are new, in order
+    expect(builtYear(0, plots, founded, now)).toBe(now - OLDEST_STANDING);
+    expect(builtYear(plots - 1, plots, founded, now)).toBe(now);
+    for (let k = 1; k < plots; k++) expect(builtYear(k, plots, founded, now)).toBeGreaterThan(builtYear(k - 1, plots, founded, now));
+    // a young town has no buildings older than itself
+    expect(builtYear(0, plots, 3900, now)).toBe(3900);
+    // and what a plot is made of follows what was known when it was built
+    expect(builtTech(0, plots, 1.0)).toBeCloseTo(0.22);
+    expect(builtTech(plots - 1, plots, 1.0)).toBeCloseTo(1.0);
+    expect(builtTech(plots / 2, plots, 1.0)).toBeGreaterThan(0.5);
+    // the look of the middle and of the edge differ as two periods do, in most towns
+    let different = 0;
+    for (let town = 0; town < 40; town++) {
+      const c = culture + town * 7919, t0 = 500 + town * 613;
+      const centre = fashionOf(c, builtYear(4, plots, t0, t0 + 2400)), edge = fashionOf(c, builtYear(plots - 4, plots, t0, t0 + 2400));
+      if (fashionDistance(centre, edge) > 0.25) different++;
+      // neighbours on one street were built in the same years and look alike
+      expect(fashionDistance(fashionOf(c, builtYear(100, plots, t0, t0 + 2400)), fashionOf(c, builtYear(102, plots, t0, t0 + 2400)))).toBeLessThan(0.08);
+    }
+    expect(different).toBeGreaterThanOrEqual(28);
+  });
+
+  it('roof colours turn with the fashion without leaving the range of colour', () => {
+    const base = [0.2, 0.7, 0.9];
+    const same = turnHue(base, 0, 1);
+    for (let k = 0; k < 3; k++) expect(same[k]).toBeCloseTo(base[k]!, 5);
+    const turned = turnHue(base, 0.12, 1);
+    expect(Math.abs(turned[0]! - base[0]!) + Math.abs(turned[1]! - base[1]!) + Math.abs(turned[2]! - base[2]!)).toBeGreaterThan(0.15);
+    // a turn keeps the brightness, a tone changes it
+    expect(turned[0]! + turned[1]! + turned[2]!).toBeCloseTo(base[0]! + base[1]! + base[2]!, 1);
+    expect(turnHue(base, 0, 0.75)[2]).toBeCloseTo(0.675, 5);
+    for (const v of turnHue([1, 1, 0.9], -0.12, 1.2)) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(1); }
+  });
+});

@@ -167,6 +167,14 @@ function nationDetail(s: Simulation, id: number): NationDetail | null {
   return { id, name: n.name, land: n.land.slice(), species: n.species, people, tech, rulers: rulers.slice(-60), houses };
 }
 
+/** Whose building fashions a nation borrows (system E14): the most knowledgeable country it is in touch with, if that is another culture, and the more so the more its own culture trades. */
+function fashionSource(s: Simulation, n: Simulation['civ']['h']['nations'][number]): { cultureId: number; fashionFrom: number; fashionShare: number } {
+  const h = s.civ.h, own = h.cultures[n.culture]!;
+  let best: (typeof n) | undefined;
+  for (const id of n.contacts) { const o = h.nations[id]; if (o && o.ended < 0 && o.culture !== n.culture && (!best || o.tech > best.tech)) best = o; }
+  return { cultureId: own.id * 7919 + 17, fashionFrom: best ? best.culture * 7919 + 17 : -1, fashionShare: best ? Math.min(0.6, 0.15 + 0.45 * own.trade) : 0 };
+}
+
 /** The towns the page is told about: every living one, and the ruins of the last few hundred to fall. */
 function shownSettlements(s: Simulation): Simulation['civ']['settlements'] {
   const all = s.civ.settlements;
@@ -219,7 +227,7 @@ function nationList(s: Simulation): NationInfo[] {
       id: n.id, name: n.name, species: n.species, capital: n.capital, founded: n.founded, ended: n.ended, parent: n.parent, government: n.government,
       stability: n.stability, tech: n.tech, era: n.era, eraName: s.civ.eraName(n), eraOwn: s.civ.eraOwnName(n), earth: earthNote(n.era), hue: n.hue, pop: n.pop, towns: n.towns,
       culture: culture.name, language: h.languages[culture.language]!.name, ruler: ruler && ruler.died < 0 ? ruler.name : '', rulerSince: ruler && ruler.died < 0 ? ruler.reignFrom : -1,
-      house: house ? house.name : '', houseReigns: house ? house.reigns : 0, houseId: house ? house.id : -1, eventId: n.eventId, golden: n.golden ? n.golden.own : '', goldenSince: n.golden ? n.golden.since : -1, goldenWorks: n.golden ? n.golden.works : 0,
+      house: house ? house.name : '', houseReigns: house ? house.reigns : 0, houseId: house ? house.id : -1, eventId: n.eventId, ...fashionSource(s, n), golden: n.golden ? n.golden.own : '', goldenSince: n.golden ? n.golden.since : -1, goldenWorks: n.golden ? n.golden.works : 0,
       calendar: cal ? cal.name : '', calendarOwn: cal ? cal.own : '', calendarEpoch: cal ? cal.epoch : 0, calendarEvent: cal ? cal.eventId : -1,
     };
   });

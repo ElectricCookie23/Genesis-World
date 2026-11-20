@@ -107,3 +107,78 @@ export function architectureDistance(a: Architecture, b: Architecture): number {
   return Math.abs(a.rise - b.rise) / 1.35 + Math.abs(a.lift - b.lift) / 1.95 + Math.abs(a.wade - b.wade) * 0.5 + Math.abs(a.round - b.round) * 0.5 + Math.abs(a.girth - b.girth) / 0.8 * 0.3
     + Math.abs(a.pitch - b.pitch) / 1.6 * 0.6 + Math.abs(a.windows - b.windows) / 1.2 * 0.3 + Math.abs(a.ornament - b.ornament) * 0.4 + Math.abs(a.spacing - b.spacing) / 0.4 * 0.3 + Math.abs(a.scale - b.scale) / 0.45 * 0.3;
 }
+
+// ---------------------------------------------------------------- styles over time (system E14)
+
+/** The fashion in building of one culture at one time: what it does to the way its people build anyway. */
+export interface Fashion {
+  /** Multipliers on roof pitch and window density. */
+  pitch: number;
+  windows: number;
+  /** Added to ornament (-0.35 .. 0.35). */
+  ornament: number;
+  /** Turn of the roof colour round the wheel (-0.12 .. 0.12 of a full turn), and how light or dark roofs are (0.75 .. 1.2). */
+  hue: number;
+  tone: number;
+}
+
+function knot(seed: number, k: number, salt: number): number {
+  let h = Math.imul(seed | 0, 0x9e3779b1) ^ Math.imul(k | 0, 0x85ebca6b) ^ Math.imul(salt, 0xc2b2ae35);
+  h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12; h = Math.imul(h, 0x297a2d39); h ^= h >>> 15;
+  return (h >>> 0) / 4294967296;
+}
+
+/** A value that wanders smoothly with the years, new every `period` years, in 0..1. */
+function wander(seed: number, year: number, period: number, salt: number): number {
+  const t = year / period, k = Math.floor(t), f = t - k, s = f * f * (3 - 2 * f);
+  return knot(seed, k, salt) * (1 - s) + knot(seed, k + 1, salt) * s;
+}
+
+/** How long a fashion lasts, in years: styles change over a few centuries, each feature at its own pace. */
+export const FASHION_YEARS = 320;
+
+/**
+ * The fashion of a culture in a given year (system E14). It drifts: each feature wanders at its own pace, so
+ * a style is never repeated and two cultures never keep step. `culture` is a number that is the culture's alone.
+ */
+export function fashionOf(culture: number, year: number): Fashion {
+  return {
+    pitch: 0.65 + 0.9 * wander(culture, year, FASHION_YEARS * 1.3, 1),
+    windows: 0.7 + 0.8 * wander(culture, year, FASHION_YEARS * 0.9, 2),
+    ornament: -0.35 + 0.7 * wander(culture, year, FASHION_YEARS, 3),
+    hue: -0.12 + 0.24 * wander(culture, year, FASHION_YEARS * 1.7, 4),
+    tone: 0.75 + 0.45 * wander(culture, year, FASHION_YEARS * 1.1, 5),
+  };
+}
+
+/** A fashion that has taken something from another: `share` of the way toward it (cultures borrow from those they trade with). */
+export function borrowFashion(own: Fashion, other: Fashion, share: number): Fashion {
+  const m = (a: number, b: number) => a + (b - a) * share;
+  return { pitch: m(own.pitch, other.pitch), windows: m(own.windows, other.windows), ornament: m(own.ornament, other.ornament), hue: m(own.hue, other.hue), tone: m(own.tone, other.tone) };
+}
+
+/** How unlike two fashions look: 0 the same, about 1 unmistakably different periods. */
+export function fashionDistance(a: Fashion, b: Fashion): number {
+  return Math.abs(a.pitch - b.pitch) / 0.9 * 0.3 + Math.abs(a.windows - b.windows) / 0.8 * 0.2 + Math.abs(a.ornament - b.ornament) / 0.7 * 0.25 + Math.abs(a.hue - b.hue) / 0.24 * 0.25 + Math.abs(a.tone - b.tone) / 0.45 * 0.2;
+}
+
+/**
+ * When each plot of a town was built (system E14). A town of `count` plots founded in `founded` and standing in
+ * `now` filled in from the middle outward: its first plots are as old as the town, its last are new. Growth was
+ * slow at first and quicker later, as towns' is.
+ */
+export function builtYear(plot: number, count: number, founded: number, now: number): number {
+  const share = Math.min(1, Math.max(0, plot / Math.max(1, count - 1)));
+  // (nothing stands unrebuilt for ever: the oldest quarter of the oldest town is of some sixteen centuries ago)
+  const span = Math.min(OLDEST_STANDING, Math.max(0, now - founded));
+  return now - span + span * Math.pow(share, 0.7);
+}
+
+/** The age of the oldest buildings still standing anywhere, in years. */
+export const OLDEST_STANDING = 1600;
+
+/** What a town knew when a plot was built, given what it knows now: it began as farmers and learned steadily. */
+export function builtTech(plot: number, count: number, techNow: number): number {
+  const share = Math.min(1, Math.max(0, plot / Math.max(1, count - 1)));
+  return 0.22 + (Math.max(0.22, techNow) - 0.22) * Math.pow(share, 0.6);
+}

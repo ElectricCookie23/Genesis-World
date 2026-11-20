@@ -36,6 +36,10 @@ export interface Nation {
   emblem: Emblem;
   /** In a golden age: its lights and map colour are graded warm. */
   golden?: boolean;
+  /** Its culture's number, the culture whose building fashions it borrows (-1 none) and how much (system E14). */
+  cultureId?: number;
+  fashionFrom?: number;
+  fashionShare?: number;
 }
 
 /** The warm grade of a golden age: a colour pulled toward gold and lifted a little, never past full brightness. */
@@ -143,6 +147,7 @@ export function deriveNations(settlements: SettlementInfo[], grid: Grid, species
     n.color = lightColour(tech, n.signature);
     // a country in its golden age shows it: its lights and its colour on the map lean warm and bright (system E10)
     n.golden = !!own && !!own.golden;
+    if (own) { n.cultureId = own.cultureId; n.fashionFrom = own.fashionFrom; n.fashionShare = own.fashionShare; }
     if (n.golden) n.color = goldenGrade(n.color);
   }
   return nations;
