@@ -198,6 +198,10 @@ export interface HistoryState {
   peacePop?: number;
   /** The year the leading nation reached the top of knowledge, or -1. */
   topSince?: number;
+  /** The wonders of this history (system E19): giant works, each raised because of something that really happened. */
+  wonders?: Wonder[];
+  /** How many wonders have ever been begun (their ids run from 1). */
+  wonderSeq?: number;
   /** The first herds to run wild in a ruin and the first nests in its towers (system E18): the events that recorded them. */
   firstWild?: { feral?: number; nesting?: number };
   /** The first dam, the first mine and the first felling of a nation's forests anywhere (system E16): the events that recorded them. */
@@ -226,4 +230,34 @@ export interface HistoryState {
 
 export function emptyHistory(): HistoryState {
   return { cultures: [], languages: [], nations: [], people: [], dynasties: [], pending: 0, began: -1, topEra: 0, firsts: [], notables: [] };
+}
+
+/** What a wonder is (system E19). Each kind answers one kind of event. */
+export const WONDER_KINDS = ['observatory', 'sungate', 'crater-temple', 'fire-temple', 'first-tower', 'tomb', 'victory', 'lighthouse', 'memorial', 'colossus', 'peace-hall'] as const;
+export type WonderKind = (typeof WONDER_KINDS)[number];
+
+/**
+ * A wonder (system E19): a giant work in or beside a town, begun in one year and finished in another, raised
+ * because of an event that is in the record. `cause` is that event; `toward` is the cell it faces, if it faces
+ * anything (the crater, the mountain that burned, the sea its ships crossed); `bearing` is the direction of its
+ * long axis where that is fixed by the sky (radians east of north).
+ */
+export interface Wonder {
+  id: number;
+  kind: WonderKind;
+  name: string;
+  /** What it is, in a few words ("a temple facing the crater"). */
+  what: string;
+  /** Why it was built, in a sentence. */
+  why: string;
+  settlement: number;
+  nation: number;
+  /** The year work began and the year it was (or will be) finished. */
+  year: number;
+  done: number;
+  /** The event that records its raising, and the event that inspired it. */
+  eventId: number;
+  cause: number;
+  toward?: number;
+  bearing?: number;
 }

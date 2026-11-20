@@ -1034,7 +1034,7 @@ describe('golden ages (E10)', () => {
   });
 });
 
-import { NETWORKS } from '../src/sim/history/model';
+import { NETWORKS, WONDER_KINDS } from '../src/sim/history/model';
 
 describe('infrastructure networks (E15)', () => {
   it('a full run joins its towns with at least five kinds of network, one after another', () => {
@@ -1323,4 +1323,81 @@ describe('feral cities (E18)', () => {
     }
     for (const e of sim.events.events.filter((x) => x.type === 'feral')) { expect((e.speciesIds ?? []).length).toBe(1); expect(e.description.length).toBeGreaterThan(60); }
   }, 600000);
+});
+
+describe('wonders (E19)', () => {
+  it('every wonder links to the event that inspired it', () => {
+    const runs = fiveHistories();
+    let total = 0;
+    const kinds = new Set<string>();
+    for (const { sim } of runs) {
+      const ev = sim.events.events, all = sim.civ.h.wonders ?? [];
+      total += all.length;
+      const ids = new Set<number>();
+      for (const w of all) {
+        kinds.add(w.kind);
+        expect(WONDER_KINDS).toContain(w.kind);
+        expect(ids.has(w.id)).toBe(false);
+        ids.add(w.id);
+        // what inspired it is an event on record, older than the wonder
+        const cause = ev[w.cause];
+        expect(cause, `${w.name} has no cause`).toBeTruthy();
+        expect(cause!.simYear).toBeLessThanOrEqual(w.year);
+        // its own raising is an event caused by that one: the cause graph leads from the wonder back to its reason
+        const own = ev[w.eventId]!;
+        expect(own.type).toBe('wonder');
+        expect(own.causes).toContain(w.cause);
+        expect(cause!.effects).toContain(w.eventId);
+        expect(own.data!.cause).toBe(w.cause);
+        // it stands in a town that exists, takes years to build, and says why
+        expect(sim.civ.settlements[w.settlement]).toBeTruthy();
+        expect(own.cellId).toBe(sim.civ.settlements[w.settlement]!.cell);
+        expect(w.done).toBeGreaterThan(w.year + 5);
+        expect(w.why.length).toBeGreaterThan(20);
+        // the kind answers the kind of event
+        const fits: Record<string, RegExp> = { observatory: /comet/, sungate: /eclipse/, 'crater-temple': /impact/, 'fire-temple': /erupt|volcan/, 'first-tower': /milestone/, tomb: /./, victory: /war/, lighthouse: /settlement/, memorial: /./, colossus: /golden-age/, 'peace-hall': /long-peace/ };
+        expect(cause!.type).toMatch(fits[w.kind]!);
+        if (w.kind === 'crater-temple' || w.kind === 'fire-temple') expect(w.toward).toBe(cause!.cellId);
+        if (w.kind === 'observatory') expect(Number.isFinite(w.bearing)).toBe(true);
+      }
+      // no country raises two at once, and the world is not crowded with them
+      for (const a of all) for (const b of all) if (a.id < b.id && a.nation === b.nation && b.kind !== 'peace-hall') expect(b.year).toBeGreaterThanOrEqual(a.done);
+      expect(all.length).toBeLessThan(70);
+    }
+    expect(total).toBeGreaterThan(8);
+    // they are not all alike
+    expect(kinds.size).toBeGreaterThanOrEqual(4);
+  });
+
+  it('the same history raises the same wonders', () => {
+    const a = atDawn(0)!, b = atDawn(0)!;
+    for (let y = 0; y < 2600; y++) { a.step(1); b.step(1); }
+    expect(JSON.stringify(a.civ.h.wonders ?? [])).toBe(JSON.stringify(b.civ.h.wonders ?? []));
+  });
+
+  it('a meteor the player drops is answered, in time, by a temple that faces its crater', () => {
+    // (this changes the shared histories: keep it the last test of the file)
+    const runs = fiveHistories();
+    let temples = 0;
+    for (const { sim } of runs) {
+      const big = sim.civ.settlements.filter((s) => s.ruined < 0 && s.nation >= 0).sort((p, q) => q.pop - p.pop)[0];
+      if (!big) continue;
+      const g = sim.grid;
+      let cell = big.cell;
+      for (let k = 0; k < 4; k++) cell = g.neighbors[cell * 6 + (k % g.ncount[cell]!)]!;
+      const fall = sim.meteor(cell, 0.2, true);
+      for (let y = 0; y < 2500; y++) {
+        sim.step(1);
+        if (y % 25 === 0 && (sim.civ.h.wonders ?? []).some((w) => w.kind === 'crater-temple' && w.cause === fall.id)) break;
+      }
+      const temple = (sim.civ.h.wonders ?? []).find((w) => w.kind === 'crater-temple' && w.cause === fall.id);
+      if (!temple) continue;
+      temples++;
+      expect(temple.toward).toBe(cell);
+      expect(sim.civ.settlements[temple.settlement]!.cell).not.toBe(cell);
+      expect(sim.events.events[temple.eventId]!.causes).toContain(fall.id);
+      expect(temple.why).toMatch(/crater/);
+    }
+    expect(temples).toBeGreaterThanOrEqual(2);
+  });
 });

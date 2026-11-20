@@ -141,12 +141,28 @@ export interface PlantInfo {
   cover: number;
 }
 
+/** A wonder as the page sees it (system E19): what it is, who raised it and when, and the event that inspired it. */
+export interface WonderInfo {
+  id: number;
+  /** One of the kinds in `WONDER_KINDS` (sim/history/model.ts). */
+  kind: string;
+  name: string; what: string; why: string;
+  /** The country that raised it (its name), the year work began and the year it was or will be finished. */
+  builder: string; year: number; done: number;
+  /** The event of its raising, the event that inspired it and that event's title. */
+  eventId: number; cause: number; causeTitle: string;
+  /** The cell it faces (-1 if none) and the bearing of its long axis, radians east of north (NaN if not fixed). */
+  toward: number; bearing: number;
+}
+
 export interface SettlementInfo {
   id: number; name: string; cell: number; species: number; pop: number; tech: number; founded: number; belief: number; eventId: number; ruined: number;
   /** Has raised a temple (after the sky has meddled often enough). */
   temple?: boolean;
   /** Great works raised here in golden ages. */
   monuments?: number;
+  /** The wonders that stand here, or are being built (system E19). */
+  wonders?: WonderInfo[];
   /** Its walls, oldest first, as pairs: the people it held (thousands) and what it knew when each was built. */
   walls?: number[];
   /** Founded by settlers who came by sea. */
