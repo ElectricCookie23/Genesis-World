@@ -35,8 +35,8 @@ The sections below this one are older background.
 **Owner said (2026-11-21):** "i am going away from keyboard please queue everything for yourself to do". So: keep working down the list below without waiting; the usage limit is still the constraint.
 
 **Queue, in order**
-1. From the `6dddd2d` check: worked ground between buildings (grass grows to the walls), Night Map labels (only 5 of 95 realms named; two sit outside the planet's edge), night side from orbit still near-black and a hard white dot on the cloud belt, wide pink halo on lit towers from the ground, hard straight foam line where shallows meet the shore, animals as tall as tower blocks beside a town.
-2. Not yet checked on a GPU: sky at altitude on WebGL2, the small-island sea patch, broadleaf trunks and bark from inside a forest, how a wading animal looks, the goals panel. Ask the owner before the next GPU check (standing rule).
+1. ~~From the `6dddd2d` check~~ Done as the sixth batch (see `HANDOFF.md`): plants clear of towns, taller towers, Night Map names, lightning from orbit, shoreline foam, fewer lit windows. Software-checked only.
+2. Not yet checked on a GPU: the sixth batch, sky at altitude on WebGL2, the small-island sea patch, broadleaf trunks and bark from inside a forest, how a wading animal looks, the goals panel. Ask the owner before the next GPU check (standing rule).
 3. Goals, next steps: a short debrief when a goal is reached (the chain of causes in plain words, not only the link), more goals as the build session's systems land (dynasties, first meetings), and the owner's open question on progression (default: all open).
 4. The older look items in `HANDOFF.md` ("Still open, for whoever gets to it").
 5. Side panels overlap the stats box at the top right on short windows, and on a phone the bottom bar shows through an open panel (seen while checking the goals panel; older than it).

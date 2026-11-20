@@ -192,7 +192,10 @@ export class OceanSurface {
     const shore = float(1).sub(smoothstep(0.0, 0.11, depthKm));
     const swash = sin(depthKm.mul(95).sub(uTime.mul(1.2)).add(grad.x.add(grad.z).mul(9))).mul(0.5).add(0.5);
     const edge = float(1).sub(smoothstep(0.0, 0.00009, path));
-    const shoreFoam = shore.mul(smoothstep(0.55, 0.95, swash)).mul(0.6).add(edge.mul(0.85)).mul(smoothstep(-0.05, 0.02, depthKm));
+    // the line at the water's edge comes and goes with the swash and the wave foam: drawn solid it was a hard white
+    // rim along every shore (seen on a real GPU from the ground)
+    const lace = swash.mul(0.55).add(foamTex.mul(0.5)).add(0.25).min(1);
+    const shoreFoam = shore.mul(smoothstep(0.55, 0.95, swash)).mul(0.6).add(edge.mul(lace).mul(0.7)).mul(smoothstep(-0.05, 0.02, depthKm));
     const foam = max(whitecaps, shoreFoam).clamp(0, 1);
     const whiteLit: N = sunColor.mul(sunVis).mul(max(dot(dir, L), 0).mul(0.8).add(0.2)).add(ambient.mul(1.6));
     color = mix(color, vec3(0.94, 0.96, 0.97).mul(whiteLit), foam.mul(0.92));

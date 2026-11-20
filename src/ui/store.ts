@@ -206,6 +206,8 @@ export const actions = {
   fork: () => {},
   /** Screen position of a direction on the globe: [x, y, visible 0..1]. */
   project: (_x: number, _y: number, _z: number): [number, number, number] => [0, 0, 0],
+  /** The planet's disc on screen: centre x, y and radius in pixels. */
+  disc: (): [number, number, number] => [0, 0, 1e9],
 };
 
 export function togglePanel(p: Panel): void {

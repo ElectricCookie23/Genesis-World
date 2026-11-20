@@ -12,7 +12,7 @@ import {
   screenCoordinate, select, sin, smoothstep, step, texture, uniform, uv, varying, vec2, vec3, vec4,
 } from 'three/tsl';
 import type { Grid } from '../../sim/world';
-import type { CellSnapshot, PlantInfo } from '../../shared/protocol';
+import type { CellSnapshot, PlantInfo, SettlementInfo } from '../../shared/protocol';
 import { PG } from '../../sim/genetics';
 import { EXAG, uDitherFrame, uMoonDir, uSunDir, uTime } from '../common';
 import { faceDirection } from './cubebake';
@@ -23,6 +23,7 @@ import { Copies } from './packed';
 import { FORMS, PART, addPlantInstanceData, buildPlant, type Form } from './plantmesh';
 import { groundRadiusNode } from './terrain';
 import { eclipseLight } from './eclipse';
+import { settlementSize } from './nations';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
@@ -116,6 +117,11 @@ export class Flora {
   private lastBuild = 0;
   private triCentre: Float32Array;
   private grassCell = 0;
+  /** Living towns as x, y, z, radius, trees kept: the ground between their buildings is kept clear of plants. */
+  private towns = new Float32Array(0);
+  /** The towns near the patch being planted, and near the grass, same layout. */
+  private townsNear: number[] = [];
+  private townsByGrass: number[] = [];
 
   constructor(private grid: Grid, private data: PlanetData, erosionTex: Texture, private cloudShadow: (p: N) => N, maxInstances: number, fullCap = 1600, grassCap = 6000, private tile = DEFAULT_TILE) {
     this.maxInstances = maxInstances;
@@ -411,6 +417,52 @@ export class Flora {
     if (performance.now() - this.lastBuild > 2000) this.dirty = true;
   }
 
+  /**
+   * Where people live, plants give way: nothing small grows between the buildings and few trees are left standing.
+   * (Seen on a real GPU: tall grass growing against the walls of tower blocks.) The radius is the one the town is
+   * built to in `buildings.ts`. Picked up at the next replanting; no rebuild is forced, towns grow slowly.
+   */
+  setTowns(list: SettlementInfo[]): void {
+    const pos = this.grid.pos;
+    let n = 0;
+    for (const st of list) if (st.ruined < 0) n++;
+    if (this.towns.length !== n * 5) this.towns = new Float32Array(n * 5);
+    let o = 0;
+    for (const st of list) {
+      if (st.ruined >= 0) continue;
+      const size = settlementSize(st.pop);
+      this.towns[o] = pos[st.cell * 3]!; this.towns[o + 1] = pos[st.cell * 3 + 1]!; this.towns[o + 2] = pos[st.cell * 3 + 2]!;
+      this.towns[o + 3] = (0.0025 + 0.02 * size * (0.25 + 0.75 * st.tech)) * 1.08;
+      // a village keeps its shade trees; a city keeps a few
+      this.towns[o + 4] = st.tech < 0.3 ? 0.4 : 0.1;
+      o += 5;
+    }
+  }
+
+  /** The towns within `reach` (radians) of a direction, into `out`. */
+  private townsAround(x: number, y: number, z: number, reach: number, out: number[]): void {
+    out.length = 0;
+    const T = this.towns;
+    for (let i = 0; i < T.length; i += 5) {
+      const r = reach + T[i + 3]!;
+      if (2 - 2 * (T[i]! * x + T[i + 1]! * y + T[i + 2]! * z) < r * r) out.push(T[i]!, T[i + 1]!, T[i + 2]!, T[i + 3]!, T[i + 4]!);
+    }
+  }
+
+  /** Whether a plant at a direction stands: `h` is its own random number, `tree` whether it is one. */
+  private static stands(near: number[], x: number, y: number, z: number, h: number, tree: boolean): boolean {
+    for (let i = 0; i < near.length; i += 5) {
+      const r = near[i + 3]!;
+      const d2 = 2 - 2 * (near[i]! * x + near[i + 1]! * y + near[i + 2]! * z);
+      if (d2 >= r * r) continue;
+      // cleared in the middle, growing back over the outer fifth
+      const edge = Math.max(0, (Math.sqrt(d2) / r - 0.8) / 0.2);
+      const keep = Math.max(edge, tree ? near[i + 4]! * (0.35 + 0.65 * Math.sqrt(d2) / r) : 0);
+      if (h > keep) return false;
+    }
+    return true;
+  }
+
   setPlants(plants: Map<number, PlantInfo>): void {
     this.plants = plants;
     this.dirty = true;
@@ -468,6 +520,9 @@ export class Flora {
       if (tc[t]! * focus.x + tc[t + 1]! * focus.y + tc[t + 2]! * focus.z > cosR) visible.push(t);
     }
     const perTri = Math.max(1, Math.min(42, Math.floor(this.maxInstances / Math.max(1, visible.length))));
+    // towns only clear ground that is seen from near; from far the ground tint carries it
+    const townsNear = this.townsNear;
+    if (dist < 0.2) this.townsAround(focus.x, focus.y, focus.z, radius + 0.01, townsNear); else townsNear.length = 0;
     for (const s of this.full.values()) s.n = 0;
     let farN = 0;
     const far = this.far;
@@ -520,6 +575,7 @@ export class Flora {
           pos[ia * 3 + 2]! * w + pos[ib * 3 + 2]! * u + pos[ic * 3 + 2]! * v,
         ).normalize();
         const small = form === 'tuft' || form === 'fern' || form === 'flower';
+        if (!seaBed && townsNear.length && !Flora.stands(townsNear, up.x, up.y, up.z, hash(t * 61 + k * 211), !small && form !== 'shrub')) continue;
         const size = (seaBed ? (coral ? 0.0015 : form === 'fern' ? 0.0034 : 0.0013) : small ? 0.0011 : form === 'shrub' ? 0.0015 : 0.0021 + 0.0042 * hv) * sizeBoost * (0.8 + 0.4 * hash(t * 7 + k * 31));
         // colour: this world's pigments, with the leaf-hue gene running between the two
         const tHue = Math.max(0, Math.min(1, (genes ? genes[PG.LeafHue]! : 0.5) + (hash(t + k * 5) - 0.5) * 0.18));
@@ -618,6 +674,8 @@ export class Flora {
     const A = this.pigmentA, B = this.pigmentB;
     let n = 0;
     let cell = this.grassCell;
+    const townsNear = this.townsByGrass;
+    this.townsAround(fx, fy, fz, R * 1.2, townsNear);
     const half = side >> 1;
     for (let j = -half; j <= half && n < cap; j++) {
       for (let i = -half; i <= half && n < cap; i++) {
@@ -642,6 +700,7 @@ export class Flora {
         if (elevation[cell]! <= seaLevel + 0.03 || snow[cell]! > 3) continue;
         const veg = vegetation[cell]!;
         if (hash(key + 2) > veg * 1.5 + 0.04) continue;
+        if (townsNear.length && !Flora.stands(townsNear, d[0], d[1], d[2], hash(key + 8), false)) continue;
         const genes = this.plants.get(flora[cell]!)?.genes;
         const tHue = Math.max(0, Math.min(1, (genes ? genes[PG.LeafHue]! : 0.5) + (hash(key + 3) - 0.5) * 0.25));
         const light = 1.25 * (0.75 + 0.6 * hash(key + 4));

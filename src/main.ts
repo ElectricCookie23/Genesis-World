@@ -246,6 +246,7 @@ async function boot(): Promise<void> {
   const fossilCells = () => [...state.species.values()].filter((x) => x.extinctYear >= 0 && x.peakPop > 2e4).map((x) => x.homeCell);
   scene.onNations = (nations) => update({ nations });
   actions.project = (x, y, z) => scene.projectDir(x, y, z);
+  actions.disc = () => scene.discOnScreen();
   actions.openDynasty = (id) => { update({ panel: 'dynasty', dynastyDetail: state.dynastyDetail?.id === id ? state.dynastyDetail : null }); send({ type: 'requestDynasty', id }); };
   actions.openNation = (id) => { update({ panel: 'nation', nationDetail: state.nationDetail?.id === id ? state.nationDetail : null }); send({ type: 'requestNation', id }); };
   actions.setOverlay = (o) => {
