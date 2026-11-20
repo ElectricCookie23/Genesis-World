@@ -53,7 +53,7 @@ Settlement dressing that the reviews found missing (bare ground between building
 
 ## Second pass: Poly Pizza (poly.pizza), CC0 models only
 
-3,521 Poly Pizza models are on the Mac; the sheets below show only those whose page says **Public Domain (CC0)** (folder `polypizza/`). The credit-required ones (`polypizza-attribution/`, CC-BY) are a larger set and have not been previewed. Four of eight sheets were looked at: `pp-trees.jpg`, `pp-coral-kelp-mushroom.jpg`, `pp-temples-towers.jpg`, `pp-huts-houses.jpg`. Not looked at: `pp-pine-palm`, `pp-rocks-bones`, `pp-modern`, `pp-boats`. Authors vary per model; each model's page and author are in the Mac's `MANIFEST.md`. Triangle counts run from tens to tens of thousands, so check the `.json` beside each sheet before picking.
+3,521 Poly Pizza models are on the Mac; the sheets below show only those whose page says **Public Domain (CC0)** (folder `polypizza/`). The credit-required ones (`polypizza-attribution/`, CC-BY) are a larger set and have not been previewed. All eight sheets have now been looked at (the last four, `pp-pine-palm`, `pp-rocks-bones`, `pp-modern`, `pp-boats`, on 2026-11-21; see "Third pass" below). Authors vary per model; each model's page and author are in the Mac's `MANIFEST.md`. Triangle counts run from tens to tens of thousands, so check the `.json` beside each sheet before picking.
 
 These fill the gaps the Kenney packs left:
 
@@ -81,6 +81,25 @@ These fill the gaps the Kenney packs left:
 | power lines | `pp-temples-towers` 44, 45 `Transmission_Tower` | For industrial eras. |
 
 Not suitable although they matched the search: cartoon characters (`pp-coral-kelp-mushroom` 5, 8, 10, 16), fish (1, 3), a pickaxe (17), a target (`pp-temples-towers` 16) and a can (27).
+
+### Third pass: the remaining four Poly Pizza sheets (2026-11-21)
+
+| Game need | Candidates (sheet, tile number, name) | Verdict |
+|---|---|---|
+| **rocks and boulders** | `pp-rocks-bones` 10, 17, 18 (smooth grey boulders), 16 (tall grey slab), 11, 15 (red-brown faceted), 12 `Rock_Medium` (mossy), 21 (rock cluster with rubble), 20 `Rock_Formation` (sandstone stack), 14 `Mountain` (snow-tipped spire) | Good range of colours and shapes; 20 and 14 suit desert and alpine ground. |
+| **bones on the ground** (fossil sites, dead herds) | `pp-rocks-bones` 8 `Large_Bone` (a rib arch), 25 `Ribcage`, 37 `Skull`, 1 to 5 single bones, 6, 7 fish skeletons | 8 and 25 read well from a distance. **Not 37: the skull is human-shaped, and the owner wants nothing human-looking in the game** (2026-11-21). |
+| shell | `pp-rocks-bones` 22 `Mussel_Open` | One usable beach object. |
+| dead tree | `pp-rocks-bones` 24 `Dead_Tree` | Thin bare branches; good. |
+| **boats** (the game has harbours and no boats) | `pp-boats` 3, 4 `Boat` (plain rowing boats), 10 `Sail_Boat` (one mast), 11 `Sail_Ship`, 12 `Ship` (three-masters), 13 `Small_Ship`, 21 `Cruise_Ship`, 22 `Ship_Wreck` | Covers every era from first boats to the modern age. 3 or 4 and 10 are the ones to start with. |
+| spacecraft (far-future eras) | `pp-boats` 23 to 26, 28 `Spaceship`; `pp-modern` 34 `Space_Lander`, 35 `Space_Platform`, 33 `Space_Base_Module` | Usable. |
+| **town buildings, industrial to modern** | `pp-modern` 4, 5, 12, 22 to 25 (brick shop-fronted blocks, three to four storeys), 3 `Building` (grey stone town block), 10 `Large_Building` | The brick blocks are the best "industrial town" pieces collected so far, but they are plainly an Earth city street. |
+| **factory** | `pp-modern` 13 `Structure` (shed with a tank tower and pipes) | The only factory-like model in the CC0 set. |
+| **skyscrapers** | `pp-modern` 27 to 30 (glass towers), 15 to 18, 26 (plain white stepped towers) | Good for late eras; the white ones would take the game's own colours. |
+| conifers | `pp-pine-palm` 10, 11 `Pine` (layered drooping branches), 8 `Pine` (sparse, with bare lower trunk), 9 `Pine_Tree` | 10 and 11 are the best conifers collected. 12 to 14 are plain cone stacks, no better than what the game draws. |
+| palms | `pp-pine-palm` 4 (straight, broad fronds), 5 (curved trunk) | Good. |
+| bamboo | `pp-pine-palm` 1 to 3 | Square-section stalks; usable only far away. |
+
+Not suitable although they matched the search: skeleton characters and gravestones (`pp-rocks-bones` 23, 26 to 36), kitchen and make-up items filed under boats (`pp-boats` 5, 6, 14, 15), a rover (9), cargo containers (17 to 20), a traffic light, a stage and a pipe section (`pp-modern` 2, 7, 11).
 
 ## Caveats
 

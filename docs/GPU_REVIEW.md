@@ -2,7 +2,31 @@
 
 > **Pre-merge checks are possible (2026-11-21).** The review Mac can build any branch or commit locally and run the same GPU checks against it before it reaches `main` or the live site. Proven once: `origin/main` built in about 6 s, loaded on WebGPU at High with an empty console. To use it, push the work to a branch and ask for a check of that branch by name.
 
+> **Owner direction, 2026-11-21, in the owner's words to the Mac session:** "i don't want humans or anything resembling humans in the game. please. we can act and assume by something similar of a human but no need to show them in any way". So the thinking species may behave like people, but nothing human-looking is to be drawn. Places in the code that look, from their comments alone (not yet checked on screen), as if they draw a person-like figure: `src/render/gfx/buildings.ts` line 262 ("one of the builders, seen from far above: a body and a head") with its use at line 508, and line 339, the colossus wonder ("a figure on a plinth, facing +x, with one arm raised and a fire in its hand"). Worth checking too: `Portrait` in `src/ui/portrait` (drawn from the species' genes, so it may already be fine), the citizen and battlefield pictures in `src/ui/ground.tsx`, and "the figures peoples have named among the stars". Asset and concept work on the Mac follows the same rule (no human figures, skulls or statues).
+
 Observations only. Nothing under `src/` was changed. Screenshots are in `docs/screenshots/gpu/`.
+
+## First GPU look at Sections 5 and 6 (2026-11-21, bundle `index-DLm2M6p6.js`)
+
+WebGPU, High, Apple M3 Pro, live site, seed `amber-reef-101`, 100,000 years after the dawn of history (120.7 My, 627 living towns, 8,437 events). **On battery, so no frame rates.** One run, driven through `__genesis.actions`, not by clicking the panels. Screenshots `retest11-*`; `retest11-webgpu-sheet.jpg` has four views in one image and `retest11-webgpu-documentary-frames.jpg` six frames of the saved film.
+
+| Asked | Result |
+|---|---|
+| **Documentary saved as a video on WebGPU** (`playFilm(1, true)`) | **Works.** The file is 59.9 s, 1280×720, VP8, 1,727 frames (28.8 a second), 13.9 MB, and plays. Seven shots; every frame sampled shows the planet and the caption (year, title, two lines), none black. |
+| **Senses filter** (`seeAs`) | Works for the one kind seen: an eyeless species turns the view into large grey blocks, as its text says ("knows light from dark through its skin"). **Not seen: echoes, warmth, the electric sense, or any species with eyes.** My script picked three species and all three were eyeless; it needs to pick by `mode`. |
+| **Walking** (W A S D) | Works. Holding W for 4 s moved the view 0.058 rad north at height 0.02; D for 2 s moved it 0.031 rad sideways. The hint bar shows. No frame was black. |
+| **Look up at night** (`setSkyView`) | Works. Dark sky with stars and faint coloured cloud, and **the comet is drawn with its tail and labelled** "the comet". The moon was full but out of view; no star-figure labels appeared. |
+| "See it from the ground" on a meteor | Not tried. |
+
+Seen along the way:
+
+1. **Film: a white area with stepped, cell-shaped edges** fills much of the globe in the "Kadruvou impact" shot and shows at the top of the "goes extinct" shot. It looks like a field drawn per grid cell (ice, or the impact's mark) with no smoothing; from orbit the staircase edge is plain.
+2. **Film: the first four shots are all the whole planet from the same distance**, with the sun's glare in the middle of two of them. Only the last two (the dawn of history, a migration) go near the ground.
+3. **Film captions fade at the end of a shot** and the last frame sampled had the text half faded over bright cloud, hard to read.
+4. **An animal as tall as a six-storey block** stands at the edge of the town (top left of the sheet): a green two-legged animal whose head reaches the roofs of the towers beside it.
+5. **The town, 100,000 years after the dawn of history, is tower blocks with window grids** standing on a steep slope, some with one side well above the ground. Stilted paths run down the slope.
+6. No human-looking figure appeared in these views, but none was close enough to a building site to show the builders.
+7. Console: `Max polyphony exceeded. Note dropped.` six times (the music), and two 404s.
 
 This is the second version. The first was cut short by a flat battery; this one adds frame rates on mains power, a clean WebGL2 pass, a proper look at creatures, and corrects the first version's account of the black ground (C3).
 
