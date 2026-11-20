@@ -22,7 +22,29 @@ How the sessions talk:
 - Assets: **not now.** The owner's decision: the collected assets come later, "once the base game is done and the blackbox testing of it is essentially complete. the normal features need to work first." BRIEF.md allows CC0 or public domain only, each logged in `CREDITS.md`.
 - The owner paused this work because of usage limits. Keep to work that matters, and do not start long speculative jobs.
 
-## Where things are (2026-11-21) — read this first
+## Latest state (end of 2026-11-20 UTC) — read this first
+
+The owner's instruction now: "start creating all the features. go back to the briefs and check the list of the total 250 features. make sure all have been made and working. after that we will start with asset pass." And twice: "why is everything so low poly?"
+
+**Done since the section below**
+- Expansion Section 10 complete (E91 to E100): `sim/cosmos.ts`, `sim/legacy.ts`, `sim/link.ts`, `ui/system.tsx`, tests `cosmos`, `legacy`, `link`. The build session builds in order from Section 2; this session works backward from the end. Decisions of this session now go in `docs/DECISIONS_FIX.md` (F1...), at the build session's request.
+- Independent audit of the original 150: `docs/FEATURE_AUDIT.md` (123 work, 25 partial, 2 unclear). Fixed from it: hunters (15, 17), sea level and invasions (31, 81), senses and signals (36, 66, 76, 77, 78), the shatter-moon button (100, 101), designer sliders (132, 134). See F2 to F7.
+- GPU checks `retest8` and `retest9` read and acted on; performance study `docs/PERFORMANCE.md` acted on in part (F9, F10).
+- Animals reshaped (F11); sheets in `docs/asset-previews/species-sheet-before.jpg` and `-after.jpg`.
+
+**Queue, in order**
+1. A GPU check of what the Mac has not seen: hunters and the chase, the reshaped animals, the day-side exposure fix, FXAA on Medium, the new designer sliders, the Shatter button. Ask the owner first (standing rule).
+2. Rest of the audit's partials: 46 temples facing the viewer, 50 ruins drawn, 62 giants from high oxygen, 109 caves, 110 vents, 128, 129, 133, 135; 12 and 144 need individual animals in the simulation (large); 40 needs deterministic stepping in the worker (build session's file).
+3. Expansion Section 9 (E81 to E90), then Section 8 backward, until the two sessions meet.
+4. More of `docs/CREATURE_SCULPTING.md` (blended joints, feet, ears and jaws) and section B of `docs/PERFORMANCE.md` (contact shadows, leaf volume), then section A (temporal upscaling, cheaper clouds).
+5. Asset pass, when the owner says.
+
+**Easy to forget**
+- Any change to the rules of life changes every history: run `scripts/checks/traitsweep.ts` (hunters, traits, sea) and check when history begins on five seeds before pushing. Tests that need a history must not depend on one seed being early.
+- `history.test.ts` alone takes 6 minutes; the whole suite 5 to 7. CI gates the deploy on it.
+- Mac session id ends `...Qg7yj2dn` (prefix `session_01A25QnAtsbJhBdv`); I mistyped it twice.
+
+## Earlier: where things were
 
 The sections below this one are older background.
 
