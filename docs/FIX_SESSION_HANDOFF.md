@@ -32,7 +32,7 @@ The owner's instruction now: "start creating all the features. go back to the br
 - GPU checks `retest8` and `retest9` read and acted on; performance study `docs/PERFORMANCE.md` acted on in part (F9, F10).
 - Animals reshaped (F11); sheets in `docs/asset-previews/species-sheet-before.jpg` and `-after.jpg`.
 
-**Owner's order of work (2026-11-21):** the older look list, then everything else on the queue, then animal sculpting last. With the sculpting: remove all religion and all "god" from the game, rename and group the tools, and keep animals invented and plausible, not Earth-like or realistic (`docs/DIRECTION_DRAFT.md`, the 2026-11-21 section). Done so far in that order: the look list (F12), the audit's remaining items (F13), expansion Section 9 (F14, F15).
+**Owner's order of work (2026-11-21):** the older look list, then everything else on the queue, then animal sculpting last. With the sculpting: remove all religion and all "god" from the game, rename and group the tools, and keep animals invented and plausible, not Earth-like or realistic (`docs/DIRECTION_DRAFT.md`, the 2026-11-21 section). Done so far in that order: the look list (F12), the audit's remaining items (F13), expansion Section 9 (F14, F15), expansion Section 8 (F16 to F19). Next: Section 7 backward toward the build session (which is at E19), then the last phase.
 
 **Queue, in order**
 1. A GPU check of what the Mac has not seen: hunters and the chase, the reshaped animals, the day-side exposure fix, FXAA on Medium, the new designer sliders, the Shatter button. Ask the owner first (standing rule).
