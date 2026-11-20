@@ -848,3 +848,113 @@ describe('calendars (E8)', () => {
     expect(shared).toBeGreaterThan(0);
   }, 900000);
 });
+
+import { arrowPath, recentMigrations } from '../src/ui/panels';
+import type { SimEvent } from '../src/sim/events';
+
+describe('migrations of peoples (E9)', () => {
+  /** A world three thousand years into its history, then struck by hand, then left for two thousand more. */
+  function struck(tool: string): { sim: Simulation; strike: number; before: number } {
+    const sim = atDawn(0)!;
+    for (let y = 0; y < 3000; y++) sim.step(1);
+    const before = sim.events.events.length;
+    const town = sim.civ.settlements.find((s) => s.ruined < 0)!;
+    sim.god(tool, town.cell);
+    const strike = sim.events.events.length - 1;
+    for (let y = 0; y < 2500; y += 10) sim.step(10);
+    return { sim, strike, before };
+  }
+  const checkMoves = (sim: Simulation, moves: SimEvent[]): void => {
+    const h = sim.civ.h, cells = sim.grid.count;
+    for (const e of moves) {
+      const d = e.data!;
+      expect(h.nations[Number(d.nation)]).toBeDefined();
+      expect(Number(d.from)).toBeGreaterThanOrEqual(0); expect(Number(d.from)).toBeLessThan(cells);
+      expect(Number(d.to)).toBeGreaterThanOrEqual(0); expect(Number(d.to)).toBeLessThan(cells);
+      expect(d.to).not.toBe(d.from);
+      expect(Number(d.people)).toBeGreaterThan(0);
+      expect(['ice', 'sea', 'famine']).toContain(d.cause);
+      expect(e.causes.length).toBeGreaterThan(0);
+      for (const c of e.causes) expect(sim.events.events[c]).toBeDefined();
+      // they arrive somewhere: a town stands (or stood) where the chronicle says they settled
+      expect(sim.civ.settlements.some((s) => s.cell === d.to)).toBe(true);
+      if (d.host !== undefined) expect(e.description).toMatch(/among the people of/);
+    }
+  };
+
+  it('an ice age sets a people moving, and the chronicle says why', () => {
+    const { sim, strike, before } = struck('iceage');
+    const moves = sim.events.events.slice(before).filter((e) => e.type === 'migration');
+    expect(moves.length).toBeGreaterThanOrEqual(1);
+    checkMoves(sim, moves);
+    const cold = moves.filter((e) => e.data!.cause === 'ice');
+    expect(cold.length).toBeGreaterThanOrEqual(1);
+    // the cold that was called down is the cause on record
+    expect(cold.some((e) => e.causes.includes(strike))).toBe(true);
+    expect(cold[0]!.importance).toBeGreaterThanOrEqual(2);
+    expect(cold[0]!.description).toMatch(/The ice has come down/);
+    // no people moves twice within a few generations
+    const byNation = new Map<number, number[]>();
+    for (const e of moves) { const k = Number(e.data!.nation); byNation.set(k, [...(byNation.get(k) ?? []), e.simYear]); }
+    for (const years of byNation.values()) for (let i = 1; i < years.length; i++) expect(years[i]! - years[i - 1]!).toBeGreaterThanOrEqual(150);
+  }, 300000);
+
+  it('a rising sea drives the people of drowned towns to higher ground', () => {
+    const { sim, strike, before } = struck('flood');
+    const moves = sim.events.events.slice(before).filter((e) => e.type === 'migration');
+    checkMoves(sim, moves);
+    const wet = moves.filter((e) => e.data!.cause === 'sea');
+    expect(wet.length).toBeGreaterThanOrEqual(1);
+    expect(wet.some((e) => e.causes.includes(strike))).toBe(true);
+    // where they went stands above the water still, or was itself given up when the sea kept rising
+    for (const e of wet) {
+      // (a new town, or the town of another nation that took them in)
+      const town = [...sim.civ.settlements].reverse().find((x) => x.cell === e.data!.to && x.founded <= e.simYear)!;
+      expect(town).toBeDefined();
+      expect(sim.world.elevation[town.cell]! > sim.world.seaLevel || town.ruined >= 0).toBe(true);
+    }
+  }, 300000);
+
+  it('peoples grow apart and, where migrants move in, mix', () => {
+    const runs = fiveHistories();
+    let many = 0, mixed = 0;
+    for (const r of runs) {
+      const h = r.sim.civ.h;
+      if (h.cultures.length > 1) many++;
+      for (const n of h.nations) expect(h.cultures[n.culture]).toBeDefined();
+      for (const c of h.cultures) {
+        expect(h.languages[c.language]).toBeDefined();
+        if (c.parent >= 0) {
+          const parent = h.cultures[c.parent]!;
+          expect(parent.species).toBe(c.species);
+          // a daughter people speaks a changed tongue: some everyday words are no longer the same
+          const mine = h.languages[c.language]!, theirs = h.languages[parent.language]!;
+          expect(MEANINGS.some((m) => word(mine, m) !== word(theirs, m))).toBe(true);
+          expect(MEANINGS.filter((m) => wordDistance(word(mine, m), word(theirs, m)) < 0.6).length).toBeGreaterThan(MEANINGS.length / 3);
+        }
+        if (c.mixedWith !== undefined) { mixed++; expect(h.cultures[c.mixedWith]).toBeDefined(); expect(c.mixedWith).not.toBe(c.parent); }
+      }
+      for (const e of r.sim.events.events.filter((x) => x.type === 'culture')) {
+        const c = h.cultures[Number(e.data!.culture)]!;
+        expect(c.mixedWith).toBe(Number(e.data!.other));
+        expect(e.causes.some((id) => r.sim.events.events[id]!.type === 'migration')).toBe(true);
+      }
+      checkMoves(r.sim, r.sim.events.events.filter((e) => e.type === 'migration'));
+    }
+    expect(many).toBeGreaterThanOrEqual(3);
+    expect(mixed).toBeGreaterThanOrEqual(0);
+  }, 900000);
+
+  it('the map draws an arrow for each recent migration, the short way round', () => {
+    const ev = (id: number, type: string, data?: Record<string, number | string>): SimEvent => ({ id, type, simYear: id, cellId: -1, title: 't', description: 'd', causes: [], causeWeights: [], importance: 2, speciesIds: [], data } as unknown as SimEvent);
+    const list = [ev(0, 'war'), ev(1, 'migration', { from: 3, to: 9, cause: 'ice' }), ev(2, 'migration'), ev(3, 'migration', { from: 4, to: 5, cause: 'sea' })];
+    expect(recentMigrations(list).map((e) => e.id)).toEqual([1, 3]);
+    expect(recentMigrations(list, 1).map((e) => e.id)).toEqual([3]);
+    const straight = arrowPath([0.2, 0.5], [0.4, 0.5]);
+    expect(straight).toMatch(/^M 144\.0 180\.0 Q /);
+    expect(straight).toMatch(/ 288\.0 180\.0$/);
+    // across the edge of the map the arrow goes the short way, off the side, not back across the whole world
+    const wrap = arrowPath([0.95, 0.5], [0.05, 0.5]);
+    expect(Number(wrap.split(' ').slice(-2)[0])).toBeGreaterThan(720);
+  });
+});

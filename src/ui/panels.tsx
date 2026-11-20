@@ -366,6 +366,56 @@ export function CrossSection() {
 }
 
 /** Flat map of the whole world. Click anywhere to fly there. */
+const MOVE_COLOUR: Record<string, string> = { ice: '#bfe6ff', sea: '#5fe0d0', famine: '#ffc56b' };
+
+/** The latest migrations of peoples in the chronicle (system E9), newest last. */
+export function recentMigrations(events: SimEvent[], limit = 8): SimEvent[] {
+  const out: SimEvent[] = [];
+  for (let i = events.length - 1; i >= 0 && out.length < limit && events.length - i < 6000; i--) {
+    const e = events[i];
+    if (e && e.type === 'migration' && typeof e.data?.from === 'number' && typeof e.data?.to === 'number') out.push(e);
+  }
+  return out.reverse();
+}
+
+/** The path of an arrow on the flat map between two points given as fractions of its size: a shallow arc, the short way round. */
+export function arrowPath(a: [number, number], b: [number, number], W = 720, H = 360): string {
+  let bu = b[0];
+  if (bu - a[0] > 0.5) bu -= 1; else if (a[0] - bu > 0.5) bu += 1;
+  const x0 = a[0] * W, y0 = a[1] * H, x1 = bu * W, y1 = b[1] * H;
+  const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1;
+  // bow the line to one side so that two arrows between neighbours do not hide each other
+  const bow = Math.min(40, len * 0.22);
+  const cx = (x0 + x1) / 2 - (dy / len) * bow, cy = (y0 + y1) / 2 + (dx / len) * bow;
+  return `M ${x0.toFixed(1)} ${y0.toFixed(1)} Q ${cx.toFixed(1)} ${cy.toFixed(1)} ${x1.toFixed(1)} ${y1.toFixed(1)}`;
+}
+
+/** Marching arrows over the flat map, one for each recent migration: from the land a people left to where it settled. */
+function MigrationArrows() {
+  const s = useStore();
+  const moves = recentMigrations(s.events);
+  if (!moves.length) return null;
+  return (
+    <svg viewBox="0 0 720 360" preserveAspectRatio="none" style={{ position: 'absolute', left: '0', top: '0', width: '100%', height: '100%', pointerEvents: 'none', overflow: 'hidden', borderRadius: '8px' }}>
+      <defs>
+        {Object.entries(MOVE_COLOUR).map(([k, c]) => <marker key={k} id={`mv-${k}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill={c} /></marker>)}
+      </defs>
+      {moves.map((e, i) => {
+        const why = String(e.data!.cause ?? 'famine');
+        const d = arrowPath(actions.mapPoint(Number(e.data!.from)), actions.mapPoint(Number(e.data!.to)));
+        const colour = MOVE_COLOUR[why] ?? MOVE_COLOUR.famine!;
+        return (
+          <g key={e.id} style={{ pointerEvents: 'auto', cursor: 'pointer' }} opacity={0.45 + 0.55 * ((i + 1) / moves.length)} onClick={() => update({ whyEvent: e.id })}>
+            <title>{`${e.title}: ${e.description}`}</title>
+            <path d={d} fill="none" stroke="#000" stroke-width="5" opacity="0.4" />
+            <path d={d} fill="none" stroke={colour} stroke-width="2.6" class={s.quality === 'low' ? undefined : css.march} marker-end={`url(#mv-${MOVE_COLOUR[why] ? why : 'famine'})`} />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export function FlatMap() {
   const s = useStore();
   const ref = useRef<HTMLCanvasElement>(null);
@@ -379,8 +429,12 @@ export function FlatMap() {
     <div class={`${css.panel} ${css.side} ${css.wide}`} style={{ bottom: 'auto' }}>
       <div class={css.head}><h2>Map of the world</h2><span class={css.sub}>click to fly there</span><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
       <div style={{ padding: '0 14px 14px' }}>
-        <canvas ref={ref} width={720} height={360} style={{ width: '100%', borderRadius: '8px', cursor: 'crosshair', display: 'block' }}
-          onClick={(e) => { const r = (e.target as HTMLCanvasElement).getBoundingClientRect(); actions.mapClick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); }} />
+        <div style={{ position: 'relative' }}>
+          <canvas ref={ref} width={720} height={360} style={{ width: '100%', borderRadius: '8px', cursor: 'crosshair', display: 'block' }}
+            onClick={(e) => { const r = (e.target as HTMLCanvasElement).getBoundingClientRect(); actions.mapClick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); }} />
+          <MigrationArrows />
+        </div>
+        {recentMigrations(s.events).length > 0 && <div class={css.sub} style={{ margin: '6px 0 0' }}>Arrows: peoples on the move (<span style={{ color: MOVE_COLOUR.ice }}>driven by ice</span>, <span style={{ color: MOVE_COLOUR.sea }}>by the sea</span>, <span style={{ color: MOVE_COLOUR.famine }}>by hunger</span>). Click one to see why.</div>}
       </div>
     </div>
   );

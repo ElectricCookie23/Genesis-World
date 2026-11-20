@@ -51,6 +51,9 @@ export class Simulation {
   private eraChanged = -1e12;
   private seaState = 0;
   private seaEvent = -1;
+
+  /** The event behind the present stand of the seas, if they stand high or low (else -1). */
+  get seaCause(): number { return this.seaState !== 0 ? this.seaEvent : -1; }
   private lifeYear: number;
   private algaeDelay: number;
   private animalDelay: number;
@@ -281,7 +284,7 @@ export class Simulation {
 
   // ---------------------------------------------------------------- climate eras
 
-  private rootClimateCause(): number {
+  rootClimateCause(): number {
     // a recent great eruption or impact explains a climate swing; otherwise the orbit does
     const recent = this.events.recent('impact', this.simYear, 400_000) ?? this.events.recent('super-eruption', this.simYear, 600_000);
     if (recent) return recent.id;
