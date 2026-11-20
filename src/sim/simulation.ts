@@ -161,6 +161,14 @@ export class Simulation {
     this.binary = this.rng.fork('suns').chance(0.14);
     // hydrothermal vents: undersea volcanic sites
     for (const v of this.geology.volcanoes) if (this.world.elevation[v.cell]! < -0.5) this.plants.vents.add(this.regions.regionOf[v.cell]!);
+    // every world has some: where no volcano stands deep enough (most worlds had none at all), the deep sea floor
+    // itself is cracked in a few places, chosen from the seed
+    {
+      const deep: number[] = [];
+      for (let i = 0; i < this.grid.count; i++) if (this.world.elevation[i]! < -1.6) deep.push(i);
+      const vr = this.rng.fork('vents');
+      for (let k = 0; k < 40 && this.plants.vents.size < 4 && deep.length; k++) this.plants.vents.add(this.regions.regionOf[deep[vr.int(deep.length)]!]!);
+    }
     this.civRng = this.rng.fork('civilization');
     this.cometPeriod = this.lifeRng.range(18e6, 34e6);
     this.cometNext = this.cometPeriod * this.lifeRng.range(0.4, 1);
@@ -865,11 +873,13 @@ export class Simulation {
         if (sp.extinctYear >= 0 || !sp.name || sp.pop < 2000) continue;
         const g = sp.ref, cell = this.regions.centre[sp.home]!, c0 = sp.eventId >= 0 ? [sp.eventId] : [];
         // cave dwellers: burrowers of the dark that have given up their eyes and colour
-        if (g[G.Burrow]! > 0.62 && g[G.Nocturnal]! > 0.55 && g[G.EyeCount]! < 0.12 && once(`cave-${sp.id}`)) {
+        // (the three conditions were each so strict that no species in any measured history met them together)
+        if (g[G.Burrow]! > 0.6 && g[G.Nocturnal]! > 0.58 && (g[G.EyeCount]! < 0.2 || g[G.EyeSize]! < 0.2 || g[G.Sight]! < 0.2) && once(`cave-${sp.id}`)) {
           this.emit({ type: 'cave', cellId: cell, title: `${sp.name} goes under`, description: `${sp.name} lives its whole life in caves now. It is pale and blind, and it does not need to be anything else.`, causes: c0, importance: 1, speciesIds: [sp.id] });
         }
         // vent life: deep-sea animals living off the planet's own heat
-        if (this.plants.vents.has(sp.home) && g[G.Water]! > 0.8 && once(`vent-${sp.id}`) && once('vent-first')) {
+        // (anywhere in its range, not only where it began: a species has one home region out of hundreds)
+        if (g[G.Water]! > 0.8 && [...this.plants.vents].some((v) => where.get(sp.id)?.has(v)) && once(`vent-${sp.id}`) && once('vent-first')) {
           this.emit({ type: 'vent', cellId: cell, title: 'Life at the vents', description: `Far below the reach of sunlight, ${sp.name} crowds around cracks where hot, mineral-black water pours from the sea floor. If the sun went out, it would not notice.`, causes: c0, importance: 1, speciesIds: [sp.id] });
         }
         // hibernation: slow-living burrowers of cold country sleep the winter away
@@ -885,7 +895,8 @@ export class Simulation {
           this.emit({ type: 'pollination', cellId: this.regions.centre[at]!, title: 'Flowers find a partner', description: `${sp.name} drinks at the flowers${flower ? ` of ${flower.name}` : ''} and leaves each one dusted with the last. The plants that feed it best set the most seed, and the animals that visit most are best fed: each is now shaping the other.`, causes: c0, importance: 2, speciesIds: [sp.id] });
         }
         // mass hatchings: glowing sea animals that breed all at once
-        if (g[G.Water]! > 0.7 && g[G.Offspring]! > 0.75 && g[G.Glow]! > 0.4 && once(`hatch-${sp.id}`)) {
+        // (glow above 0.4 with broods that large was never reached; the sea lights up for less)
+        if (g[G.Water]! > 0.7 && g[G.Offspring]! > 0.55 && g[G.Glow]! > 0.3 && once(`hatch-${sp.id}`)) {
           this.emit({ type: 'hatching', cellId: cell, title: `The ${sp.name.split(' ')[0]} hatching`, description: `On one night of the year every egg of ${sp.name} hatches together. For a few hours the sea is lit from below, coast to coast.`, causes: c0, importance: 1, speciesIds: [sp.id] });
         }
       }
@@ -922,7 +933,8 @@ export class Simulation {
         }
       }
     }
-    if (!this.richAirNoted && this.plants.oxygen > 0.3) {
+    // (the line was 30 percent, which no measured world reached: they level off at 24 to 25)
+    if (!this.richAirNoted && this.plants.oxygen > 0.23) {
       this.richAirNoted = true;
       this.emit({ type: 'oxygen', title: 'An age of giants', description: 'Forests have made the air so rich that bodies can grow huge on it. Small things become large, and large things enormous.', causes: this.oxygenEvent >= 0 ? [this.oxygenEvent] : [], importance: 2 });
     }

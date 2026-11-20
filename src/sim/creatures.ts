@@ -256,6 +256,7 @@ export class Creatures {
     const kappa = new Float64Array(M * M);
     // thin air limits big, active bodies; rich air allows giants
     const oxyLimit = sat(oxygen / 0.12);
+    const richAir = sat((oxygen - 0.2) / 0.1);
     for (let r = 0; r < R; r++) {
       const a = this.regionStart[r]!, b = this.regionStart[r + 1]!;
       let pollVisits = 0;
@@ -288,6 +289,9 @@ export class Creatures {
         // big or warm-blooded bodies need more oxygen
         const o2need = genome[g + G.Size]! * 0.6 + (warm ? 0.3 : 0) + phen[p + P.Fly]! * 0.3;
         activity *= sat(0.75 + oxyLimit * 0.6 - o2need * (1 - oxyLimit) * 1.5);
+        // rich air carries big bodies: above a fifth oxygen, the larger an animal is the more it gains, so an age of
+        // rich air is an age of giants (thin air only held bodies back before; rich air did nothing)
+        activity *= 1 + richAir * 0.3 * genome[g + G.Size]!;
         act[i] = activity / (1 + st);
         demand[i] = count[c]! * phen[p + P.Need]!;
         // partners: a species that lives with its symbiont forages a little better; small flying plant-feeders drink from flowers

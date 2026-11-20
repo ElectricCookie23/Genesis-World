@@ -101,7 +101,7 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 59 | Plankton blooms visible from orbit, and bioluminescent waves at night. | done | plankton stains the sea green by sea-plant cover and glows blue at night where waves stir it |
 | 60 | Hurricanes with a visible eye. | done | strong storms over warm sea become hurricanes; the cloud volume draws them as spiral bands around a clear eye, with damage at landfall |
 | 61 | Snow that builds up and melts, feeding the rivers. | done | snow builds and melts with temperature, and meltwater adds to river flow |
-| 62 | Oxygen level tracked, with a giant-insect era when it spikes. | done | oxygen tracked, limits body size and activity; an age of giants is declared when it passes 30% |
+| 62 | Oxygen level tracked, with a giant-insect era when it spikes. | done | oxygen tracked, limits body size and activity; an age of giants is declared when it passes 30% **Audit fix:** rich air now carries big bodies (above a fifth oxygen, larger animals gain), and the "age of giants" is announced at 23 percent instead of a 30 that no world reached: it fired in all three measured histories. |
 | 63 | Seasonal migrations that wear trails into the land. | done | at 1x and 10x wandering herds shift toward the summer hemisphere; herds of a migratory land species walk between the neighbouring regions they live in and wear the ground into braided pale trails that show from above and fade when the herds stop (trail event) |
 | 64 | Hibernation, and day versus night species. | done | slow-living burrowers feel less of the cold, by degree (they sleep through it), with an event for the first hibernator living in cold country; at 1x and 10x they are underground while it is winter where they live; night animals lie low by day and day animals by night |
 | 65 | Camouflage evolving to match each biome. | done | prey whose hue matches the ground cover of its region is harder for hunters to detect, so colour is under selection |
@@ -148,8 +148,8 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 106 | The supercontinent cycle. | done | continent count is tracked as plates drift; supercontinent formation and break-up are logged |
 | 107 | Supervolcano ash winters. | done | super-eruptions bring a volcanic winter with global dieback |
 | 108 | Glaciers carving fjords. | done | ice near the coast carves valleys below sea level, which flood as fjords when it melts |
-| 109 | Cave networks with blind, pale species. | done | blind, pale burrowers of the dark are recorded as cave dwellers; cave mouths (a rock arch round a black opening) appear on steep mountainsides near the camera |
-| 110 | Hydrothermal vent ecosystems. | done | undersea volcanic sites feed life without sunlight; vent dwellers are recorded |
+| 109 | Cave networks with blind, pale species. | done | blind, pale burrowers of the dark are recorded as cave dwellers; cave mouths (a rock arch round a black opening) appear on steep mountainsides near the camera **Audit fix:** the three conditions were never met together; loosened (burrowing, nocturnal, reduced eyes), and such animals are drawn pale. Fired in two measured histories of three. |
+| 110 | Hydrothermal vent ecosystems. | done | undersea volcanic sites feed life without sunlight; vent dwellers are recorded **Audit fix:** most worlds had no vent at all; every world now has a few on the deep sea floor, and vent life is found anywhere in a species' range. Fired in all three measured histories. Still nothing drawn at the vent itself. |
 | 111 | Geysers and hot springs. | done | scattered land cells puff steam in bursts and hold a hot spring: a mineral-blue pool in a pale crust ringed with rust-coloured terraces |
 | 112 | Salt flats where inland seas dry. | done | hot dry lowlands become white salt flats (biome) |
 | 113 | Tornadoes. | done | a twisting funnel of dust reaches from the ground to the cloud base under some storm cells over land (`gfx/tornado.ts`), with the debris particles at its foot |
@@ -167,14 +167,14 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 125 | A space age with satellites and a radio signal. | done | space age milestone; satellites circle the planet as points of light once technology passes 0.9, and the narration mentions the radio signal |
 | 126 | Possible nuclear winter. | done | after the space age a war can become nuclear: winter, dieback, most people and knowledge lost |
 | 127 | Departure: a civilization leaves the planet as a light rising into space. | done | after 25 My of space age the people depart (milestone), and a point of light climbs out of the air from their greatest city on a long bright trail |
-| 128 | Giant mushrooms and glowing fungal networks, shown in an x-ray view. | done | glowing water-loving plants grow as giant mushrooms; the fungal view (overlay) darkens the ground and shows the web of threads between them, glowing |
+| 128 | Giant mushrooms and glowing fungal networks, shown in an x-ray view. | done | glowing water-loving plants grow as giant mushrooms; the fungal view (overlay) darkens the ground and shows the web of threads between them, glowing **Audit fix:** the mushroom rule asked for a thirstier glowing plant than any measured history grew; lowered from 0.55 to 0.42. |
 | 129 | Carnivorous plants in poor soil. | done | thorny, toxic, slow plants are recorded as meat-eaters |
 | 130 | Autumn colors. | done | broadleaf trees turn gold, red and brown where the cold season is coming (1x and 10x) |
 | 131 | A marker on the oldest living tree. | done | the longest-standing forest is tracked and its oldest tree drawn tall and golden |
 | 132 | Gas-bladder creatures drifting like blimps. | done | slow, large winged species carry a great pale float (a smooth translucent bladder above the body) **Audit fix:** the designer now has the metabolism slider this form needs. |
 | 133 | Living islands: sea giants with forests on their backs. | done | armoured sea giants carry a grove on their backs |
 | 134 | Walking forests. | done | colour-shifting land giants carry a grove on their backs **Audit fix:** the designer now has the colour-change slider this form needs; the gene passed 0.6 in one measured history. |
-| 135 | Mass hatchings that light up the ocean. | done | glowing, prolific sea species hatch all at once (event), and the sea around the place lights up from below in a glow that spreads and fades |
+| 135 | Mass hatchings that light up the ocean. | done | glowing, prolific sea species hatch all at once (event), and the sea around the place lights up from below in a glow that spreads and fades **Audit fix:** thresholds lowered (glow 0.3, broods 0.55) and glow now pays for sea animals; not yet seen to fire in a measured history. |
 | 136 | Bone graveyards. | done | ribcage skeletons (spine, arched ribs, skull) lie where species died out |
 | 137 | A rare golden mutant. | done | about 1 in 700 individuals is drawn golden and noted on its card |
 | 138 | An eternal storm sitting over one spot. | done | one storm per world never ends |
