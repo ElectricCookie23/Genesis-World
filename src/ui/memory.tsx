@@ -17,6 +17,7 @@ const TABS: [MemoryTab, string, string][] = [
   ['chronoscope', 'Chronoscope', 'a town as it stood in any year'],
   ['forecasts', 'Forecasts', 'what scholars said would happen, and whether it did'],
   ['whatif', 'What if', 'the same world run twice: once with an event, once without'],
+  ['film', 'Documentary', 'a film of this world, from the first life to now'],
 ];
 
 /** A date, said the way the rest of the page says dates: by how long ago while that means something, else by the year. */
@@ -494,6 +495,56 @@ function WhatIfView() {
   );
 }
 
+// ---------------------------------------------------------------------------------------------- the documentary
+
+function FilmView() {
+  const s = useStore();
+  const [record, setRecord] = useState(false);
+  const weighty = s.events.filter((e) => e && e.importance >= 1).length;
+  return (
+    <div>
+      <p class={css.sub} style={{ marginTop: 0 }}>Choose a length. The film takes the weightiest events of every stretch of this world's record, from the first life to the present, flies to where each one happened and tells it. Time stands still while it plays. The places are shown as they are now, not as they were then.</p>
+      <div class={css.row}>
+        <span>Save it as a video file as well<br /><span class={css.sub}>A .webm file, with the words on the picture and without sound.</span></span>
+        <button class={css.btn} onClick={() => setRecord(!record)}>{record ? 'yes' : 'no'}</button>
+      </div>
+      {[1, 3, 10].map((m) => (
+        <div class={css.row} key={m}>
+          <span>{m === 1 ? 'One minute' : `${m} minutes`}<br /><span class={css.sub}>{Math.min(weighty, Math.round((m * 60) / 9))} scenes</span></span>
+          <button class={css.btn} onClick={() => actions.playFilm(m, record)}>{record ? 'film it' : 'play'}</button>
+        </div>
+      ))}
+      {weighty === 0 && <p class={css.sub}>Nothing has happened yet to make a film of.</p>}
+    </div>
+  );
+}
+
+/** The words of the film over the picture, and the way out of it. */
+export function FilmOverlay() {
+  const s = useStore();
+  const f = s.film;
+  if (!f) return null;
+  const shot = f.shots[f.index];
+  const total = f.minutes * 60;
+  return (
+    <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', background: 'linear-gradient(to bottom, #0000 55%, #000c 100%)' }}>
+      <div style={{ position: 'absolute', top: '14px', right: '16px', pointerEvents: 'auto', display: 'flex', gap: '10px', alignItems: 'center' }}>
+        {f.recording && <span class={css.sub} style={{ color: '#ff7d6a' }}>● filming</span>}
+        <span class={css.sub}>{f.index + 1} of {f.shots.length}</span>
+        <button class={css.btn} onClick={() => actions.stopFilm()}>stop</button>
+      </div>
+      {shot && (
+        <div key={shot.eventId} class={css.filmWords} style={{ animationDuration: `${shot.seconds}s` }}>
+          <div class={css.sub} style={{ letterSpacing: '0.3em' }}>{formatYear(shot.year).toUpperCase()}</div>
+          <h1>{shot.title}</h1>
+          <p>{shot.text}</p>
+        </div>
+      )}
+      <div style={{ height: '2px', background: '#ffffff22' }}><i style={{ display: 'block', height: '100%', background: '#fff4d8', width: `${shot ? ((shot.at + shot.seconds) / total) * 100 : 0}%`, transition: `width ${shot ? shot.seconds : 0}s linear` }} /></div>
+    </div>
+  );
+}
+
 export function Memory() {
   const s = useStore();
   const tab = TABS.find((t) => t[0] === s.memTab) ?? TABS[0]!;
@@ -513,6 +564,7 @@ export function Memory() {
         {s.memTab === 'chronoscope' && <ChronoscopeView />}
         {s.memTab === 'forecasts' && <ForecastsView />}
         {s.memTab === 'whatif' && <WhatIfView />}
+        {s.memTab === 'film' && <FilmView />}
       </div>
     </div>
   );

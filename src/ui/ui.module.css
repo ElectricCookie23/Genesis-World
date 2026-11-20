@@ -115,6 +115,10 @@
 .line { margin: 8px 0 0 6px; }
 .lineStep { position: relative; border-left: 2px solid; padding: 0 0 12px 14px; }
 .lineStep i { position: absolute; left: -6px; top: 3px; width: 10px; height: 10px; border-radius: 50%; }
+.filmWords { text-align: center; padding: 0 8vw 26px; text-shadow: 0 2px 18px #000, 0 0 4px #000; animation: filmWords linear both; }
+.filmWords h1 { margin: 6px 0 6px; font: 500 clamp(28px, 4.4vw, 46px)/1.1 'Cormorant Garamond', serif; color: #fff6dc; }
+.filmWords p { margin: 0 auto; max-width: 900px; font: italic 500 clamp(16px, 2vw, 22px)/1.35 'Cormorant Garamond', serif; opacity: 0.94; }
+@keyframes filmWords { 0% { opacity: 0; } 8%, 92% { opacity: 1; } 100% { opacity: 0; } }
 .btn { all: unset; cursor: pointer; padding: 7px 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.09); }
 .btn:hover { background: rgba(255, 255, 255, 0.18); }
 .goal { padding: 9px 0 10px; border-top: 1px solid #ffffff14; }

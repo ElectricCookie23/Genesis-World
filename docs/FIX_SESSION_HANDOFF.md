@@ -1,30 +1,12 @@
 # Fix session handoff (GPU review follow-up)
 
-## PAUSED 2026-11-20 (usage limit). Read this first.
+## Latest state (2026-11-20, after the pause)
 
-**State of the branch `claude/sweet-keller-8gmglc`:** one commit ahead of `main`, holding Section 6 work in progress. It compiles (`npx tsc --noEmit -p .` clean). It is **not on `main`** because the full test suite has not been run since the forecasts module was added to the simulation (it emits new events during a live history; `tests/history.test.ts` is sensitive to that). `main` is at the phone fixes and passes.
+**Section 6 (E51 to E60) is complete and on `main`.** Chronoscope, archive, atlas, truth and record, counterfactual, butterfly tracker, ancestry, braid, documentary maker, forecasts: all in the Record panel (bar button "Record", key A), each tested, each looked at in the software renderer. PROGRESS.md has the rows; decisions F25 to F29. Files: `src/sim/memory.ts`, `forecast.ts`, `whatif.ts`, `src/game/film.ts`, `src/ui/memory.tsx`; tests `memory`, `forecast`, `whatif`, `film`; checks `scripts/checks/memorysweep.ts`, `memorydump.ts`, `forecastsweep.ts`, `whatifsweep.ts`.
 
-**First thing to do on resuming:** `npx vitest run` (6 to 7 minutes). If green, `git fetch origin main && git merge FETCH_HEAD && git push origin HEAD:main`. If `history.test.ts` fails, the suspect is `sim/forecast.ts` (`this.forecast.step` in `simulation.ts`): it only acts while `civ.historyLive`, so look at tests that count events.
+**Not seen on a real GPU:** any of Section 6 (none of it depends on one, but the film's recording draws the 3D canvas into a 2D one each frame, which has only been tried on WebGL in the software renderer, not on WebGPU). Worth one look when the Mac next checks: play a one-minute documentary with "save as a video" on, on WebGPU, and open the file.
 
-**Section 6 (E51 to E60), where each stands**
-| | Feature | State |
-|---|---|---|
-| E51 | Chronoscope | built: `placeAt` in `sim/memory.ts`, dial in the Record panel, the town is redrawn in 3D as it stood (`withPast` in `main.ts`). Tests pass. **Not yet seen on screen**: whether the building renderer rebuilds a town when its size is overridden is unverified. |
-| E52 | Archive | built and tested (6,107 articles, 23,973 links, none dead, on a test world). Not yet seen on screen. |
-| E53 | Atlas | built and tested. Not yet seen on screen. |
-| E54 | Truth and record | built and tested. Not yet seen on screen. |
-| E55 | Counterfactual | **engine only**: `sim/whatif.ts` (`Counterfactual`, `changeFor`, `replayable`, `outcome`, `differences`), measured with `scripts/checks/whatifsweep.ts`. **Not wired**: no worker message, no panel, no tests. Plan: worker keeps a save from just before each tool use (`beforeTool`) and uses the latest rewind point before the event; `{ type: 'whatif', eventId }` starts a job, `job.advance(30)` each tick, state posted every half second, maps at the end; cap the run at about 1,500 steps (20 My of deep time or 6,000 years of history); a "What if" tab with two flat maps (biome byte per cell, 255 = sea), the list of differences, and a "what if this had not happened?" button in the Why panel for `replayable` events. |
-| E56 | Butterfly tracker | same engine (`change.kind === 'herd'`); spread measured 6% then 25% then 51% of cells. Needs the same wiring plus a heat map with a slider over `heat` frames. |
-| E57 | Ancestry | built and tested. Not yet seen on screen. |
-| E58 | Braid | built and tested. Not yet seen on screen. |
-| E59 | Documentary maker | **not started.** Plan: pick the heaviest events spread over time from the cause graph, fly the camera to each event's cell (`actions.flyToCell`), caption with year, title and description, record with the existing `toggleRecording` (the recording takes the 3D canvas only, so captions must be drawn another way or the film is narration over the present globe: say so in PROGRESS). |
-| E60 | Forecasts (was Prophecies) | built and tested: `sim/forecast.ts`, tab in the Record panel. Reckoned 14 of 14 came true, guessed 5 of 21, on one 8,000-year history. No religion in it. |
-
-**New files:** `src/sim/memory.ts`, `src/sim/forecast.ts`, `src/sim/whatif.ts`, `src/ui/memory.tsx`, `tests/memory.test.ts` (8 tests, pass), `tests/forecast.test.ts` (5, pass), `scripts/checks/memorysweep.ts`, `memorydump.ts`, `forecastsweep.ts`, `whatifsweep.ts`. Panel `'archive'` ("Record" on the bar, key A). War events now carry `data: { town, other, nation, foe }` (`simulation.ts`, `civEvent('war')`).
-
-**To see the Record panel on screen:** `npx vite-node scripts/checks/memorydump.ts <out.json>` runs a full-size world to history (about 5 minutes) and writes real answers; load them into the page with `__genesis.update({ memIndex, memAtlas, ... })` after setting `__genesis.actions.askMemory = () => {}`. A first run gave only 1 nation after 4,000 years at full size, so the script now runs on until there are 30.
-
-**Still to write for Section 6:** PROGRESS.md rows E51 to E60, `docs/DECISIONS_FIX.md` entries (F25 on: the record reads and never writes; forecasts replace prophecies; the counterfactual is two re-runs with a control, not a re-run against the live world), a line in HANDOFF.md for the build session.
+**To see the Record panel with a real history without waiting for one:** `npx vite-node scripts/checks/memorydump.ts <out.json>` (about 5 minutes) and load the answers into the page with `__genesis.update({ memIndex, memAtlas, ... })` after setting `__genesis.actions.askMemory = () => {}`.
 
 **After Section 6, in the owner's order:** Section 5 (E41 to E50), then the animal sculpting LAST (invented, plausible, not Earth-like, not realistic; `docs/CREATURE_SCULPTING.md`; heads, wings, back plates, legs, colour, walk). Asset pass only when the owner says. Ask the owner before each GPU check. One thing to raise with the owner: the game's own name, "Genesis", given the decision to have no religious wording.
 

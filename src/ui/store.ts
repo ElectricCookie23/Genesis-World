@@ -13,10 +13,11 @@ import type { IndustryInfo } from '../sim/industry';
 import type { Article, Atlas, IndexGroup, Lane, PastPlace, Records, Ref, Step } from '../sim/memory';
 import type { MemoryAsk } from '../shared/protocol';
 import type { ForecastInfo } from '../sim/forecast';
+import type { Shot } from '../game/film';
 import type { WhatIfMaps, WhatIfState } from '../sim/whatif';
 
 export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'tongues' | 'goals' | 'system' | 'microscope' | 'archive';
-export type MemoryTab = 'archive' | 'atlas' | 'braid' | 'records' | 'ancestry' | 'chronoscope' | 'forecasts' | 'whatif';
+export type MemoryTab = 'archive' | 'atlas' | 'braid' | 'records' | 'ancestry' | 'chronoscope' | 'forecasts' | 'whatif' | 'film';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
 
 /** One person in an individual's family tree; key is set when that relative is drawn in the world and can be selected. */
@@ -85,6 +86,8 @@ export interface UIState {
   whatIf: WhatIfState | null;
   whatIfMaps: WhatIfMaps | null;
   whatIfProblem: string;
+  /** A documentary being shown (expansion E59): its shots, the one on screen, and whether it is being recorded to a file. */
+  film: { shots: Shot[]; index: number; minutes: number; recording: boolean } | null;
   /** The town site whose layers are open (system E17). */
   siteDetail: SiteDetail | null;
   /** The ruling house whose family tree is open. */
@@ -188,6 +191,7 @@ export const state: UIState = {
   whatIf: null,
   whatIfMaps: null,
   whatIfProblem: '',
+  film: null,
   timeline: [],
   other: null,
   overlay: 'none',
@@ -279,6 +283,9 @@ export const actions = {
   openArticle: (_ref: Ref) => {},
   /** Set the chronoscope's dial for a town (null puts the town back in the present). */
   setChrono: (_id: number, _year: number | null) => {},
+  /** Make and show a documentary of this world's story, of so many minutes; `record` also saves it as a video file. */
+  playFilm: (_minutes: number, _record: boolean) => {},
+  stopFilm: () => {},
   /** Ask what the world would be had an event not happened (-1 stops the run in hand); or spare one small herd under the view and watch the difference spread. */
   whatIf: (_eventId: number) => {},
   whatIfHerd: () => {},

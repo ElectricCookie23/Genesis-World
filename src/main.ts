@@ -23,6 +23,7 @@ import { del, get, set } from 'idb-keyval';
 import { Music } from './audio/music';
 import type { SlotInfo, UIState } from './ui/store';
 import { GOALS, emptyRecord, evaluateGoals, type GoalRecord } from './game/goals';
+import { planFilm, shotAt, type Shot } from './game/film';
 import { actions, state, togglePanel, update } from './ui/store';
 
 const bootBar = document.getElementById('boot-bar') as HTMLElement;
@@ -507,6 +508,85 @@ async function boot(): Promise<void> {
       img.data[i * 4] = r; img.data[i * 4 + 1] = g; img.data[i * 4 + 2] = bl; img.data[i * 4 + 3] = 255;
     }
     ctx.putImageData(img, 0, 0);
+  };
+  // ---- the documentary maker (expansion E59): the plan is made in game/film.ts; here it is shown, and filmed
+  let film: { shots: Shot[]; started: number; index: number; speedWas: number; recorder: MediaRecorder | null; board: HTMLCanvasElement | null } | null = null;
+  const wrap = (ctx: CanvasRenderingContext2D, text: string, width: number): string[] => {
+    const lines: string[] = [];
+    let line = '';
+    for (const w of text.split(' ')) { const next = line ? `${line} ${w}` : w; if (ctx.measureText(next).width > width && line) { lines.push(line); line = w; } else line = next; }
+    if (line) lines.push(line);
+    return lines;
+  };
+  actions.playFilm = (minutes, record) => {
+    if (film) return;
+    const shots = planFilm(state.events, minutes);
+    if (!shots.length) { update({ notice: 'Nothing has happened yet to make a film of.' }); window.setTimeout(() => update({ notice: '' }), 3500); return; }
+    film = { shots, started: performance.now(), index: -1, speedWas: state.speedIndex, recorder: null, board: null };
+    setSpeed(0);
+    if (record) {
+      try {
+        const board = document.createElement('canvas');
+        board.width = 1280; board.height = 720;
+        const chunks: Blob[] = [];
+        const rec = new MediaRecorder(board.captureStream(30), { mimeType: 'video/webm' });
+        rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+        rec.onstop = () => download(URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })), `genesis-${seed}-documentary.webm`);
+        rec.start();
+        film.board = board; film.recorder = rec;
+      } catch { update({ notice: 'This browser cannot record video here. The film will play without being saved.' }); window.setTimeout(() => update({ notice: '' }), 4000); }
+    }
+    update({ film: { shots, index: 0, minutes, recording: !!film.recorder }, panel: 'none', whyEvent: -1, selectedSpecies: -1, creature: null });
+  };
+  actions.stopFilm = () => {
+    if (!film) return;
+    if (film.recorder && film.recorder.state !== 'inactive') film.recorder.stop();
+    setSpeed(film.speedWas);
+    film = null;
+    scene.cam.idle = 0;
+    update({ film: null });
+  };
+  /** One frame of the film: move to the next shot when its time comes, and paint the frame for the recording. */
+  const filmFrame = (now: number): void => {
+    if (!film) return;
+    const seconds = (now - film.started) / 1000;
+    const i = shotAt(film.shots, seconds);
+    if (i < 0) { actions.stopFilm(); return; }
+    const shot = film.shots[i]!;
+    if (i !== film.index) {
+      film.index = i;
+      const e = state.events[shot.eventId];
+      // near for what peoples did in one place, wide for what happened to the land and its life, the whole planet for the rest
+      const lon = shot.cell >= 0 ? grid.lon[shot.cell]! : scene.cam.lon + 0.9;
+      if (shot.cell >= 0) scene.cam.flyTo(lon, grid.lat[shot.cell]!, e && e.data && typeof e.data.nation === 'number' ? 0.3 : 1.0);
+      else scene.cam.flyTo(lon, 0.25 * Math.sin(i * 1.7), 2.3);
+      // a film is shot in daylight: the place is turned to mid-morning, and the day goes on from there
+      scene.dayAngle = lon - 0.5;
+      update({ film: state.film ? { ...state.film, index: i } : null });
+    }
+    scene.cam.idle = 100;
+    const board = film.board;
+    if (!board) return;
+    const ctx = board.getContext('2d');
+    if (!ctx) return;
+    const W = board.width, H = board.height;
+    // the picture, filling the frame
+    const k = Math.max(W / canvas.width, H / canvas.height), w = canvas.width * k, h = canvas.height * k;
+    ctx.drawImage(canvas, (W - w) / 2, (H - h) / 2, w, h);
+    const shade = ctx.createLinearGradient(0, H * 0.52, 0, H);
+    shade.addColorStop(0, 'rgba(0,0,0,0)'); shade.addColorStop(1, 'rgba(0,0,0,0.82)');
+    ctx.fillStyle = shade; ctx.fillRect(0, H * 0.52, W, H * 0.48);
+    // the words fade in at the start of a shot and out at its end
+    const into = seconds - shot.at, left = shot.at + shot.seconds - seconds;
+    ctx.globalAlpha = Math.max(0, Math.min(1, into / 0.8, left / 0.6));
+    ctx.textAlign = 'center'; ctx.fillStyle = '#fff6dc';
+    ctx.font = "500 15px ui-monospace, monospace";
+    ctx.fillText(formatYear(shot.year).toUpperCase().split('').join('\u200a'), W / 2, H - 196);
+    ctx.font = "500 40px 'Cormorant Garamond', serif";
+    ctx.fillText(shot.title, W / 2, H - 150);
+    ctx.font = "italic 500 23px 'Cormorant Garamond', serif"; ctx.fillStyle = '#ece7db';
+    wrap(ctx, shot.text, W * 0.78).slice(0, 4).forEach((line, n) => ctx.fillText(line, W / 2, H - 110 + n * 29));
+    ctx.globalAlpha = 1;
   };
   actions.whatIf = (eventId) => {
     if (eventId < 0) { send({ type: 'whatif', stop: true }); return; }
@@ -1045,9 +1125,10 @@ async function boot(): Promise<void> {
         scene.cam.zoomTo(postcardBase * (1 + 0.28 * Math.sin(now / 9000)));
         scene.cam.idle = 100;
       } else postcardBase = 0;
-      const busy = state.panel !== 'none' || state.whyEvent >= 0 || state.selectedSpecies >= 0;
+      const busy = state.panel !== 'none' || state.whyEvent >= 0 || state.selectedSpecies >= 0 || !!state.film;
       if (!state.uiHidden && !state.opening && !busy && now - lastActivity > 4000) update({ uiHidden: true });
     }
+    filmFrame(now);
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);

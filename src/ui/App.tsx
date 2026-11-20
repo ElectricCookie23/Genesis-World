@@ -3,7 +3,7 @@ import { actions, togglePanel, useStore } from './store';
 import { GoalMarker, Goals } from './goals';
 import { SkyMessage, System } from './system';
 import { Microscope, Pulse } from './strange';
-import { Memory } from './memory';
+import { FilmOverlay, Memory } from './memory';
 import { bigNumber, formatYear } from './format';
 import { DynastyPanel } from './dynasty';
 import { LanguagesPanel } from './tongues';
@@ -22,7 +22,7 @@ const HINTS = [
 export function App() {
   const s = useStore();
   const st = s.stats;
-  const hidden = s.uiHidden || s.postcard;
+  const hidden = s.uiHidden || s.postcard || !!s.film;
   const last = s.chronicle.length ? s.events[s.chronicle[s.chronicle.length - 1]!] : undefined;
   return (
     <div class={css.root}>
@@ -98,6 +98,7 @@ export function App() {
           </div>
         </div>
       )}
+      {s.film && <FilmOverlay />}
       {s.notice && <div class={`${css.panel} ${css.notice}`}>{s.notice}</div>}
       {s.eraBanner && !s.milestone && !s.opening && (
         <div key={`${s.eraBanner.title}${s.eraBanner.year}`} style={{ position: 'fixed', left: '50%', top: '13%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'none', maxWidth: '92vw', textShadow: '0 2px 18px #000c' }}>
@@ -114,7 +115,7 @@ export function App() {
         </div>
       )}
       {/* on a phone a panel is a sheet over the lower screen: the narration would lie across its text */}
-      {s.chronicleLine && !s.milestone && s.panel !== 'archive' && !(s.mobile && s.panel !== 'none') && <div class={css.narration} key={s.chronicleLine}>{s.chronicleLine}</div>}
+      {s.chronicleLine && !s.milestone && !s.film && s.panel !== 'archive' && !(s.mobile && s.panel !== 'none') && <div class={css.narration} key={s.chronicleLine}>{s.chronicleLine}</div>}
       {!s.opening && !s.chronicleLine && !s.milestone && last && s.panel !== 'chronicle' && s.panel !== 'archive' && !(s.mobile && s.panel !== 'none') && !hidden && (st?.simYear ?? 0) - last.simYear < 4e6 && (
         <div class={css.narration} key={last.id}><small>{formatYear(last.simYear).toUpperCase()}</small>{last.description}</div>
       )}
