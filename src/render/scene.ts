@@ -912,6 +912,14 @@ export class GenesisScene {
     // the aurora breathes with the star's activity, and needs air to glow in
     // mostly quiet, now and then a strong display; storms on the star make it much stronger
     uAurora.value = Math.max(0.08, 0.38 + 0.3 * Math.sin(this.time * 0.037) + 0.22 * Math.sin(this.time * 0.011 + 1.3)) * this.solar * uAtmo.value;
+    // The aurora shows only on the night side. Seen from well out over the day side there is none in view, and it
+    // cost 2.3 ms a frame there for nothing (measured on a real GPU): it is not drawn at all then, nor when there is
+    // no air for it to glow in.
+    if (this.aurora) {
+      const cam = this.cam.camera.position;
+      const overDay = cam.dot(uSunDir.value as Vector3) / Math.max(1e-6, cam.length());
+      this.aurora.mesh.visible = uAurora.value > 0.001 && !(overDay > 0.5 && this.cam.dist > 0.5);
+    }
     this.terrain?.update(this.cam.camera.position);
     this.ocean?.update(this.renderer, this.cam.camera.position, this.time, this.keepSeaPatch);
     this.vegetation?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist, this.cam.camera.position, this.renderer);

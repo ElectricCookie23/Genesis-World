@@ -1,6 +1,6 @@
 // Creature populations ("cohorts"): groups of one species in one region sharing a genome.
 // Cohorts eat, get eaten, starve, freeze, breed, wander and mutate. Selection is whatever happens to them.
-import { G, GENE_COUNT, P, PHEN_COUNT, computePhenotype, geneDistance, mutateInto } from './genetics';
+import { G, GENE_COUNT, HUNTER_DIET, P, PHEN_COUNT, computePhenotype, geneDistance, mutateInto } from './genetics';
 import type { RNG } from './rng';
 import type { Regions } from './regions';
 import type { Plants } from './plants';
@@ -14,6 +14,12 @@ const FOOD_SCALE = 3e5;
  * so a population of them yields more food per kg than a population of giants.
  */
 const E_PREY = 0.25;
+/**
+ * Meat is a richer food than leaves: a hunter gets this much more from a kill than its bare energy. Without it no
+ * lineage ever became a hunter (measured over whole histories: the diet gene never passed a third), because the
+ * many odds against a catch left a meat-eater starving beside a grazer.
+ */
+const MEAT_RICH = 3;
 const INTAKE_CAP = 2.4;
 const LOG_QUARTER = Math.log(0.25);
 const SPECIATION_DISTANCE = 0.46;
@@ -354,6 +360,9 @@ export class Creatures {
         for (let j = 0; j < n; j++) {
           if (j === i) continue;
           const q = this.regionList[a + j]!;
+          // a species does not hunt its own kind. (It did: a released hunter lost four times as many to its own packs
+          // as to hunger, and no hunting lineage ever lasted.)
+          if (sp[q] === sp[c]) continue;
           const qp = q * PHEN_COUNT, qg = q * GENE_COUNT;
           const overlap = Math.min(fl[i]!, fl[j]!) + Math.min(fs[i]!, fs[j]!);
           if (overlap <= 0.01) continue;
@@ -369,7 +378,8 @@ export class Creatures {
           let hueGap = Math.abs(genome[qg + G.Hue]! - (fl[j]! > fs[j]! ? groundHue : 0.58));
           if (hueGap > 0.5) hueGap = 1 - hueGap;
           const blend = Math.max(0, 1 - hueGap * 6) * 0.22;
-          const detect = sat(0.7 + phen[p + P.Sense]! * 0.9 - phen[qp + P.Conceal]! * 0.6 - blend) * (1 - 0.5 * night);
+          // (alert prey is harder to surprise: senses are worth having on both sides of a hunt)
+          const detect = sat(0.7 + phen[p + P.Sense]! * 0.9 - phen[qp + P.Conceal]! * 0.6 - phen[qp + P.Sense]! * 0.2 - blend) * (1 - 0.5 * night);
           const def = 1 - phen[qp + P.Defense]! * 0.75 * (1 - phen[p + P.Attack]! * 0.6);
           const tox = 1 - sat(genome[qg + G.Toxicity]! - genome[c * GENE_COUNT + G.ToxinResist]!);
           const k = Math.min(1, overlap * 1.4) * sizeFit * pursuit * detect * def * tox * meat;
@@ -383,14 +393,16 @@ export class Creatures {
           if (claimM[j]! <= 0) continue;
           const q = this.regionList[a + j]!;
           const perPrey = phen[q * PHEN_COUNT + P.Mass75]! * E_PREY;
-          const catchable = count[q]! * 0.35 * perPrey;
+          // scarce prey is hard to find: the last few hundred of a herd have room to hide, so hunters ease off before
+          // they have eaten everything (without this a hunter stripped a region bare and starved beside it)
+          const catchable = count[q]! * 0.35 * (count[q]! / (count[q]! + 1500)) * perPrey;
           const share = claimM[j]! > catchable ? catchable / claimM[j]! : 1;
           let takenEnergy = 0;
           for (let i = 0; i < n; i++) {
             const k = kappa[i * M + j]!;
             if (k <= 0) continue;
             const e = capacity[i]! * k * share;
-            got[i] = got[i]! + e;
+            got[i] = got[i]! + e * MEAT_RICH;
             takenEnergy += e;
             const ps = this.species[sp[this.regionList[a + i]!]!]!;
             const qs = this.species[sp[q]!]!;
@@ -429,7 +441,7 @@ export class Creatures {
     }
     this.disperse(rng, tau);
     this.tally(year);
-    if (this.stepCount % 6 === 0) this.detectSpeciation(rng, year);
+    if (this.stepCount % 6 === 0) { this.fillHunterNiche(rng, year); this.detectSpeciation(rng, year); }
   }
 
   /**
@@ -641,6 +653,51 @@ export class Creatures {
    * Split species whose populations have drifted apart. A population that is genetically far from
    * its species and separated from it, by geography or by way of life, becomes a new species.
    */
+  /** The year a hunting lineage was last started, so the next waits its turn. */
+  private nicheYear = -1e9;
+
+  /**
+   * A world full of animals with nothing hunting them is an open door, and something walks through it. When no
+   * living species is a hunter, a few neighbouring populations of an abundant animal that already takes some meat
+   * turn to it in earnest: more meat in the diet, bolder, sharper-eyed, a little larger. They are then far enough
+   * from their kin for the ordinary rules to split them off as a species of their own, if they prosper.
+   *
+   * (Left to small steps alone no lineage ever crossed over: eating a little more meat and a little less grass paid
+   * worse at every step of the way, in every history measured. A hunter that was set down whole could live.)
+   */
+  private fillHunterNiche(rng: RNG, year: number): void {
+    if (this.livingSpecies < 6 || year - this.nicheYear < 3e6) return;
+    let best = -1, bestScore = 0;
+    for (const s of this.species) {
+      if (s.extinctYear >= 0) continue;
+      if (s.ref[G.Diet]! > HUNTER_DIET) return;
+      // many of them, already part meat-eaters, and not too large to grow
+      const score = Math.log10(s.pop + 10) * (0.2 + s.ref[G.Diet]!) * (1.2 - s.ref[G.Size]!);
+      // (never the cleverest animals: turning them into hunters split the very lineage a mind was growing in, and
+      // put the first peoples off by a hundred million years)
+      if (s.regions >= 4 && s.ref[G.Intelligence]! < 0.4 && score > bestScore) { bestScore = score; best = s.id; }
+    }
+    if (best < 0) return;
+    this.nicheYear = year;
+    const mine: number[] = [];
+    for (let c = 0; c < this.high; c++) if (this.alive[c] && this.sp[c] === best) mine.push(c);
+    if (mine.length < 4) return;
+    mine.sort((a, b) => this.count[b]! - this.count[a]!);
+    // not the heartland: the next few largest populations
+    const turned = mine.slice(1, 1 + Math.max(3, Math.min(8, Math.round(mine.length * 0.25))));
+    const diet = rng.range(0.56, 0.68), bold = rng.range(0.25, 0.35);
+    for (const c of turned) {
+      const g = c * GENE_COUNT, gen = this.genome;
+      gen[g + G.Diet] = diet;
+      gen[g + G.Aggression] = Math.min(1, gen[g + G.Aggression]! + bold);
+      gen[g + G.Sight] = Math.min(1, gen[g + G.Sight]! + 0.18);
+      gen[g + G.EyeCount] = Math.max(gen[g + G.EyeCount]!, 0.3);
+      gen[g + G.Size] = Math.min(1, gen[g + G.Size]! + 0.07);
+      gen[g + G.LimbLength] = Math.min(1, gen[g + G.LimbLength]! + 0.12);
+      computePhenotype(gen, g, this.phen, c * PHEN_COUNT);
+    }
+  }
+
   private detectSpeciation(rng: RNG, year: number): void {
     const { species, genome, phen } = this;
     const bySpecies = new Map<number, number[]>();

@@ -9,7 +9,7 @@ import { EventLog, type SimEvent } from './events';
 import { buildRegions, updateRegions, type Regions } from './regions';
 import { Plants, type PlantSpecies } from './plants';
 import { Creatures, type Species } from './creatures';
-import { G, GENE_COUNT, P, PG, PLANT_GENES, geneDistance, sizeMetres } from './genetics';
+import { G, GENE_COUNT, HUNTER_DIET, P, PG, PLANT_GENES, geneDistance, sizeMetres } from './genetics';
 import { cellsWithin } from './geology';
 import { nameSpecies, plantName } from './naming';
 import { placeName } from './names';
@@ -247,7 +247,11 @@ export class Simulation {
     updateSnow(w, c, dt);
     // ice sheets lock up water: sea level falls in cold eras and rises in warm ones
     this.seaBias *= Math.exp(-dt / 60000);
-    const target = Math.max(-0.3, Math.min(0.2, -(this.iceVolume() - this.baseIce) * 0.035)) + this.seaBias - this.cosmos.seaLoss;
+    // (The swing was a twentieth of a kilometre at most, measured over whole histories, and the events for falling
+    // and rising seas wait for 0.08: no land bridge ever opened. Ice now takes more water, and warm water itself
+    // stands higher, so an ice age drops the sea by a tenth to a fifth of a kilometre and a hot age lifts it.)
+    const warmth = Math.max(-8, Math.min(10, c.meanTemp - this.baseTemp));
+    const target = Math.max(-0.3, Math.min(0.2, -(this.iceVolume() - this.baseIce) * 0.08 + warmth * 0.011)) + this.seaBias - this.cosmos.seaLoss;
     w.seaLevel += (target - w.seaLevel) * 0.15;
     classifyBiomes(w, c);
     // visual fields fade by sim time, but stay visible for about a second at high speed
@@ -1299,7 +1303,7 @@ export class Simulation {
     const land = cr.speciesMean(s.id, P.LandUse, true), fly = cr.speciesMean(s.id, P.Fly, true);
     const m = sizeMetres(s.ref[G.Size]!);
     const size = m < 0.15 ? 'tiny' : m < 0.6 ? 'small' : m < 2 ? 'mid-sized' : m < 4.5 ? 'large' : 'giant';
-    const diet = s.ref[G.Diet]! > 0.62 ? 'hunter' : s.ref[G.Diet]! < 0.3 ? 'grazer' : 'forager';
+    const diet = s.ref[G.Diet]! > HUNTER_DIET ? 'hunter' : s.ref[G.Diet]! < 0.3 ? 'grazer' : 'forager';
     const where = fly > 0.45 ? 'flying' : land > 0.6 ? 'land' : land > 0.25 ? 'shore' : 'sea';
     return `a ${size} ${where} ${diet}`;
   }
@@ -1437,13 +1441,13 @@ export class Simulation {
       const c = s.eventId >= 0 ? [s.eventId] : [];
       const ids = [s.id];
       if (g[G.EyeCount]! > 0.12 && g[G.EyeSize]! + g[G.Sight]! > 0.5) this.milestone('first-eye', 'First eye', `${s.name} can see. A patch of light-sensitive skin has become an eye, and the world gains its first witness.`, cell, c, ids);
-      if (g[G.Diet]! > 0.6) this.milestone('first-hunter', 'First hunter', `${s.name} eats other animals. From now on, everything alive must watch its back.`, cell, c, ids);
+      if (g[G.Diet]! > HUNTER_DIET) this.milestone('first-hunter', 'First hunter', `${s.name} eats other animals. From now on, everything alive must watch its back.`, cell, c, ids);
       if (g[G.Glow]! > 0.55) this.milestone('first-glow', 'Living light', `${s.name} makes its own light in the dark.`, cell, c, ids);
       if (g[G.WarmBlood]! > 0.5) this.milestone('first-warm', 'Warm blood', `${s.name} burns food to stay warm. It can hunt at night and in the cold, and it is always hungry.`, cell, c, ids);
       if (g[G.Size]! > 0.82) this.milestone('first-giant', 'The first giants', `${s.name} is more than ${Math.round(sizeMetres(g[G.Size]!))} metres long. Nothing alive has ever been this big.`, cell, c, ids);
       if (g[G.Armor]! > 0.6) this.milestone('first-armor', 'Armour', `${s.name} grows a shell thick enough to turn teeth.`, cell, c, ids);
       if (g[G.Venom]! > 0.6) this.milestone('first-venom', 'Venom', `${s.name} carries venom.`, cell, c, ids);
-      if (g[G.Sociality]! > 0.65 && g[G.Diet]! > 0.6) this.milestone('first-pack', 'The first packs', `${s.name} hunts together. Prey that could shrug off one hunter cannot shrug off six.`, cell, c, ids);
+      if (g[G.Sociality]! > 0.65 && g[G.Diet]! > HUNTER_DIET) this.milestone('first-pack', 'The first packs', `${s.name} hunts together. Prey that could shrug off one hunter cannot shrug off six.`, cell, c, ids);
       if (g[G.Care]! > 0.6) this.milestone('first-care', 'Parents', `${s.name} guards and feeds its young.`, cell, c, ids);
       const land = cr.speciesMean(s.id, P.LandUse, true);
       if (land > 0.55) {
@@ -1516,7 +1520,8 @@ export class Simulation {
     } else if (kind === 'rediscover') {
       const ruin = this.civ.settlements[cause]!;
       const elder = this.creatures.species[ruin.species]!;
-      this.emit({ type: 'rediscovery', cellId: cell, title: `The ruins under ${st!.name}`, description: `Digging foundations at ${st!.name}, ${sp.name} break into walls no one of their kind ever built. ${elder.name} lived here once, ${Math.round((this.simYear - ruin.ruined) / 1e6 * 10) / 10} million years ago.`, causes: [st!.eventId, ruin.eventId].filter((x) => x >= 0), importance: 2, speciesIds: [speciesId, elder.id] });
+      this.emit({ type: 'rediscovery', cellId: cell, title: `The ruins under ${st!.name}`, description: `Digging foundations at ${st!.name}, ${sp.name} break into walls no one of their kind ever built. ${elder.name} lived here once, ${Math.round((this.simYear - ruin.ruined) / 1e6 * 10) / 10} million years ago.`, causes: [st!.eventId, ruin.eventId].filter((x) => x >= 0), importance: this.notedOnce.has('rediscovery') ? 0 : 2, speciesIds: [speciesId, elder.id] });
+      this.notedOnce.add('rediscovery');
     } else if (kind === 'painting') {
       const prey = this.creatures.species[cause]!;
       this.emit({ type: 'painting', cellId: cell, title: `Paintings at ${st!.name}`, description: `On a cave wall near ${st!.name}, in ochre and soot, someone has painted ${prey.name}. The animals are running.`, causes: [st!.eventId, prey.eventId].filter((x) => x >= 0), importance: this.notedOnce.has('painting') ? 0 : 1, speciesIds: [speciesId, prey.id] });

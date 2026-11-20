@@ -54,9 +54,9 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 12 | Energy, hunger, reproduction, aging and death. | in progress | sim done at population level (energy, starvation, breeding, death) |
 | 13 | Mutation, with natural selection emerging on its own. | done | mutation plus selection from food, predation and climate only; no fitness score |
 | 14 | Speciation detection, with each new species given a generated Latin-style name. | done | lineage speciation with Latin-style names from trait and place roots |
-| 15 | Herbivores, predators and scavengers in a live food web. | done | herbivores, hunters and scavengers share food pools per region; hunters and packs emerge but do not always persist |
+| 15 | Herbivores, predators and scavengers in a live food web. | done | herbivores, hunters and scavengers share food pools per region; hunters and packs emerge but do not always persist **Audit fix (2026-11-21):** no lineage ever became a hunter in measured histories (the diet gene never passed a third). Now a species does not hunt its own kind, scarce prey is harder to find, meat feeds better than leaves (`MEAT_RICH`), a hunter is an animal past `HUNTER_DIET` (0.45), and a world of animals with no hunters starts a hunting lineage (`fillHunterNiche`). Measured on three seeds: hunters present in half to most of each history, two to five hunting species at a time. |
 | 16 | Herds, flocks and fish schools. | done | individuals move as herds, flocks and schools around a drifting centre |
-| 17 | Pack hunting, and prey that flee. | done | hunters and prey sharing a region are paired: hunters close in, the prey herd bolts, and cards say chasing or fleeing; pack hunting emerges in the sim |
+| 17 | Pack hunting, and prey that flee. | done | hunters and prey sharing a region are paired: hunters close in, the prey herd bolts, and cards say chasing or fleeing; pack hunting emerges in the sim **Audit fix:** with hunters now present in every measured world, "First hunter" and "The first packs" fire in all three seeds and the chase is drawn from diet 0.45 up. |
 | 18 | Life starts in the sea and moves onto land over time. | done | life starts in the sea; oxygen opens the land; first land animals emerge around 85 My |
 | 19 | Flight evolves gradually, starting with gliding. | done | legs to gliding membrane to wings; powered flight has now appeared in a test run (not yet in every seed) |
 | 20 | The cause graph: every event stores its causes and effects. | done | every event stores causes with weights and effects |
@@ -70,12 +70,12 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 28 | Storm cells with lightning, and rain that drives plant growth. | done | storm cells drift with the wind as dense grey cloud; lightning flickers inside them; rain (moisture) drives plant growth |
 | 29 | Lightning starts wildfires, followed by regrowth (grass, then shrubs, then forest). | done | lightning fires spread cell by cell at low speed with smoke and embers; scorch regrows grass first, then canopy |
 | 30 | Ice ages and warm eras, with biomes migrating as the climate changes. | done | long climate cycles drive ice ages and warm eras; biomes follow |
-| 31 | Sea level rises and falls, opening and closing land bridges. | in progress | sea level follows ice volume; land-bridge effects on life to verify |
+| 31 | Sea level rises and falls, opening and closing land bridges. | done | sea level follows ice volume; land-bridge effects on life to verify **Audit fix:** the sea moved 0.05 km at most, under the 0.08 the events wait for. Ice now takes more water and warm seas stand higher: measured swings of -0.12 to -0.18 and +0.08 to +0.10 km, five or six falls and one to three rises per 200 My. |
 | 32 | Volcanic eruptions with lava, ash and fertile ground afterward. | done | eruptions build land, ash, fertility, cooling, lava glow, smoke and embers; cones erode |
 | 33 | Meteor strike god tool: shockwave, crater, impact winter. | done | meteor tool: entry streak, flash, debris, crater, impact winter |
 | 34 | Mass extinctions, each logged with its causes. | done | detected from extinction rate, logged with weighted causes |
 | 35 | Adaptive radiation that refills empty niches after extinctions. | done | empty worlds speciate faster; radiation event after a mass extinction |
-| 36 | Night side: bioluminescent plants and creatures. | done | glowing plants and creatures light up at night and bloom |
+| 36 | Night side: bioluminescent plants and creatures. | done | glowing plants and creatures light up at night and bloom **Audit fix:** glow now helps animals find mates in the dark or the deep (it only cost before); glowing animals (gene above 0.5) appeared in one measured history of three. The designer has a glow slider. |
 | 37 | Auroras over the poles. | in progress | ribbon curtains over both poles on the night side; solar events to come |
 | 38 | Generative ambient music that shifts with the planet's state. | in progress | generative ambient music (Tone.js) that shifts with stage, era and life, near silence after a mass extinction |
 | 39 | Postcard mode: UI hidden, slow cinematic camera. | done | P hides the UI; the camera drifts and breathes in and out with depth of field up close |
@@ -105,7 +105,7 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 63 | Seasonal migrations that wear trails into the land. | done | at 1x and 10x wandering herds shift toward the summer hemisphere; herds of a migratory land species walk between the neighbouring regions they live in and wear the ground into braided pale trails that show from above and fade when the herds stop (trail event) |
 | 64 | Hibernation, and day versus night species. | done | slow-living burrowers feel less of the cold, by degree (they sleep through it), with an event for the first hibernator living in cold country; at 1x and 10x they are underground while it is winter where they live; night animals lie low by day and day animals by night |
 | 65 | Camouflage evolving to match each biome. | done | prey whose hue matches the ground cover of its region is harder for hunters to detect, so colour is under selection |
-| 66 | Sexual selection: mating displays and ornaments. | done | ornaments raise breeding success but cost energy and concealment |
+| 66 | Sexual selection: mating displays and ornaments. | done | ornaments raise breeding success but cost energy and concealment **Audit fix:** display counts for more in sociable animals; ornaments passed the drawn level (0.4) in all three measured histories and 0.6 in one. Designer slider added. |
 | 67 | Nests and parental care. | done | species with strong parental care get a nest mound at each home, and are seen with one or two small young walking close behind a parent |
 | 68 | Disease outbreaks spreading through herds. | done | plagues strike crowded, sociable species and spread to neighbouring regions |
 | 69 | Symbiosis pairs. | done | a large and a small species sharing at least two regions become a pair (event, worded by what the small one eats and whether they live in the sea); from then on each forages about 7% better wherever the other lives too; a few pairs per world |
@@ -115,12 +115,12 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 73 | Island dwarfism and gigantism. | done | isolated island populations that shrink or grow are flagged as dwarfs or giants |
 | 74 | Flight lost on predator-free islands. | done | a winged lineage whose descendants lose their wings is recorded |
 | 75 | Land species returning to the sea as ocean giants. | done | land lineages that return to the sea are recorded with a milestone |
-| 76 | Echolocation shown as ripples. | done | echolocating animals near the camera send out expanding ripples |
-| 77 | Electric fish with visible arcs. | done | electric sea species carry glowing patches and, seen up close, crackle now and then with a jagged thread of sparks |
-| 78 | Metamorphosis, with larval and adult forms that look completely different. | done | young of metamorphosing species are drawn as limbless grubs unlike the adults |
+| 76 | Echolocation shown as ripples. | done | echolocating animals near the camera send out expanding ripples **Audit fix:** sound sense used to do nothing below 0.6, so nothing crossed it; it now grows into use and helps find food. Passed 0.6 in two measured histories of three. Designer slider added. |
+| 77 | Electric fish with visible arcs. | done | electric sea species carry glowing patches and, seen up close, crackle now and then with a jagged thread of sparks **Audit fix:** as 76: electric sense passed 0.6 in all three measured histories (0.63 to 0.75). Designer slider added. |
+| 78 | Metamorphosis, with larval and adult forms that look completely different. | done | young of metamorphosing species are drawn as limbless grubs unlike the adults **Audit fix:** the gene had no effect in the simulation; young that live a different life now breed better at the water's edge. Still below the drawn level in measured histories (0.29 to 0.45 of 0.6); the designer has a "larval stage" slider. |
 | 79 | Hive species with growing mounds. | done | small, highly social species raise tall mounds at each colony |
 | 80 | Keystone species whose loss collapses an ecosystem. | done | when a widespread species dies and three more follow within 1.5 My, an ecosystem collapse is logged |
-| 81 | Invasive species crossing land bridges. | done | land species that surge across new land bridges when the seas fall are logged as invasions |
+| 81 | Invasive species crossing land bridges. | done | land species that surge across new land bridges when the seas fall are logged as invasions **Audit fix:** needed a sea-fall that never came (see 31). Now 7 to 9 invasions per measured history. |
 | 82 | Living fossils flagged when a species stays unchanged for eons. | done | species unchanged for 60 My are flagged |
 | 83 | Fossil layer: see-through ground showing bones where extinct species died. | done | fossils view (overlay): the ground turns to dark glass with its layers showing, and ribcage skeletons shine through it where extinct species last lived; out of the view the bones lie small on the ground |
 | 84 | Auto-generated field guide with a sketch-style card for every species. | done | field guide shows every living species as a paper card with an ink sketch drawn from its genes (`ui/sketch.tsx`: body, legs, wings, fins, horns, sail, plates, markings, hand-drawn wobble) and a description |
@@ -139,8 +139,8 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 97 | Comets that return on a long cycle and become myths. | done | a seeded comet returns on a fixed period, each return linked to the last, and becomes myth |
 | 98 | Meteor showers that trigger mutation bursts. | done | meteor showers raise mutation rates for a while |
 | 99 | A rare captured second moon. | done | rare capture of a second, smaller moon (event, omen, drawn in the sky) |
-| 100 | Shattering the moon into a ring system. | done | shatter god tool breaks the moon into a ring |
-| 101 | Ring shadow creating a cold stripe biome. | done | the ring cools and darkens a band along the equator |
+| 100 | Shattering the moon into a ring system. | done | shatter god tool breaks the moon into a ring **Audit fix:** the tool had no button; "Shatter the moon" is now in the sky tools. |
+| 101 | Ring shadow creating a cold stripe biome. | done | the ring cools and darkens a band along the equator **Audit fix:** reachable now that 100 has a button. |
 | 102 | A nearby supernova with a radiation spike. | done | rare supernova: radiation kill on land and a mutation burst; peoples take it as an omen |
 | 103 | The sun brightening over the far future. | done | after 380 My the star slowly brightens and warms the world |
 | 104 | Constellations named after extinct species. | done | villages name constellations after extinct species whose bones they find |
@@ -171,9 +171,9 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 129 | Carnivorous plants in poor soil. | done | thorny, toxic, slow plants are recorded as meat-eaters |
 | 130 | Autumn colors. | done | broadleaf trees turn gold, red and brown where the cold season is coming (1x and 10x) |
 | 131 | A marker on the oldest living tree. | done | the longest-standing forest is tracked and its oldest tree drawn tall and golden |
-| 132 | Gas-bladder creatures drifting like blimps. | done | slow, large winged species carry a great pale float (a smooth translucent bladder above the body) |
+| 132 | Gas-bladder creatures drifting like blimps. | done | slow, large winged species carry a great pale float (a smooth translucent bladder above the body) **Audit fix:** the designer now has the metabolism slider this form needs. |
 | 133 | Living islands: sea giants with forests on their backs. | done | armoured sea giants carry a grove on their backs |
-| 134 | Walking forests. | done | colour-shifting land giants carry a grove on their backs |
+| 134 | Walking forests. | done | colour-shifting land giants carry a grove on their backs **Audit fix:** the designer now has the colour-change slider this form needs; the gene passed 0.6 in one measured history. |
 | 135 | Mass hatchings that light up the ocean. | done | glowing, prolific sea species hatch all at once (event), and the sea around the place lights up from below in a glow that spreads and fades |
 | 136 | Bone graveyards. | done | ribcage skeletons (spine, arched ribs, skull) lie where species died out |
 | 137 | A rare golden mutant. | done | about 1 in 700 individuals is drawn golden and noted on its card |

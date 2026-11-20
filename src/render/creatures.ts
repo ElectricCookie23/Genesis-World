@@ -9,7 +9,7 @@ import {
   abs, attribute, cameraPosition, cos, cross, dot, float, instancedBufferAttribute, max, normalLocal, normalize, positionGeometry, positionWorld, pow,
   sin, step, varying, vec3,
 } from 'three/tsl';
-import { G, Limb, limbKind, sizeMetres } from '../sim/genetics';
+import { G, Limb, limbKind, sizeMetres, HUNTER_DIET } from '../sim/genetics';
 import { RNG } from '../sim/rng';
 import { placeName } from '../sim/names';
 import type { Grid } from '../sim/world';
@@ -189,7 +189,7 @@ export class CreatureLayer {
           size: ANIMAL_BASE + ANIMAL_SPAN * Math.pow(info.genes[G.Size]!, 1.3), social: info.genes[G.Sociality]!, fed: h.fed[i]!,
           pos: home.clone(), fwd: e1.clone(), moving: 0, cell, night: info.genes[G.Nocturnal]!,
           larva: info.genes[G.Metamorphosis]! > 0.6 && hash(key * 53 + 7) < 0.35,
-          rival: null, hunter: info.genes[G.Diet]! > 0.6, migrate: info.genes[G.Migration]!, echo: info.genes[G.Echo]! > 0.6,
+          rival: null, hunter: info.genes[G.Diet]! > HUNTER_DIET, migrate: info.genes[G.Migration]!, echo: info.genes[G.Echo]! > 0.6,
           hibernates: info.genes[G.Burrow]! > 0.5 && info.genes[G.Metabolism]! < 0.55 && medium === 1,
         });
         // species that care for their young are seen with them: one or two small ones close behind a parent
@@ -457,7 +457,7 @@ export function describeIndividual(ind: Individual, info: SpeciesInfo): { name: 
   const span = 1 + 70 * info.genes[G.Lifespan]! * (0.3 + info.genes[G.Size]!);
   const years = span * (0.08 + 0.85 * ind.h);
   const age = years < 1 ? `${Math.max(1, Math.round(years * 12))} months` : `${Math.round(years)} years`;
-  const hunter = info.genes[G.Diet]! > 0.6;
+  const hunter = info.genes[G.Diet]! > HUNTER_DIET;
   let action: string;
   if (ind.medium === 2) action = ind.moving > 0.5 ? 'soaring' : 'circling';
   else if (ind.medium === 0) action = ind.moving > 0.6 ? (hunter ? 'chasing prey' : 'swimming') : hunter ? 'lying in wait' : 'grazing the shallows';
