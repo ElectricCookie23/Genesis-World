@@ -73,7 +73,7 @@ export interface Dynasty {
   reigns: number;
 }
 
-export type Government = 'band' | 'chiefdom' | 'kingdom' | 'republic' | 'empire' | 'council';
+export type Government = 'band' | 'chiefdom' | 'kingdom' | 'republic' | 'empire' | 'council' | 'custom';
 
 export interface Nation {
   id: number;
@@ -142,6 +142,16 @@ export interface HistoryState {
   topEra: number;
   /** The highest age ever reached in this history, which a great ruin does not lower. */
   peakEra?: number;
+  /** The year the long peace began (nations and towns live on, history is no longer made), or -1. */
+  peace?: number;
+  /** The most people alive at once during the long peace: losing most of them breaks it. */
+  peacePop?: number;
+  /** The year the leading nation reached the top of knowledge, or -1. */
+  topSince?: number;
+  /** The year of the last war fought with the weapons of the Age of Orbit, if there has been one. */
+  lastWar?: number;
+  /** The year history resumed after a broken peace, or -1. */
+  since?: number;
   /** For each slot of the tech web, whether anyone has yet discovered it (1) in this history. */
   firsts: number[];
   /** People on record who are not rulers and are still alive: their lives are followed to their end (system E6). */

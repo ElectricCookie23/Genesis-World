@@ -44,6 +44,8 @@ export interface Settlement {
   modifier: string;
   /** A slot of the tech web: something here was built with a technique its people have since forgotten (system E5), or -1. */
   relic: number;
+  /** Founded by settlers who came across the sea. */
+  overseas?: boolean;
 }
 
 export const INTELLIGENCE_THRESHOLD = 0.5;
@@ -55,6 +57,14 @@ export const FARMING = 0.22;
 const MAX_TICKS = 300;
 /** Ticks longer than this many years are a fast-forward: rulers and minor events are summarised, not recorded. */
 const SUMMARY_YEARS = 8;
+/** After a departure, the years over which the towns of home thin out before the long peace settles on those who stayed. */
+const STAYED_YEARS = 1200;
+/** A people that has stood at the top of knowledge this long without leaving settles into the long peace. */
+const SUMMIT_YEARS = 3000;
+/** For this long after a last war no one will fight another. */
+const LAST_WAR_MEMORY = 6000;
+/** No history is made for longer than this: a people that has not changed in so long lives by custom. */
+const LONGEST_HISTORY = 40000;
 
 const sat = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
 /** How far from its capital a nation of each era can hold a town, counted in regions (the spacing of neighbouring towns). */
@@ -73,6 +83,8 @@ export class Civilization {
   maxTech = 0;
   spaceAgeYear = -1;
   departed = false;
+  /** The year the departure happened, or -1. */
+  departedYear = -1;
   hasMusic = false;
   /** Nations, cultures, languages and remembered people. */
   h: HistoryState = emptyHistory();
@@ -85,6 +97,11 @@ export class Civilization {
   /** True while at least one nation exists: the world then has a history worth watching year by year. */
   get historyActive(): boolean {
     return this.h.began >= 0 && this.h.nations.some((n) => n.ended < 0);
+  }
+
+  /** True while history is still being made: nations exist and the long peace has not settled on them. */
+  get historyLive(): boolean {
+    return this.historyActive && !((this.h.peace ?? -1) >= 0);
   }
 
   // ------------------------------------------------------------------ prehistory (once per ecology step)
@@ -167,7 +184,7 @@ export class Civilization {
     const h = this.h;
     if (h.began < 0 || !h.nations.some((n) => n.ended < 0)) {
       // no nation is left: whatever comes next begins its own ages, its own first ships, its own sky
-      if (h.topEra > 0 || this.departed) { h.topEra = 0; h.peakEra = 0; h.firsts.length = 0; this.departed = false; this.spaceAgeYear = -1; this.industrial = false; this.ships = false; }
+      if (h.topEra > 0 || this.departed || (h.peace ?? -1) >= 0) { h.topEra = 0; h.peakEra = 0; h.firsts.length = 0; h.peace = -1; h.topSince = -1; h.since = -1; this.departed = false; this.departedYear = -1; this.spaceAgeYear = -1; this.industrial = false; this.ships = false; }
       h.pending = 0;
       return;
     }
@@ -197,6 +214,7 @@ export class Civilization {
       if (!list) members.set(st.nation, (list = []));
       list.push(st);
     }
+    if ((h.peace ?? -1) >= 0) { this.peaceTick(sim, rng, members, y, year); return; }
     let most = 1;
     for (const list of members.values()) if (list.length > most) most = list.length;
     for (const n of h.nations) {
@@ -273,9 +291,18 @@ export class Civilization {
     }
     // departure: a people that has held the sky for long enough finally leaves
     if (!this.departed && this.spaceAgeYear >= 0 && year - this.spaceAgeYear > 1500 && living >= 12) {
-      this.departed = true;
+      this.departed = true; this.departedYear = year;
       { const at = sim.events.events.length, lead = this.leadTown(); sim.civEvent('departure', this.sapient[0]!, -1, -1); if (lead) this.stepForward(sim, lead, at, 'The captain of the first ship out was {name}.', 'explorer'); }
     }
+    // ---- the long peace: a history does not go on for ever
+    let top = 0;
+    for (const n of h.nations) if (n.ended < 0 && n.tech > top) top = n.tech;
+    if (top >= 1.18) { if ((h.topSince ?? -1) < 0) h.topSince = year; } else h.topSince = -1;
+    const since = (h.since ?? -1) >= 0 ? h.since! : h.began;
+    const why = this.departed && year - this.departedYear >= STAYED_YEARS ? 'stayed'
+      : (h.topSince ?? -1) >= 0 && year - h.topSince! >= SUMMIT_YEARS ? 'summit'
+        : year - since >= LONGEST_HISTORY ? 'custom' : '';
+    if (why && living > 0) this.settle(sim, year, why);
   }
 
   /** One town of a nation, over `y` years. */
@@ -284,9 +311,9 @@ export class Civilization {
     const s = cr.species[st.species]!;
     if (this.failed(sim, st, s.extinctYear >= 0)) { this.abandon(sim, st, year); return; }
     const capacity = this.capacity(sim, st);
-    if (this.departed) {
-      // the ones who left took the future with them: the towns of home thin out over a few thousand years
-      st.pop *= Math.exp(-y / 550);
+    if (this.departed && year - this.departedYear < STAYED_YEARS) {
+      // many leave: for a thousand years the towns of home thin out, to about half of what they were
+      st.pop *= Math.exp(-y / 1700);
     } else {
       // people: a few per cent a year while there is room
       const grow = 1 - Math.exp(-0.03 * y);
@@ -352,7 +379,8 @@ export class Civilization {
           }
         }
         // with the atom in hand, a war can end the age
-        if (this.spaceAgeYear >= 0 && rng.chance(0.04)) { const at = sim.events.events.length; sim.civEvent('nuclear', st.species, st.cell, st.id); if (sim.events.events.length > at) this.credit(sim, null, n, at, 'The order was given by {name}.'); }
+        // (only between nations that hold the sky, rarely, and never while the last one is remembered)
+        if (this.spaceAgeYear >= 0 && !this.departed && n.era >= 8 && year - (this.h.lastWar ?? -1e9) > LAST_WAR_MEMORY && rng.chance(0.012)) { this.h.lastWar = year; const at = sim.events.events.length; sim.civEvent('nuclear', st.species, st.cell, st.id); if (sim.events.events.length > at) this.credit(sim, null, n, at, 'The order was given by {name}.'); }
         break;
       }
     }
@@ -372,10 +400,18 @@ export class Civilization {
     }
     // people move on and found daughter towns
     if (!this.departed && st.pop > capacity * 0.7 && rng.chance(Math.min(0.6, 0.004 * y * (1 + st.tech * 3)))) {
-      const nb = reg.grid.neighbors[st.region * 6 + rng.int(reg.grid.ncount[st.region]!)]!;
+      let nb = reg.grid.neighbors[st.region * 6 + rng.int(reg.grid.ncount[st.region]!)]!;
+      // where the land ends, a people with boats looks across the water
+      let bySea = false;
+      if (reg.land[nb]! <= 0.3 && rng.chance(0.5)) { const shore = this.voyage(sim, n, st.region, nb); if (shore >= 0) { nb = shore; bySea = true; } }
       if (!this.occupied.has(nb) && reg.land[nb]! > 0.3 && reg.ice[nb]! < 0.5) {
         const d = this.found(sim, rng, st.species, nb, st.id, year);
         if (d) {
+          if (bySea) {
+            d.overseas = true;
+            const ev = sim.events.events[d.eventId];
+            if (ev) ev.description = `${ev.description} They came by sea from ${st.name}.`;
+          }
           d.tech = Math.max(FARMING, st.tech * 0.6); d.belief = st.belief; d.farms = true; st.pop *= 0.85;
           // a country can only hold what its age lets it reach: settlers who go further answer to no one back home
           const cap = this.settlements[n.capital]!, gp = sim.grid.pos;
@@ -743,6 +779,132 @@ export class Civilization {
     return [...out].sort((a, b) => a - b);
   }
 
+  /**
+   * Where a boat that puts out from region `from` across the water at `first` makes land: a free region on
+   * the far shore, within the reach of the nation's ships, or -1. It holds its heading away from home.
+   */
+  private voyage(sim: Simulation, n: Nation, from: number, first: number): number {
+    const reg = sim.regions, g = reg.grid, p = g.pos;
+    const knows = (id: string) => n.know.way[SLOT_INDEX.get(id)!]! >= 0;
+    const spacing = Math.sqrt((4 * Math.PI) / reg.count);
+    // rafts cross a strait, sails a narrow sea, keeled ships a wide one, ocean ships and engine ships any water
+    const range = knows('steamship') ? 4 : knows('ship2') ? 1.7 : knows('ship1') ? Math.max(0.55, 5 * spacing) : knows('sail') ? 3 * spacing : knows('boat') ? 1.6 * spacing : 0;
+    if (range <= 0) return -1;
+    const ox = p[from * 3]!, oy = p[from * 3 + 1]!, oz = p[from * 3 + 2]!;
+    let cur = first;
+    for (let hop = 0; hop < 400; hop++) {
+      if (reg.land[cur]! > 0.3) return this.occupied.has(cur) || reg.ice[cur]! >= 0.5 ? -1 : cur;
+      let best = -1, bd = p[cur * 3]! * ox + p[cur * 3 + 1]! * oy + p[cur * 3 + 2]! * oz;
+      for (let k = 0; k < g.ncount[cur]!; k++) {
+        const nb = g.neighbors[cur * 6 + k]!;
+        const d = p[nb * 3]! * ox + p[nb * 3 + 1]! * oy + p[nb * 3 + 2]! * oz;
+        if (d < bd) { bd = d; best = nb; }
+      }
+      if (best < 0 || Math.acos(Math.max(-1, Math.min(1, bd))) > range) return -1;
+      cur = best;
+    }
+    return -1;
+  }
+
+  /**
+   * The long peace begins. A history cannot be made for ever: sooner or later a people either leaves, or has
+   * all it wants, or has simply lived one way for so long that nothing changes. From then on its nations and
+   * towns stay as they are, lit and lived in, until the planet itself disturbs them. `why` is 'stayed' (those
+   * left behind after a departure), 'summit' (at the top of knowledge) or 'custom' (unchanged for too long).
+   */
+  private settle(sim: Simulation, year: number, why: string): void {
+    const h = this.h;
+    h.peace = year;
+    let pop = 0;
+    for (const st of this.settlements) if (st.ruined < 0 && st.nation >= 0) pop += st.pop;
+    h.peacePop = pop;
+    const lead = this.leadTown();
+    const n = lead ? h.nations[lead.nation] : undefined;
+    const sp = sim.creatures.species[n ? n.species : this.sapient[0]!];
+    const who = sp ? sp.name : 'this people';
+    const ev = sim.emit({
+      type: 'long-peace', year, cellId: lead ? lead.cell : -1, title: 'The long peace',
+      description: why === 'stayed'
+        ? `Not everyone left. Those of ${who} who stayed keep the old cities lit and the fields in order, and want for nothing. Nothing in their world is new any more, and no one counts the years by kings.`
+        : why === 'summit'
+          ? `There is nothing left that ${who} wants and cannot make. The quarrels of its nations fade into custom, its ruling houses into ceremony. Its cities will shine like this for as long as the planet lets them.`
+          : `${n ? `The people of ${n.name}` : who} have lived the same way for longer than any of them can reckon, and no longer expect anything else. From here their story is one of seasons, not of kings.`,
+      causes: [n ? n.eventId : -1].filter((x) => x >= 0), importance: 3, speciesIds: sp ? [sp.id] : [], data: { why },
+    });
+    if (n) this.credit(sim, null, n, ev.id, 'The last ruler anyone troubled to remember was {name}.');
+    // the records of rulers close: from here no one keeps them
+    for (const x of h.nations) {
+      if (x.ended >= 0) continue;
+      const ruler = h.people[x.ruler], house = h.dynasties[x.dynasty];
+      if (ruler && ruler.died < 0) { ruler.died = year; ruler.reignTo = year; ruler.fate = 'was the last ruler whose name was kept'; }
+      if (house && house.ended < 0) house.ended = year;
+      x.government = 'custom'; x.stability = 1; x.fatigue = 0; x.woes.length = 0;
+    }
+  }
+
+  /** One tick of the long peace: towns live on, spread slowly and can still be lost to the planet; nothing else changes. */
+  private peaceTick(sim: Simulation, rng: RNG, members: Map<number, Settlement[]>, y: number, year: number): void {
+    const h = this.h, reg = sim.regions;
+    let pop = 0, cause = -1;
+    for (const n of h.nations) {
+      if (n.ended >= 0) continue;
+      const towns = members.get(n.id);
+      if (!towns || !towns.length) { this.endNation(sim, n, year); continue; }
+      if (n.woes.length) { cause = n.woes[n.woes.length - 1]!.eventId; n.woes.length = 0; }
+      let sum = 0, big = towns[0]!;
+      for (const st of towns) {
+        const sp = sim.creatures.species[st.species]!;
+        if (this.failed(sim, st, sp.extinctYear >= 0)) { this.abandon(sim, st, year); continue; }
+        const room = this.capacity(sim, st) * 0.6;
+        st.pop += (room - st.pop) * (1 - Math.exp(-y / 300));
+        sum += st.pop;
+        if (st.pop > big.pop) big = st;
+        // the land fills slowly: a new town now and then, by land or across the water, under the same custom
+        if (st.pop > room * 0.8 && rng.chance(Math.min(0.3, 0.0003 * y))) {
+          let nb = reg.grid.neighbors[st.region * 6 + rng.int(reg.grid.ncount[st.region]!)]!;
+          let bySea = false;
+          if (reg.land[nb]! <= 0.3) { nb = this.voyage(sim, n, st.region, nb); bySea = true; }
+          if (nb >= 0 && !this.occupied.has(nb) && reg.land[nb]! > 0.3 && reg.ice[nb]! < 0.5) {
+            const d = this.found(sim, rng, st.species, nb, st.id, year);
+            if (d) { d.tech = st.tech; d.belief = st.belief; d.farms = true; d.nation = n.id; d.pop = Math.max(d.pop, st.pop * 0.1); if (bySea) d.overseas = true; sim.cellLog.note(d.cell, year, Log.Owner, n.id); }
+          }
+        }
+      }
+      n.pop = sum; n.towns = towns.length;
+      const seat = this.settlements[n.capital];
+      if (!seat || seat.ruined >= 0 || seat.nation !== n.id) n.capital = big.id;
+      pop += sum;
+    }
+    if (pop > (h.peacePop ?? 0)) h.peacePop = pop;
+    // the planet breaks the peace: when most of the people are gone, the survivors have to begin again
+    if (pop > 0 && pop < 0.3 * (h.peacePop ?? 0)) this.unsettle(sim, rng, year, cause);
+  }
+
+  /** The long peace is broken by a catastrophe: much is forgotten, rulers are needed again, and history resumes. */
+  private unsettle(sim: Simulation, rng: RNG, year: number, cause: number): void {
+    const h = this.h;
+    h.peace = -1; h.since = year; h.topSince = -1;
+    const lead = this.leadTown();
+    const because = cause >= 0 && sim.events.events[cause] ? sim.events.events[cause]!.title : '';
+    const ev = sim.emit({
+      type: 'peace-broken', year, cellId: lead ? lead.cell : -1, title: 'The long peace ends',
+      description: `${because ? `After ${because.charAt(0).toLowerCase()}${because.slice(1)}, m` : 'M'}ost of the people are gone, and with them most of what was known. The survivors need leaders again, and granaries, and walls. Their years are worth counting once more.`,
+      causes: [cause].filter((x) => x >= 0), importance: 3, speciesIds: lead ? [lead.species] : [], data: {},
+    });
+    for (const n of h.nations) {
+      if (n.ended >= 0) continue;
+      const land = new Set(n.land);
+      const keep = FARMING + (n.tech - FARMING) * 0.5;
+      for (let i = 0; i < WEB.length; i++) if (n.know.way[i]! >= 0 && WEB[i]!.level > keep) { n.know.way[i] = -1; n.know.lost[i] = year; n.know.lostEvent[i] = ev.id; }
+      n.know.saved = 0;
+      n.tech = Math.max(FARMING, levelOf(n.know, land)); n.era = eraOf(n.tech); n.stability = 0.5;
+      this.enthrone(sim, rng, n, year);
+      for (const st of this.settlements) if (st.ruined < 0 && st.nation === n.id) st.tech = Math.min(st.tech, n.tech);
+    }
+    h.topEra = h.nations.reduce((m, n) => (n.ended < 0 ? Math.max(m, n.era) : m), 0);
+    this.credit(sim, null, h.nations[lead ? lead.nation : 0]!, ev.id, 'The first to be followed was {name}.');
+  }
+
   /** How each nation in the last list of contacts was reached: 0 across a border, 1 by sea, 2 by signal. */
   private contactWay = new Map<number, number>();
 
@@ -771,7 +933,9 @@ export class Civilization {
           + (apart >= 2 ? ` ${ahead.name} is in its ${this.eraName(ahead)}; ${behind.name} is still in its ${this.eraName(behind)}, and has never seen such things.` : ''),
         causes: [n.eventId, o.eventId].filter((x) => x >= 0), importance: apart >= 2 || way === 1 ? 1 : 0, speciesIds: n.species === o.species ? [n.species] : [n.species, o.species], data: { nation: n.id, other: o.id, way },
       });
-      const who = this.credit(sim, rng, n, ev.id, way === 2 ? 'The one listening that night was {name}.' : '{name} led the way, and came home to tell of it.', way === 2 ? 'scholar' : 'explorer', year);
+      // a crossing or a meeting of unequal peoples makes a name; a meeting at a border is only dated by who ruled
+      const who = way === 0 && apart < 2 ? (this.credit(sim, null, n, ev.id, 'It was in the reign of {name}.'), null)
+        : this.credit(sim, rng, n, ev.id, way === 2 ? 'The one listening that night was {name}.' : '{name} led the way, and came home to tell of it.', way === 2 ? 'scholar' : 'explorer', year);
       // what a traveller brings home is worth a little study: a bold one brings back more
       n.know.saved += 0.002 + (who ? 0.003 * who.bold : 0);
     }
@@ -981,7 +1145,49 @@ export class Civilization {
         return;
       }
     }
+    if ((h.peace ?? -1) >= 0) {
+      // in the long peace new farmers of the same people simply take up the custom of the nearest nation
+      const gp = sim.grid.pos;
+      let best: Nation | undefined, bd = -2;
+      for (const n of h.nations) {
+        if (n.ended >= 0 || n.species !== st.species) continue;
+        const cap = this.settlements[n.capital];
+        if (!cap) continue;
+        const d = gp[cap.cell * 3]! * gp[st.cell * 3]! + gp[cap.cell * 3 + 1]! * gp[st.cell * 3 + 1]! + gp[cap.cell * 3 + 2]! * gp[st.cell * 3 + 2]!;
+        if (d > bd) { bd = d; best = n; }
+      }
+      if (best) { st.nation = best.id; st.tech = Math.max(st.tech, FARMING); sim.cellLog.note(st.cell, year, Log.Owner, best.id); return; }
+      // but another people planting its first fields is news: the old nations wake
+      this.wake(sim, rng, year, st);
+    }
     this.newNation(sim, rng, st, year, null);
+  }
+
+  /** The long peace ends without a catastrophe: a new people has appeared, and the old nations have things to decide again. */
+  private wake(sim: Simulation, rng: RNG, year: number, newcomer: Settlement): void {
+    const h = this.h;
+    h.peace = -1; h.since = year; h.topSince = -1;
+    const sp = sim.creatures.species[newcomer.species]!;
+    const ev = sim.emit({
+      type: 'peace-broken', year, cellId: newcomer.cell, title: 'The long peace ends',
+      description: `At ${newcomer.name} another people, ${sp.name}, has planted fields of its own. The old nations look up from their customs: there is someone new in the world, and things to decide again.`,
+      causes: [newcomer.eventId].filter((x) => x >= 0), importance: 3, speciesIds: [newcomer.species], data: {},
+    });
+    let lead: Nation | undefined;
+    for (const n of h.nations) {
+      if (n.ended >= 0) continue;
+      this.enthrone(sim, rng, n, year);
+      n.stability = 0.7;
+      if (!lead || n.tech > lead.tech) lead = n;
+    }
+    if (lead) this.credit(sim, null, lead, ev.id, 'Among the old nations {name} was the first to send envoys.');
+  }
+
+  /** A nation that kept no rulers follows one again. */
+  private enthrone(sim: Simulation, rng: RNG, n: Nation, year: number): void {
+    const first = this.person(rng, n, 'ruler', year, this.lifespan(sim, n.species) * (0.3 + rng.next() * 0.25), -1, -1);
+    const house = this.dynasty(n, first, year);
+    n.ruler = first.id; n.dynasty = house.id; n.government = 'chiefdom';
   }
 
   /** A town becomes the first of a new country: on its own (the first farmers of a land) or by going beyond the reach of the one it came from. */

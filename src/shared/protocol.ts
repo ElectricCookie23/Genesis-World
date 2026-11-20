@@ -57,6 +57,8 @@ export interface WorldStats {
   speedIndex: number;
   /** A history is unfolding (at least one nation exists). */
   history?: boolean;
+  /** The year the long peace began (nations live on, history is no longer made), or -1. */
+  longPeace?: number;
   /** Time is being held at the pace of history instead of the chosen speed. */
   historyHeld?: boolean;
   /** Year history began, or -1. */
@@ -220,7 +222,8 @@ export type ToWorker =
   | { type: 'requestNation'; id: number }
   | { type: 'rewindLimit'; count: number }
   /** Jump ahead by running the sim flat out (used by automated checks). */
-  | { type: 'warp'; years: number };
+  /** Jump ahead. It stops where a history begins, unless `through` is set (for scripts that need to reach a date). */
+  | { type: 'warp'; years: number; through?: boolean };
 
 export type FromWorker =
   | { type: 'ready'; seed: string; gridN: number; tilt: number; cells: CellSnapshot; stats: WorldStats }

@@ -717,6 +717,9 @@ export function Peoples() {
       <div class={css.head}><h2>Peoples</h2><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
       <div class={css.scroll}>
         {s.settlements.length === 0 && <p class={css.sub}>No one has lit a fire yet. In some worlds, no one ever does.</p>}
+        {(s.stats?.longPeace ?? -1) >= 0 && s.nations.length > 0 && (
+          <p class={css.sub} style={{ margin: '0 0 8px' }}>The long peace, {Math.max(0, Math.round((s.stats?.simYear ?? 0) - (s.stats?.longPeace ?? 0))).toLocaleString('en-US')} years old. History is no longer made here: these nations and their towns live on as they are, by custom, until the planet disturbs them.</p>
+        )}
         {s.nations.length > 0 && <div class={css.sub} style={{ margin: '4px 0 6px' }}>NATIONS</div>}
         {[...s.nations].sort((a, b) => b.pop - a.pop).slice(0, 24).map((n) => {
           const cap = s.settlements.find((x) => x.id === n.capital);
@@ -734,7 +737,7 @@ export function Peoples() {
                   const year = s.stats?.simYear ?? 0;
                   return (
                     <div class={css.when} style={{ color: '#a9a498' }}>
-                      {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}). {realm.ruler} of the {realm.house} has ruled {Math.max(1, Math.round(year - realm.rulerSince)).toLocaleString('en-US')} {Math.round(year - realm.rulerSince) === 1 ? 'year' : 'years'} ({realm.houseReigns} {realm.houseReigns === 1 ? 'reign' : 'reigns'} of that house). Founded {Math.round(year - realm.founded).toLocaleString('en-US')} years ago. They speak {realm.language}.
+                      {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}). {realm.ruler ? `${realm.ruler} of the ${realm.house} has ruled ${Math.max(1, Math.round(year - realm.rulerSince)).toLocaleString('en-US')} ${Math.round(year - realm.rulerSince) === 1 ? 'year' : 'years'} (${realm.houseReigns} ${realm.houseReigns === 1 ? 'reign' : 'reigns'} of that house).` : 'It lives by custom and keeps no list of rulers.'} Founded {Math.round(year - realm.founded).toLocaleString('en-US')} years ago. They speak {realm.language}.
                     </div>
                   );
                 })()}

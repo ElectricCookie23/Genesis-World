@@ -222,6 +222,9 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | E9 | Migrations of Peoples | not started | |
 | E10 | Golden Ages | not started | |
 
+After E6 (2026-11-20), outside the numbered list: settlement by sea, the long peace that ends a history without emptying the world, a rare and remembered last war, bounded lists sent to the page, and a warp that can run through (DECISIONS 96 to 99). These answer the fix session's report that no civilization survived a fast-forward on the full-size planet. Tests: `a history that lasts` in `tests/history.test.ts`; `scripts/ffciv.ts` traces a fast-forwarded civilization.
+
+
 ### Section 2. Cities And Real-Time Growth
 
 | # | System | Status | Notes |

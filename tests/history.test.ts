@@ -630,3 +630,56 @@ describe('notable people (E6)', () => {
     }
   });
 });
+
+describe('a history that lasts (settlement by sea and the long peace)', () => {
+  it('a fast-forwarded history settles into a long peace: towns live on, and the records stop growing', () => {
+    // two of the five worlds, jumped through three million years in the steps a warp takes
+    let settled = 0;
+    for (const k of [0, 2]) {
+      const sim = atDawn(k);
+      if (!sim) continue;
+      const h = sim.civ.h;
+      for (let i = 0; i < 40; i++) sim.step(15000);
+      const nations = h.nations.length, people = h.people.length, eventsAt = sim.events.events.length;
+      const gone = sim.creatures.species[h.nations[0]!.species]!.extinctYear >= 0;
+      if (!gone && sim.civ.living > 0) {
+        expect((h.peace ?? -1), `${FIVE[k]} has not settled after 600,000 years`).toBeGreaterThanOrEqual(0);
+        expect(sim.civ.historyLive).toBe(false);
+        expect(sim.civ.historyActive).toBe(true);
+        settled++;
+        // the peace is announced once, at the top level of the chronicle
+        expect(sim.events.events.filter((e) => e.type === 'long-peace').length).toBeGreaterThanOrEqual(1);
+      }
+      // however the history went, it stayed a bounded record
+      expect(nations).toBeLessThan(2500);
+      expect(people).toBeLessThan(2500);
+      for (let i = 0; i < 160; i++) sim.step(15000);
+      // (unless the peace was broken meanwhile, by a catastrophe or by a new people, and history ran again for a while)
+      if ((h.peace ?? -1) >= 0 && !sim.events.events.slice(eventsAt).some((e) => e.type === 'peace-broken')) {
+        // in the peace nothing is added to the lists of nations and people, and the chronicle is all but silent
+        expect(h.nations.length).toBe(nations);
+        expect(h.people.length).toBe(people);
+        expect(sim.events.events.slice(eventsAt).filter((e) => ['nation', 'war', 'civil-war', 'secession', 'nation-collapse', 'dynasty', 'era'].includes(e.type)).length).toBe(0);
+        for (const n of h.nations) if (n.ended < 0) { expect(n.government).toBe('custom'); expect(n.towns).toBeGreaterThan(0); }
+        for (const st of sim.civ.settlements) if (st.ruined < 0 && st.nation >= 0) expect(h.nations[st.nation]!.ended).toBeLessThan(0);
+      }
+    }
+    expect(settled).toBeGreaterThanOrEqual(1);
+  }, 900000);
+
+  it('a people with boats settles across the water, and only as far as its ships can go', () => {
+    const runs = fiveHistories();
+    let overseas = 0;
+    for (const r of runs) {
+      for (const st of r.sim.civ.settlements) {
+        if (!st.overseas) continue;
+        overseas++;
+        // it stands on land, and the chronicle says how its people came
+        expect(r.sim.world.elevation[st.cell]! > r.sim.world.seaLevel || st.ruined >= 0).toBe(true);
+        const ev = r.sim.events.events[st.eventId];
+        if (ev) expect(ev.description).toMatch(/came by sea/);
+      }
+    }
+    expect(overseas).toBeGreaterThan(0);
+  }, 900000);
+});

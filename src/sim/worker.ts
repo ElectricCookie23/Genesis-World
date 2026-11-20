@@ -127,7 +127,7 @@ function snapshotCells(s: Simulation): { cells: CellSnapshot; transfer: Transfer
 
 /** True when time is being held at the pace of history. */
 function historyHeld(): boolean {
-  return !!sim && sim.civ.historyActive && !historyOverride && SPEEDS[speedIndex]!.yearsPerSecond > HISTORY_YPS;
+  return !!sim && sim.civ.historyLive && !historyOverride && SPEEDS[speedIndex]!.yearsPerSecond > HISTORY_YPS;
 }
 
 function currentYps(): number {
@@ -164,14 +164,27 @@ function nationDetail(s: Simulation, id: number): NationDetail | null {
   return { id, name: n.name, land: n.land.slice(), species: n.species, people, tech, rulers: rulers.slice(-60) };
 }
 
+/** The towns the page is told about: every living one, and the ruins of the last few hundred to fall. */
+function shownSettlements(s: Simulation): Simulation['civ']['settlements'] {
+  const all = s.civ.settlements;
+  let ruins = 0;
+  for (const t of all) if (t.ruined >= 0) ruins++;
+  if (ruins <= 300) return all;
+  let skip = ruins - 300;
+  return all.filter((t) => t.ruined < 0 || skip-- <= 0);
+}
+
 function nationList(s: Simulation): NationInfo[] {
   const h = s.civ.h;
-  return h.nations.map((n) => {
+  // the living, and the forty most lately ended: a long history leaves thousands behind
+  const ended = h.nations.filter((n) => n.ended >= 0);
+  const keep = new Set(ended.slice(-40).map((n) => n.id));
+  return h.nations.filter((n) => n.ended < 0 || keep.has(n.id)).map((n) => {
     const ruler = h.people[n.ruler], house = h.dynasties[n.dynasty], culture = h.cultures[n.culture]!;
     return {
       id: n.id, name: n.name, species: n.species, capital: n.capital, founded: n.founded, ended: n.ended, parent: n.parent, government: n.government,
       stability: n.stability, tech: n.tech, era: n.era, eraName: s.civ.eraName(n), eraOwn: s.civ.eraOwnName(n), earth: earthNote(n.era), hue: n.hue, pop: n.pop, towns: n.towns,
-      culture: culture.name, language: h.languages[culture.language]!.name, ruler: ruler ? ruler.name : '', rulerSince: ruler ? ruler.reignFrom : -1,
+      culture: culture.name, language: h.languages[culture.language]!.name, ruler: ruler && ruler.died < 0 ? ruler.name : '', rulerSince: ruler && ruler.died < 0 ? ruler.reignFrom : -1,
       house: house ? house.name : '', houseReigns: house ? house.reigns : 0, eventId: n.eventId,
     };
   });
@@ -191,6 +204,7 @@ function stats(s: Simulation): WorldStats {
     speedIndex,
     yearsPerSecond: currentYps(),
     history: s.civ.historyActive,
+    longPeace: s.civ.h.peace ?? -1,
     historyHeld: historyHeld(),
     historyBegan: s.civ.h.began,
     topEra: s.civ.h.topEra,
@@ -266,7 +280,7 @@ function tick(): void {
   const yps = currentYps();
   if (yps > 0) s.step(yps / TICK_HZ);
   // history has begun (or ended): the hold on time starts afresh each time
-  const active = s.civ.historyActive;
+  const active = s.civ.historyLive;
   if (active !== wasHistory) { wasHistory = active; historyOverride = false; }
   // a whole copy of the world is kept at the start of every era, for replays and what-ifs
   if (s.civ.h.topEra < snapshotEra) snapshotEra = s.civ.h.topEra;
@@ -311,7 +325,7 @@ function tick(): void {
     lastSpecies = now;
     post({ type: 'species', species: speciesList(s) });
     if (s.civ.settlements.length) {
-      post({ type: 'settlements', settlements: s.civ.settlements.map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, belief: t.belief, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, temple: t.temple, farms: t.farms })) , nations: nationList(s) });
+      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, belief: t.belief, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, temple: t.temple, farms: t.farms })) , nations: nationList(s) });
     }
     speciesVersion = s.creatures.version;
     if (s.plants.version !== plantVersion) {
@@ -347,7 +361,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
       case 'speed':
         speedIndex = Math.max(0, Math.min(SPEEDS.length - 1, msg.index));
         // choosing a faster speed while history runs is a decision to skip ahead: it lifts the hold
-        historyOverride = !!sim && sim.civ.historyActive && SPEEDS[speedIndex]!.yearsPerSecond > HISTORY_YPS;
+        historyOverride = !!sim && sim.civ.historyLive && SPEEDS[speedIndex]!.yearsPerSecond > HISTORY_YPS;
         slowUntil = 0;
         break;
       case 'requestCells':
@@ -372,7 +386,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         sim = new Simulation(save.seed, save.gridN);
         loadSimulation(sim, save);
         if (msg.diverge) sim.diverge();
-        snapshotEra = sim.civ.h.topEra; wasHistory = sim.civ.historyActive; historyOverride = false;
+        snapshotEra = sim.civ.h.topEra; wasHistory = sim.civ.historyLive; historyOverride = false;
         sim.events.drainFresh();
         sentExtinct.clear();
         speciesVersion = -1;
@@ -404,7 +418,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         if (!point) break;
         sim = new Simulation(point.save.seed, point.save.gridN);
         loadSimulation(sim, point.save);
-        snapshotEra = sim.civ.h.topEra; wasHistory = sim.civ.historyActive; historyOverride = false;
+        snapshotEra = sim.civ.h.topEra; wasHistory = sim.civ.historyLive; historyOverride = false;
         sim.events.drainFresh();
         sentExtinct.clear();
         plantVersion = -1;
@@ -419,9 +433,16 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
       case 'warp':
         if (sim) {
           const end = sim.simYear + msg.years;
-          const had = sim.civ.historyActive;
-          // a jump through time stops where history begins (unless it began before the jump): that is the part worth watching
-          while (sim.simYear < end) { sim.step(15000); if (!had && sim.civ.historyActive) break; }
+          const had = sim.civ.historyLive;
+          // a jump through time stops where history begins (unless it began before the jump, or the caller asked to
+          // run through): that is the part worth watching. The page is told how far it has got twice a second.
+          let told = performance.now();
+          while (sim.simYear < end) {
+            sim.step(Math.min(15000, end - sim.simYear));
+            if (!msg.through && !had && sim.civ.historyLive) break;
+            if (performance.now() - told > 500) { told = performance.now(); post({ type: 'stats', stats: stats(sim) }); }
+          }
+          wasHistory = sim.civ.historyLive;
           cellsRequested = true;
         }
         break;
