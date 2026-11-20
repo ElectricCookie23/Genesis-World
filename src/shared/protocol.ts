@@ -141,6 +141,10 @@ export interface SettlementInfo {
   walls?: number[];
   /** Founded by settlers who came by sea. */
   overseas?: boolean;
+  /** The most people it ever held (thousands): how large its ruin is. After it was left: the name of the tame animal that runs wild in it and of the animal that nests in its towers ('' if none) (system E18). */
+  peak?: number;
+  feral?: string;
+  nesting?: string;
   /** How many layers lie in the ground here, counting the ruins it stands on (system E17). */
   layers?: number;
   /** Has dammed a river; works a mine (system E16). */

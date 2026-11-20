@@ -17,6 +17,7 @@ import { eraOf, eraSlot, eraTitle, earthNote } from './history/eras';
 import { hash32 } from './history/hash';
 import { capital, compound, makeLanguage, personName, placeMeanings, soundChange, splitLanguage, word, type Language } from './history/language';
 import { clearedCover } from './plants';
+import { stillCleared } from './history/decay';
 import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role } from './history/model';
 import { SLOT_INDEX, WEB, borrowable, chooseNext, copyKnowledge, forget, levelOf, newKnowledge, shed, wayFor, type Land, type Leaning } from './history/tech';
 
@@ -69,6 +70,11 @@ export interface Settlement {
   relic: number;
   /** Founded by settlers who came across the sea. */
   overseas?: boolean;
+  /** The most people it ever held (thousands): how large its ruin is (system E18). */
+  peak?: number;
+  /** After it was left: the tame animals that run wild in it, and the animals that nest in its towers (species ids). */
+  feral?: number;
+  nesting?: number;
   /** What lies in the ground here (system E17): each building phase and each destruction of this town, oldest first. */
   strata?: Stratum[];
   /** The ruin this town was founded on top of, if any. */
@@ -227,6 +233,7 @@ export class Civilization {
     this.tend(sim, tau);
     this.paint(sim);
     this.glow(sim);
+    this.regrow(sim);
     this.clear(sim);
   }
 
@@ -259,6 +266,7 @@ export class Civilization {
     this.census();
     this.paint(sim);
     this.glow(sim);
+    this.regrow(sim);
     this.clear(sim);
   }
 
@@ -387,6 +395,7 @@ export class Civilization {
     const cr = sim.creatures, reg = sim.regions;
     const s = cr.species[st.species]!;
     if (this.failed(sim, st, s.extinctYear >= 0)) { this.abandon(sim, st, year); return; }
+    if (st.pop > (st.peak ?? 0)) st.peak = st.pop;
     const capacity = this.capacity(sim, st);
     if (this.departed && year - this.departedYear < STAYED_YEARS) {
       // many leave: for a thousand years the towns of home thin out, to about half of what they were
@@ -1664,6 +1673,20 @@ export class Civilization {
     for (const l of list) if (l.kind === 3 || l.kind === 4) { if (this.settlements[l.a]!.nation === n.id) this.wired.add(l.a); if (this.settlements[l.b]!.nation === n.id) this.wired.add(l.b); }
   }
 
+  /** A town that has been left gives its land back slowly (system E18): fields to scrub in a few generations, streets to forest in centuries. */
+  private regrow(sim: Simulation): void {
+    if (!this.landUse) return;
+    const { cleared, elevation, seaLevel } = sim.world, g = sim.grid, year = sim.simYear;
+    for (const st of this.settlements) {
+      if (st.ruined < 0 || !st.farms) continue;
+      const years = year - st.ruined;
+      if (years > 2600) continue;
+      const streets = stillCleared(years, true), land = stillCleared(years, false);
+      if (elevation[st.cell]! > seaLevel) cleared[st.cell] = Math.max(cleared[st.cell]!, streets);
+      if (land > 0) for (let j = 0; j < g.ncount[st.cell]!; j++) { const nb = g.neighbors[st.cell * 6 + j]!; if (elevation[nb]! > seaLevel) cleared[nb] = Math.max(cleared[nb]!, land); }
+    }
+  }
+
   /**
    * A change in what is cleared shows at once (system E16): the plant cover of a cell is recomputed for its new
    * clearing from what it would be wild, without waiting for the plants' own next step. (That step applies the
@@ -2195,6 +2218,59 @@ export class Civilization {
     sim.cellLog.note(st.cell, year, Log.Ruined, st.id);
     sim.cellLog.note(st.cell, year, Log.Owner, -1);
     sim.civEvent('ruin', st.species, st.cell, st.id);
+    this.goWild(sim, st, year);
+  }
+
+  /**
+   * Feral cities (system E18). When a town is left, the animals its people kept run wild in it, and where it had
+   * towers something that flies takes them for cliffs and nests there. When the last town of a people is gone,
+   * the animals they tamed are tame no longer.
+   */
+  private goWild(sim: Simulation, st: Settlement, year: number): void {
+    if (st.tech < 0.3) return;
+    const cr = sim.creatures, h = this.h;
+    const ruin = st.eventId;
+    const firsts = (h.firstWild ??= {});
+    // the herds
+    const tame = cr.species.find((sp) => sp.tamedBy === st.species && sp.extinctYear < 0 && !!sp.name);
+    if (tame) {
+      let here = false;
+      for (let c = 0; c < cr.high && !here; c++) if (cr.alive[c] && cr.sp[c] === tame.id && cr.region[c] === st.region) here = true;
+      if (here) {
+        st.feral = tame.id;
+        const first = firsts.feral === undefined;
+        const ev = sim.emit({
+          type: 'feral', year, cellId: st.cell, title: first ? 'The herds run wild' : `Wild herds in ${st.name}`,
+          description: `No one drives the ${tame.name} of ${st.name} out to pasture any more. They graze the fields that fed their keepers and shelter in the empty houses, and each generation is a little warier than the last.`,
+          causes: [ruin].filter((x) => x >= 0), importance: first ? 2 : 0, speciesIds: [tame.id], data: { settlement: st.id, species: tame.id },
+        });
+        if (first && ev.id >= 0) firsts.feral = ev.id;
+      }
+      // with the last town of their keepers gone, they are a wild animal again
+      if (!this.settlements.some((x) => x.ruined < 0 && x.species === st.species)) tame.tamedBy = -1;
+    }
+    // the towers
+    if (st.tech >= 0.6) {
+      let best = -1, most = 0;
+      for (let c = 0; c < cr.high; c++) {
+        if (!cr.alive[c] || cr.region[c] !== st.region || cr.sp[c] === st.species) continue;
+        if (cr.phen[c * PHEN_COUNT + P.Fly]! < 0.4) continue;
+        if (cr.count[c]! > most && cr.species[cr.sp[c]!]!.name) { most = cr.count[c]!; best = c; }
+      }
+      if (best >= 0) {
+        const sp = cr.species[cr.sp[best]!]!;
+        st.nesting = sp.id;
+        // somewhere safe to raise young is worth a good deal
+        cr.count[best] = cr.count[best]! * 1.15;
+        const first = firsts.nesting === undefined;
+        const ev = sim.emit({
+          type: 'feral', year, cellId: st.cell, title: first ? 'Nests in the towers' : `${sp.name} nests in ${st.name}`,
+          description: `The towers of ${st.name} are cliffs now, as far as ${sp.name} is concerned: high ledges out of reach of anything that hunts on the ground. The window openings fill with nests.`,
+          causes: [ruin].filter((x) => x >= 0), importance: first ? 2 : 0, speciesIds: [sp.id], data: { settlement: st.id, species: sp.id },
+        });
+        if (first && ev.id >= 0) firsts.nesting = ev.id;
+      }
+    }
   }
 
   private census(): void {

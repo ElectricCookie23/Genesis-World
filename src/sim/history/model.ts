@@ -198,6 +198,8 @@ export interface HistoryState {
   peacePop?: number;
   /** The year the leading nation reached the top of knowledge, or -1. */
   topSince?: number;
+  /** The first herds to run wild in a ruin and the first nests in its towers (system E18): the events that recorded them. */
+  firstWild?: { feral?: number; nesting?: number };
   /** The first dam, the first mine and the first felling of a nation's forests anywhere (system E16): the events that recorded them. */
   firstWorks?: { dam?: number; mine?: number; felled?: number };
   /** What has been built between towns (system E15): roads, aqueducts, canals, railways, wires, pipelines, power lines. */

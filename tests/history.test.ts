@@ -1250,3 +1250,76 @@ describe('ruins and layers (E17)', () => {
     expect(new Set(['camp', 'burnt', 'ash', 'flood', 'shaken', 'decay', 'abandoned'].map((k) => layerLook(l(k, 1, 0.1)).fill)).size).toBe(7);
   });
 });
+
+import { DECAY, decayOf, decaySpans, describeRuin, standing, stillCleared } from '../src/sim/history/decay';
+
+describe('feral cities (E18)', () => {
+  it('a ruin decays in stages, a great city more slowly than a village', () => {
+    expect(DECAY.length).toBe(5);
+    expect(decayOf(0, 0.8).stage).toBe(0);
+    // every stage in order as the centuries pass, never back
+    let last = -1;
+    const seen = new Set<number>();
+    for (let y = 0; y < 9000; y += 10) { const s = decayOf(y, 0.8).stage; expect(s).toBeGreaterThanOrEqual(last); last = s; seen.add(s); }
+    expect(seen.size).toBe(5);
+    expect(DECAY[decayOf(1e6, 1.2).stage]).toBe('gone');
+    // stone and steel outlast mud brick
+    const sum = (t: number) => decaySpans(t).reduce((a, b) => a + b, 0);
+    expect(sum(1.1)).toBeGreaterThan(sum(0.35) * 1.8);
+    expect(decayOf(800, 0.35).stage).toBeGreaterThan(decayOf(800, 1.1).stage);
+    // what stands dwindles without ever growing back
+    let share = 1, height = 1;
+    for (let y = 0; y < 9000; y += 25) { const s = standing(y, 0.9); expect(s.share).toBeLessThanOrEqual(share + 1e-9); expect(s.height).toBeLessThanOrEqual(height + 1e-9); share = s.share; height = s.height; }
+    expect(standing(0, 0.9).share).toBe(1);
+    expect(share).toBe(0);
+    // fields go back in generations, streets in centuries, and both do go back
+    expect(stillCleared(0, true)).toBe(1);
+    expect(stillCleared(300, false)).toBeLessThan(stillCleared(300, true));
+    expect(stillCleared(1000, false)).toBe(0);
+    expect(stillCleared(2600, true)).toBe(0);
+    expect(new Set([0, 100, 500, 2000, 9000].map((y) => describeRuin(y, 0.6))).size).toBe(5);
+  });
+
+  it('a collapsed city fully returns to forest, given enough time', () => {
+    const sim = atDawn(1)!;
+    for (let y = 0; y < 2500; y++) sim.step(1);
+    const w = sim.world, civ = sim.civ;
+    const towns = civ.settlements.filter((s) => s.ruined < 0 && s.farms);
+    expect(towns.length).toBeGreaterThan(3);
+    let bare = 0;
+    for (let i = 0; i < w.cleared.length; i++) if (w.cleared[i]! > 0) bare++;
+    expect(bare).toBeGreaterThan(20);
+    // the people go: every town is emptied at once
+    for (const st of civ.settlements) if (st.ruined < 0) st.pop = 0;
+    sim.step(1);
+    expect(civ.settlements.filter((s) => s.ruined < 0 && s.farms).length).toBe(0);
+    const big = towns.reduce((a, b) => ((b.peak ?? 0) > (a.peak ?? 0) ? b : a));
+    expect(big.ruined).toBeGreaterThan(0);
+    expect(big.peak ?? 0).toBeGreaterThan(1);
+    // its streets are still bare the year after, greener a few centuries on, and its fields go back first
+    expect(w.cleared[big.cell]!).toBeGreaterThan(0.95);
+    for (let y = 0; y < 300; y += 25) sim.step(25);
+    const streets = w.cleared[big.cell]!;
+    expect(streets).toBeGreaterThan(0.3);
+    expect(streets).toBeLessThan(0.75);
+    const field = sim.grid.neighbors[big.cell * 6]!;
+    if (w.elevation[field]! > w.seaLevel) expect(w.cleared[field]!).toBeLessThan(streets);
+    // given enough time nothing is bare anywhere: the plant cover is exactly what it would be had no one ever lived here
+    for (let y = 300; y < 3000; y += 50) sim.step(50);
+    for (let i = 0; i < w.cleared.length; i++) { expect(w.cleared[i]).toBe(0); expect(w.clearedApplied[i]).toBe(0); }
+    const cover = w.vegetation.slice(), trees = w.canopy.slice();
+    sim.plants.paint(w, sim.climate);
+    let differ = 0;
+    for (let i = 0; i < cover.length; i++) if (Math.abs(cover[i]! - w.vegetation[i]!) > 0.02 || Math.abs(trees[i]! - w.canopy[i]!) > 0.05) differ++;
+    expect(differ).toBeLessThan(cover.length * 0.01);
+    // and the ruin itself is mounds or less by now
+    expect(decayOf(sim.simYear - big.ruined, big.tech).stage).toBeGreaterThanOrEqual(2);
+    // the animals its people kept are no one's now
+    for (const sp of sim.creatures.species) expect(sp.tamedBy < 0 || civ.settlements.some((s) => s.ruined < 0 && s.species === sp.tamedBy)).toBe(true);
+    for (const st of civ.settlements) {
+      if (st.feral !== undefined) expect(sim.creatures.species[st.feral]).toBeDefined();
+      if (st.nesting !== undefined) { expect(st.tech).toBeGreaterThanOrEqual(0.6); expect(st.nesting).not.toBe(st.species); }
+    }
+    for (const e of sim.events.events.filter((x) => x.type === 'feral')) { expect((e.speciesIds ?? []).length).toBe(1); expect(e.description.length).toBeGreaterThan(60); }
+  }, 600000);
+});

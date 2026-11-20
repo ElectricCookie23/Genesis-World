@@ -19,6 +19,7 @@ import { settlementSize, type Nation } from './nations';
 import { MAX_PLOTS, buildingSites, planCity, stageOf, watchable, type CityPlan, type CitySite, type District, type Site } from './cityplan';
 import type { PlanetData } from './planetdata';
 import type { GroundSampler } from './ground';
+import { standing } from '../../sim/history/decay';
 import { architectureOf, borrowFashion, builtTech, builtYear, fashionOf, materialOf, type Architecture, type Fashion } from './architecture';
 import type { SpeciesInfo } from '../../shared/protocol';
 import { groundRadiusNode } from './terrain';
@@ -666,17 +667,21 @@ export class Towns {
       const up = new Vector3(), east = new Vector3(), north = new Vector3(), c = new Vector3(), fwd = new Vector3();
       let total = 0;
       for (const st of this.settlements) {
-        if (st.ruined >= 0 || total >= this.budget) continue;
+        if (total >= this.budget) continue;
+        // A town no one lives in still stands, for a while (system E18): fewer of its buildings each century, and
+        // less of each. Plants do not keep clear of it, so the forest comes up through its streets.
+        const left = st.ruined >= 0 ? standing(Math.max(0, simYear - st.ruined), st.tech) : null;
+        if (left && (left.share <= 0.02 || st.tech < 0.3)) continue;
         c.set(pos[st.cell * 3]!, pos[st.cell * 3 + 1]!, pos[st.cell * 3 + 2]!);
         if (c.dot(focus) < reachCos) continue;
         const nat = this.nationOf.get(st.id);
         const tint = nat ? nat.signature : [0.6, 0.4, 0.3];
         const light = nat ? nat.color : [1.0, 0.5, 0.14];
-        const size = settlementSize(st.pop);
+        const size = settlementSize(left ? st.peak ?? st.pop : st.pop);
         east.set(-c.z, 0, c.x).normalize();
         north.crossVectors(c, east);
         // about half the windows at most: with four in five lit and bright, every tower wore a wide pink halo at night
-        const lit = st.tech < 0.3 ? 0.15 : Math.min(0.55, 0.22 + 0.3 * st.tech);
+        const lit = left ? 0 : st.tech < 0.3 ? 0.15 : Math.min(0.55, 0.22 + 0.3 * st.tech);
         // What gets built follows how many people there are as well as what they know: a few hundred farmers with
         // advanced neighbours do not raise tower blocks and domes. (Seen on a real GPU: a town of 503 drawn as a
         // modern skyline.) Small places stay huts, houses and a hall whatever the age.
@@ -709,12 +714,15 @@ export class Towns {
           return f;
         };
         const nowYear = Math.max(simYear, st.founded);
+        // (a ruin's roofs and walls go the colour of moss and lichen as it stands)
+        const mossy = left ? [tint[0]! * left.share * 0.5 + 0.2 * (1 - left.share), tint[1]! * left.share * 0.5 + 0.3 * (1 - left.share), tint[2]! * left.share * 0.5 + 0.17 * (1 - left.share)] : tint;
+        if (left) this.wallColour = this.wallColour.map((v, i) => v * (0.5 + 0.4 * left.share) + [0.1, 0.14, 0.08][i]! * (1 - left.share));
         this.form = plain;
         const laid = this.planFor(st, c, east, north, nat, cells!, arch ? arch.wade : 0);
         const plan = laid.plan, wetAt = laid.wet;
         // (a people that lives packed together builds its streets closer)
         const U = 0.00062 * boost * (arch ? arch.spacing : 1);
-        const full = Math.min(plan.plots.length, townPlots(st.pop, st.tech));
+        const full = Math.min(plan.plots.length, townPlots(left ? st.peak ?? st.pop : st.pop, st.tech));
         const count = Math.max(lapse < 1 ? 3 : 0, Math.round(full * lapse * lapse));
         let px = 0, py = 0;
         const at = (x: number, y: number): Vector3 => { px = x; py = y; return up.copy(c).addScaledVector(east, x * U).addScaledVector(north, y * U).normalize(); };
@@ -733,10 +741,10 @@ export class Towns {
           for (let j = 0; j < ncount[st.cell]!; j++) { const nb = neighbors[st.cell * 6 + j]!; const d = up.x * pos[nb * 3]! + up.y * pos[nb * 3 + 1]! + up.z * pos[nb * 3 + 2]!; if (d > best) { best = d; cell = nb; } }
           return elevation[cell]! <= seaLevel + 0.01;
         };
-        if (st.temple && plan.temple && lapse > 0.3) { at(plan.temple[0], plan.temple[1]); this.put('temple', up, hash(st.id * 31) * 6.28, 0.0009 * boost, hash(st.id), lit, st.tech, tint, light); total++; }
+        if (st.temple && plan.temple && lapse > 0.3 && (!left || left.share > 0.25)) { at(plan.temple[0], plan.temple[1]); this.put('temple', up, hash(st.id * 31) * 6.28, 0.0009 * boost, hash(st.id), lit, st.tech, tint, light); total++; }
         // streets: a stretch of road for every step of every street the town has reached (lanes stay footpaths)
         for (const street of plan.streets) {
-          if (street.order > count || street.rank > 1) continue;
+          if (street.order > count || street.rank > 1 || (left && left.share < 0.75)) continue;
           const pts = street.points;
           // a road out of town is only made as far as the town has grown along it
           const made = street.rank === 0 ? Math.min(pts.length - 1, 2 + Math.ceil(Math.sqrt(count) * 1.25)) : pts.length - 1;
@@ -749,7 +757,7 @@ export class Towns {
         }
         // walls: each as it was built, round the town of its day, with gates where the roads go through
         for (const wall of plan.walls) {
-          if (wall.order > count) continue;
+          if (wall.order > count || (left && left.share < 0.35)) continue;
           const pts = wall.points;
           for (let i = 1; i < pts.length; i++) {
             const [x0, y0] = pts[i - 1]!, [x1, y1] = pts[i]!;
@@ -768,7 +776,7 @@ export class Towns {
           for (const g of wall.gates) { at(g[0], g[1]); if (!wet()) this.put('gate', up, 0, U * 1.25, 0.7, 0, era, tint, light, toward(Math.atan2(g[1], g[0]))); }
         }
         // ---- what joins this town to others (system E15): each kind runs out of town toward the town it leads to, beside the road
-        if (st.links && lapse >= 1 && dist < 0.2) {
+        if (st.links && lapse >= 1 && dist < 0.2 && !left) {
           let edge = 4;
           for (let k = 0; k < count; k += 7) edge = Math.max(edge, Math.hypot(plan.plots[k]!.x, plan.plots[k]!.y));
           const seen = new Set<number>();
@@ -791,7 +799,7 @@ export class Towns {
           }
         }
         // ---- what is being built just now (system E12): each crew at one plot, at its stage
-        const jobs: Site[] = working && lapse >= 1 ? buildingSites(st.id * 7919 + 13, count, simYear, (i) => plan.plots[i]!.central).filter((j) => watchable(j, yearsPerSecond)) : [];
+        const jobs: Site[] = working && lapse >= 1 && !left ? buildingSites(st.id * 7919 + 13, count, simYear, (i) => plan.plots[i]!.central).filter((j) => watchable(j, yearsPerSecond)) : [];
         const shown: { what: string; progress: number; years: number; stage: string }[] = [];
         const raise = (kind: Building, sz: number, seed: number, progress: number, heading: number, x: number, y: number): void => {
           // scaffolding to the height the work has reached, a crane of the age beside anything tall, builders in the street
@@ -806,7 +814,7 @@ export class Towns {
         const works = Math.min(plan.monuments.length, st.monuments ?? 0);
         for (let m = 0; m < plan.monuments.length && lapse >= 1; m++) {
           const [mx, my] = plan.monuments[m]!;
-          const going = m === works && !!nat?.golden && working;
+          const going = m === works && !!nat?.golden && working && !left;
           if (m >= works && !going) break;
           at(mx, my);
           if (wet()) continue;
@@ -814,7 +822,7 @@ export class Towns {
           const kind: Building = m % 2 ? 'dome' : 'spire', sz = 0.00094 * boost, seed = hash(st.id * 53 + m * 7), heading = Math.atan2(-my, -mx);
           // a great work takes a generation: thirty years, which is how often the chronicle records one in a golden age
           const progress = going ? Math.max(0.04, (simYear / 30 + hash(st.id * 3 + m)) % 1) : 1;
-          this.put(kind, up, 0, sz, seed, going ? -progress : lit, Math.max(era, 0.5), tint, light, toward(heading));
+          this.put(kind, up, 0, sz, seed, going ? -progress : left ? -Math.max(0.08, left.height) : lit, Math.max(era, 0.5), left ? mossy : tint, light, toward(heading));
           if (going) { raise(kind, sz, seed, progress, heading, mx, my); shown.push({ what: `a great ${kind}`, progress, years: 30, stage: stageOf(progress) }); }
           total++;
         }
@@ -845,6 +853,9 @@ export class Towns {
             this.style = ownStyle;
             raise(kind, sz, h2, progress, plot.yaw, plot.x, plot.y);
             shown.push({ what: `a ${kind} in the ${plot.district === 'homes' ? 'streets of houses' : plot.district === 'market' ? 'market' : plot.district === 'temple' ? 'temple quarter' : plot.district}`, progress, years: job.years, stage: stageOf(progress) });
+          } else if (left) {
+            // what still stands of it: some buildings are gone altogether, the rest are broken off at some height
+            if (h3 * 0.999 < left.share) this.put(kind, up, 0, sz, h2, -Math.max(0.08, left.height * (0.55 + 0.9 * hash(st.id * 31 + k * 13))), Math.min(age, 0.55), mossy, light, toward(plot.yaw));
           } else this.put(kind, up, 0, sz, h2, lit, age, look.tint, light, toward(plot.yaw));
           this.style = ownStyle;
           total++;
