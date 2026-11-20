@@ -13,6 +13,37 @@ This is the second version. The first was cut short by a flat battery; this one 
 - Roughly 60 of about 230 captures were looked at. Each finding names the files it rests on; the rest are listed at the end.
 - For part of the second run the machine's owner was also using the same browser window, so the Genesis tab may have been in the background at times. The frame-rate table was finished before that; the creature captures after it were checked to be in a visible tab.
 
+## Check of commit 841782b (2026-11-21): partial
+
+Newest green deploy when testing began: `841782b` (it contains `146a27d`). Main run on bundle `assets/index-B2bMw8Ce.js`, WebGPU, High, seed `amber-reef-101`. **History began at 109.67 My** (plain warp stopped there with 5 towns); 416 towns and 61 realms after 100,000 years; 1,152 towns and 75 realms at 200 My. Console over the main run: nothing at all. Files start `retest10-`; eight are cited and all eight were looked at.
+
+**Two items are not done and one run is void.** The laptop came off mains power during the session and was at 20% by the end, so Chrome's battery saver capped the last run at exactly 30 fps: the Medium frame rates are void. And my Medium run took over the browser tab while the species-sheet job was still using it, so **no new species sheets were produced** (item 5). Both will be repeated on mains power. The figures in the main run (85.8, 56 and 59.6 fps) are above the cap, so that run was not affected.
+
+| # | Item | Result | Evidence |
+|---|---|---|---|
+| 1 | Day side from orbit | **Largely fixed.** After 10 s and 30 s: `measured` 0.109, `measuredBright` 0.727 then 0.717, `target` 1.308 then 1.325 (was 1.86). The cloud belt is bright but now has visible structure, the glow round the disc is a thin rim, and sea and land read clearly. | `retest10-webgpu-orbit-day-30s.jpg`, `setImmediate(-1.46, 0.1, 2.6)`, sun +0.5 |
+| 1 | Night side, sun +2.9 | `measured` 0.013, `target` 2.1. **Land still cannot be told from sea** away from the lights: both are the same dark teal-black. Lights are plentiful (green, blue, white) and coasts can be guessed only where lights follow them. A white dot with a dark centre sits on the cloud belt. | `retest10-webgpu-orbit-night.jpg` |
+| 2 | Medium: edge quality with FXAA | From dist 0.3 the coastline and tree edges are smooth, with no stair-stepping; the whole frame is slightly soft. Acceptable. Forest from 0.02 was captured, not looked at. Bundle `index-pwzw4nfw.js`. | `retest10-webgpu-medium-coast.jpg` |
+| 2 | Medium frame rates | **Void** (battery cap: 30.1, 30.3, 30.1 fps). | |
+| 2 | High with TAA switched off | **Fixed.** From orbit: 56.0 fps with TAA on, 59.6 fps with it off. Off is no longer slower (it was 30 against 51). | logs |
+| 3 | Aurora | **Fixed.** `scene.aurora.mesh.visible` is false over the day side from orbit and true over the night side. Frame time on the day side was 11.7 ms, but at pixel ratio 1 after the step-downs, so it cannot be compared with the earlier 19.7 ms at ratio 1.5. | logs |
+| 4 | Hunters | One living species of 45 has the diet gene above 0.45: *Zephoella venator* (0.61, land). Chronicle has "First hunter" (13.24 My) and "The first packs" (82.48 My). At its home, 9 individuals were flagged as hunters and 33 had a rival set; over 45 s with the sim running, the number running fell from 87 to 52 and the number present from 183 to 139. So the behaviour exists in the data. **A chase was not seen**: the one frame looked at shows a town on a slope and an animal on the skyline, tilted, with no pursuit readable. | `retest10-webgpu-hunt-1.jpg` |
+| 5 | Reshaped animals, species sheets | **Not done** (see above). The sheets in `docs/asset-previews/species-sheet-webgl-*.jpg` are still the old baseline. | |
+| 6 | Sky tools panel | **Not verified again.** Opening the panel from script did not show it in the capture (the frame shows the planet with no panel), so I could not confirm the three entries on screen or use Shatter from the panel. The code on main does list them (`GOD_TOOLS` in `src/ui/panels.tsx`). | `retest10-webgpu-sky-tools.jpg` |
+| 7 | Designer sliders | **Present**: ornaments, colour change, echolocation, electric sense, larval stage, slow or fast metabolism, day or night, burrowing, after the original eighteen. | logs |
+| 7 | Designed land animal (ornaments 1, diet 1), *Tyranium ornatus* | **The back sail shows**: a green horned animal with a tall spiked sail, at night among lit towers. It stands taller than the tower blocks. Whether it chased anything was not watched. | `retest10-webgpu-designed-land-ornament-night.jpg` |
+| 7 | Designed sea animal (glow, electric sense, echolocation 1), *Brypus lucens* | **Nothing visible.** The night close-up under water is a completely black frame: no glow, sparks or ripples, and no animal. 30 individuals existed there. Either the effects do not draw or the dark water hides everything. | `retest10-webgpu-designed-sea-glow-night.jpg` |
+| 8 | Shoreline foam | **Not judged.** The spot my search picked is open sea with a small pale mound in it, not a beach. | `retest10-webgpu-beach-0.006.jpg` |
+| 9 | Sea level | Chronicle has "The seas fall" twice (0.04, 35.68 My) and "The seas rise" six times (20.06 to 189.63 My). The before-and-after coast pictures were not taken. | logs |
+| 10 | Worse than last time | See below. | |
+
+**New observations**
+
+1. **A dark blue ink-like blotch** floats on the turquoise shallows in the foreground of the sea view (`retest10-webgpu-beach-0.006.jpg`, bottom centre): ragged, opaque, unlike anything else on the water.
+2. **Town roofs are huge flat green slabs**, tilted at steep angles and far larger than the walls under them, some standing on edge like sails (`retest10-webgpu-hunt-1.jpg`). Pale grey paving slabs also lie tilted across the slope.
+3. Night windows are now white rather than pink, with a soft halo and glitter on the sea; roofs are large pale planes that catch the light (`-designed-land-ornament-night.jpg`).
+4. A large animal stands on the town's rooftops and is as long as several buildings (`-hunt-1.jpg`, top left).
+
 ## Motion review, first pass (2026-11-21)
 
 The first time anything was judged across consecutive frames instead of single stills. WebGPU, High, bundle `index-C8xtQ58C.js`, seed `amber-reef-101` at the dawn + 100,000 y, simulation running at 1x. Each sequence is 8 or 12 frames tiled into one strip, with the mean pixel change between neighbouring frames (0 to 255, measured on a 200 x 125 copy) as a rough motion figure. Files: `docs/screenshots/gpu/motion-webgpu-*.jpg`. Six strips were looked at.
