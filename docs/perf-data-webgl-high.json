@@ -1,0 +1,2366 @@
+{
+ "meta": {
+  "bundle": "index-h9kwcS4w.js",
+  "backend": "webgl2",
+  "preset": "high",
+  "canvas": [
+   2400,
+   1369
+  ],
+  "pr": 1.5,
+  "post": {
+   "taa": true,
+   "ao": true,
+   "bloom": true,
+   "fringe": true
+  },
+  "cloudSteps": 18,
+  "My": 74.065,
+  "towns": 384,
+  "species": 40,
+  "refresh": 82
+ },
+ "spots": {
+  "forest": [
+   -0.813,
+   -0.43
+  ],
+  "town": [
+   -2.744,
+   0.683,
+   "Nemigitim",
+   328
+  ]
+ },
+ "views": [
+  {
+   "name": "orbit, day side",
+   "view": {
+    "lon": -1.46,
+    "lat": 0.1,
+    "dist": 2.6,
+    "sun": 0.5,
+    "tilt": 0
+   },
+   "base0": {
+    "fps": 57.5,
+    "ms": 17.39,
+    "cpu": 2.27
+   },
+   "base1": {
+    "fps": 60.6,
+    "ms": 16.51,
+    "cpu": 2.15
+   },
+   "baseInfo": {
+    "calls": 89,
+    "tris": 135155
+   },
+   "rows": [
+    {
+     "label": "clouds",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 720,
+     "fps": 58.8,
+     "ms": 17,
+     "cpu": 2.16
+    },
+    {
+     "label": "ocean",
+     "drawn": 1,
+     "instances": 16,
+     "trisDrawn": 40960,
+     "fps": 64.3,
+     "ms": 15.55,
+     "cpu": 1.99
+    },
+    {
+     "label": "terrain",
+     "drawn": 1,
+     "instances": 16,
+     "trisDrawn": 40960,
+     "fps": 62.6,
+     "ms": 15.97,
+     "cpu": 2.03
+    },
+    {
+     "label": "atmosphere shell",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 980,
+     "fps": 61.1,
+     "ms": 16.35,
+     "cpu": 1.85
+    },
+    {
+     "label": "sky and stars",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 2976,
+     "fps": 64.9,
+     "ms": 15.41,
+     "cpu": 2.02
+    },
+    {
+     "label": "aurora",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 720,
+     "fps": 63,
+     "ms": 15.88,
+     "cpu": 2
+    },
+    {
+     "label": "rain and snow",
+     "drawn": 0
+    },
+    {
+     "label": "moons",
+     "drawn": 2,
+     "instances": 2,
+     "trisDrawn": 1440,
+     "fps": 57.2,
+     "ms": 17.5,
+     "cpu": 2
+    },
+    {
+     "label": "rivers",
+     "drawn": 0
+    },
+    {
+     "label": "ring",
+     "drawn": 0
+    },
+    {
+     "label": "satellites",
+     "drawn": 1,
+     "instances": 40,
+     "trisDrawn": 80,
+     "fps": 57.7,
+     "ms": 17.32,
+     "cpu": 2.06
+    },
+    {
+     "label": "plants: near models",
+     "drawn": 0
+    },
+    {
+     "label": "plants: far pictures (imposters)",
+     "drawn": 0
+    },
+    {
+     "label": "grass blades",
+     "drawn": 0
+    },
+    {
+     "label": "other [position,normal,uv]",
+     "drawn": 0
+    },
+    {
+     "label": "other [position,normal,color,cloudCover,glow]",
+     "drawn": 0
+    },
+    {
+     "label": "other instanced [position,uv]",
+     "drawn": 1,
+     "instances": 3000,
+     "trisDrawn": 6000,
+     "fps": 58,
+     "ms": 17.24,
+     "cpu": 2.11
+    },
+    {
+     "label": "other instanced [position,normal]",
+     "drawn": 0
+    },
+    {
+     "label": "buildings",
+     "drawn": 0
+    },
+    {
+     "label": "other [position,normal,uv,iDir,iData]",
+     "drawn": 0
+    },
+    {
+     "label": "other [position,normal,dark,iDir,iQuat]",
+     "drawn": 0
+    }
+   ],
+   "extra": [
+    {
+     "label": "effect off: taa",
+     "fps": 55.9,
+     "ms": 17.89,
+     "cpu": 1.25
+    },
+    {
+     "label": "effect off: ao",
+     "fps": 59.7,
+     "ms": 16.74,
+     "cpu": 2.02
+    },
+    {
+     "label": "effect off: bloom",
+     "fps": 62.1,
+     "ms": 16.11,
+     "cpu": 1.11
+    },
+    {
+     "label": "effect off: fringe",
+     "fps": 59.4,
+     "ms": 16.83,
+     "cpu": 2.06
+    },
+    {
+     "label": "all four effects off",
+     "fps": 60.3,
+     "ms": 16.6,
+     "cpu": 1.27
+    },
+    {
+     "label": "pixel ratio 0.75 (was 1.5)",
+     "fps": 120.3,
+     "ms": 8.31,
+     "cpu": 1.71
+    },
+    {
+     "label": "pixel ratio 1 (was 1.5)",
+     "fps": 108,
+     "ms": 9.26,
+     "cpu": 1.66
+    },
+    {
+     "label": "pixel ratio 2 (was 1.5)",
+     "fps": 38.3,
+     "ms": 26.12,
+     "cpu": 1.21
+    },
+    {
+     "label": "cloud steps 8 (was 18)",
+     "fps": 65.2,
+     "ms": 15.33,
+     "cpu": 1.97
+    },
+    {
+     "label": "cloud steps 12 (was 18)",
+     "fps": 62.3,
+     "ms": 16.05,
+     "cpu": 1.98
+    },
+    {
+     "label": "cloud steps 24 (was 18)",
+     "fps": 55.2,
+     "ms": 18.1,
+     "cpu": 2
+    },
+    {
+     "label": "cloud steps 32 (was 18)",
+     "fps": 51.8,
+     "ms": 19.32,
+     "cpu": 2.15
+    },
+    {
+     "label": "simulation running at 1x (was paused)",
+     "fps": 58.2,
+     "ms": 17.19,
+     "cpu": 1.91
+    },
+    {
+     "label": "simulation running at speed 3",
+     "fps": 58.8,
+     "ms": 17,
+     "cpu": 1.78
+    },
+    {
+     "label": "camera moving steadily",
+     "fps": 57,
+     "ms": 17.53,
+     "cpu": 2.66
+    }
+   ],
+   "state": {
+    "pr": 1.5,
+    "post": {
+     "taa": true,
+     "ao": true,
+     "bloom": true,
+     "fringe": true
+    },
+    "lum": 0.105,
+    "individuals": 0
+   }
+  },
+  {
+   "name": "orbit, night side",
+   "view": {
+    "lon": -1.46,
+    "lat": 0.1,
+    "dist": 2.6,
+    "sun": 2.8,
+    "tilt": 0
+   },
+   "base0": {
+    "fps": 60.3,
+    "ms": 16.59,
+    "cpu": 2.17
+   },
+   "base1": {
+    "fps": 59.7,
+    "ms": 16.76,
+    "cpu": 2.28
+   },
+   "baseInfo": {
+    "calls": 88,
+    "tris": 135154
+   },
+   "rows": [
+    {
+     "label": "clouds",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 720,
+     "fps": 62.6,
+     "ms": 15.98,
+     "cpu": 2.25
+    },
+    {
+     "label": "ocean",
+     "drawn": 1,
+     "instances": 16,
+     "trisDrawn": 40960,
+     "fps": 65.4,
+     "ms": 15.28,
+     "cpu": 2.15
+    },
+    {
+     "label": "terrain",
+     "drawn": 1,
+     "instances": 16,
+     "trisDrawn": 40960,
+     "fps": 62.6,
+     "ms": 15.97,
+     "cpu": 2.09
+    },
+    {
+     "label": "atmosphere shell",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 980,
+     "fps": 61.9,
+     "ms": 16.15,
+     "cpu": 2.09
+    },
+    {
+     "label": "sky and stars",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 2976,
+     "fps": 64.7,
+     "ms": 15.46,
+     "cpu": 2.15
+    },
+    {
+     "label": "aurora",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 720,
+     "fps": 64.7,
+     "ms": 15.45,
+     "cpu": 2.2
+    },
+    {
+     "label": "rain and snow",
+     "drawn": 0
+    },
+    {
+     "label": "moons",
+     "drawn": 2,
+     "instances": 2,
+     "trisDrawn": 1440,
+     "fps": 59.2,
+     "ms": 16.89,
+     "cpu": 2.38
+    },
+    {
+     "label": "rivers",
+     "drawn": 0
+    },
+    {
+     "label": "ring",
+     "drawn": 0
+    },
+    {
+     "label": "satellites",
+     "drawn": 1,
+     "instances": 40,
+     "trisDrawn": 80,
+     "fps": 59.9,
+     "ms": 16.68,
+     "cpu": 2.16
+    },
+    {
+     "label": "plants: near models",
+     "drawn": 0
+    },
+    {
+     "label": "plants: far pictures (imposters)",
+     "drawn": 0
+    },
+    {
+     "label": "grass blades",
+     "drawn": 0
+    },
+    {
+     "label": "other [position,normal,uv]",
+     "drawn": 0
+    },
+    {
+     "label": "other [position,normal,color,cloudCover,glow]",
+     "drawn": 0
+    },
+    {
+     "label": "other instanced [position,uv]",
+     "drawn": 1,
+     "instances": 3000,
+     "trisDrawn": 6000,
+     "fps": 59.8,
+     "ms": 16.72,
+     "cpu": 2.25
+    },
+    {
+     "label": "other instanced [position,normal]",
+     "drawn": 0
+    },
+    {
+     "label": "buildings",
+     "drawn": 0
+    },
+    {
+     "label": "other [position,normal,uv,iDir,iData]",
+     "drawn": 0
+    },
+    {
+     "label": "other [position,normal,dark,iDir,iQuat]",
+     "drawn": 0
+    }
+   ],
+   "extra": [
+    {
+     "label": "effect off: taa",
+     "fps": 54.3,
+     "ms": 18.41,
+     "cpu": 1.82
+    },
+    {
+     "label": "effect off: ao",
+     "fps": 61.1,
+     "ms": 16.38,
+     "cpu": 2.2
+    },
+    {
+     "label": "effect off: bloom",
+     "fps": 62.9,
+     "ms": 15.9,
+     "cpu": 1.71
+    },
+    {
+     "label": "effect off: fringe",
+     "fps": 62.2,
+     "ms": 16.07,
+     "cpu": 2.04
+    },
+    {
+     "label": "all four effects off",
+     "fps": 62,
+     "ms": 16.13,
+     "cpu": 1.99
+    },
+    {
+     "label": "pixel ratio 0.75 (was 1.5)",
+     "fps": 119.8,
+     "ms": 8.35,
+     "cpu": 1.84
+    },
+    {
+     "label": "pixel ratio 1 (was 1.5)",
+     "fps": 108.7,
+     "ms": 9.2,
+     "cpu": 1.72
+    },
+    {
+     "label": "pixel ratio 2 (was 1.5)",
+     "fps": 37.1,
+     "ms": 26.93,
+     "cpu": 1.45
+    },
+    {
+     "label": "cloud steps 8 (was 18)",
+     "fps": 64.8,
+     "ms": 15.44,
+     "cpu": 2.18
+    },
+    {
+     "label": "cloud steps 12 (was 18)",
+     "fps": 62.3,
+     "ms": 16.05,
+     "cpu": 2.2
+    },
+    {
+     "label": "cloud steps 24 (was 18)",
+     "fps": 57.2,
+     "ms": 17.49,
+     "cpu": 2.23
+    },
+    {
+     "label": "cloud steps 32 (was 18)",
+     "fps": 52.7,
+     "ms": 18.97,
+     "cpu": 2.37
+    },
+    {
+     "label": "simulation running at 1x (was paused)",
+     "fps": 58.2,
+     "ms": 17.19,
+     "cpu": 2.05
+    },
+    {
+     "label": "simulation running at speed 3",
+     "fps": 58.2,
+     "ms": 17.19,
+     "cpu": 2.04
+    },
+    {
+     "label": "camera moving steadily",
+     "fps": 58.6,
+     "ms": 17.06,
+     "cpu": 2.18
+    }
+   ],
+   "state": {
+    "pr": 1.5,
+    "post": {
+     "taa": true,
+     "ao": true,
+     "bloom": true,
+     "fringe": true
+    },
+    "lum": 0.014,
+    "individuals": 0
+   }
+  },
+  {
+   "name": "mid altitude over the densest forest (dist 0.3)",
+   "view": {
+    "lon": -0.813,
+    "lat": -0.43,
+    "dist": 0.3,
+    "sun": 0.5,
+    "tilt": 0
+   },
+   "base0": {
+    "fps": 44.8,
+    "ms": 22.32,
+    "cpu": 2.71
+   },
+   "base1": {
+    "fps": 44.3,
+    "ms": 22.57,
+    "cpu": 2.62
+   },
+   "baseInfo": {
+    "calls": 101,
+    "tris": 1198739
+   },
+   "rows": [
+    {
+     "label": "clouds",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 720,
+     "fps": 46.5,
+     "ms": 21.51,
+     "cpu": 2.45
+    },
+    {
+     "label": "ocean",
+     "drawn": 1,
+     "instances": 128,
+     "trisDrawn": 327680,
+     "fps": 50.7,
+     "ms": 19.72,
+     "cpu": 2.27
+    },
+    {
+     "label": "terrain",
+     "drawn": 1,
+     "instances": 180,
+     "trisDrawn": 460800,
+     "fps": 51,
+     "ms": 19.62,
+     "cpu": 2.51
+    },
+    {
+     "label": "atmosphere shell",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 980,
+     "fps": 47,
+     "ms": 21.27,
+     "cpu": 2.49
+    },
+    {
+     "label": "sky and stars",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 2976,
+     "fps": 43.5,
+     "ms": 22.98,
+     "cpu": 2.72
+    },
+    {
+     "label": "aurora",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 720,
+     "fps": 48.2,
+     "ms": 20.74,
+     "cpu": 2.3
+    },
+    {
+     "label": "rain and snow",
+     "drawn": 0
+    },
+    {
+     "label": "moons",
+     "drawn": 2,
+     "instances": 2,
+     "trisDrawn": 1440,
+     "fps": 44.2,
+     "ms": 22.65,
+     "cpu": 2.37
+    },
+    {
+     "label": "rivers",
+     "drawn": 0
+    },
+    {
+     "label": "ring",
+     "drawn": 0
+    },
+    {
+     "label": "satellites",
+     "drawn": 1,
+     "instances": 40,
+     "trisDrawn": 80,
+     "fps": 44.9,
+     "ms": 22.25,
+     "cpu": 2.37
+    },
+    {
+     "label": "plants: near models",
+     "drawn": 0
+    },
+    {
+     "label": "plants: far pictures (imposters)",
+     "drawn": 1,
+     "instances": 1318,
+     "trisDrawn": 2636,
+     "fps": 45.5,
+     "ms": 21.96,
+     "cpu": 2.46
+    },
+    {
+     "label": "grass blades",
+     "drawn": 0
+    },
+    {
+     "label": "nest mounds",
+     "drawn": 0
+    },
+    {
+     "label": "other [position,normal,uv]",
+     "drawn": 2,
+     "instances": 2,
+     "trisDrawn": 92,
+     "fps": 45.1,
+     "ms": 22.17,
+     "cpu": 2.39
+    },
+    {
+     "label": "other [position,normal,color,cloudCover,glow]",
+     "drawn": 0
+    },
+    {
+     "label": "other instanced [position,uv]",
+     "drawn": 1,
+     "instances": 3000,
+     "trisDrawn": 6000,
+     "fps": 45.9,
+     "ms": 21.79,
+     "cpu": 2.37
+    },
+    {
+     "label": "other instanced [position,normal]",
+     "drawn": 0
+    },
+    {
+     "label": "buildings",
+     "drawn": 9,
+     "instances": 4624,
+     "trisDrawn": 66296,
+     "fps": 45.1,
+     "ms": 22.17,
+     "cpu": 2.29
+    },
+    {
+     "label": "other [position,normal,uv,iDir,iData]",
+     "drawn": 0
+    },
+    {
+     "label": "other instanced [position,normal,dark,iDir,iQuat,iData]",
+     "drawn": 1,
+     "instances": 10,
+     "trisDrawn": 1260,
+     "fps": 46,
+     "ms": 21.74,
+     "cpu": 1.21
+    }
+   ],
+   "extra": [
+    {
+     "label": "effect off: taa",
+     "fps": 33.7,
+     "ms": 29.71,
+     "cpu": 1.18
+    },
+    {
+     "label": "effect off: ao",
+     "fps": 46.6,
+     "ms": 21.46,
+     "cpu": 2.21
+    },
+    {
+     "label": "effect off: bloom",
+     "fps": 46.9,
+     "ms": 21.3,
+     "cpu": 1.18
+    },
+    {
+     "label": "effect off: fringe",
+     "fps": 46.5,
+     "ms": 21.51,
+     "cpu": 2.34
+    },
+    {
+     "label": "all four effects off",
+     "fps": 36,
+     "ms": 27.8,
+     "cpu": 1.45
+    },
+    {
+     "label": "pixel ratio 0.75 (was 1.5)",
+     "fps": 120.3,
+     "ms": 8.31,
+     "cpu": 1.76
+    },
+    {
+     "label": "pixel ratio 1 (was 1.5)",
+     "fps": 82.7,
+     "ms": 12.09,
+     "cpu": 2.1
+    },
+    {
+     "label": "pixel ratio 2 (was 1.5)",
+     "fps": 27.4,
+     "ms": 36.52,
+     "cpu": 1.65
+    },
+    {
+     "label": "cloud steps 8 (was 18)",
+     "fps": 47,
+     "ms": 21.3,
+     "cpu": 2.71
+    },
+    {
+     "label": "cloud steps 12 (was 18)",
+     "fps": 46.5,
+     "ms": 21.51,
+     "cpu": 1.59
+    },
+    {
+     "label": "cloud steps 24 (was 18)",
+     "fps": 41.9,
+     "ms": 23.84,
+     "cpu": 1.51
+    },
+    {
+     "label": "cloud steps 32 (was 18)",
+     "fps": 40.1,
+     "ms": 24.91,
+     "cpu": 1.48
+    },
+    {
+     "label": "simulation running at 1x (was paused)",
+     "fps": 43.9,
+     "ms": 22.77,
+     "cpu": 2.73
+    },
+    {
+     "label": "simulation running at speed 3",
+     "fps": 44.8,
+     "ms": 22.33,
+     "cpu": 2.18
+    },
+    {
+     "label": "camera moving steadily",
+     "fps": 44.5,
+     "ms": 22.47,
+     "cpu": 1.96
+    }
+   ],
+   "state": {
+    "pr": 1.5,
+    "post": {
+     "taa": true,
+     "ao": true,
+     "bloom": true,
+     "fringe": true
+    },
+    "lum": 0.191,
+    "individuals": 724
+   }
+  },
+  {
+   "name": "forest from above the canopy (dist 0.05)",
+   "view": {
+    "lon": -0.813,
+    "lat": -0.43,
+    "dist": 0.05,
+    "sun": 0.5,
+    "tilt": -0.35
+   },
+   "base0": {
+    "fps": 46.5,
+    "ms": 21.5,
+    "cpu": 2.82
+   },
+   "base1": {
+    "fps": 46.2,
+    "ms": 21.65,
+    "cpu": 2.75
+   },
+   "baseInfo": {
+    "calls": 108,
+    "tris": 3639291
+   },
+   "rows": [
+    {
+     "label": "clouds",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 720,
+     "fps": 47.6,
+     "ms": 21.01,
+     "cpu": 2.72
+    },
+    {
+     "label": "ocean",
+     "drawn": 1,
+     "instances": 337,
+     "trisDrawn": 862720,
+     "fps": 49.7,
+     "ms": 20.13,
+     "cpu": 2.84
+    },
+    {
+     "label": "terrain",
+     "drawn": 1,
+     "instances": 537,
+     "trisDrawn": 1374720,
+     "fps": 53.1,
+     "ms": 18.82,
+     "cpu": 2.65
+    },
+    {
+     "label": "atmosphere shell",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 980,
+     "fps": 52.2,
+     "ms": 19.16,
+     "cpu": 2.48
+    },
+    {
+     "label": "sky and stars",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 2976,
+     "fps": 49.9,
+     "ms": 20.02,
+     "cpu": 2.75
+    },
+    {
+     "label": "aurora",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 720,
+     "fps": 49.2,
+     "ms": 20.33,
+     "cpu": 2.67
+    },
+    {
+     "label": "rain and snow",
+     "drawn": 0
+    },
+    {
+     "label": "moons",
+     "drawn": 2,
+     "instances": 2,
+     "trisDrawn": 1440,
+     "fps": 46.1,
+     "ms": 21.67,
+     "cpu": 2.76
+    },
+    {
+     "label": "rivers",
+     "drawn": 0
+    },
+    {
+     "label": "ring",
+     "drawn": 0
+    },
+    {
+     "label": "satellites",
+     "drawn": 1,
+     "instances": 40,
+     "trisDrawn": 80,
+     "fps": 47.6,
+     "ms": 21,
+     "cpu": 2.8
+    },
+    {
+     "label": "plants: near models",
+     "drawn": 1,
+     "instances": 145,
+     "trisDrawn": 125860,
+     "fps": 49.7,
+     "ms": 20.13,
+     "cpu": 2.69
+    },
+    {
+     "label": "plants: far pictures (imposters)",
+     "drawn": 1,
+     "instances": 718,
+     "trisDrawn": 1436,
+     "fps": 43.9,
+     "ms": 22.79,
+     "cpu": 2.85
+    },
+    {
+     "label": "grass blades",
+     "drawn": 0
+    },
+    {
+     "label": "animals",
+     "drawn": 3,
+     "instances": 327,
+     "trisDrawn": 240312,
+     "fps": 47.7,
+     "ms": 20.97,
+     "cpu": 2.64
+    },
+    {
+     "label": "nest mounds",
+     "drawn": 0
+    },
+    {
+     "label": "other [position,normal,uv]",
+     "drawn": 2,
+     "instances": 2,
+     "trisDrawn": 92,
+     "fps": 47.5,
+     "ms": 21.04,
+     "cpu": 2.68
+    },
+    {
+     "label": "other [position,normal,color,cloudCover,glow]",
+     "drawn": 0
+    },
+    {
+     "label": "other instanced [position,uv]",
+     "drawn": 1,
+     "instances": 3000,
+     "trisDrawn": 6000,
+     "fps": 47.3,
+     "ms": 21.16,
+     "cpu": 2.78
+    },
+    {
+     "label": "other instanced [position,normal]",
+     "drawn": 1,
+     "instances": 212,
+     "trisDrawn": 116176,
+     "fps": 47.7,
+     "ms": 20.95,
+     "cpu": 2.86
+    },
+    {
+     "label": "buildings",
+     "drawn": 11,
+     "instances": 2450,
+     "trisDrawn": 41732,
+     "fps": 47.4,
+     "ms": 21.08,
+     "cpu": 2.61
+    },
+    {
+     "label": "other [position,normal,uv,iDir,iData]",
+     "drawn": 0
+    },
+    {
+     "label": "other instanced [position,normal,dark,iDir,iQuat,iData]",
+     "drawn": 1,
+     "instances": 10,
+     "trisDrawn": 1260,
+     "fps": 47.1,
+     "ms": 21.22,
+     "cpu": 2.77
+    }
+   ],
+   "extra": [
+    {
+     "label": "effect off: taa",
+     "fps": 38.8,
+     "ms": 25.76,
+     "cpu": 1.45
+    },
+    {
+     "label": "effect off: ao",
+     "fps": 49.3,
+     "ms": 20.28,
+     "cpu": 2.4
+    },
+    {
+     "label": "effect off: bloom",
+     "fps": 47.7,
+     "ms": 20.96,
+     "cpu": 1.4
+    },
+    {
+     "label": "effect off: fringe",
+     "fps": 48.2,
+     "ms": 20.73,
+     "cpu": 1.47
+    },
+    {
+     "label": "all four effects off",
+     "fps": 43.2,
+     "ms": 23.17,
+     "cpu": 2.55
+    },
+    {
+     "label": "pixel ratio 0.75 (was 1.5)",
+     "fps": 120.3,
+     "ms": 8.32,
+     "cpu": 2.13
+    },
+    {
+     "label": "pixel ratio 1 (was 1.5)",
+     "fps": 85.4,
+     "ms": 11.7,
+     "cpu": 2.19
+    },
+    {
+     "label": "pixel ratio 2 (was 1.5)",
+     "fps": 28.8,
+     "ms": 34.72,
+     "cpu": 1.53
+    },
+    {
+     "label": "cloud steps 8 (was 18)",
+     "fps": 51.4,
+     "ms": 19.44,
+     "cpu": 2.58
+    },
+    {
+     "label": "cloud steps 12 (was 18)",
+     "fps": 48.9,
+     "ms": 20.43,
+     "cpu": 2.49
+    },
+    {
+     "label": "cloud steps 24 (was 18)",
+     "fps": 44.6,
+     "ms": 22.44,
+     "cpu": 2.55
+    },
+    {
+     "label": "cloud steps 32 (was 18)",
+     "fps": 42.6,
+     "ms": 23.45,
+     "cpu": 2.76
+    },
+    {
+     "label": "simulation running at 1x (was paused)",
+     "fps": 46.9,
+     "ms": 21.31,
+     "cpu": 2.83
+    },
+    {
+     "label": "simulation running at speed 3",
+     "fps": 46.7,
+     "ms": 21.39,
+     "cpu": 2.72
+    },
+    {
+     "label": "camera moving steadily",
+     "fps": 43.6,
+     "ms": 22.95,
+     "cpu": 3.21
+    }
+   ],
+   "state": {
+    "pr": 1.5,
+    "post": {
+     "taa": true,
+     "ao": true,
+     "bloom": true,
+     "fringe": true
+    },
+    "lum": 0.274,
+    "individuals": 302
+   }
+  },
+  {
+   "name": "forest, ground level (dist 0.02)",
+   "view": {
+    "lon": -0.813,
+    "lat": -0.43,
+    "dist": 0.02,
+    "sun": 0.5,
+    "tilt": -0.5
+   },
+   "base0": {
+    "fps": 40.3,
+    "ms": 24.84,
+    "cpu": 3
+   },
+   "base1": {
+    "fps": 40.5,
+    "ms": 24.67,
+    "cpu": 3.07
+   },
+   "baseInfo": {
+    "calls": 113,
+    "tris": 4203260
+   },
+   "rows": [
+    {
+     "label": "clouds",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 720,
+     "fps": 42.7,
+     "ms": 23.42,
+     "cpu": 3.11
+    },
+    {
+     "label": "ocean",
+     "drawn": 1,
+     "instances": 351,
+     "trisDrawn": 898560,
+     "fps": 42.1,
+     "ms": 23.73,
+     "cpu": 3.08
+    },
+    {
+     "label": "terrain",
+     "drawn": 1,
+     "instances": 557,
+     "trisDrawn": 1425920,
+     "fps": 48.7,
+     "ms": 20.52,
+     "cpu": 2.72
+    },
+    {
+     "label": "atmosphere shell",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 980,
+     "fps": 42.7,
+     "ms": 23.45,
+     "cpu": 2.84
+    },
+    {
+     "label": "sky and stars",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 2976,
+     "fps": 42,
+     "ms": 23.83,
+     "cpu": 3.04
+    },
+    {
+     "label": "aurora",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 720,
+     "fps": 43.3,
+     "ms": 23.11,
+     "cpu": 3.08
+    },
+    {
+     "label": "rain and snow",
+     "drawn": 0
+    },
+    {
+     "label": "moons",
+     "drawn": 2,
+     "instances": 2,
+     "trisDrawn": 1440,
+     "fps": 40.3,
+     "ms": 24.8,
+     "cpu": 2.97
+    },
+    {
+     "label": "rivers",
+     "drawn": 0
+    },
+    {
+     "label": "ring",
+     "drawn": 0
+    },
+    {
+     "label": "satellites",
+     "drawn": 1,
+     "instances": 40,
+     "trisDrawn": 80,
+     "fps": 41,
+     "ms": 24.36,
+     "cpu": 3.06
+    },
+    {
+     "label": "plants: near models",
+     "drawn": 4,
+     "instances": 410,
+     "trisDrawn": 329367,
+     "fps": 43.2,
+     "ms": 23.13,
+     "cpu": 2.82
+    },
+    {
+     "label": "plants: far pictures (imposters)",
+     "drawn": 1,
+     "instances": 331,
+     "trisDrawn": 662,
+     "fps": 39.6,
+     "ms": 25.26,
+     "cpu": 2.97
+    },
+    {
+     "label": "grass blades",
+     "drawn": 1,
+     "instances": 6000,
+     "trisDrawn": 270000,
+     "fps": 39.7,
+     "ms": 25.18,
+     "cpu": 2.94
+    },
+    {
+     "label": "animals",
+     "drawn": 3,
+     "instances": 302,
+     "trisDrawn": 222416,
+     "fps": 39.8,
+     "ms": 25.11,
+     "cpu": 2.97
+    },
+    {
+     "label": "nest mounds",
+     "drawn": 0
+    },
+    {
+     "label": "other [position,normal,uv]",
+     "drawn": 2,
+     "instances": 2,
+     "trisDrawn": 92,
+     "fps": 39.5,
+     "ms": 25.29,
+     "cpu": 2.43
+    },
+    {
+     "label": "other [position,normal,color,cloudCover,glow]",
+     "drawn": 0
+    },
+    {
+     "label": "other instanced [position,uv]",
+     "drawn": 1,
+     "instances": 3000,
+     "trisDrawn": 6000,
+     "fps": 39.5,
+     "ms": 25.31,
+     "cpu": 1.72
+    },
+    {
+     "label": "other instanced [position,normal]",
+     "drawn": 1,
+     "instances": 212,
+     "trisDrawn": 116176,
+     "fps": 40.8,
+     "ms": 24.52,
+     "cpu": 1.75
+    },
+    {
+     "label": "buildings",
+     "drawn": 12,
+     "instances": 1639,
+     "trisDrawn": 27984,
+     "fps": 41.1,
+     "ms": 24.35,
+     "cpu": 2.36
+    },
+    {
+     "label": "other [position,normal,uv,iDir,iData]",
+     "drawn": 0
+    },
+    {
+     "label": "other instanced [position,normal,dark,iDir,iQuat,iData]",
+     "drawn": 1,
+     "instances": 10,
+     "trisDrawn": 1260,
+     "fps": 39.4,
+     "ms": 25.4,
+     "cpu": 2.94
+    }
+   ],
+   "extra": [
+    {
+     "label": "effect off: taa",
+     "fps": 33.1,
+     "ms": 30.18,
+     "cpu": 1.74
+    },
+    {
+     "label": "effect off: ao",
+     "fps": 44.9,
+     "ms": 22.27,
+     "cpu": 1.77
+    },
+    {
+     "label": "effect off: bloom",
+     "fps": 41.3,
+     "ms": 24.24,
+     "cpu": 1.67
+    },
+    {
+     "label": "effect off: fringe",
+     "fps": 41,
+     "ms": 24.37,
+     "cpu": 1.74
+    },
+    {
+     "label": "all four effects off",
+     "fps": 37.7,
+     "ms": 26.53,
+     "cpu": 1.63
+    },
+    {
+     "label": "pixel ratio 0.75 (was 1.5)",
+     "fps": 100.7,
+     "ms": 9.93,
+     "cpu": 2.14
+    },
+    {
+     "label": "pixel ratio 1 (was 1.5)",
+     "fps": 71.9,
+     "ms": 13.91,
+     "cpu": 2.51
+    },
+    {
+     "label": "pixel ratio 2 (was 1.5)",
+     "fps": 25.7,
+     "ms": 38.92,
+     "cpu": 1.8
+    },
+    {
+     "label": "cloud steps 8 (was 18)",
+     "fps": 43.2,
+     "ms": 23.15,
+     "cpu": 2.95
+    },
+    {
+     "label": "cloud steps 12 (was 18)",
+     "fps": 41.8,
+     "ms": 23.94,
+     "cpu": 2.97
+    },
+    {
+     "label": "cloud steps 24 (was 18)",
+     "fps": 38.1,
+     "ms": 26.23,
+     "cpu": 3.02
+    },
+    {
+     "label": "cloud steps 32 (was 18)",
+     "fps": 37.6,
+     "ms": 26.61,
+     "cpu": 3.03
+    },
+    {
+     "label": "simulation running at 1x (was paused)",
+     "fps": 40.3,
+     "ms": 24.82,
+     "cpu": 2.85
+    },
+    {
+     "label": "simulation running at speed 3",
+     "fps": 40.7,
+     "ms": 24.57,
+     "cpu": 3.02
+    },
+    {
+     "label": "camera moving steadily",
+     "fps": 41.2,
+     "ms": 24.29,
+     "cpu": 2.79
+    }
+   ],
+   "state": {
+    "pr": 1.5,
+    "post": {
+     "taa": true,
+     "ao": true,
+     "bloom": true,
+     "fringe": true
+    },
+    "lum": 0.246,
+    "individuals": 302
+   }
+  },
+  {
+   "name": "largest town \"Nemigitim\", ground level by day (dist 0.02)",
+   "view": {
+    "lon": -2.744,
+    "lat": 0.683,
+    "dist": 0.02,
+    "sun": 0.5,
+    "tilt": -0.5
+   },
+   "base0": {
+    "fps": 48.4,
+    "ms": 20.66,
+    "cpu": 2.81
+   },
+   "base1": {
+    "fps": 47.7,
+    "ms": 20.97,
+    "cpu": 2.7
+   },
+   "baseInfo": {
+    "calls": 111,
+    "tris": 4111062
+   },
+   "rows": [
+    {
+     "label": "clouds",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 720,
+     "fps": 49.3,
+     "ms": 20.27,
+     "cpu": 2.96
+    },
+    {
+     "label": "ocean",
+     "drawn": 1,
+     "instances": 397,
+     "trisDrawn": 1016320,
+     "fps": 53,
+     "ms": 18.86,
+     "cpu": 2.76
+    },
+    {
+     "label": "terrain",
+     "drawn": 1,
+     "instances": 608,
+     "trisDrawn": 1556480,
+     "fps": 55.5,
+     "ms": 18.03,
+     "cpu": 2.72
+    },
+    {
+     "label": "atmosphere shell",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 980,
+     "fps": 52.2,
+     "ms": 19.16,
+     "cpu": 2.95
+    },
+    {
+     "label": "sky and stars",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 2976,
+     "fps": 51.1,
+     "ms": 19.57,
+     "cpu": 2.73
+    },
+    {
+     "label": "aurora",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 720,
+     "fps": 48.8,
+     "ms": 20.48,
+     "cpu": 2.77
+    },
+    {
+     "label": "rain and snow",
+     "drawn": 0
+    },
+    {
+     "label": "moons",
+     "drawn": 2,
+     "instances": 2,
+     "trisDrawn": 1440,
+     "fps": 49.4,
+     "ms": 20.23,
+     "cpu": 2.91
+    },
+    {
+     "label": "rivers",
+     "drawn": 0
+    },
+    {
+     "label": "ring",
+     "drawn": 0
+    },
+    {
+     "label": "satellites",
+     "drawn": 1,
+     "instances": 40,
+     "trisDrawn": 80,
+     "fps": 47.6,
+     "ms": 21.02,
+     "cpu": 2.93
+    },
+    {
+     "label": "plants: near models",
+     "drawn": 3,
+     "instances": 330,
+     "trisDrawn": 65313,
+     "fps": 47.2,
+     "ms": 21.19,
+     "cpu": 2.7
+    },
+    {
+     "label": "plants: far pictures (imposters)",
+     "drawn": 1,
+     "instances": 248,
+     "trisDrawn": 496,
+     "fps": 46.4,
+     "ms": 21.57,
+     "cpu": 2.74
+    },
+    {
+     "label": "grass blades",
+     "drawn": 1,
+     "instances": 1751,
+     "trisDrawn": 78795,
+     "fps": 46.6,
+     "ms": 21.47,
+     "cpu": 2.74
+    },
+    {
+     "label": "animals",
+     "drawn": 2,
+     "instances": 259,
+     "trisDrawn": 204760,
+     "fps": 48.2,
+     "ms": 20.74,
+     "cpu": 2.77
+    },
+    {
+     "label": "nest mounds",
+     "drawn": 0
+    },
+    {
+     "label": "other [position,normal,uv]",
+     "drawn": 2,
+     "instances": 2,
+     "trisDrawn": 92,
+     "fps": 47.1,
+     "ms": 21.23,
+     "cpu": 2.68
+    },
+    {
+     "label": "other [position,normal,color,cloudCover,glow]",
+     "drawn": 0
+    },
+    {
+     "label": "other instanced [position,uv]",
+     "drawn": 1,
+     "instances": 3000,
+     "trisDrawn": 6000,
+     "fps": 47.2,
+     "ms": 21.18,
+     "cpu": 2.62
+    },
+    {
+     "label": "other instanced [position,normal]",
+     "drawn": 1,
+     "instances": 212,
+     "trisDrawn": 116176,
+     "fps": 47.6,
+     "ms": 21.02,
+     "cpu": 2.54
+    },
+    {
+     "label": "buildings",
+     "drawn": 13,
+     "instances": 2473,
+     "trisDrawn": 41402,
+     "fps": 46.6,
+     "ms": 21.46,
+     "cpu": 2.41
+    },
+    {
+     "label": "other [position,normal,uv,iDir,iData]",
+     "drawn": 0
+    },
+    {
+     "label": "other instanced [position,normal,dark,iDir,iQuat,iData]",
+     "drawn": 1,
+     "instances": 21,
+     "trisDrawn": 2646,
+     "fps": 47.4,
+     "ms": 21.09,
+     "cpu": 2.57
+    }
+   ],
+   "extra": [
+    {
+     "label": "effect off: taa",
+     "fps": 39.2,
+     "ms": 25.53,
+     "cpu": 1.85
+    },
+    {
+     "label": "effect off: ao",
+     "fps": 52,
+     "ms": 19.24,
+     "cpu": 2.63
+    },
+    {
+     "label": "effect off: bloom",
+     "fps": 50.2,
+     "ms": 19.94,
+     "cpu": 1.79
+    },
+    {
+     "label": "effect off: fringe",
+     "fps": 50.2,
+     "ms": 19.92,
+     "cpu": 1.69
+    },
+    {
+     "label": "all four effects off",
+     "fps": 45.1,
+     "ms": 22.17,
+     "cpu": 1.61
+    },
+    {
+     "label": "pixel ratio 0.75 (was 1.5)",
+     "fps": 120.1,
+     "ms": 8.33,
+     "cpu": 2.07
+    },
+    {
+     "label": "pixel ratio 1 (was 1.5)",
+     "fps": 88.8,
+     "ms": 11.26,
+     "cpu": 2.16
+    },
+    {
+     "label": "pixel ratio 2 (was 1.5)",
+     "fps": 30.4,
+     "ms": 32.84,
+     "cpu": 1.85
+    },
+    {
+     "label": "cloud steps 8 (was 18)",
+     "fps": 51.7,
+     "ms": 19.36,
+     "cpu": 2.62
+    },
+    {
+     "label": "cloud steps 12 (was 18)",
+     "fps": 49.9,
+     "ms": 20.04,
+     "cpu": 2.71
+    },
+    {
+     "label": "cloud steps 24 (was 18)",
+     "fps": 44.9,
+     "ms": 22.26,
+     "cpu": 2.64
+    },
+    {
+     "label": "cloud steps 32 (was 18)",
+     "fps": 43.6,
+     "ms": 22.94,
+     "cpu": 2.63
+    },
+    {
+     "label": "simulation running at 1x (was paused)",
+     "fps": 47.3,
+     "ms": 21.13,
+     "cpu": 2.88
+    },
+    {
+     "label": "simulation running at speed 3",
+     "fps": 46.9,
+     "ms": 21.31,
+     "cpu": 2.78
+    },
+    {
+     "label": "camera moving steadily",
+     "fps": 47.9,
+     "ms": 20.88,
+     "cpu": 3.13
+    }
+   ],
+   "state": {
+    "pr": 1.5,
+    "post": {
+     "taa": true,
+     "ao": true,
+     "bloom": true,
+     "fringe": true
+    },
+    "lum": 0.322,
+    "individuals": 259
+   }
+  },
+  {
+   "name": "same town at night (dist 0.02)",
+   "view": {
+    "lon": -2.744,
+    "lat": 0.683,
+    "dist": 0.02,
+    "sun": 2.8,
+    "tilt": -0.5
+   },
+   "base0": {
+    "fps": 47.7,
+    "ms": 20.97,
+    "cpu": 2.89
+   },
+   "base1": {
+    "fps": 49,
+    "ms": 20.42,
+    "cpu": 2.35
+   },
+   "baseInfo": {
+    "calls": 112,
+    "tris": 4109983
+   },
+   "rows": [
+    {
+     "label": "clouds",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 720,
+     "fps": 48.8,
+     "ms": 20.51,
+     "cpu": 3.02
+    },
+    {
+     "label": "ocean",
+     "drawn": 1,
+     "instances": 397,
+     "trisDrawn": 1016320,
+     "fps": 52,
+     "ms": 19.24,
+     "cpu": 2.67
+    },
+    {
+     "label": "terrain",
+     "drawn": 1,
+     "instances": 608,
+     "trisDrawn": 1556480,
+     "fps": 55.5,
+     "ms": 18.03,
+     "cpu": 2.78
+    },
+    {
+     "label": "atmosphere shell",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 980,
+     "fps": 51.5,
+     "ms": 19.41,
+     "cpu": 2.92
+    },
+    {
+     "label": "sky and stars",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 2976,
+     "fps": 49.8,
+     "ms": 20.07,
+     "cpu": 2.88
+    },
+    {
+     "label": "aurora",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 720,
+     "fps": 49.9,
+     "ms": 20.04,
+     "cpu": 2.87
+    },
+    {
+     "label": "rain and snow",
+     "drawn": 0
+    },
+    {
+     "label": "moons",
+     "drawn": 2,
+     "instances": 2,
+     "trisDrawn": 1440,
+     "fps": 49.1,
+     "ms": 20.35,
+     "cpu": 2.93
+    },
+    {
+     "label": "rivers",
+     "drawn": 0
+    },
+    {
+     "label": "ring",
+     "drawn": 0
+    },
+    {
+     "label": "satellites",
+     "drawn": 1,
+     "instances": 40,
+     "trisDrawn": 80,
+     "fps": 47,
+     "ms": 21.26,
+     "cpu": 2.88
+    },
+    {
+     "label": "plants: near models",
+     "drawn": 3,
+     "instances": 330,
+     "trisDrawn": 65313,
+     "fps": 47.5,
+     "ms": 21.05,
+     "cpu": 2.78
+    },
+    {
+     "label": "plants: far pictures (imposters)",
+     "drawn": 1,
+     "instances": 248,
+     "trisDrawn": 496,
+     "fps": 46.9,
+     "ms": 21.34,
+     "cpu": 2.66
+    },
+    {
+     "label": "grass blades",
+     "drawn": 1,
+     "instances": 1751,
+     "trisDrawn": 78795,
+     "fps": 47.2,
+     "ms": 21.18,
+     "cpu": 2.78
+    },
+    {
+     "label": "animals",
+     "drawn": 2,
+     "instances": 259,
+     "trisDrawn": 204760,
+     "fps": 47.8,
+     "ms": 20.9,
+     "cpu": 2.84
+    },
+    {
+     "label": "nest mounds",
+     "drawn": 0
+    },
+    {
+     "label": "other [position,normal,uv]",
+     "drawn": 2,
+     "instances": 2,
+     "trisDrawn": 92,
+     "fps": 47,
+     "ms": 21.28,
+     "cpu": 3.03
+    },
+    {
+     "label": "other [position,normal,color,cloudCover,glow]",
+     "drawn": 0
+    },
+    {
+     "label": "other instanced [position,uv]",
+     "drawn": 1,
+     "instances": 3000,
+     "trisDrawn": 6000,
+     "fps": 46.7,
+     "ms": 21.41,
+     "cpu": 2.71
+    },
+    {
+     "label": "other instanced [position,normal]",
+     "drawn": 1,
+     "instances": 212,
+     "trisDrawn": 116176,
+     "fps": 48.6,
+     "ms": 20.56,
+     "cpu": 2.83
+    },
+    {
+     "label": "buildings",
+     "drawn": 13,
+     "instances": 2456,
+     "trisDrawn": 40322,
+     "fps": 45.4,
+     "ms": 22.04,
+     "cpu": 2.65
+    },
+    {
+     "label": "other [position,normal,uv,iDir,iData]",
+     "drawn": 0
+    },
+    {
+     "label": "other instanced [position,normal,dark,iDir,iQuat,iData]",
+     "drawn": 1,
+     "instances": 21,
+     "trisDrawn": 2646,
+     "fps": 48.4,
+     "ms": 20.67,
+     "cpu": 2.81
+    }
+   ],
+   "extra": [
+    {
+     "label": "effect off: taa",
+     "fps": 38.9,
+     "ms": 25.7,
+     "cpu": 2.17
+    },
+    {
+     "label": "effect off: ao",
+     "fps": 52,
+     "ms": 19.22,
+     "cpu": 2.99
+    },
+    {
+     "label": "effect off: bloom",
+     "fps": 50.2,
+     "ms": 19.93,
+     "cpu": 1.95
+    },
+    {
+     "label": "effect off: fringe",
+     "fps": 49.4,
+     "ms": 20.25,
+     "cpu": 2.27
+    },
+    {
+     "label": "all four effects off",
+     "fps": 44.4,
+     "ms": 22.52,
+     "cpu": 2.57
+    },
+    {
+     "label": "pixel ratio 0.75 (was 1.5)",
+     "fps": 120,
+     "ms": 8.34,
+     "cpu": 2.18
+    },
+    {
+     "label": "pixel ratio 1 (was 1.5)",
+     "fps": 89.1,
+     "ms": 11.23,
+     "cpu": 2.2
+    },
+    {
+     "label": "pixel ratio 2 (was 1.5)",
+     "fps": 29.6,
+     "ms": 33.84,
+     "cpu": 2.08
+    },
+    {
+     "label": "cloud steps 8 (was 18)",
+     "fps": 52.8,
+     "ms": 18.95,
+     "cpu": 2.77
+    },
+    {
+     "label": "cloud steps 12 (was 18)",
+     "fps": 49.6,
+     "ms": 20.17,
+     "cpu": 2.8
+    },
+    {
+     "label": "cloud steps 24 (was 18)",
+     "fps": 46,
+     "ms": 21.75,
+     "cpu": 2.86
+    },
+    {
+     "label": "cloud steps 32 (was 18)",
+     "fps": 45.2,
+     "ms": 22.14,
+     "cpu": 2.84
+    },
+    {
+     "label": "simulation running at 1x (was paused)",
+     "fps": 48.3,
+     "ms": 20.7,
+     "cpu": 2.58
+    },
+    {
+     "label": "simulation running at speed 3",
+     "fps": 48.3,
+     "ms": 20.7,
+     "cpu": 2.83
+    },
+    {
+     "label": "camera moving steadily",
+     "fps": 47.6,
+     "ms": 21.03,
+     "cpu": 3.29
+    }
+   ],
+   "state": {
+    "pr": 1.5,
+    "post": {
+     "taa": true,
+     "ao": true,
+     "bloom": true,
+     "fringe": true
+    },
+    "lum": 0.013,
+    "individuals": 259
+   }
+  },
+  {
+   "name": "forest ground with 256 sample animals added",
+   "view": {
+    "lon": -0.813,
+    "lat": -0.43,
+    "dist": 0.02,
+    "sun": 0.5,
+    "tilt": -0.5
+   },
+   "base0": {
+    "fps": 40.6,
+    "ms": 24.66,
+    "cpu": 2.03
+   },
+   "base1": {
+    "fps": 40.2,
+    "ms": 24.85,
+    "cpu": 2.6
+   },
+   "baseInfo": {
+    "calls": 117,
+    "tris": 4501373
+   },
+   "rows": [
+    {
+     "label": "clouds",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 720,
+     "fps": 41.3,
+     "ms": 24.23,
+     "cpu": 2.29
+    },
+    {
+     "label": "ocean",
+     "drawn": 1,
+     "instances": 351,
+     "trisDrawn": 898560,
+     "fps": 42.1,
+     "ms": 23.75,
+     "cpu": 2.74
+    },
+    {
+     "label": "terrain",
+     "drawn": 1,
+     "instances": 557,
+     "trisDrawn": 1425920,
+     "fps": 49.8,
+     "ms": 20.09,
+     "cpu": 3.03
+    },
+    {
+     "label": "atmosphere shell",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 980,
+     "fps": 42.7,
+     "ms": 23.44,
+     "cpu": 3.25
+    },
+    {
+     "label": "sky and stars",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 2976,
+     "fps": 42.6,
+     "ms": 23.45,
+     "cpu": 3.13
+    },
+    {
+     "label": "aurora",
+     "drawn": 1,
+     "instances": 1,
+     "trisDrawn": 720,
+     "fps": 42.6,
+     "ms": 23.49,
+     "cpu": 3.44
+    },
+    {
+     "label": "rain and snow",
+     "drawn": 0
+    },
+    {
+     "label": "moons",
+     "drawn": 2,
+     "instances": 2,
+     "trisDrawn": 1440,
+     "fps": 40.2,
+     "ms": 24.86,
+     "cpu": 3.33
+    },
+    {
+     "label": "rivers",
+     "drawn": 0
+    },
+    {
+     "label": "ring",
+     "drawn": 0
+    },
+    {
+     "label": "satellites",
+     "drawn": 1,
+     "instances": 40,
+     "trisDrawn": 80,
+     "fps": 39.6,
+     "ms": 25.24,
+     "cpu": 3.26
+    },
+    {
+     "label": "plants: near models",
+     "drawn": 4,
+     "instances": 410,
+     "trisDrawn": 329367,
+     "fps": 43.3,
+     "ms": 23.1,
+     "cpu": 3.1
+    },
+    {
+     "label": "plants: far pictures (imposters)",
+     "drawn": 1,
+     "instances": 331,
+     "trisDrawn": 662,
+     "fps": 39.6,
+     "ms": 25.23,
+     "cpu": 3.28
+    },
+    {
+     "label": "grass blades",
+     "drawn": 1,
+     "instances": 6000,
+     "trisDrawn": 270000,
+     "fps": 39.7,
+     "ms": 25.16,
+     "cpu": 3.14
+    },
+    {
+     "label": "animals",
+     "drawn": 7,
+     "instances": 244,
+     "trisDrawn": 521752,
+     "fps": 40.5,
+     "ms": 24.72,
+     "cpu": 3.16
+    },
+    {
+     "label": "nest mounds",
+     "drawn": 1,
+     "instances": 6,
+     "trisDrawn": 504,
+     "fps": 40.3,
+     "ms": 24.82,
+     "cpu": 3.26
+    },
+    {
+     "label": "other [position,normal,uv]",
+     "drawn": 2,
+     "instances": 2,
+     "trisDrawn": 92,
+     "fps": 39.3,
+     "ms": 25.47,
+     "cpu": 3.32
+    },
+    {
+     "label": "other [position,normal,color,cloudCover,glow]",
+     "drawn": 0
+    },
+    {
+     "label": "other instanced [position,uv]",
+     "drawn": 1,
+     "instances": 3000,
+     "trisDrawn": 6000,
+     "fps": 40,
+     "ms": 25.01,
+     "cpu": 3.21
+    },
+    {
+     "label": "other instanced [position,normal]",
+     "drawn": 1,
+     "instances": 212,
+     "trisDrawn": 116176,
+     "fps": 41.1,
+     "ms": 24.34,
+     "cpu": 3.01
+    },
+    {
+     "label": "buildings",
+     "drawn": 12,
+     "instances": 1657,
+     "trisDrawn": 28218,
+     "fps": 41.4,
+     "ms": 24.13,
+     "cpu": 3.05
+    },
+    {
+     "label": "other [position,normal,uv,iDir,iData]",
+     "drawn": 0
+    },
+    {
+     "label": "other instanced [position,normal,dark,iDir,iQuat,iData]",
+     "drawn": 1,
+     "instances": 10,
+     "trisDrawn": 1260,
+     "fps": 41.1,
+     "ms": 24.34,
+     "cpu": 3.32
+    }
+   ],
+   "extra": [
+    {
+     "label": "effect off: taa",
+     "fps": 32.8,
+     "ms": 30.45,
+     "cpu": 2.04
+    },
+    {
+     "label": "effect off: ao",
+     "fps": 44.7,
+     "ms": 22.38,
+     "cpu": 2.07
+    },
+    {
+     "label": "effect off: bloom",
+     "fps": 41.9,
+     "ms": 23.88,
+     "cpu": 2.5
+    },
+    {
+     "label": "effect off: fringe",
+     "fps": 40.9,
+     "ms": 24.46,
+     "cpu": 2.11
+    },
+    {
+     "label": "all four effects off",
+     "fps": 37.1,
+     "ms": 26.99,
+     "cpu": 2.15
+    },
+    {
+     "label": "pixel ratio 0.75 (was 1.5)",
+     "fps": 98.6,
+     "ms": 10.14,
+     "cpu": 2.26
+    },
+    {
+     "label": "pixel ratio 1 (was 1.5)",
+     "fps": 71.4,
+     "ms": 14,
+     "cpu": 2.75
+    },
+    {
+     "label": "pixel ratio 2 (was 1.5)",
+     "fps": 25.8,
+     "ms": 38.72,
+     "cpu": 2.4
+    },
+    {
+     "label": "cloud steps 8 (was 18)",
+     "fps": 42.7,
+     "ms": 23.39,
+     "cpu": 2.56
+    },
+    {
+     "label": "cloud steps 12 (was 18)",
+     "fps": 41.7,
+     "ms": 23.97,
+     "cpu": 3.15
+    },
+    {
+     "label": "cloud steps 24 (was 18)",
+     "fps": 38.1,
+     "ms": 26.23,
+     "cpu": 3.22
+    },
+    {
+     "label": "cloud steps 32 (was 18)",
+     "fps": 37.4,
+     "ms": 26.76,
+     "cpu": 3.38
+    },
+    {
+     "label": "simulation running at 1x (was paused)",
+     "fps": 41,
+     "ms": 24.39,
+     "cpu": 3.41
+    },
+    {
+     "label": "simulation running at speed 3",
+     "fps": 40.1,
+     "ms": 24.91,
+     "cpu": 3.14
+    },
+    {
+     "label": "camera moving steadily",
+     "fps": 39.9,
+     "ms": 25.04,
+     "cpu": 2.65
+    }
+   ],
+   "state": {
+    "pr": 1.5,
+    "post": {
+     "taa": true,
+     "ao": true,
+     "bloom": true,
+     "fringe": true
+    },
+    "lum": 0.264,
+    "individuals": 250
+   }
+  }
+ ],
+ "console": []
+}
