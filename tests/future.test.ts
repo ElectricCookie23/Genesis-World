@@ -13,7 +13,7 @@ const ofType = (sim: Simulation, type: string) => sim.events.events.filter((e) =
 const land = (sim: Simulation, skip = 0) => { let k = 0; for (let i = 0; i < sim.grid.count; i++) if (sim.world.elevation[i]! > sim.world.seaLevel + 0.1 && k++ === skip) return i; return 0; };
 const town = (sim: Simulation, species: number, cell: number, tech: number, name: string): Settlement => {
   const ev = sim.emit({ type: 'settlement', cellId: cell, title: `${name} is founded`, description: '', importance: 0, speciesIds: [species] });
-  const st = { id: sim.civ.settlements.length, name, cell, region: sim.regions.regionOf[cell]!, species, pop: 800, tech, founded: sim.simYear, belief: -1, eventId: ev.id, ruined: -1, painted: false, temple: false, farms: true, stars: true, nation: -1, head: '', modifier: '', relic: -1 } as Settlement;
+  const st = { id: sim.civ.settlements.length, name, cell, region: sim.regions.regionOf[cell]!, species, pop: 800, tech, founded: sim.simYear, lore: -1, eventId: ev.id, ruined: -1, painted: false, farms: true, stars: true, nation: -1, head: '', modifier: '', relic: -1 } as Settlement;
   sim.civ.settlements.push(st);
   return st;
 };
