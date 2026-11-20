@@ -89,3 +89,79 @@ describe('living city growth (E11)', () => {
     expect(townPlots(1e7, 1.2)).toBeLessThanOrEqual(MAX_PLOTS);
   });
 });
+
+import { CREW_YEARS, STAGES, buildingSites, stageOf, watchable } from '../src/render/gfx/cityplan';
+import { BUILDINGS, HEIGHT, buildBuilding } from '../src/render/gfx/buildings';
+
+describe('watch it being built (E12)', () => {
+  it('a building goes up from foundation to details, and the same date always shows the same work', () => {
+    const central = (i: number) => 1 - i / 200;
+    // one job of the house-building crew, watched a few days at a time (at 1x a day is a second)
+    const seed = 4242, plots = 60;
+    let year = 1000;
+    const start = buildingSites(seed, plots, year, central)[0]!;
+    // go to the beginning of its next job
+    while (buildingSites(seed, plots, year, central)[0]!.plot === start.plot) year += 0.001;
+    const job = buildingSites(seed, plots, year, central)[0]!;
+    expect(job.progress).toBeLessThan(0.02);
+    const seen: string[] = [];
+    let last = -1, steps = 0;
+    const step = CREW_YEARS[0]! / 40;
+    for (;; year += step, steps++) {
+      const now = buildingSites(seed, plots, year, central)[0]!;
+      if (now.plot !== job.plot) break;
+      expect(now.progress).toBeGreaterThan(last);
+      last = now.progress;
+      const stage = stageOf(now.progress);
+      if (seen[seen.length - 1] !== stage) seen.push(stage);
+      expect(steps).toBeLessThan(200);
+    }
+    // every stage in order, over the crew's span of years, and then the crew moves on
+    expect(seen).toEqual([...STAGES]);
+    expect(last).toBeGreaterThan(0.95);
+    expect(steps * step).toBeGreaterThan(CREW_YEARS[0]! * 0.9);
+    expect(steps * step).toBeLessThan(CREW_YEARS[0]! * 1.1);
+    expect(JSON.stringify(buildingSites(seed, plots, 1234.5, central))).toBe(JSON.stringify(buildingSites(seed, plots, 1234.5, central)));
+    // at a day a second every job can be watched; at a year a second only the long ones
+    const all = buildingSites(99, 300, 50, central);
+    expect(all.filter((j) => watchable(j, 1 / 365)).length).toBe(3);
+    expect(all.filter((j) => watchable(j, 1)).map((j) => j.crew)).toEqual([2]);
+    expect(all.filter((j) => watchable(j, 25)).length).toBe(0);
+    expect(JSON.stringify(buildingSites(seed + 1, plots, 1234.5, central))).not.toBe(JSON.stringify(buildingSites(seed, plots, 1234.5, central)));
+  });
+
+  it('a larger town has more crews, on different plots, and great works go up near the middle', () => {
+    const central = (i: number) => 1 - i / 300;
+    expect(buildingSites(7, 1, 500).length).toBe(0);
+    expect(buildingSites(7, 10, 500).length).toBe(1);
+    expect(buildingSites(7, 40, 500).length).toBe(2);
+    const plotsSeen = new Set<number>();
+    let middle = 0, jobs = 0;
+    for (let y = 0; y < 120; y += 0.37) {
+      const sites = buildingSites(99, 300, y, central);
+      expect(sites.length).toBe(3);
+      expect(new Set(sites.map((s) => s.plot)).size).toBe(3);
+      for (const s of sites) { expect(s.plot).toBeGreaterThanOrEqual(0); expect(s.plot).toBeLessThan(300); expect(s.progress).toBeGreaterThanOrEqual(0); expect(s.progress).toBeLessThan(1); expect(s.years).toBe(CREW_YEARS[s.crew]); plotsSeen.add(s.plot); }
+      const great = sites.find((s) => s.crew === 2)!;
+      jobs++; if (central(great.plot) >= 0.5) middle++;
+    }
+    // the work moves about the town, and much of it is at the growing edge
+    expect(plotsSeen.size).toBeGreaterThan(60);
+    expect([...plotsSeen].filter((p) => p >= 270).length).toBeGreaterThanOrEqual(25);
+    expect(middle / jobs).toBeGreaterThan(0.9);
+  });
+
+  it('there is scaffolding, a crane for each age and builders to draw, and a height for everything that rises', () => {
+    for (const kind of ['scaffold', 'hoist', 'crane', 'worker'] as const) {
+      expect(BUILDINGS).toContain(kind);
+      const g = buildBuilding(kind);
+      expect(g.getAttribute('position').count).toBeGreaterThan(20);
+    }
+    // the tower crane stands taller than the timber one, and both taller than a house
+    const top = (kind: (typeof BUILDINGS)[number]) => { const g = buildBuilding(kind); g.computeBoundingBox(); return g.boundingBox!.max.y; };
+    expect(top('crane')).toBeGreaterThan(top('hoist'));
+    expect(top('hoist')).toBeGreaterThan(top('house'));
+    // the heights the scaffolding reaches are the heights of the models
+    for (const kind of ['hut', 'house', 'hall', 'tower', 'dome', 'spire', 'temple'] as const) expect(Math.abs(top(kind) - HEIGHT[kind]!)).toBeLessThan(0.12);
+  });
+});

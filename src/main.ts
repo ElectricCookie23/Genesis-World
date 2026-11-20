@@ -248,6 +248,7 @@ async function boot(): Promise<void> {
   scene.onNations = (nations) => update({ nations });
   actions.project = (x, y, z) => scene.projectDir(x, y, z);
   actions.disc = () => scene.discOnScreen();
+  actions.construction = (id) => scene.construction(id);
   actions.cellDir = (cell) => { const p = grid.pos; return [p[cell * 3]!, p[cell * 3 + 1]!, p[cell * 3 + 2]!]; };
   actions.timelapse = (id, cell) => { actions.flyToCell(cell, 0.045); update({ panel: 'none' }); window.setTimeout(() => scene.timelapse(id), 1800); };
   actions.openDynasty = (id) => { update({ panel: 'dynasty', dynastyDetail: state.dynastyDetail?.id === id ? state.dynastyDetail : null }); send({ type: 'requestDynasty', id }); };
