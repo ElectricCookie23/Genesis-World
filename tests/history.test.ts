@@ -783,3 +783,68 @@ describe('dynasties and succession (E7)', () => {
     expect(layoutHouse([]).nodes.length).toBe(0);
   });
 });
+
+import { calendarName, dateIn, localYear } from '../src/sim/history/calendar';
+
+describe('calendars (E8)', () => {
+  it('a date is counted from Year 1, and backwards before it', () => {
+    const cal = { name: 'the Falling Light', epoch: 3104471.4 };
+    expect(localYear(cal, 3104471.9)).toBe(1);
+    expect(localYear(cal, 3104882)).toBe(412);
+    expect(dateIn(cal, 3104882)).toBe('Year 412 of the Falling Light');
+    expect(dateIn(cal, 3104470)).toBe('1 year before the Falling Light');
+    expect(dateIn(cal, 3104441)).toBe('30 years before the Falling Light');
+    // a count is named for what it remembers
+    expect(calendarName('founding', 1, 'dawn', '')[0]).toBe('the First Fields');
+    expect(calendarName('founding', 1, 'sea', '')[0]).toBe('the Landing');
+    expect(calendarName('founding', 1, 'successor', 'Old Country')[0]).toBe('the Fall of Old Country');
+    expect(calendarName('crown', 1, '', 'House of Atlei')[0]).toBe('the House of Atlei');
+    expect(calendarName('prophet', 1, '', 'Feipa')[0]).toBe('the Teaching of Feipa');
+    expect(calendarName('disaster', 1, 'eruption The mountain opens', '')[0]).toBe('the Ash');
+    expect(calendarName('comet', 5, '', '')).toEqual(calendarName('comet', 5, '', ''));
+  });
+
+  it('every nation keeps a count of years tied to a real event in the cause graph', () => {
+    const runs = fiveHistories();
+    let reformed = 0, shared = 0, sky = 0, nations = 0;
+    for (const r of runs) {
+      const h = r.sim.civ.h, ev = r.sim.events.events;
+      const cals = h.calendars ?? [];
+      for (const n of h.nations) {
+        nations++;
+        const cal = r.sim.civ.calendarOf(n);
+        expect(cal, `${r.seed}: ${n.name} keeps no count`).toBeDefined();
+        const tied = ev[cal!.eventId];
+        expect(tied, `${r.seed}: the count of ${n.name} is tied to nothing`).toBeDefined();
+        // Year 1 is the year of that event, and the count was not set before the event happened
+        expect(Math.abs(tied!.simYear - cal!.epoch)).toBeLessThan(2);
+        expect(cal!.set).toBeGreaterThanOrEqual(cal!.epoch);
+        expect(cal!.name).toMatch(/^the /);
+        expect(cal!.own.length).toBeGreaterThan(2);
+        if (n.ended < 0) expect(r.sim.civ.dateFor(n, r.sim.simYear)).toMatch(/^Year [\d,]+ of the /);
+        if (cal!.nation !== n.id) shared++;
+      }
+      for (const c of cals) {
+        if (c.kind !== 'founding') reformed++;
+        if (c.kind === 'comet' || c.kind === 'eclipse') { sky++; expect(ev[c.eventId]!.type).toBe(c.kind); }
+        // two counts never share a name unless they count from the same year
+        for (const o of cals) if (o.id < c.id && o.name === c.name) expect(Math.floor(o.epoch)).toBe(Math.floor(c.epoch));
+      }
+      // a reform is announced, names the count and says what today's date is by it
+      for (const e of ev.filter((x) => x.type === 'calendar')) {
+        const c = cals[Number(e.data!.calendar)]!;
+        expect(e.description).toContain(c.name);
+        expect(e.description).toContain(c.own);
+        expect(e.causes).toContain(c.eventId);
+      }
+      // the small comet keeps its appointments
+      const returns = ev.filter((x) => x.title === 'The Visitor returns');
+      for (let i = 1; i < returns.length; i++) expect((returns[i]!.simYear - returns[i - 1]!.simYear) % h.visitor!.period).toBeLessThan(1.5);
+    }
+    expect(nations).toBeGreaterThan(20);
+    expect(reformed).toBeGreaterThan(5);
+    expect(sky).toBeGreaterThan(0);
+    // settlers and successors mostly keep the count they were born under
+    expect(shared).toBeGreaterThan(0);
+  }, 900000);
+});

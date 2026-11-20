@@ -151,3 +151,25 @@ describe('saving and loading', () => {
     expect(b.creatures.livingSpecies).toBe(a.creatures.livingSpecies);
   }, 120000);
 });
+
+import { saveSimulation as saveWorld, loadSimulation as loadWorld } from '../src/sim/snapshot';
+import { Simulation as World } from '../src/sim/simulation';
+
+describe('saves keep records made after the world began', () => {
+  it('a nested record that a fresh world does not have is rebuilt on load', () => {
+    const a = new World('amber-reef-101', 9);
+    a.step(15000);
+    // the history keeps optional records (the small comet's schedule, the latest sign in the sky) that only exist once made
+    a.civ.h.visitor = { period: 77, next: 1234, last: 5 };
+    a.civ.h.sign = { eventId: 5, year: 1200, kind: 'comet' };
+    a.civ.h.peace = 4321;
+    const b = new World('amber-reef-101', 9);
+    loadWorld(b, saveWorld(a, 't'));
+    expect(b.civ.h.visitor).toEqual({ period: 77, next: 1234, last: 5 });
+    expect(b.civ.h.sign).toEqual({ eventId: 5, year: 1200, kind: 'comet' });
+    expect(b.civ.h.peace).toBe(4321);
+    // and the copy is its own: changing it does not change the original
+    b.civ.h.visitor!.next = 1;
+    expect(a.civ.h.visitor!.next).toBe(1234);
+  });
+});

@@ -1,5 +1,6 @@
 // The entities of history. All of them are plain data, so the whole of history saves, loads and
 // rewinds with the rest of the simulation.
+import type { Calendar } from './calendar';
 import type { Language } from './language';
 import type { Knowledge, Land } from './tech';
 
@@ -132,6 +133,8 @@ export interface Nation {
   fatigue: number;
   /** Recent blows to the nation (wars, plagues, disasters, a fallen house), newest last: what a collapse is blamed on. */
   woes: { kind: string; eventId: number; year: number }[];
+  /** The count of years it keeps (an index into the history's calendars). */
+  calendar?: number;
   /** Every nation this one has ever met. */
   met?: number[];
   /** Nations it will not fight while a marriage between the ruling houses is remembered. */
@@ -162,6 +165,14 @@ export interface HistoryState {
   peacePop?: number;
   /** The year the leading nation reached the top of knowledge, or -1. */
   topSince?: number;
+  /** The counts of years peoples have kept (system E8). */
+  calendars?: Calendar[];
+  /** The first event of this history: the last resort for what a count of years is tied to. */
+  dawnEvent?: number;
+  /** The small comet of the human clock: how often it returns, when it is next due, and the event of its last return. */
+  visitor?: { period: number; next: number; last: number };
+  /** The latest sight in the sky anyone recorded: its event, its year and its kind. */
+  sign?: { eventId: number; year: number; kind: 'comet' | 'eclipse' };
   /** The year of the last war fought with the weapons of the Age of Orbit, if there has been one. */
   lastWar?: number;
   /** The year history resumed after a broken peace, or -1. */

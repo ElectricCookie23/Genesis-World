@@ -4,10 +4,19 @@ import { CreatureSketch } from './sketch';
 import { ART_NAMES, Portrait, artStyle } from './portrait';
 import { G, GENE_NAMES } from '../sim/genetics';
 import type { SimEvent } from '../sim/events';
-import type { PersonInfo, SpeciesInfo } from '../shared/protocol';
+import type { NationInfo, PersonInfo, SpeciesInfo } from '../shared/protocol';
+import { dateIn } from '../sim/history/calendar';
 import { actions, state, update, useStore, type Relative, type UIState } from './store';
 import { bigNumber, eventColor, eventGlyph, formatYear, hsl, metres, shortYear } from './format';
 import css from './ui.module.css';
+
+/** The date of an event in the count of years of the nation it belongs to, when the page knows that nation (system E8). */
+function localDate(realms: NationInfo[], e: SimEvent): string {
+  const id = e.data?.nation;
+  if (typeof id !== 'number') return '';
+  const r = realms.find((x) => x.id === id);
+  return r && r.calendar ? dateIn({ name: r.calendar, epoch: r.calendarEpoch }, e.simYear) : '';
+}
 
 /** A number that glides to its new value. */
 export function Num({ value, format }: { value: number; format: (n: number) => string }) {
@@ -46,7 +55,7 @@ export function Chronicle() {
           return (
             <button class={css.entry} key={id} onClick={() => update({ whyEvent: id })} style={{ color: eventColor(e.type) }}>
               <i class={css.dot} />
-              <div class={css.when} style={{ color: '#ece7db' }}>{formatYear(e.simYear)}</div>
+              <div class={css.when} style={{ color: '#ece7db' }}>{formatYear(e.simYear)}{(() => { const own = localDate(s.realms, e); return own ? ` · ${own}` : ''; })()}</div>
               <div class={`${css.what} ${e.importance >= 3 ? css.big : ''}`} style={{ color: '#ece7db' }}>{e.importance >= 3 ? e.title : e.description}</div>
             </button>
           );
@@ -88,7 +97,7 @@ export function Why() {
             <div class={css.step} key={e.id} style={{ color: eventColor(e.type) }}>
               <div class={css.thumb}>{eventGlyph(e.type)}</div>
               <div style={{ color: '#ece7db' }}>
-                <div class={css.when}>{formatYear(e.simYear)}</div>
+                <div class={css.when}>{formatYear(e.simYear)}{(() => { const own = localDate(s.realms, e); return own ? ` · ${own}` : ''; })()}</div>
                 <h3>{e.title}</h3>
                 <p>{e.description}</p>
                 {e.cellId >= 0 && <button class={css.link} onClick={() => actions.flyToCell(e.cellId)}>show place</button>}
@@ -656,7 +665,7 @@ export function NationPanel() {
         {!d && <p class={css.sub}>Asking the archives.</p>}
         {d && realm && (
           <p class={css.sub} style={{ margin: '0 0 8px' }}>
-            {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}){realm.ended >= 0 ? ' (the nation is gone)' : ''}. {d.tech.filter((t) => t.state === 1).length} of {d.tech.filter((t) => t.state !== 2).length} things its land allows are known.
+            {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}){realm.ended >= 0 ? ' (the nation is gone)' : ''}. {realm.calendar && realm.ended < 0 ? `${dateIn({ name: realm.calendar, epoch: realm.calendarEpoch }, year)} (sim year ${Math.floor(year).toLocaleString('en-US')}). ` : ''}{d.tech.filter((t) => t.state === 1).length} of {d.tech.filter((t) => t.state !== 2).length} things its land allows are known.
             {' '}Its land offers {d.land.length ? d.land.join(', ') : 'little'}{d.land.includes('ore') ? '' : '; no ore, so no metal'}.
           </p>
         )}
@@ -744,14 +753,14 @@ export function Peoples() {
                   const year = s.stats?.simYear ?? 0;
                   return (
                     <div class={css.when} style={{ color: '#a9a498' }}>
-                      {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}). {realm.ruler ? `${realm.ruler} of the ${realm.house} has ruled ${Math.max(1, Math.round(year - realm.rulerSince)).toLocaleString('en-US')} ${Math.round(year - realm.rulerSince) === 1 ? 'year' : 'years'} (${realm.houseReigns} ${realm.houseReigns === 1 ? 'reign' : 'reigns'} of that house).` : 'It lives by custom and keeps no list of rulers.'} Founded {Math.round(year - realm.founded).toLocaleString('en-US')} years ago. They speak {realm.language}.
+                      {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}). {realm.ruler ? `${realm.ruler} of the ${realm.house} has ruled ${Math.max(1, Math.round(year - realm.rulerSince)).toLocaleString('en-US')} ${Math.round(year - realm.rulerSince) === 1 ? 'year' : 'years'} (${realm.houseReigns} ${realm.houseReigns === 1 ? 'reign' : 'reigns'} of that house).` : 'It lives by custom and keeps no list of rulers.'} Founded {Math.round(year - realm.founded).toLocaleString('en-US')} years ago. They speak {realm.language}.{realm.calendar ? ` By their count it is ${dateIn({ name: realm.calendar, epoch: realm.calendarEpoch }, year)}, or ${realm.calendarOwn} in their own tongue (sim year ${Math.floor(year).toLocaleString('en-US')}).` : ''}
                     </div>
                   );
                 })()}
               </div>
               <span style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
                 {cap && <button class={css.link} style={{ marginRight: 0 }} onClick={() => { actions.setOverlay('nations'); actions.flyToCell(cap.cell, 1.2); }}>map</button>}
-                {(() => { const realm = s.realms.find((r) => r.ended < 0 && r.capital === n.capital) ?? s.realms.find((r) => r.ended < 0 && r.name === n.name); return realm ? <><button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.id)}>knowledge</button>{realm.houseId >= 0 && realm.ruler && <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openDynasty(realm.houseId)}>family tree</button>}</> : null; })()}
+                {(() => { const realm = s.realms.find((r) => r.ended < 0 && r.capital === n.capital) ?? s.realms.find((r) => r.ended < 0 && r.name === n.name); return realm ? <><button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.id)}>knowledge</button>{realm.houseId >= 0 && realm.ruler && <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openDynasty(realm.houseId)}>family tree</button>}{realm.calendarEvent >= 0 && s.events[realm.calendarEvent] && <button class={css.link} style={{ marginRight: 0 }} title="The event their years are counted from" onClick={() => update({ whyEvent: realm.calendarEvent })}>year one</button>}</> : null; })()}
               </span>
             </div>
           );

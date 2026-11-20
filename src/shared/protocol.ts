@@ -148,6 +148,8 @@ export interface NationInfo {
   ruler: string; rulerSince: number; house: string; houseReigns: number;
   /** Id of the ruling house, or -1. */
   houseId: number;
+  /** Its count of years (system E8): what Year 1 remembers, the same in its own tongue, the sim year that is Year 1, and the event it is tied to. */
+  calendar: string; calendarOwn: string; calendarEpoch: number; calendarEvent: number;
   eventId: number;
 }
 

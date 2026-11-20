@@ -34,6 +34,8 @@ function restore(target: object, data: Plain): void {
     const cur = (target as Plain)[key];
     if (v !== null && typeof v === 'object' && '__nested' in (v as Plain)) {
       if (cur && typeof cur === 'object') restore(cur, (v as { __nested: Plain }).__nested);
+      // (a record that a fresh world does not have yet, such as one made later in a history, is built here)
+      else { const made: Plain = {}; restore(made, (v as { __nested: Plain }).__nested); (target as Plain)[key] = made; }
     } else if (isTyped(v) && isTyped(cur) && cur.length === v.length) (cur as Float32Array).set(v);
     else (target as Plain)[key] = v;
   }
