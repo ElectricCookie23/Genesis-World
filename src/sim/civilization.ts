@@ -70,6 +70,9 @@ const sat = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
 /** How far from its capital a nation of each era can hold a town, counted in regions (the spacing of neighbouring towns). */
 const REACH = [2.5, 3.5, 4.5, 6, 10, 14, 22, 45, 99, 99];
 
+/** How many towns a nation of each era can govern before its size itself begins to pull it apart. */
+const GOVERNABLE = [3, 5, 8, 14, 24, 40, 70, 120, 200, 300];
+
 /** Size class of a settlement from its level of knowledge: 0 camp, 1 village, 2 town, 3 city, 4 great city. */
 export function sizeClass(tech: number): number {
   return tech >= 0.9 ? 4 : tech >= 0.6 ? 3 : tech >= 0.45 ? 2 : tech >= 0.3 ? 1 : 0;
@@ -235,7 +238,8 @@ export class Civilization {
         const span = this.lifespan(sim, n.species);
         const age = year - ruler.born;
         const hazard = 0.006 * Math.exp((age - 0.55 * span) / (0.14 * span));
-        if (rng.chance(1 - Math.exp(-hazard * y))) this.succession(sim, rng, n, year, age > span * 0.75 ? 'died of old age' : rng.pick(['died of a fever', 'died in a fall', 'died after a short illness', 'was killed hunting', 'died in the night']));
+        if (rng.chance(1 - Math.exp(-hazard * y))) this.succession(sim, rng, n, towns, year, age > span * 0.75 ? 'died of old age' : rng.pick(['died of a fever', 'died in a fall', 'died after a short illness', 'was killed hunting', 'died in the night']));
+        else if (this.fine && (ruler.spouse ?? -1) < 0 && n.contacts.length && rng.chance(1 - Math.exp(-y * 0.006))) this.marry(sim, rng, n, year);
       }
       // ---- knowledge: more people, clever people and neighbours to learn from all speed it; so does what is already known
       const reach = Math.min(4, towns.length - 1) * 0.08;
@@ -346,6 +350,8 @@ export class Civilization {
         if (oid === undefined) continue;
         const o = this.settlements[oid]!;
         if (o.nation === st.nation && o.species === st.species) continue;
+        // a marriage between the ruling houses keeps the peace while it is remembered (system E7)
+        if (this.allied(n, o.nation, year)) continue;
         if (o.species === st.species && (o.belief === st.belief || o.belief < 0 || st.belief < 0) && !rng.chance(0.35)) continue;
         st.pop *= 0.7; o.pop *= 0.65; st.tech = Math.max(0.03, st.tech - 0.02); o.tech = Math.max(0.03, o.tech - 0.02);
         n.fatigue = sat(n.fatigue + 0.22);
@@ -489,7 +495,7 @@ export class Civilization {
     const p: Person = {
       id: h.people.length, name: personName(this.languageOf(n), hash32(this.seedNum, h.people.length, 0x9e0)), role, nation: n.id, culture: n.culture,
       born: year - age, died: -1, dynasty, parent, bold: lean(elder?.bold), wise: lean(elder?.wise), cruel: lean(elder?.cruel), pious: lean(elder?.pious),
-      events: [], fate: '', reignFrom: role === 'ruler' ? year : -1, reignTo: -1, patron: role === 'ruler' || role === 'founder' ? -1 : n.ruler, rival: -1, rose: year, era: n.era,
+      events: [], fate: '', reignFrom: role === 'ruler' ? year : -1, reignTo: -1, patron: role === 'ruler' || role === 'founder' ? -1 : n.ruler, rival: -1, rose: year, era: n.era, gen: elder ? (elder.gen ?? 0) + 1 : 0, spouse: -1,
     };
     h.people.push(p);
     if (role !== 'ruler' && role !== 'founder') h.notables.push(p.id);
@@ -498,7 +504,7 @@ export class Civilization {
 
   private dynasty(n: Nation, founder: Person, year: number): Dynasty {
     const h = this.h;
-    const d: Dynasty = { id: h.dynasties.length, name: `House of ${founder.name}`, nation: n.id, founder: founder.id, founded: year, ended: -1, rulers: [founder.id], reigns: 1 };
+    const d: Dynasty = { id: h.dynasties.length, name: `House of ${founder.name}`, nation: n.id, founder: founder.id, founded: year, ended: -1, rulers: [founder.id], reigns: 1, generations: 1 };
     h.dynasties.push(d);
     founder.dynasty = d.id;
     return d;
@@ -589,6 +595,8 @@ export class Civilization {
         : p.role === 'prophet' ? (old ? 'died old, surrounded by followers' : rng.pick(['was stoned by a crowd', 'walked into the hills and was not seen again', 'died fasting']))
         : p.role === 'explorer' ? (old ? 'died at home, still talking of the sea' : rng.pick(['was lost with all hands', 'died of a fever far from home', 'never came back']))
         : p.role === 'artist' ? (old ? 'died old and famous' : rng.pick(['died poor', 'died young, with the great work unfinished', 'drank to death']))
+        : p.role === 'consort' ? (old ? 'died old at court' : rng.pick(['died of a fever', 'died young, far from home', 'died in the same year as the wedding feast was remembered']))
+        : p.role === 'claimant' ? (old ? 'died old, never crowned' : rng.pick(['died in exile', 'was killed by order of the crown', 'died a prisoner']))
         : old ? 'died old, still at work' : rng.pick(['died of a fever', 'died in an accident in the workshop', 'died in the night']);
       h.notables.splice(k, 1);
     }
@@ -624,7 +632,8 @@ export class Civilization {
     const hunger = sat((crowd / towns.length - 0.97) * 5);
     const split = towns.length > 1 ? 1 - Math.max(...faiths.values()) / towns.length : 0;
     const overreach = far / towns.length;
-    const size = Math.log2(1 + towns.length) / 7;
+    // (a country can be inherited or conquered into a size its age has no means to govern: system E7 makes such unions)
+    const size = Math.log2(1 + towns.length) / 7 + 1.2 * sat(towns.length / GOVERNABLE[n.era]! - 1);
     n.inequality = sat(n.inequality + y * 0.00045 * (0.4 + n.tech) * (1 - n.inequality));
     n.fatigue *= Math.exp(-y / 40);
     const house = h.dynasties[n.dynasty], ruler = h.people[n.ruler];
@@ -1091,37 +1100,206 @@ export class Civilization {
         const cap = this.settlements[n.capital]!;
         sim.emit({ type: 'dynasty', year, cellId: cap.cell, title: `A new house in ${n.name}`, description: `The ${house.name} is over after ${old} reigns. ${ruler.name} holds ${cap.name} now.`, causes: [n.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [n.species], data: { nation: n.id } });
       }
-      house.name = `House of ${ruler.name}`; house.founded = year; house.reigns = 1; house.rulers = [ruler.id]; house.founder = ruler.id;
-    } else house.reigns += reigns;
+      house.name = `House of ${ruler.name}`; house.founded = year; house.reigns = 1; house.generations = 1; house.rulers = [ruler.id]; house.founder = ruler.id;
+    } else { house.reigns += reigns; house.generations = (house.generations ?? 1) + Math.round(reigns * 0.8); }
   }
 
-  /** The ruler is gone: an heir of the house follows, or the house falls and another takes its place. */
-  private succession(sim: Simulation, rng: RNG, n: Nation, year: number, fate: string): void {
+  /** True while a marriage between the ruling houses keeps nation `n` from fighting nation `other`. */
+  private allied(n: Nation, other: number, year: number): boolean {
+    if (!n.allies || other < 0) return false;
+    for (const a of n.allies) if (a.nation === other && a.until > year) return true;
+    return false;
+  }
+
+  /**
+   * The ruler marries into the ruling house of a country they are in touch with (system E7). While the
+   * match is remembered the two countries do not fight, and a child of it has a claim on the other throne.
+   */
+  private marry(sim: Simulation, rng: RNG, n: Nation, year: number): void {
+    const h = this.h;
+    const ruler = h.people[n.ruler];
+    if (!ruler) return;
+    const open = n.contacts.map((id) => h.nations[id]!).filter((o) => o && o.ended < 0 && o.species === n.species && h.dynasties[o.dynasty] && h.dynasties[o.dynasty]!.ended < 0 && o.dynasty !== n.dynasty && !this.allied(n, o.id, year));
+    if (!open.length) return;
+    const other = rng.pick(open);
+    const theirs = h.dynasties[other.dynasty]!, head = h.people[other.ruler];
+    const span = this.lifespan(sim, n.species);
+    const consort = this.person(rng, n, 'consort', year, Math.max(span * 0.18, Math.min(span * 0.5, year - ruler.born - span * 0.05 + rng.next() * span * 0.1)), -1, theirs.id);
+    consort.name = personName(this.languageOf(other), hash32(this.seedNum, consort.id, 0x9e2));
+    consort.gen = head ? (head.gen ?? 0) + 1 : 0;
+    consort.spouse = ruler.id; ruler.spouse = consort.id; ruler.match = other.id;
+    const until = year + 60 + rng.next() * 60;
+    const cap = this.settlements[n.capital]!;
+    const ev = sim.emit({
+      type: 'marriage', year, cellId: cap.cell, title: `${n.name} and ${other.name} joined by marriage`,
+      description: `${ruler.name} of ${n.name} weds ${consort.name} of the ${theirs.name}, which rules ${other.name}. While the match is remembered the two countries will not fight, and a child of it may one day claim both.`,
+      causes: [n.eventId, other.eventId].filter((x) => x >= 0), importance: n.towns >= 6 && other.towns >= 6 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, other: other.id, person: consort.id },
+    });
+    consort.events.push(ev.id); ruler.events.push(ev.id);
+    (n.allies ??= []).push({ nation: other.id, until, eventId: ev.id });
+    (other.allies ??= []).push({ nation: n.id, until, eventId: ev.id });
+    for (const x of [n, other]) if (x.allies!.length > 6) x.allies!.shift();
+    n.stability = sat(n.stability + 0.03);
+  }
+
+  /**
+   * The ruler is gone (system E7). A grown child follows if there is one, and a second child may dispute
+   * it, which in an unsteady country means civil war. With no child a brother or sister may follow; failing
+   * that a ruler abroad with a claim by marriage takes the throne for their own house; failing that the
+   * house is over and another family takes its place.
+   */
+  private succession(sim: Simulation, rng: RNG, n: Nation, towns: Settlement[], year: number, fate: string): void {
     const h = this.h;
     const old = h.people[n.ruler]!;
     old.died = year; old.reignTo = year; old.fate = fate;
     const span = this.lifespan(sim, n.species);
     const house = h.dynasties[n.dynasty];
-    // an heir is likelier in a steady realm
-    if (house && rng.chance(0.84 + 0.14 * n.stability)) {
-      const next = this.person(rng, n, 'ruler', year, span * (0.25 + rng.next() * 0.3), old.id, house.id);
-      house.rulers.push(next.id);
-      house.reigns++;
+    const cap = this.settlements[n.capital]!;
+    const age = year - old.born;
+    // how many of the ruler's children are grown: more for one who lived long, and for one who married
+    const wed = (old.spouse ?? -1) >= 0 ? 0.06 : 0;
+    const kids = !house ? 0 : age > 0.45 * span ? (rng.chance(0.9 + wed) ? 1 + rng.int(3) : 0) : age > 0.32 * span ? (rng.chance(0.62 + wed) ? 1 + rng.int(2) : 0) : rng.chance(0.2 + wed) ? 1 : 0;
+    const crown = (next: Person, line: Dynasty): void => {
+      line.rulers.push(next.id); line.reigns++;
+      const first = h.people[line.founder];
+      line.generations = Math.max(line.generations ?? 1, (next.gen ?? 0) - (first ? first.gen ?? 0 : 0) + 1);
       n.ruler = next.id;
+    };
+    // the great families will not always follow the heir: likelier in an unsteady country, and for a house still new
+    const refused = !!house && rng.chance(0.03 + 0.16 * (1 - n.stability) + (house.reigns < 3 ? 0.05 : 0));
+    if (house && kids > 0 && !refused) {
+      // a usurper: in a country coming apart, a general on record may set the heir aside
+      const general = n.stability < 0.3 && rng.chance(0.3) ? h.notables.map((id) => h.people[id]!).find((p) => p.role === 'general' && p.nation === n.id && p.died < 0) : undefined;
+      if (general) {
+        house.ended = year;
+        h.notables.splice(h.notables.indexOf(general.id), 1);
+        general.role = 'ruler'; general.reignFrom = year; general.patron = -1; general.gen = 0;
+        const line = this.dynasty(n, general, year);
+        n.ruler = general.id; n.dynasty = line.id;
+        const ev = sim.emit({
+          type: 'dynasty', year, cellId: cap.cell, title: `A general takes ${n.name}`,
+          description: `${old.name} ${fate}. The heir was a child of the ${house.name}; the army was ${general.name}'s. ${general.name} holds ${cap.name} now, and the ${house.name} is over after ${house.reigns} ${house.reigns === 1 ? 'reign' : 'reigns'}.`,
+          causes: [n.eventId, general.events[0] ?? -1].filter((x) => x >= 0), importance: house.reigns >= 8 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, person: general.id },
+        });
+        general.events.push(ev.id); old.events.push(ev.id);
+        this.woe(n, 'succession', ev.id, year, 0.12);
+        return;
+      }
+      const heir = this.person(rng, n, 'ruler', year, Math.max(span * 0.16, Math.min(span * 0.5, age - span * (0.22 + rng.next() * 0.1))), old.id, house.id);
+      // a claim comes from a parent's marriage, or is handed down
+      heir.claim = (old.match ?? -1) >= 0 ? old.match : old.claim ?? -1;
+      crown(heir, house);
+      // a disputed succession: likelier in an unsteady country
+      if (kids > 1 && rng.chance(0.04 + 0.2 * (1 - n.stability))) {
+        const rivalAge = Math.max(span * 0.14, (year - heir.born) - span * (0.02 + rng.next() * 0.06));
+        const claimant = this.person(rng, n, 'claimant', year, rivalAge, old.id, house.id);
+        claimant.rival = heir.id; heir.rival = claimant.id;
+        const war = towns.length >= 5 && rng.chance(0.1 + 0.5 * (1 - n.stability));
+        const ev = sim.emit({
+          type: war ? 'civil-war' : 'dynasty', year, cellId: cap.cell, title: war ? `Civil war in ${n.name}` : `Disputed succession in ${n.name}`,
+          description: `${old.name} ${fate}, and two children of the ${house.name} both claim ${cap.name}. ${heir.name} is crowned there.`,
+          causes: [n.eventId].filter((x) => x >= 0), importance: war ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, person: claimant.id },
+        });
+        claimant.events.push(ev.id); heir.events.push(ev.id); old.events.push(ev.id);
+        if (war) this.successionWar(sim, rng, n, towns, year, heir, claimant, ev.id);
+        else {
+          const end = rng.pick(['flees over the border and is not heard of again', 'is shut up in a temple for life', 'dies in the fighting at the gate', 'is bought off with a province to govern']);
+          const ev2 = sim.events.events[ev.id]!;
+          ev2.description += ` ${claimant.name} ${end}.`;
+          if (!end.startsWith('is bought')) { claimant.died = end.startsWith('dies') ? year : -1; if (claimant.died >= 0) { claimant.fate = 'died fighting for the throne'; h.notables.splice(h.notables.indexOf(claimant.id), 1); } }
+          this.woe(n, 'succession', ev.id, year, 0.07);
+        }
+      }
+      return;
+    }
+    // no child: a brother or sister of the dead ruler
+    if (house && !refused && rng.chance(0.45)) {
+      const kin = this.person(rng, n, 'ruler', year, Math.max(span * 0.25, age - span * rng.next() * 0.12), old.parent, house.id);
+      kin.gen = old.gen ?? 0;
+      crown(kin, house);
+      return;
+    }
+    // a claim by marriage: a ruler abroad whose parent married into this house
+    const claimer = house ? h.nations.map((x) => (x.ended < 0 && x.id !== n.id ? h.people[x.ruler] : undefined)).find((p) => p && p.died < 0 && p.claim === n.id) : undefined;
+    if (house && claimer) {
+      const theirs = h.dynasties[claimer.dynasty]!, abroad = h.nations[claimer.nation]!;
+      house.ended = year;
+      const next = this.person(rng, n, 'ruler', year, Math.max(span * 0.16, (year - claimer.born) - span * (0.22 + rng.next() * 0.1)), claimer.id, theirs.id);
+      const line = this.dynasty(n, next, year);
+      line.name = theirs.name; line.branchOf = theirs.id;
+      n.ruler = next.id; n.dynasty = line.id;
+      claimer.claim = -1;
+      // where the two countries lie close enough for one court to hold both, they become one
+      const seat = this.settlements[abroad.capital];
+      if (seat && rng.chance(0.7)) {
+        const gp = sim.grid.pos;
+        const cos = gp[seat.cell * 3]! * gp[cap.cell * 3]! + gp[seat.cell * 3 + 1]! * gp[cap.cell * 3 + 1]! + gp[seat.cell * 3 + 2]! * gp[cap.cell * 3 + 2]!;
+        if (Math.acos(Math.max(-1, Math.min(1, cos))) < 1.5 * REACH[abroad.era]! * Math.sqrt((4 * Math.PI) / sim.regions.count)) {
+          const ev = sim.emit({
+            type: 'union', year, cellId: cap.cell, title: `${n.name} is joined to ${abroad.name}`,
+            description: `${old.name} ${fate} and left no heir. By an old marriage the claim falls to ${claimer.name} of the ${theirs.name}, and ${n.name} with its ${towns.length} ${towns.length === 1 ? 'town' : 'towns'} becomes part of ${abroad.name}. No battle was fought for it.`,
+            causes: [n.eventId, abroad.eventId].filter((x) => x >= 0), importance: towns.length + abroad.towns >= 8 ? 2 : 1, speciesIds: [n.species], data: { nation: abroad.id, other: n.id, person: claimer.id },
+          });
+          claimer.events.push(ev.id); old.events.push(ev.id);
+          for (const st of towns) { st.nation = abroad.id; sim.cellLog.note(st.cell, year, Log.Owner, abroad.id); }
+          abroad.towns += towns.length;
+          // what either country knew, the united one knows
+          const land = new Set(abroad.land);
+          for (let i = 0; i < WEB.length; i++) if (abroad.know.way[i]! < 0 && n.know.way[i]! >= 0 && wayFor(i, land) >= 0) { abroad.know.way[i] = wayFor(i, land); abroad.know.year[i] = year; }
+          claimer.claim = -1;
+          n.ended = year; n.pop = 0; n.towns = 0;
+          return;
+        }
+      }
+      const until = year + 80;
+      (n.allies ??= []).push({ nation: abroad.id, until, eventId: -1 });
+      (abroad.allies ??= []).push({ nation: n.id, until, eventId: -1 });
+      const ev = sim.emit({
+        type: 'dynasty', year, cellId: cap.cell, title: `${n.name} passes to the ${theirs.name}`,
+        description: `${old.name} ${fate} and left no heir. By an old marriage the claim falls to ${claimer.name} of ${abroad.name}, who sends ${next.name} to rule in ${cap.name}. The ${house.name} is over after ${house.reigns} ${house.reigns === 1 ? 'reign' : 'reigns'}; two countries now answer to one family.`,
+        causes: [n.eventId, abroad.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [n.species], data: { nation: n.id, other: abroad.id, person: next.id },
+      });
+      n.allies[n.allies.length - 1]!.eventId = ev.id; abroad.allies[abroad.allies.length - 1]!.eventId = ev.id;
+      next.events.push(ev.id); old.events.push(ev.id); claimer.events.push(ev.id);
+      this.woe(n, 'succession', ev.id, year, 0.05);
       return;
     }
     if (house) house.ended = year;
     const next = this.person(rng, n, 'ruler', year, span * (0.3 + rng.next() * 0.25), -1, -1);
     const line = this.dynasty(n, next, year);
     n.ruler = next.id; n.dynasty = line.id;
-    const cap = this.settlements[n.capital]!;
     const ev = sim.emit({
       type: 'dynasty', year, cellId: cap.cell, title: `A new house in ${n.name}`,
-      description: house ? `${old.name} ${fate} and left no heir the great families would follow. ${next.name} takes ${cap.name}, and the ${house.name} is over after ${house.reigns} ${house.reigns === 1 ? 'reign' : 'reigns'}.` : `${next.name} takes power in ${cap.name}.`,
+      description: house ? `${old.name} ${fate} and left no heir the great families would follow. ${next.name} takes ${cap.name}, and the ${house.name} is over after ${house.reigns} ${house.reigns === 1 ? 'reign' : 'reigns'}.` : `${next.name} takes ${cap.name}.`,
       causes: [n.eventId].filter((x) => x >= 0), importance: house && house.reigns >= 12 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, person: next.id },
     });
     next.events.push(ev.id); old.events.push(ev.id);
     this.woe(n, 'succession', ev.id, year, 0.16);
+  }
+
+  /** Two children of one house fight for it: the second city crowns the younger, and the country divides between them. */
+  private successionWar(sim: Simulation, rng: RNG, n: Nation, towns: Settlement[], year: number, heir: Person, claimant: Person, eventId: number): void {
+    const gp = sim.grid.pos;
+    const cap = this.settlements[n.capital]!;
+    const spacing = Math.sqrt((4 * Math.PI) / sim.regions.count);
+    const angle = (a: Settlement, b: Settlement): number => Math.acos(Math.max(-1, Math.min(1, gp[a.cell * 3]! * gp[b.cell * 3]! + gp[a.cell * 3 + 1]! * gp[b.cell * 3 + 1]! + gp[a.cell * 3 + 2]! * gp[b.cell * 3 + 2]!)));
+    const others = towns.filter((st) => st.id !== cap.id && st.ruined < 0);
+    if (!others.length) return;
+    const seat = [...others].sort((a, b) => b.pop - a.pop).find((st) => angle(cap, st) > 1.2 * spacing) ?? others[0]!;
+    const ev = sim.events.events[eventId]!;
+    ev.description += ` ${claimant.name} is crowned in ${seat.name}. Towns choose a side, or have one chosen for them.`;
+    ev.cellId = seat.cell;
+    const other = this.newNation(sim, rng, seat, year, n, 'breakaway', [eventId], claimant);
+    for (const st of others) {
+      st.pop *= 0.8;
+      if (st.id !== seat.id && angle(seat, st) < angle(cap, st)) { st.nation = other.id; sim.cellLog.note(st.cell, year, Log.Owner, other.id); }
+    }
+    cap.pop *= 0.8;
+    n.fatigue = sat(n.fatigue + 0.4); other.fatigue = 0.4;
+    n.stability = 0.5; other.stability = 0.5;
+    this.woe(n, 'succession', eventId, year, 0);
+    // each branch keeps its claim on the other half: when one line fails the country may be made whole again
+    heir.claim = other.id; claimant.claim = n.id;
   }
 
   /** A camp has planted fields. It joins a neighbouring nation of its own people, or founds one. */
@@ -1191,7 +1369,7 @@ export class Civilization {
   }
 
   /** A town becomes the first of a new country: on its own (the first farmers of a land) or by going beyond the reach of the one it came from. */
-  private newNation(sim: Simulation, rng: RNG, st: Settlement, year: number, from: Nation | null, why: 'far' | 'breakaway' | 'successor' = 'far', because: number[] = []): Nation {
+  private newNation(sim: Simulation, rng: RNG, st: Settlement, year: number, from: Nation | null, why: 'far' | 'breakaway' | 'successor' = 'far', because: number[] = [], lead?: Person): Nation {
     const h = this.h;
     const culture = this.cultureFor(sim, st.species, year);
     const lang = h.languages[culture.language]!;
@@ -1213,9 +1391,13 @@ export class Civilization {
     }
     h.nations.push(n);
     const span = this.lifespan(sim, st.species);
-    const first = this.person(rng, n, 'founder', year, span * (0.3 + rng.next() * 0.25), -1, -1);
+    // (a claimant of an older house who takes a throne of their own founds a branch of it)
+    const first = lead ?? this.person(rng, n, 'founder', year, span * (0.3 + rng.next() * 0.25), -1, -1);
+    const branch = lead ? lead.dynasty : -1;
+    if (lead) { lead.nation = n.id; lead.role = 'founder'; lead.patron = -1; const at = h.notables.indexOf(lead.id); if (at >= 0) h.notables.splice(at, 1); }
     first.reignFrom = year;
     const house = this.dynasty(n, first, year);
+    if (branch >= 0) house.branchOf = branch;
     n.ruler = first.id; n.dynasty = house.id;
     st.nation = n.id;
     const dawn = h.began < 0;

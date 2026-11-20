@@ -1,10 +1,10 @@
 // Tiny observable store shared by the Preact UI and the app.
 import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
-import type { NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
+import type { DynastyDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 import type { Nation } from '../render/gfx/nations';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
 
 /** One person in an individual's family tree; key is set when that relative is drawn in the world and can be selected. */
@@ -55,6 +55,8 @@ export interface UIState {
   realms: NationInfo[];
   /** The nation whose knowledge and rulers are being looked at, when it has arrived. */
   nationDetail: NationDetail | null;
+  /** The ruling house whose family tree is open. */
+  dynastyDetail: DynastyDetail | null;
   timeline: TimelinePoint[];
   /** Set while two futures run side by side. */
   other: OtherFuture | null;
@@ -113,6 +115,7 @@ export const state: UIState = {
   nations: [],
   realms: [],
   nationDetail: null,
+  dynastyDetail: null,
   timeline: [],
   other: null,
   overlay: 'none',
@@ -183,6 +186,7 @@ export const actions = {
   familyTree: (_key: number): FamilyTree | null => null,
   /** Open the knowledge and rulers of a nation (by the simulation's nation id). */
   openNation: (_id: number) => {},
+  openDynasty: (_id: number) => {},
   setEarthNotes: (_on: boolean) => {},
   selectCreatureKey: (_key: number) => {},
   /** Swap places with the other future, or stop running it. */

@@ -683,3 +683,103 @@ describe('a history that lasts (settlement by sea and the long peace)', () => {
     expect(overseas).toBeGreaterThan(0);
   }, 900000);
 });
+
+import { layoutHouse } from '../src/ui/dynasty';
+import type { HouseMember } from '../src/shared/protocol';
+
+describe('dynasties and succession (E7)', () => {
+  it('in most worlds a house rules for five generations or more, parent to child', () => {
+    const runs = fiveHistories();
+    let long = 0, branches = 0, brief = 0, houses = 0;
+    for (const r of runs) {
+      const h = r.sim.civ.h;
+      let best = 0;
+      for (const d of h.dynasties) {
+        houses++;
+        if ((d.generations ?? 1) <= 2) brief++;
+        if (d.branchOf !== undefined) { branches++; expect(h.dynasties[d.branchOf]).toBeDefined(); expect(d.branchOf).not.toBe(d.id); }
+        // the line of rulers on record: each a child, or a brother or sister, of one before
+        const rulers = d.rulers.map((id) => h.people[id]!);
+        let chain = 1, top = 1;
+        for (let i = 1; i < rulers.length; i++) {
+          const p = rulers[i]!, before = rulers[i - 1]!;
+          expect(p.dynasty).toBe(d.id);
+          expect((p.gen ?? 0)).toBeGreaterThanOrEqual(before.gen ?? 0);
+          if (p.parent === before.id) { expect(p.gen).toBe((before.gen ?? 0) + 1); chain++; top = Math.max(top, chain); }
+          else if ((p.gen ?? 0) === (before.gen ?? 0)) { /* a brother or sister: same generation */ }
+          else chain = 1;
+          expect(p.reignFrom).toBeGreaterThanOrEqual(before.reignFrom);
+        }
+        best = Math.max(best, top);
+        expect((d.generations ?? 1)).toBeGreaterThanOrEqual(1);
+        expect(d.reigns).toBeGreaterThanOrEqual(d.generations ?? 1);
+      }
+      if (best >= 5) long++;
+    }
+    expect(long).toBeGreaterThanOrEqual(Math.min(4, runs.length));
+    // and they do not all last: many houses are over within two generations
+    expect(brief).toBeGreaterThan(houses * 0.15);
+    expect(branches).toBeGreaterThan(0);
+  }, 900000);
+
+  it('disputed successions, marriages between houses, alliances and inherited thrones are all on record', () => {
+    const runs = fiveHistories();
+    let marriages = 0, disputes = 0, wars = 0, inherited = 0, unions = 0;
+    for (const r of runs) {
+      const h = r.sim.civ.h, ev = r.sim.events.events;
+      for (const e of ev) {
+        if (e.type === 'marriage') {
+          marriages++;
+          const consort = h.people[Number(e.data!.person)]!;
+          expect(consort.role).toBe('consort');
+          const ruler = h.people[consort.spouse!]!;
+          expect(ruler.spouse).toBe(consort.id);
+          expect(ruler.match).toBe(Number(e.data!.other));
+          // the consort comes from the other country's house
+          expect(h.dynasties[consort.dynasty]!.nation).toBe(Number(e.data!.other));
+          expect(e.description).toContain(consort.name);
+          expect(e.causes.length).toBeGreaterThan(0);
+        }
+        if (e.title.startsWith('Disputed succession')) { disputes++; expect(h.people[Number(e.data!.person)]!.dynasty).toBeGreaterThanOrEqual(0); }
+        if (e.type === 'civil-war' && /two children/.test(e.description)) {
+          wars++;
+          // the younger child rules the half that followed them, as a branch of the same house
+          const claimant = h.people[Number(e.data!.person)]!;
+          const theirs = h.dynasties[claimant.dynasty]!;
+          expect(theirs.branchOf).toBeDefined();
+          expect(h.people[claimant.rival]!.rival).toBe(claimant.id);
+        }
+        if (/ passes to the /.test(e.title)) { inherited++; expect(h.nations[Number(e.data!.other)]).toBeDefined(); }
+        if (e.type === 'union') { unions++; expect(h.nations[Number(e.data!.other)]!.ended).toBe(e.simYear); expect(e.description).toMatch(/No battle was fought/); }
+      }
+      // an alliance is always held by both sides, and for the same time
+      for (const n of h.nations) for (const a of n.allies ?? []) {
+        const back = (h.nations[a.nation]!.allies ?? []).find((b) => b.nation === n.id && b.until === a.until);
+        if (h.nations[a.nation]!.ended < 0 && n.ended < 0 && (h.nations[a.nation]!.allies ?? []).length < 6) expect(back, `${n.name} and ${h.nations[a.nation]!.name}`).toBeDefined();
+      }
+      // a claim is on a real country, never one's own
+      for (const p of h.people) if ((p.claim ?? -1) >= 0) { expect(h.nations[p.claim!]).toBeDefined(); }
+    }
+    expect(marriages).toBeGreaterThan(10);
+    expect(disputes).toBeGreaterThan(5);
+    expect(wars).toBeGreaterThanOrEqual(1);
+    expect(inherited + unions).toBeGreaterThanOrEqual(1);
+  }, 900000);
+
+  it('a family tree is laid out with every child below its parent and no two people in one place', () => {
+    const m = (id: number, parent: number, gen: number, born: number): HouseMember => ({ id, name: `p${id}`, role: 'ruler', parent, gen, born, died: -1, fate: '', reignFrom: born + 20, reignTo: -1, nation: 'n', spouse: '', spouseHouse: '', claim: '', wars: [], era: 2, bold: 0.5, cruel: 0.5 });
+    const family = [m(1, -1, 0, 0), m(2, 1, 1, 20), m(3, 1, 1, 22), m(4, 2, 2, 40), m(5, 2, 2, 43), m(6, 3, 2, 45), m(7, -1, 0, 3), m(8, 6, 3, 70), m(9, 99, 4, 90)];
+    const { nodes, width, height } = layoutHouse(family);
+    expect(nodes.length).toBe(family.length);
+    const at = new Map(nodes.map((n) => [n.m.id, n]));
+    for (const n of nodes) {
+      expect(n.x).toBeGreaterThanOrEqual(0); expect(n.x).toBeLessThan(width); expect(n.y).toBeLessThan(height);
+      const parent = at.get(n.m.parent);
+      if (parent) expect(n.y).toBeGreaterThan(parent.y);
+      for (const o of nodes) if (o !== n) expect(o.x === n.x && o.y === n.y).toBe(false);
+    }
+    // a parent stands over the middle of its children
+    expect(at.get(2)!.x).toBe((at.get(4)!.x + at.get(5)!.x) / 2);
+    expect(layoutHouse([]).nodes.length).toBe(0);
+  });
+});

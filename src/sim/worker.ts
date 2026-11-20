@@ -5,7 +5,7 @@ import { G, P, PHEN_COUNT, sizeMetres } from './genetics';
 import { nearestCell } from './world';
 import { loadSimulation, saveSimulation, type SaveState } from './snapshot';
 import {
-  HISTORY_SPEED, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type NationDetail, type PersonInfo, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
+  HISTORY_SPEED, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type DynastyDetail, type HouseMember, type NationDetail, type PersonInfo, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
 } from '../shared/protocol';
 import { ERAS, earthNote, eraOf } from './history/eras';
 import { compound } from './history/language';
@@ -149,19 +149,20 @@ function nationDetail(s: Simulation, id: number): NationDetail | null {
       own: compound(lang, way.words[0], way.words[1], known >= 0 ? year : Infinity), year, key: !!slot.key,
     };
   });
-  const rulers = h.people.filter((p) => p.nation === id && p.reignFrom >= 0).map((p) => ({ name: p.name, from: p.reignFrom, to: p.reignTo, fate: p.fate, house: h.dynasties[p.dynasty]?.name ?? '' }));
+  const rulers = h.people.filter((p) => p.nation === id && p.reignFrom >= 0).map((p) => ({ name: p.name, from: p.reignFrom, to: p.reignTo, fate: p.fate, house: h.dynasties[p.dynasty]?.name ?? '', houseId: h.dynasties[p.dynasty] ? p.dynasty : -1 }));
+  const houses = h.dynasties.filter((d) => d.nation === id).reverse().slice(0, 30).map((d) => ({ id: d.id, name: d.name, founded: d.founded, ended: d.ended, reigns: d.reigns, generations: d.generations ?? 1 }));
   const info = (p: (typeof h.people)[number]): PersonInfo => {
     const ev = s.events.events[p.events[0] ?? -1];
     return {
       id: p.id, name: p.name, role: p.role, born: p.born, died: p.died, fate: p.fate, bold: p.bold, wise: p.wise, cruel: p.cruel, pious: p.pious, era: p.era ?? n.era,
-      patron: h.people[p.patron]?.name ?? '', rival: h.people[p.rival]?.name ?? '', house: h.dynasties[p.dynasty]?.name ?? '', deed: ev ? ev.title : '', eventId: ev ? ev.id : -1,
+      patron: h.people[p.patron]?.name ?? '', rival: h.people[p.rival]?.name ?? '', house: h.dynasties[p.dynasty]?.name ?? '', houseId: h.dynasties[p.dynasty] ? p.dynasty : -1, deed: ev ? ev.title : '', eventId: ev ? ev.id : -1,
     };
   };
   const mine = h.people.filter((p) => p.nation === id);
   const first = mine.find((p) => p.role === 'founder'), now = h.people[n.ruler];
   const others = mine.filter((p) => p.role !== 'ruler' && p.role !== 'founder').reverse().slice(0, 40);
   const people = [...new Set([now, first, ...others].filter((p): p is NonNullable<typeof p> => !!p && p.nation === id))].map(info);
-  return { id, name: n.name, land: n.land.slice(), species: n.species, people, tech, rulers: rulers.slice(-60) };
+  return { id, name: n.name, land: n.land.slice(), species: n.species, people, tech, rulers: rulers.slice(-60), houses };
 }
 
 /** The towns the page is told about: every living one, and the ruins of the last few hundred to fall. */
@@ -172,6 +173,37 @@ function shownSettlements(s: Simulation): Simulation['civ']['settlements'] {
   if (ruins <= 300) return all;
   let skip = ruins - 300;
   return all.filter((t) => t.ruined < 0 || skip-- <= 0);
+}
+
+/** A ruling house with its family tree: those who ruled, their husbands and wives, and the children who fought for the throne. */
+function dynastyDetail(s: Simulation, id: number): DynastyDetail | null {
+  const h = s.civ.h, d = h.dynasties[id];
+  if (!d) return null;
+  const n = h.nations[d.nation]!;
+  const first = h.people[d.founder];
+  const base = first ? first.gen ?? 0 : 0;
+  // the family: its rulers, anyone else born into it, and those who married in
+  const family = h.people.filter((p) => p.dynasty === id && p.role !== 'consort');
+  const ids = new Set(family.map((p) => p.id));
+  const wars = s.events.events.filter((e) => (e.type === 'war' || e.type === 'civil-war' || e.type === 'conquest') && e.data?.nation === n.id);
+  const members: HouseMember[] = family.slice(-80).map((p) => {
+    const wife = h.people[p.spouse ?? -1];
+    const to = p.reignTo < 0 ? Infinity : p.reignTo;
+    return {
+      id: p.id, name: p.name, role: p.role, parent: ids.has(p.parent) ? p.parent : -1, gen: Math.max(0, (p.gen ?? 0) - base), born: p.born, died: p.died, fate: p.fate,
+      reignFrom: p.reignFrom, reignTo: p.reignTo, nation: h.nations[p.nation]?.name ?? '', spouse: wife ? wife.name : '', spouseHouse: wife ? h.dynasties[wife.dynasty]?.name ?? '' : '',
+      claim: (p.claim ?? -1) >= 0 ? h.nations[p.claim!]?.name ?? '' : '',
+      wars: p.reignFrom >= 0 ? wars.filter((e) => e.simYear >= p.reignFrom && e.simYear <= to).slice(0, 4).map((e) => e.title) : [],
+      era: p.era ?? n.era, bold: p.bold, cruel: p.cruel,
+    };
+  });
+  const parent = d.branchOf !== undefined ? h.dynasties[d.branchOf] : undefined;
+  return {
+    id, name: d.name, nation: n.id, nationName: n.name, species: n.species, founded: d.founded, ended: d.ended, reigns: d.reigns, generations: d.generations ?? 1,
+    branchOf: parent ? parent.name : '', branchId: parent ? parent.id : -1,
+    branches: h.dynasties.filter((x) => x.branchOf === id).slice(0, 12).map((x) => ({ id: x.id, name: x.name, nation: h.nations[x.nation]?.name ?? '' })),
+    members,
+  };
 }
 
 function nationList(s: Simulation): NationInfo[] {
@@ -185,7 +217,7 @@ function nationList(s: Simulation): NationInfo[] {
       id: n.id, name: n.name, species: n.species, capital: n.capital, founded: n.founded, ended: n.ended, parent: n.parent, government: n.government,
       stability: n.stability, tech: n.tech, era: n.era, eraName: s.civ.eraName(n), eraOwn: s.civ.eraOwnName(n), earth: earthNote(n.era), hue: n.hue, pop: n.pop, towns: n.towns,
       culture: culture.name, language: h.languages[culture.language]!.name, ruler: ruler && ruler.died < 0 ? ruler.name : '', rulerSince: ruler && ruler.died < 0 ? ruler.reignFrom : -1,
-      house: house ? house.name : '', houseReigns: house ? house.reigns : 0, eventId: n.eventId,
+      house: house ? house.name : '', houseReigns: house ? house.reigns : 0, houseId: house ? house.id : -1, eventId: n.eventId,
     };
   });
 }
@@ -396,6 +428,9 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         post({ type: 'loaded', cells, stats: stats(sim), events: sim.events.events }, transfer);
         break;
       }
+      case 'requestDynasty':
+        if (sim) { const detail = dynastyDetail(sim, msg.id); if (detail) post({ type: 'dynasty', detail }); }
+        break;
       case 'requestNation':
         if (sim) { const detail = nationDetail(sim, msg.id); if (detail) post({ type: 'nation', detail }); }
         break;
