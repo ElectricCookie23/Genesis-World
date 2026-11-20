@@ -102,6 +102,19 @@
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; }
 .toolGroup { display: flex; align-items: baseline; gap: 10px; margin: 14px 0 2px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
 .toolGroup b { font: 500 17px 'Cormorant Garamond', serif; letter-spacing: 0.02em; }
+.ref { all: unset; cursor: pointer; border-bottom: 1px solid #ffffff55; }
+.ref:hover { border-bottom-color: #fff; }
+.article { font: 500 15.5px/1.4 'Cormorant Garamond', serif; opacity: 0.92; margin: 0 0 8px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 6px; }
+.tabs button { all: unset; cursor: pointer; padding: 5px 9px; border-radius: 7px; background: rgba(255, 255, 255, 0.06); opacity: 0.75; }
+.tabs button.active { opacity: 1; background: rgba(255, 255, 255, 0.18); }
+.find { all: unset; display: block; box-sizing: border-box; width: 100%; margin: 6px 0 8px; padding: 6px 9px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); color: inherit; font: inherit; }
+.find option { color: #111; }
+.entries { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0 10px; }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 0; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+.line { margin: 8px 0 0 6px; }
+.lineStep { position: relative; border-left: 2px solid; padding: 0 0 12px 14px; }
+.lineStep i { position: absolute; left: -6px; top: 3px; width: 10px; height: 10px; border-radius: 50%; }
 .btn { all: unset; cursor: pointer; padding: 7px 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.09); }
 .btn:hover { background: rgba(255, 255, 255, 0.18); }
 .goal { padding: 9px 0 10px; border-top: 1px solid #ffffff14; }
@@ -145,6 +158,7 @@
   }
   .card { height: auto; }
   .narration { bottom: 150px; }
+  .split { grid-template-columns: 1fr; }
 }
 @keyframes sheet { from { transform: translateY(40%); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .side, .card, .toast, .narration, .hint { animation-duration: 0.01s; } }

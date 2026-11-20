@@ -9,7 +9,7 @@ import { Opening } from './render/opening';
 import { buildGrid } from './sim/world';
 import { randomSeedCode } from './sim/rng';
 import type { SimEvent } from './sim/events';
-import { SPEEDS, type FromWorker, type ToWorker } from './shared/protocol';
+import { SPEEDS, type FromWorker, type SettlementInfo, type ToWorker } from './shared/protocol';
 import { App } from './ui/App';
 import { closeAll } from './ui/panels';
 import { describeIndividual } from './render/creatures';
@@ -271,6 +271,24 @@ async function boot(): Promise<void> {
   actions.timelapse = (id, cell) => { actions.flyToCell(cell, 0.045); update({ panel: 'none' }); window.setTimeout(() => scene.timelapse(id), 1800); };
   actions.openSite = (id) => { update({ panel: 'site', siteDetail: state.siteDetail?.id === id ? state.siteDetail : null }); send({ type: 'requestSite', id }); };
   actions.openDynasty = (id) => { update({ panel: 'dynasty', dynastyDetail: state.dynastyDetail?.id === id ? state.dynastyDetail : null }); send({ type: 'requestDynasty', id }); };
+  // the record (expansion Section 6)
+  actions.askMemory = (ask) => send({ type: 'requestMemory', ask });
+  actions.openArticle = (ref) => {
+    const trail = state.memTrail.length && state.memTrail[state.memTrail.length - 1]!.kind === ref.kind && state.memTrail[state.memTrail.length - 1]!.id === ref.id ? state.memTrail : [...state.memTrail, ref].slice(-40);
+    update({ panel: 'archive', memTab: 'archive', memTrail: trail, whyEvent: -1 });
+    send({ type: 'requestMemory', ask: { what: 'article', kind: ref.kind, id: ref.id } });
+  };
+  /** The towns as the scene should draw them: the one under the chronoscope as it stood in the year on the dial. */
+  const withPast = (list: SettlementInfo[]): SettlementInfo[] => {
+    const c = state.chrono, p = state.memPlace;
+    if (!c || !p || p.id !== c.id || p.year >= p.until) return list;
+    return list.map((st) => (st.id === p.id ? { ...st, tech: p.tech, pop: p.pop, peak: p.pop, ruined: p.standing ? -1 : st.ruined, walls: undefined, wonders: undefined, monuments: 0, links: undefined, dam: false, mine: false, relic: undefined } : st));
+  };
+  actions.setChrono = (id, year) => {
+    if (year === null) { update({ chrono: null, memPlace: null }); scene.setSettlements(state.settlements, state.realms); return; }
+    update({ chrono: { id, year } });
+    send({ type: 'requestMemory', ask: { what: 'place', id, year } });
+  };
   actions.openNation = (id) => { update({ panel: 'nation', nationDetail: state.nationDetail?.id === id ? state.nationDetail : null }); send({ type: 'requestNation', id }); };
   actions.setOverlay = (o) => {
     update({ overlay: o });
@@ -407,7 +425,7 @@ async function boot(): Promise<void> {
 
   // flat map: an equirectangular picture of the planet as it is painted right now
   let mapCells: Int32Array | null = null;
-  actions.drawMap = (cv) => {
+  const drawMapOn = (cv: HTMLCanvasElement, bare: boolean): void => {
     const colors = scene.planet?.cellColors;
     const ctx = cv.getContext('2d');
     if (!colors || !ctx) return;
@@ -438,6 +456,7 @@ async function boot(): Promise<void> {
       img.data[i * 4 + 3] = 255;
     }
     ctx.putImageData(img, 0, 0);
+    if (bare) return;
     // settlements as warm dots
     ctx.fillStyle = '#ffd27a';
     for (const st of state.settlements) {
@@ -446,6 +465,8 @@ async function boot(): Promise<void> {
       ctx.fillRect(x - 1, y - 1, st.tech > 0.6 ? 3 : 2, st.tech > 0.6 ? 3 : 2);
     }
   };
+  actions.drawMap = (cv) => drawMapOn(cv, false);
+  actions.drawBareMap = (cv) => drawMapOn(cv, true);
   actions.mapPoint = (cell) => [(grid.lon[cell]! + Math.PI) / (Math.PI * 2), 0.5 - grid.lat[cell]! / Math.PI];
   actions.mapClick = (u, v) => {
     scene.cam.flyTo(u * Math.PI * 2 - Math.PI, (0.5 - v) * Math.PI, Math.min(scene.cam.dist, 1.4));
@@ -729,7 +750,7 @@ async function boot(): Promise<void> {
         break;
       }
       case 'settlements':
-        scene.setSettlements(msg.settlements, msg.nations);
+        scene.setSettlements(withPast(msg.settlements), msg.nations);
         update({ settlements: msg.settlements, realms: msg.nations ?? state.realms });
         break;
       case 'timeline':
@@ -745,6 +766,18 @@ async function boot(): Promise<void> {
       case 'site':
         update({ siteDetail: msg.detail });
         break;
+      case 'memory': {
+        const a = msg.answer;
+        if (a.what === 'index') update({ memIndex: a.data });
+        else if (a.what === 'article') update({ memArticle: a.data });
+        else if (a.what === 'atlas') update({ memAtlas: a.data });
+        else if (a.what === 'braid') update({ memBraid: a.data });
+        else if (a.what === 'records') update({ memRecords: a.data });
+        else if (a.what === 'ancestry') update({ memAncestry: a.data });
+        else if (a.what === 'forecasts') update({ memForecasts: a.data });
+        else if (state.chrono && a.data && a.data.id === state.chrono.id) { update({ memPlace: a.data }); scene.setSettlements(withPast(state.settlements), state.realms); }
+        break;
+      }
       case 'dynasty':
         update({ dynastyDetail: msg.detail });
         break;
@@ -865,6 +898,7 @@ async function boot(): Promise<void> {
     else if (k === 'j') togglePanel('goals');
     else if (k === 's') togglePanel('system');
     else if (k === 'n') togglePanel('microscope');
+    else if (k === 'a') togglePanel('archive');
     else if (e.key === '?' || k === '/') togglePanel('help');
     else if (k === 'p') { update({ postcard: !state.postcard }); scene.cam.idle = state.postcard ? 100 : 0; }
     else if (k === 'm') togglePanel('map');

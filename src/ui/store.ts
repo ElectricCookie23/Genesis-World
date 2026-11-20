@@ -10,8 +10,12 @@ import type { LinkInfo } from '../sim/link';
 import type { StrangeInfo } from '../sim/strange';
 import type { FutureInfo } from '../sim/future';
 import type { IndustryInfo } from '../sim/industry';
+import type { Article, Atlas, IndexGroup, Lane, PastPlace, Records, Ref, Step } from '../sim/memory';
+import type { MemoryAsk } from '../shared/protocol';
+import type { ForecastInfo } from '../sim/forecast';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'goals' | 'system' | 'microscope';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'goals' | 'system' | 'microscope' | 'archive';
+export type MemoryTab = 'archive' | 'atlas' | 'braid' | 'records' | 'ancestry' | 'chronoscope' | 'forecasts';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
 
 /** One person in an individual's family tree; key is set when that relative is drawn in the world and can be selected. */
@@ -62,6 +66,20 @@ export interface UIState {
   realms: NationInfo[];
   /** The nation whose knowledge and rulers are being looked at, when it has arrived. */
   nationDetail: NationDetail | null;
+  /** The record (expansion Section 6): which view is open, and what the simulation has answered for each. */
+  memTab: MemoryTab;
+  memIndex: IndexGroup[] | null;
+  memArticle: Article | null;
+  /** Articles opened on the way here, oldest first: the last one is the one being read. */
+  memTrail: Ref[];
+  memAtlas: Atlas | null;
+  memBraid: { from: number; to: number; lanes: Lane[] } | null;
+  memRecords: Records | null;
+  memAncestry: { name: string; town: string; steps: Step[] } | null;
+  /** The chronoscope: the town being looked at and the year its dial is set to; and that town as it then stood. */
+  chrono: { id: number; year: number } | null;
+  memPlace: PastPlace | null;
+  memForecasts: ForecastInfo | null;
   /** The town site whose layers are open (system E17). */
   siteDetail: SiteDetail | null;
   /** The ruling house whose family tree is open. */
@@ -146,6 +164,17 @@ export const state: UIState = {
   nationDetail: null,
   dynastyDetail: null,
   siteDetail: null,
+  memTab: 'archive',
+  memIndex: null,
+  memArticle: null,
+  memTrail: [],
+  memAtlas: null,
+  memBraid: null,
+  memRecords: null,
+  memAncestry: null,
+  chrono: null,
+  memPlace: null,
+  memForecasts: null,
   timeline: [],
   other: null,
   overlay: 'none',
@@ -231,6 +260,14 @@ export const actions = {
   /** Open the knowledge and rulers of a nation (by the simulation's nation id). */
   openNation: (_id: number) => {},
   openDynasty: (_id: number) => {},
+  /** Put a question to the record; the answer arrives in the store. */
+  askMemory: (_ask: MemoryAsk) => {},
+  /** Open the archive at an article, remembering the way back. */
+  openArticle: (_ref: Ref) => {},
+  /** Set the chronoscope's dial for a town (null puts the town back in the present). */
+  setChrono: (_id: number, _year: number | null) => {},
+  /** The flat map of the present with no towns marked, for drawing the past over. */
+  drawBareMap: (_canvas: HTMLCanvasElement) => {},
   /** Open the dig view of a town's site. */
   openSite: (_id: number) => {},
   /** How a town's builders build and of what, in a sentence. */

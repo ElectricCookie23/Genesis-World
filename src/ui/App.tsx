@@ -3,6 +3,7 @@ import { actions, togglePanel, useStore } from './store';
 import { GoalMarker, Goals } from './goals';
 import { SkyMessage, System } from './system';
 import { Microscope, Pulse } from './strange';
+import { Memory } from './memory';
 import { bigNumber, formatYear } from './format';
 import { DynastyPanel } from './dynasty';
 import { SitePanel } from './site';
@@ -65,6 +66,7 @@ export function App() {
           {s.panel === 'goals' && <Goals />}
           {s.panel === 'system' && <System />}
           {s.panel === 'microscope' && <Microscope />}
+          {s.panel === 'archive' && <Memory />}
           {s.whyEvent >= 0 && <Why />}
           {s.selectedSpecies >= 0 && s.whyEvent < 0 && <SpeciesCard />}
           {s.creature && s.selectedSpecies < 0 && s.whyEvent < 0 && <CreatureCard />}
@@ -84,6 +86,7 @@ export function App() {
             <button class={s.panel === 'tree' ? css.active : ''} onClick={() => togglePanel('tree')} title="Tree of life (T)">Tree</button>
             <button class={s.panel === 'guide' ? css.active : ''} onClick={() => togglePanel('guide')} title="Field guide and memorial">Guide</button>
             {st && st.settlements > 0 && <button class={s.panel === 'peoples' ? css.active : ''} onClick={() => togglePanel('peoples')} title="Settlements and peoples">Peoples</button>}
+            <button class={s.panel === 'archive' ? css.active : ''} onClick={() => togglePanel('archive')} title="The record: archive, atlas, braid, ancestry (A)">Record</button>
             <button class={s.panel === 'goals' ? css.active : ''} onClick={() => togglePanel('goals')} title="Goals, if you want some (J)">Goals</button>
             <button class={s.panel === 'system' ? css.active : ''} onClick={() => togglePanel('system')} title="The star system (S)">☉</button>
             <button class={s.panel === 'graphs' ? css.active : ''} onClick={() => togglePanel('graphs')} title="Graphs over time">∿</button>

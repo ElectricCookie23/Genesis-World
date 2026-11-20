@@ -2,6 +2,8 @@
 import type { SimEvent } from '../sim/events';
 import type { CosmosInfo } from '../sim/cosmos';
 import type { Archive, StarMessage } from '../sim/legacy';
+import type { ForecastInfo } from '../sim/forecast';
+import type { Article, Atlas, IndexGroup, Kind, Lane, PastPlace, Records, Step } from '../sim/memory';
 import type { LinkInfo } from '../sim/link';
 import type { StrangeInfo } from '../sim/strange';
 import type { FutureInfo } from '../sim/future';
@@ -326,6 +328,26 @@ export interface HerdSnapshot {
   fed: Float32Array;
 }
 
+/** A question put to the record (expansion Section 6), and its answer. */
+export type MemoryAsk =
+  | { what: 'index' }
+  | { what: 'article'; kind: Kind; id: number }
+  | { what: 'atlas' }
+  | { what: 'braid' }
+  | { what: 'records'; id: number }
+  | { what: 'ancestry'; town: number; index: number }
+  | { what: 'place'; id: number; year: number }
+  | { what: 'forecasts' };
+export type MemoryAnswer =
+  | { what: 'index'; data: IndexGroup[] }
+  | { what: 'article'; data: Article | null }
+  | { what: 'atlas'; data: Atlas | null }
+  | { what: 'braid'; data: { from: number; to: number; lanes: Lane[] } | null }
+  | { what: 'records'; data: Records | null }
+  | { what: 'ancestry'; data: { name: string; town: string; steps: Step[] } | null }
+  | { what: 'place'; data: PastPlace | null }
+  | { what: 'forecasts'; data: ForecastInfo };
+
 export type ToWorker =
   | { type: 'init'; seed: string; gridN?: number; neighbor?: string }
   | { type: 'speed'; index: number }
@@ -341,6 +363,7 @@ export type ToWorker =
   | { type: 'requestNation'; id: number }
   | { type: 'requestDynasty'; id: number }
   | { type: 'requestSite'; id: number }
+  | { type: 'requestMemory'; ask: MemoryAsk }
   | { type: 'rewindLimit'; count: number }
   /** Jump ahead by running the sim flat out (used by automated checks). */
   /** Jump ahead. It stops where a history begins, unless `through` is set (for scripts that need to reach a date). */
@@ -359,6 +382,7 @@ export type FromWorker =
   | { type: 'nation'; detail: NationDetail }
   | { type: 'dynasty'; detail: DynastyDetail }
   | { type: 'site'; detail: SiteDetail }
+  | { type: 'memory'; answer: MemoryAnswer }
   | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[] }
   | { type: 'timeline'; points: TimelinePoint[] }
   | { type: 'cosmos'; cosmos: CosmosInfo; messages: StarMessage[]; archives: Archive[]; link?: LinkInfo; strange: StrangeInfo; future: FutureInfo; industry: IndustryInfo }

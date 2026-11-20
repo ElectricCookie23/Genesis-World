@@ -20,6 +20,7 @@ import { Legacy } from './legacy';
 import { exchange } from './link';
 import { Strange } from './strange';
 import { Future } from './future';
+import { Forecasts } from './forecast';
 import { Industry } from './industry';
 
 /** Sim years covered by one full ecological step (one tick at Epoch speed). */
@@ -99,6 +100,8 @@ export class Simulation {
   strange: Strange;
   /** What a people does beyond the space age, and how it ends (expansion section 8). */
   future: Future;
+  /** What scholars have said will happen, and whether it did (expansion E60). */
+  forecast: Forecasts;
   /** Fuel laid down over deep time and what an industrial people does with it, up to the edge of space (expansion section 7). */
   industry: Industry;
   linkNoted: Record<string, number> = {};
@@ -187,6 +190,7 @@ export class Simulation {
     this.strange = new Strange(this.rng.fork('strange'), this.regions.count);
     this.future = new Future(this.rng.fork('future'));
     this.industry = new Industry(this.rng.fork('industry'), this.regions.count);
+    this.forecast = new Forecasts(this.rng.fork('forecast'));
     this.lifeYear = this.lifeRng.range(0.35e6, 0.9e6);
     this.algaeDelay = this.lifeRng.range(1.2e6, 3e6);
     this.animalDelay = this.lifeRng.range(5e6, 10e6);
@@ -297,6 +301,7 @@ export class Simulation {
     this.strange.step(this, dt);
     this.industry.step(this, dt);
     this.future.step(this, dt);
+    this.forecast.step(this, dt);
     // the linked world keeps the same years, then the two may notice each other
     if (this.neighbor) { this.neighbor.step(dt); exchange(this, this.neighbor); }
     // continents drift: slow enough that it only shows at high time speeds
@@ -1546,6 +1551,8 @@ export class Simulation {
         type: 'war', cellId: cell, title: `War between ${st!.name} and ${other.name}`,
         description: apart ? `${st!.name} and ${other.name} each tell the story of the old days differently, and in each telling the other is to blame. This year it comes to war.` : `${st!.name} and ${other.name} are not the same kind of people, and the land between them is not enough for both. They fight.`,
         causes: [st!.lore, other.lore, st!.eventId].filter((x) => x >= 0), importance: st!.tech > 0.6 ? 1 : 0, speciesIds: [speciesId],
+        // the two sides, as they stood that year: the record a nation keeps of the war depends on which it was (E54)
+        data: { town: st!.id, other: other.id, nation: st!.nation, foe: other.nation },
       });
     } else if (kind === 'city-plague') {
       this.emit({ type: 'plague', cellId: cell, title: `Plague in ${st!.name}`, description: this.say('cityplague', [`Sickness arrives in ${st!.name} with the traders and leaves by every road.`, `Half of ${st!.name} is dead of a fever that came along the trade road.`]), causes: [st!.eventId], importance: st!.tech > 0.7 ? 1 : 0, speciesIds: [speciesId] });

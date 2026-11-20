@@ -2,12 +2,13 @@
 // Worker entry point: owns all world state and runs the fixed-timestep loop.
 import { Simulation } from './simulation';
 import { linkInfo } from './link';
+import { ancestry, archiveIndex, article, atlas, braid, placeAt, records } from './memory';
 import { G, P, PHEN_COUNT, sizeMetres } from './genetics';
 import { nearestCell } from './world';
 import { loadSimulation, saveSimulation, type SaveState } from './snapshot';
 import {
   HISTORY_SPEED, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type DynastyDetail, type HouseMember, type SiteDetail, type NationDetail, type PersonInfo, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
-  type WonderInfo,
+  type WonderInfo, type MemoryAnswer,
 } from '../shared/protocol';
 import { ERAS, earthNote, eraOf } from './history/eras';
 import { CALAMITIES, REBUILDS } from './history/calamity';
@@ -495,6 +496,20 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
             };
             post({ type: 'site', detail });
           }
+        }
+        break;
+      case 'requestMemory':
+        if (sim) {
+          const a = msg.ask;
+          const answer: MemoryAnswer = a.what === 'index' ? { what: 'index', data: archiveIndex(sim) }
+            : a.what === 'article' ? { what: 'article', data: article(sim, { kind: a.kind, id: a.id }) }
+            : a.what === 'atlas' ? { what: 'atlas', data: atlas(sim) }
+            : a.what === 'braid' ? { what: 'braid', data: braid(sim) }
+            : a.what === 'records' ? { what: 'records', data: records(sim, a.id) }
+            : a.what === 'ancestry' ? { what: 'ancestry', data: ancestry(sim, a.town, a.index) }
+            : a.what === 'forecasts' ? { what: 'forecasts', data: sim.forecast.info() }
+            : { what: 'place', data: placeAt(sim, a.id, a.year) };
+          post({ type: 'memory', answer });
         }
         break;
       case 'requestDynasty':
