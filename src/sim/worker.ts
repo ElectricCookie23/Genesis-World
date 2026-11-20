@@ -394,7 +394,7 @@ function tick(): void {
     lastCells = now;
   }
   // the rest of the star system changes slowly: told about now and then
-  if (now - lastCosmos > 1500) { lastCosmos = now; post({ type: 'cosmos', cosmos: s.cosmos.info(s), messages: s.legacy.messages, archives: s.legacy.archives, link: s.neighbor ? linkInfo(s, s.neighbor) : undefined, strange: s.strange.info(s, focus ? nearestCell(s.regions.grid, focus.x, focus.y, focus.z, focusRegion) : 0), future: s.future.info() }); }
+  if (now - lastCosmos > 1500) { lastCosmos = now; post({ type: 'cosmos', cosmos: s.cosmos.info(s), messages: s.legacy.messages, archives: s.legacy.archives, link: s.neighbor ? linkInfo(s, s.neighbor) : undefined, strange: s.strange.info(s, focus ? nearestCell(s.regions.grid, focus.x, focus.y, focus.z, focusRegion) : 0), future: s.future.info(), industry: s.industry.info() }); }
   if (now - lastStats > 100) {
     post({ type: 'stats', stats: stats(s) });
     lastStats = now;

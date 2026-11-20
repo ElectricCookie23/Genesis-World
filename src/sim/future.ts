@@ -97,6 +97,8 @@ export class Future {
     // In the long peace nothing new is undertaken: a history that has stopped being made does not go on to build
     // rings or raise other species. The far future belongs to a history watched as it happens.
     if (civ.historyActive && !civ.historyLive) return;
+    // nor while a shell of wreckage keeps anything from being launched (E67)
+    if (sim.industry.skyClosed(sim.simYear)) return;
     this.clock += dt;
     const t = this.clock, cause = this.spaceEvent;
     const standing = civ.settlements.filter((st) => st.ruined < 0);
