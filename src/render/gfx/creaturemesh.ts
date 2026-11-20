@@ -291,8 +291,10 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
           radii.push(thick * (1.15 - 0.7 * t + 0.18 * Math.sin(t * Math.PI * 2) * (t < 0.5 ? 1 : 0.4)));
         }
         m.tube(path, radii, 6, limbC, (i) => [RIG.leg, i / 6, phase, sideCode], rig2, ZONE.limb);
-        // foot: flattened, reaching forward
-        m.ball([lx + thick * 0.9, ankle * 0.6, hipZ], [thick * 1.5, Math.max(ankle * 0.6, thick * 0.4), thick * 0.9], 6, limbC, [RIG.leg, 1.1, phase, sideCode], rig2, ZONE.limb);
+        // foot: a low pad reaching forward, little wider than the shin and set slightly into the ground. As a round
+        // ball three shins wide it read as a ball on a stick, and it hovered on uneven ground (seen on a real GPU).
+        const footH = Math.max(ankle * 0.5, thick * 0.3);
+        m.ball([lx + thick * 0.75, footH * 0.7, hipZ], [thick * 1.25, footH, thick * 0.62], 6, limbC, [RIG.leg, 1.1, phase, sideCode], rig2, ZONE.limb);
       }
     }
   }
