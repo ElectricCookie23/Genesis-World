@@ -304,7 +304,8 @@ describe('the tech web (E1)', () => {
   });
 
   it('nations in a living world discover, name and record their inventions', () => {
-    const s = worldWithHistory('coral-dune-303');
+    // (any world with a history will do; which seeds are early changes whenever the rules of life do)
+    const s = worldWithHistory('basalt-vale-202');
     expect(s).not.toBeNull();
     for (let y = 0; y < 2500; y++) s!.step(1);
     const h = s!.civ.h;
@@ -854,13 +855,14 @@ import type { SimEvent } from '../src/sim/events';
 
 describe('migrations of peoples (E9)', () => {
   /** A world three thousand years into its history, then struck by hand, then left for two thousand more. */
-  function struck(tool: string): { sim: Simulation; strike: number; before: number } {
+  function struck(tool: string, times = 1): { sim: Simulation; strike: number; before: number } {
     const sim = atDawn(0)!;
     for (let y = 0; y < 3000; y++) sim.step(1);
     const before = sim.events.events.length;
     const town = sim.civ.settlements.find((s) => s.ruined < 0)!;
-    sim.god(tool, town.cell);
-    const strike = sim.events.events.length - 1;
+    for (let k = 0; k < times; k++) sim.god(tool, town.cell);
+    // (the act itself, not whatever followed it in the same breath: a town may take it for a sign and found a faith)
+    const strike = sim.godEvents[sim.godEvents.length - 1]!;
     for (let y = 0; y < 2500; y += 10) sim.step(10);
     return { sim, strike, before };
   }
@@ -900,7 +902,8 @@ describe('migrations of peoples (E9)', () => {
   }, 300000);
 
   it('a rising sea drives the people of drowned towns to higher ground', () => {
-    const { sim, strike, before } = struck('flood');
+    // (two floods: one lifts the sea a sixth of a kilometre, which in this world takes too few towns to move a people)
+    const { sim, strike, before } = struck('flood', 2);
     const moves = sim.events.events.slice(before).filter((e) => e.type === 'migration');
     checkMoves(sim, moves);
     const wet = moves.filter((e) => e.data!.cause === 'sea');

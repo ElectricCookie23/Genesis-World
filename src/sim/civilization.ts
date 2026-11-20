@@ -258,6 +258,9 @@ export class Civilization {
         if (rng.chance(1 - Math.exp(-hazard * y))) this.succession(sim, rng, n, towns, year, age > span * 0.75 ? 'died of old age' : rng.pick(['died of a fever', 'died in a fall', 'died after a short illness', 'was killed hunting', 'died in the night']));
         else if (this.fine && (ruler.spouse ?? -1) < 0 && n.contacts.length && rng.chance(1 - Math.exp(-y * 0.006))) this.marry(sim, rng, n, year);
       }
+      // a succession can end the country (a union by marriage hands its towns to another): it has no more year to live.
+      // (Without this its towns went on to found daughters in its name, which were then living towns of a fallen country.)
+      if (n.ended >= 0) continue;
       // ---- knowledge: more people, clever people and neighbours to learn from all speed it; so does what is already known
       const reach = Math.min(4, towns.length - 1) * 0.08;
       const quick = 1 + 6 * sat((n.tech - 0.7) / 0.3) ** 2;

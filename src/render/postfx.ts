@@ -11,6 +11,7 @@ import {
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
 import { traa } from 'three/addons/tsl/display/TRAANode.js';
+import { fxaa } from 'three/addons/tsl/display/FXAANode.js';
 import GTAONode from 'three/addons/tsl/display/GTAONode.js';
 import { sharpen } from 'three/addons/tsl/display/SharpenNode.js';
 import { uDitherFrame, uExposure, uFlash, uGradeTint, uShimmer, uTime, uUnderwater, uWaterFog } from './common';
@@ -64,6 +65,10 @@ export class PostFX {
   maxExposure = 3.6;
   /** Mean scene luminance last measured (for diagnostics). */
   measured = 0;
+  /** Brightness at the bright end of the picture (98th percentile of its cells), last measured. */
+  measuredBright = 0;
+  private lumCells = new Float32Array(1024);
+  private lumLit = 0;
 
   constructor(private renderer: WebGPURenderer, private scene: Scene, private camera: PerspectiveCamera) {
     renderer.toneMapping = AgXToneMapping;
@@ -97,8 +102,10 @@ export class PostFX {
 
   private build(): void {
     const o = this.options;
-    // with temporal anti-aliasing the scene needs no multisampling
-    this.scenePass = (pass as any)(this.scene, this.camera, o.taa ? { samples: 0 } : {});
+    // The scene is never multisampled. With temporal anti-aliasing it needs none; without it, multisampling was what
+    // it fell back to, and that made "anti-aliasing off" 1 to 14 ms a frame slower than on (measured on a real GPU,
+    // docs/PERFORMANCE.md). A cheap edge filter at the end does that job instead.
+    this.scenePass = (pass as any)(this.scene, this.camera, { samples: 0 });
     const depth: N = this.scenePass.getTextureNode('depth');
     let color: N = this.scenePass.getTextureNode('output');
     // ---- ambient occlusion: only matters near the camera, so it fades out with distance
@@ -149,6 +156,7 @@ export class PostFX {
     const grey = dot(mapped.rgb, vec3(0.2126, 0.7152, 0.0722));
     mapped = vec4(mix(vec3(grey, grey, grey), mapped.rgb, 1.22).max(0), 1);
     if (o.taa) mapped = sharpen(mapped, 0.22);
+    else mapped = fxaa(mapped);
     const st = screenUV;
     const fromCentre = st.sub(0.5);
     const r2 = dot(fromCentre, fromCentre);
@@ -196,7 +204,13 @@ export class PostFX {
           let a = 0, w = 0, lin = 0;
           const half = px instanceof Uint16Array;
           const dec = (h: number) => { const s = h & 0x8000 ? -1 : 1, e = (h >> 10) & 0x1f, f = h & 0x3ff; return e === 0 ? s * 6.103515625e-5 * (f / 1024) : s * Math.pow(2, e - 15) * (1 + f / 1024); };
-          for (let i = 0; i < LUM * LUM; i++) { a += half ? dec(px[i * 4]) : px[i * 4]; w += half ? dec(px[i * 4 + 1]) : px[i * 4 + 1]; lin += half ? dec(px[i * 4 + 2]) : px[i * 4 + 2]; }
+          // each cell's own mean brightness too, to find the bright end of the picture
+          const cells = this.lumCells; let lit = 0;
+          for (let i = 0; i < LUM * LUM; i++) {
+            const wi = half ? dec(px[i * 4 + 1]) : px[i * 4 + 1], li = half ? dec(px[i * 4 + 2]) : px[i * 4 + 2];
+            a += half ? dec(px[i * 4]) : px[i * 4]; w += wi; lin += li;
+            if (wi > 0.02 && li === li) cells[lit++] = li / wi;
+          }
           const cover = w / (LUM * LUM);
           if (cover > 0.004 && isFinite(a) && isFinite(lin) && lin > 0) {
             // mostly the plain average (so bright cloud and snow are not blown out), tempered by the log average (so a dark scene still lifts)
@@ -204,7 +218,14 @@ export class PostFX {
             this.measured = mean;
             // aim for a mid-grey picture, but do not chase a few lit pixels in a dark frame
             // (the floor was 0.6: a day side under a wide cloud belt stayed flat white with a glow round it on a real GPU)
-            const wanted = Math.max(0.38, Math.min(this.maxExposure, 0.2 / mean));
+            // The bright end must stay below white. Aiming only at a mid-grey average, a planet that is mostly dark sea
+            // with a wide belt of sunlit cloud asked for nearly twice the light and its clouds went flat white with a
+            // glow round the disc (seen twice on a real GPU; the cap from orbit used to hide this). The brightest
+            // fiftieth of the picture is found and held just under white.
+            let bright = mean;
+            if (lit > 8) { const top = cells.subarray(0, lit).sort(); bright = Math.max(mean, top[Math.floor(lit * 0.98)]!); this.lumLit = lit; }
+            this.measuredBright = bright;
+            const wanted = Math.max(0.38, Math.min(this.maxExposure, 0.2 / mean, 0.95 / bright));
             this.target = 1 + (wanted - 1) * Math.min(1, cover * 6);
           } else this.target = Math.min(1.6, this.maxExposure);
           this.lumBusy = false;

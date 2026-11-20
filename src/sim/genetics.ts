@@ -18,6 +18,12 @@ export const enum G {
   COUNT,
 }
 export const GENE_COUNT = G.COUNT as number;
+/**
+ * The diet gene above which an animal is a hunter: from here it gets more than twice as much from meat as from
+ * plants. (The line was 0.6, which nothing in any measured history ever reached: omnivory always paid better on
+ * the way there.)
+ */
+export const HUNTER_DIET = 0.45;
 
 export const GENE_NAMES = [
   'size', 'body ratio', 'segments', 'limb type', 'limb pairs', 'limb length', 'neck', 'tail', 'head', 'horns', 'armor', 'insulation',
@@ -108,8 +114,10 @@ export function computePhenotype(g: Float32Array, o: number, out: Float32Array, 
   const metab = 0.5 + g[o + G.Metabolism]!;
   const brain = g[o + G.Intelligence]!;
   const eyes = g[o + G.EyeCount]! > 0.1 ? g[o + G.EyeSize]! * 0.5 + g[o + G.Sight]! * 0.5 : 0;
-  const echo = g[o + G.Echo]! > 0.6 ? g[o + G.Echo]! : 0;
-  const elec = g[o + G.Electric]! > 0.6 ? g[o + G.Electric]! * water : 0;
+  // Sound and electric senses grow into use: they used to do nothing at all below 0.6 and cost nothing either, so no
+  // lineage ever had a reason to cross that line (none did, in whole histories).
+  const echo = sat((g[o + G.Echo]! - 0.2) / 0.4) * g[o + G.Echo]!;
+  const elec = sat((g[o + G.Electric]! - 0.2) / 0.4) * g[o + G.Electric]! * water;
   const night = g[o + G.Nocturnal]!;
   // eyes work by day; smell, hearing, echolocation and electric sense work any time
   const sense = sat(0.08 + eyes * 0.55 * (1 - night * 0.6) + g[o + G.Smell]! * 0.25 + g[o + G.Hearing]! * 0.22 + echo * 0.35 + elec * 0.3 + brain * 0.15);
@@ -137,12 +145,14 @@ export function computePhenotype(g: Float32Array, o: number, out: Float32Array, 
   out[p + P.Speed] = speed;
   // minds pay off most in company: shared knowledge finds more food
   const wits = 1 + brain * 0.9 + brain * g[o + G.Sociality]! * 0.6;
-  out[p + P.HerbEff] = Math.pow(1 - diet, 1.4) * (0.75 + 0.25 * g[o + G.Head]!) * wits;
+  // good senses find food as well as prey
+  out[p + P.HerbEff] = Math.pow(1 - diet, 1.4) * (0.75 + 0.25 * g[o + G.Head]!) * wits * (0.92 + 0.16 * sense);
   out[p + P.MeatEff] = Math.pow(diet, 0.8) * 1.6 * wits;
   out[p + P.ScavEff] = (1 - Math.abs(diet - 0.55) * 1.6) * (0.3 + 0.7 * g[o + G.Smell]!) * (1 - g[o + G.Aggression]! * 0.4);
   out[p + P.Sense] = sense;
   out[p + P.Conceal] = sat((1 - size) * 0.35 + g[o + G.Burrow]! * 0.3 + g[o + G.ColorChange]! * 0.3 + night * 0.15 - g[o + G.Glow]! * 0.2 - g[o + G.Ornament]! * 0.2);
-  out[p + P.Defense] = sat(g[o + G.Armor]! * 0.5 + g[o + G.Horn]! * 0.3 + g[o + G.Sociality]! * 0.15 + g[o + G.Aggression]! * 0.1 + brain * 0.25);
+  // (wits and company are a defence of their own: lookouts, warnings, a mob that turns on the hunter)
+  out[p + P.Defense] = sat(g[o + G.Armor]! * 0.5 + g[o + G.Horn]! * 0.3 + g[o + G.Sociality]! * 0.15 + g[o + G.Aggression]! * 0.1 + brain * 0.25 + brain * g[o + G.Sociality]! * 0.45);
   // thermal comfort window in deg C
   const heat = g[o + G.HeatTol]!, cold = g[o + G.ColdTol]!, ins = g[o + G.Insulation]!;
   const centre = 17 + 16 * (heat - cold);
@@ -152,8 +162,13 @@ export function computePhenotype(g: Float32Array, o: number, out: Float32Array, 
   // life history: many small offspring versus few cared-for ones
   const off = g[o + G.Offspring]!, care = g[o + G.Care]!;
   out[p + P.RMax] = (0.35 + 1.1 * off) * (0.45 + 0.55 * care + 0.35 * (1 - off)) * (1.25 - 0.5 * g[o + G.Maturity]!) * (1.2 - 0.4 * size)
-    // showy mates breed more, though ornaments cost energy and draw predators
-    * (1 + 0.22 * g[o + G.Ornament]!);
+    // showy mates breed more, though ornaments cost energy and draw predators; display counts most in company
+    * (1 + (0.22 + 0.2 * g[o + G.Sociality]!) * g[o + G.Ornament]!)
+    // a light finds a mate in the dark: by night, or down in the sea
+    * (1 + 0.2 * g[o + G.Glow]! * Math.max(night, water))
+    // young that live a different life from their parents do not eat their parents' food: it pays for small animals
+    // of the water's edge (this gene had no effect at all before, and only drifted)
+    * (1 + 0.24 * g[o + G.Metamorphosis]! * sat(1 - Math.abs(water - 0.5) * 2.2) * (1 - size * 0.6));
   out[p + P.Death] = 0.34 - 0.2 * g[o + G.Lifespan]! + 0.1 * metab * 0.5;
   out[p + P.GenYears] = 0.3 + 28 * g[o + G.Maturity]! * (0.2 + size) + 3 * size;
   out[p + P.Attack] = sat(0.2 + g[o + G.Aggression]! * 0.3 + g[o + G.Venom]! * 0.35 + g[o + G.Horn]! * 0.1 + g[o + G.Head]! * 0.15 + brain * 0.3);

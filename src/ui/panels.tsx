@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Nation } from '../render/gfx/nations';
 import { CreatureSketch } from './sketch';
 import { ART_NAMES, Portrait, artStyle } from './portrait';
-import { G, GENE_NAMES } from '../sim/genetics';
+import { G, GENE_NAMES, HUNTER_DIET } from '../sim/genetics';
 import type { SimEvent } from '../sim/events';
 import type { NationInfo, PersonInfo, SpeciesInfo } from '../shared/protocol';
 import { dateIn } from '../sim/history/calendar';
@@ -118,7 +118,7 @@ export function Why() {
 export function describe(sp: SpeciesInfo): string {
   const g = sp.genes;
   const size = sp.metres < 0.15 ? 'tiny' : sp.metres < 0.6 ? 'small' : sp.metres < 2 ? 'mid-sized' : sp.metres < 4.5 ? 'large' : 'giant';
-  const diet = g[G.Diet]! > 0.62 ? 'hunter' : g[G.Diet]! < 0.3 ? 'grazer' : 'forager';
+  const diet = g[G.Diet]! > HUNTER_DIET ? 'hunter' : g[G.Diet]! < 0.3 ? 'grazer' : 'forager';
   const where = sp.fly > 0.45 ? 'flying' : sp.land > 0.6 ? 'land' : sp.land > 0.25 ? 'shore' : 'sea';
   const extra: string[] = [];
   if (g[G.WarmBlood]! > 0.5) extra.push('warm-blooded');
@@ -308,6 +308,7 @@ const GOD_TOOLS: [string, string, string][] = [
   ['shield', 'Shield dome', 'Keep disasters out of one region for three million years.'],
   ['monolith', 'Monolith', 'Animals living beside it grow clever.'],
   ['comet', 'Summon comet', 'Call a comet into the sky. Peoples will remember it.'],
+  ['shatter', 'Shatter the moon', 'Break the moon into a ring. Its shadow lays a cold stripe along the equator.'],
   ['rogue', 'Rogue planet', 'Send a wandering world through the system. The orbit shifts, the axis rocks, comets fall.'],
   ['burst', 'Gamma-ray burst', 'A dying star\'s beam strikes the side of the world you click.'],
   ['tilt', 'Tilt the axis', 'Change the seasons for good.'],
@@ -319,6 +320,9 @@ const DESIGN_GENES: [number, string, number][] = [
   [G.Neck, 'neck', 0.2], [G.Tail, 'tail', 0.4], [G.Horn, 'horns', 0.1], [G.Armor, 'armour', 0.1], [G.Water, 'water or land', 0.05],
   [G.Diet, 'plants or meat', 0.1], [G.Sociality, 'herding', 0.6], [G.Intelligence, 'intelligence', 0.15], [G.WarmBlood, 'warm blood', 0.3],
   [G.Hue, 'colour', 0.5], [G.Hue2, 'second colour', 0.1], [G.PatternType, 'pattern', 0.4], [G.Glow, 'glow', 0.1], [G.EyeCount, 'eyes', 0.34],
+  // traits evolution seldom reaches by itself: here they can be had for the asking
+  [G.Ornament, 'ornaments', 0.1], [G.ColorChange, 'colour change', 0.1], [G.Echo, 'echolocation', 0.1], [G.Electric, 'electric sense', 0.1],
+  [G.Metamorphosis, 'larval stage', 0.1], [G.Metabolism, 'slow or fast metabolism', 0.3], [G.Nocturnal, 'day or night', 0.2], [G.Burrow, 'burrowing', 0.1],
 ];
 
 /** Design a species by hand, then click the planet to release it. */
