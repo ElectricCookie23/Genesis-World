@@ -129,6 +129,8 @@ export interface SettlementInfo {
   id: number; name: string; cell: number; species: number; pop: number; tech: number; founded: number; belief: number; eventId: number; ruined: number;
   /** Has raised a temple (after the sky has meddled often enough). */
   temple?: boolean;
+  /** Great works raised here in golden ages. */
+  monuments?: number;
   farms?: boolean;
   /** Nation it belongs to, or -1 while it is a camp outside history. */
   nation?: number;
@@ -148,6 +150,8 @@ export interface NationInfo {
   ruler: string; rulerSince: number; house: string; houseReigns: number;
   /** Id of the ruling house, or -1. */
   houseId: number;
+  /** What its people call its golden age while one lasts ('' otherwise), the year it began, and its great works so far (system E10). */
+  golden: string; goldenSince: number; goldenWorks: number;
   /** Its count of years (system E8): what Year 1 remembers, the same in its own tongue, the sim year that is Year 1, and the event it is tied to. */
   calendar: string; calendarOwn: string; calendarEpoch: number; calendarEvent: number;
   eventId: number;

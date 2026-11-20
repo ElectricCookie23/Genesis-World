@@ -34,6 +34,15 @@ export interface Nation {
   /** Direction of the capital. */
   dir: [number, number, number];
   emblem: Emblem;
+  /** In a golden age: its lights and map colour are graded warm. */
+  golden?: boolean;
+}
+
+/** The warm grade of a golden age: a colour pulled toward gold and lifted a little, never past full brightness. */
+export function goldenGrade(c: RGB): RGB {
+  const gold: RGB = [1.0, 0.8, 0.38];
+  const mix = (a: number, b: number) => Math.min(1, (a * 0.5 + b * 0.5) * 1.12);
+  return [mix(c[0], gold[0]), mix(c[1], gold[1]), mix(c[2], gold[2])];
 }
 
 const hash = (n: number): number => { let x = (n | 0) * 374761393 + 668265263; x = (x ^ (x >>> 13)) * 1274126177; return ((x ^ (x >>> 16)) >>> 0) / 4294967296; };
@@ -132,6 +141,9 @@ export function deriveNations(settlements: SettlementInfo[], grid: Grid, species
     const own = cap.nation !== undefined && cap.nation >= 0 ? info.get(cap.nation) : undefined;
     n.name = own ? own.name : nationName(cap.name, cap.id * 7 + n.species, tech, cap.belief >= 0);
     n.color = lightColour(tech, n.signature);
+    // a country in its golden age shows it: its lights and its colour on the map lean warm and bright (system E10)
+    n.golden = !!own && !!own.golden;
+    if (n.golden) n.color = goldenGrade(n.color);
   }
   return nations;
 }

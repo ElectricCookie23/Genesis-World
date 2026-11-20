@@ -41,6 +41,7 @@ export function eventColor(type: string): string {
     case 'migration': case 'culture': return '#9fe0c8';
     case 'marriage': case 'union': case 'dynasty': return '#f0b8d0';
     case 'calendar': return '#d9c8ff';
+    case 'golden-age': case 'golden-age-end': case 'monument': return '#ffd76a';
     case 'long-peace': case 'peace-broken': return '#fff1c9';
     case 'ruin': return '#b9a48c';
     case 'storm': return '#b5c4de';
@@ -78,6 +79,9 @@ export function eventGlyph(type: string): string {
     case 'marriage': case 'union': return '∞';
     case 'dynasty': return '♔';
     case 'calendar': return '◷';
+    case 'golden-age': return '☀';
+    case 'golden-age-end': return '☾';
+    case 'monument': return '▟';
     case 'long-peace': return '☮';
     case 'peace-broken': return '⚡';
     case 'ruin': return '∴';

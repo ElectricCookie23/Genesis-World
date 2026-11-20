@@ -958,3 +958,74 @@ describe('migrations of peoples (E9)', () => {
     expect(Number(wrap.split(' ').slice(-2)[0])).toBeGreaterThan(720);
   });
 });
+
+import { goldenGrade } from '../src/render/gfx/nations';
+
+describe('golden ages (E10)', () => {
+  it('golden ages begin, raise great works and end, each with its causes on record', () => {
+    const runs = fiveHistories();
+    let ages = 0, ended = 0, worlds = 0, works = 0;
+    const reasons = new Set<string>();
+    for (const r of runs) {
+      const h = r.sim.civ.h, ev = r.sim.events.events;
+      const starts = ev.filter((e) => e.type === 'golden-age');
+      if (starts.length) worlds++;
+      for (const e of starts) {
+        ages++;
+        const n = h.nations[Number(e.data!.nation)]!;
+        expect(e.title).toBe(`The golden age of ${n.name}`);
+        expect(e.importance).toBe(2);
+        // the chronicle names the age, in the people's own tongue and in plain words
+        expect(String(e.data!.own)).toMatch(/^the \S+/);
+        expect(e.description).toContain(String(e.data!.own));
+        expect(e.description).toContain(String(e.data!.gloss));
+        expect(e.causes.length).toBeGreaterThan(0);
+        for (const c of e.causes) expect(ev[c]!.simYear).toBeLessThanOrEqual(e.simYear);
+        expect(h.people[Number(e.data!.person)]).toBeDefined();
+      }
+      for (const e of ev.filter((x) => x.type === 'golden-age-end')) {
+        ended++;
+        const d = e.data!;
+        reasons.add(String(d.reason));
+        // it is tied to the age it ends, and to whatever ended it
+        const began = e.causes.map((c) => ev[c]!).find((c) => c.type === 'golden-age')!;
+        expect(began).toBeDefined();
+        expect(began.data!.nation).toBe(d.nation);
+        expect(Math.abs(e.simYear - began.simYear - Number(d.years))).toBeLessThan(2);
+        expect(e.description).toContain(String(d.reason));
+        if (/war reached|plague|land itself|ruling house/.test(String(d.reason))) expect(e.causes.length).toBeGreaterThanOrEqual(2);
+        // the great works of the age are the monuments raised between its beginning and its end
+        const raised = ev.filter((x) => x.type === 'monument' && x.data!.nation === d.nation && x.causes.includes(began.id));
+        expect(raised.length).toBe(Number(d.works));
+        works += raised.length;
+        // no country has two golden ages within a few generations
+        const next = starts.find((x) => x.data!.nation === d.nation && x.simYear > e.simYear);
+        if (next) expect(next.simYear - e.simYear).toBeGreaterThanOrEqual(250);
+      }
+      for (const e of ev.filter((x) => x.type === 'monument')) {
+        const town = r.sim.civ.settlements[Number(e.data!.settlement)]!;
+        expect(town.monuments ?? 0).toBeGreaterThan(0);
+        expect(ev[e.causes[0]!]!.type).toBe('golden-age');
+      }
+      // a country still in its golden age is alive, and one that has ended keeps no flag
+      for (const n of h.nations) if (n.golden) { expect(n.ended).toBeLessThan(0); expect(ev[n.golden.eventId]!.type).toBe('golden-age'); }
+    }
+    expect(worlds).toBeGreaterThanOrEqual(Math.min(3, runs.length));
+    expect(ages).toBeGreaterThanOrEqual(6);
+    expect(ended).toBeGreaterThanOrEqual(4);
+    expect(works).toBeGreaterThan(0);
+    expect(reasons.size).toBeGreaterThanOrEqual(2);
+  }, 900000);
+
+  it('a country in its golden age is shown warm on the map', () => {
+    const cool: [number, number, number] = [0.2, 0.9, 1.0];
+    const warm = goldenGrade(cool);
+    expect(warm[0]).toBeGreaterThan(cool[0]);
+    expect(warm[2]).toBeLessThan(cool[2]);
+    for (const v of warm) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(1); }
+    // already warm colours stay warm, and nothing is pushed past full brightness
+    const fire = goldenGrade([1.0, 0.5, 0.14]);
+    expect(fire[0]).toBe(1);
+    expect(fire[1]).toBeGreaterThan(0.5);
+  });
+});

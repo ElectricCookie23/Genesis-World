@@ -47,6 +47,8 @@ export interface Settlement {
   relic: number;
   /** Founded by settlers who came across the sea. */
   overseas?: boolean;
+  /** Great works raised here in golden ages (system E10). */
+  monuments?: number;
   /** How warm its land was when its people last chose to live here: what a later cold is measured against. */
   homeTemp?: number;
 }
@@ -70,6 +72,11 @@ const LAST_WAR_MEMORY = 6000;
 const LONGEST_HISTORY = 40000;
 
 const sat = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
+/** What a people may call its golden age: two meanings for its own tongue, and the same in plain words. */
+const GOLDEN_NAMES: [string, string, string][] = [
+  ['sun', 'great', 'the Great Sun'], ['star', 'new', 'the New Star'], ['king', 'old', 'the Old Kings'], ['land', 'holy', 'the Blessed Land'], ['river', 'great', 'the Full River'],
+  ['fire', 'new', 'the Bright Hearth'], ['hill', 'holy', 'the Holy Hill'], ['sea', 'great', 'the Wide Sea'], ['people', 'great', 'the Great People'], ['town', 'new', 'the New Towns'],
+];
 const NTH = ['Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth'];
 /** How far from its capital a nation of each era can hold a town, counted in regions (the spacing of neighbouring towns). */
 const REACH = [2.5, 3.5, 4.5, 6, 10, 14, 22, 45, 99, 99];
@@ -253,7 +260,7 @@ export class Civilization {
       const reach = Math.min(4, towns.length - 1) * 0.08;
       const quick = 1 + 6 * sat((n.tech - 0.7) / 0.3) ** 2;
       // (learning gathers where the people are: a country much smaller than the greatest of its day works more slowly)
-      const rate = 6.5e-5 * (0.5 + 0.5 * Math.min(1, towns.length / Math.max(1, 0.5 * most))) * (0.45 + Math.log10(1 + pop) / 3) * (0.6 + sp.ref[G.Intelligence]!) * (1 + reach) * quick * (0.6 + 0.4 * n.stability) * (0.9 + 0.2 * (ruler ? ruler.wise : 0.5));
+      const rate = 6.5e-5 * (n.golden ? 1.45 : 1) * (0.5 + 0.5 * Math.min(1, towns.length / Math.max(1, 0.5 * most))) * (0.45 + Math.log10(1 + pop) / 3) * (0.6 + sp.ref[G.Intelligence]!) * (1 + reach) * quick * (0.6 + 0.4 * n.stability) * (0.9 + 0.2 * (ruler ? ruler.wise : 0.5));
       this.research(sim, rng, n, towns, rate * y, year, y);
       // ---- a library burns (system E5): likelier in troubled times, and only once there is writing to burn
       if (n.know.way[SLOT_INDEX.get('write')!]! >= 0 && rng.chance(1 - Math.exp(-y * (0.4 + 1.6 * (1 - n.stability) + n.fatigue) / 2600))) {
@@ -262,6 +269,8 @@ export class Civilization {
       }
       // ---- how well it holds together, and what happens when it does not (system E4)
       if (this.fate(sim, rng, n, towns, y, year)) continue;
+      // ---- golden ages begin, raise their monuments and end (system E10)
+      this.flourish(sim, rng, n, towns, y, year);
       // ---- a people that charts the stars fixes its count of years (system E8)
       if (this.fine && n.know.way[SLOT_INDEX.get('sky2')!]! >= 0 && this.calendarOf(n)?.kind === 'founding' && rng.chance(1 - Math.exp(-y / 40))) this.reformCalendar(sim, rng, n, year);
       // ---- in hard years a preacher may rise
@@ -878,6 +887,7 @@ export class Civilization {
         causes: [n.eventId, ...causes].filter((x) => x >= 0), importance: 2, speciesIds: [n.species], data: { nation: n.id, towns: towns.length },
       });
       this.credit(sim, rng, n, ev.id, '{name} was the last to rule it.');
+      if (n.golden) this.endGolden(sim, n, year, 'the country itself came apart', ev.id);
       cap.pop *= 0.45;
       // the largest towns that stand well apart each become the seat of a successor
       const seats: Settlement[] = [];
@@ -1058,6 +1068,7 @@ export class Civilization {
     // the records of rulers close: from here no one keeps them
     for (const x of h.nations) {
       if (x.ended >= 0) continue;
+      if (x.golden) this.endGolden(sim, x, year, 'nothing in it was new any more, and it faded into custom', ev.id);
       const ruler = h.people[x.ruler], house = h.dynasties[x.dynasty];
       if (ruler && ruler.died < 0) { ruler.died = year; ruler.reignTo = year; ruler.fate = 'was the last ruler whose name was kept'; }
       if (house && house.ended < 0) house.ended = year;
@@ -1319,6 +1330,78 @@ export class Civilization {
     } else { house.reigns += reigns; house.generations = (house.generations ?? 1) + Math.round(reigns * 0.8); }
   }
 
+  /**
+   * Golden ages (system E10). A country that is steady, well fed, of some size and in touch with at least two
+   * others may enter a golden age: knowledge comes faster, great works are raised in its towns, and its people
+   * give the years a name. Wealth gathers in few hands while it lasts, and it ends when war, plague, disaster or
+   * a disputed succession reaches it, when the country grows unsteady, when its partners are gone, or when too
+   * few own too much. The end is an event caused by whatever ended it.
+   */
+  private flourish(sim: Simulation, rng: RNG, n: Nation, towns: Settlement[], y: number, year: number): void {
+    const h = this.h;
+    let partners = 0;
+    for (const id of n.contacts) if (h.nations[id] && h.nations[id]!.ended < 0) partners++;
+    const woe = n.woes.length ? n.woes[n.woes.length - 1]! : undefined;
+    const cap = this.settlements[n.capital]!;
+    const g = n.golden;
+    if (!g) {
+      if (towns.length < 4 || n.era < 2 || n.stability < 0.64 || partners < 2 || (woe && year - woe.year < 30) || year - (n.goldenEnded ?? -1e9) < 250) return;
+      let full = 0;
+      for (const st of towns) full += Math.min(1, st.pop / Math.max(0.5, this.capacity(sim, st)));
+      if (full / towns.length < 0.7 || !rng.chance(1 - Math.exp(-y / 80))) return;
+      const lang = this.languageOf(n);
+      // what they will call these years: two meanings in their own tongue, different for each country and each time
+      const [head, modifier, gloss] = GOLDEN_NAMES[hash32(this.seedNum, n.id, Math.floor(year), 0x901d) % GOLDEN_NAMES.length]!;
+      const own = `the ${compound(lang, head, modifier, year)}`;
+      const house = h.dynasties[n.dynasty];
+      const friends = (n.allies ?? []).filter((a) => a.until > year && a.eventId >= 0).map((a) => a.eventId);
+      const settled = house && house.reigns >= 3 ? h.people[house.founder]?.events[0] ?? -1 : -1;
+      const ev = sim.emit({
+        type: 'golden-age', year, cellId: cap.cell, title: `The golden age of ${n.name}`,
+        description: `${n.name} is at peace, its granaries are full, and its traders reach ${partners} other ${partners === 1 ? 'country' : 'countries'}. The workshops and schools of ${cap.name} are crowded and its builders are never without work. Its people will remember these years as ${own}, ${gloss}.`,
+        causes: [n.eventId, settled, ...friends.slice(-2)].filter((x, i, a) => x >= 0 && sim.events.events[x] && a.indexOf(x) === i), importance: 2, speciesIds: [n.species], data: { nation: n.id, own, gloss },
+      });
+      n.golden = { since: year, eventId: ev.id, own, works: 0 };
+      this.credit(sim, rng, n, ev.id, 'It begins in the reign of {name}.');
+      return;
+    }
+    // while it lasts: wealth gathers, and great works go up
+    n.inequality = sat(n.inequality + y * 0.0007 * (1 - n.inequality));
+    if (rng.chance(1 - Math.exp(-y / 30))) {
+      const site = towns[rng.int(Math.min(towns.length, 3))] ?? cap;
+      site.monuments = (site.monuments ?? 0) + 1;
+      g.works++;
+      const what = rng.pick(['a great hall', 'a library', 'a temple with a roof no one thought could stand', 'a bridge of a hundred arches', 'a tower to watch the stars from', 'a theatre cut into the hill', 'gardens watered from the mountains', 'a harbour wall a mile long']);
+      const at = sim.emit({
+        type: 'monument', year, cellId: site.cell, title: `${capital(what)} at ${site.name}`,
+        description: `In ${g.own}, ${n.name} raises ${what} at ${site.name}.`,
+        causes: [g.eventId].filter((x) => x >= 0), importance: g.works === 1 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, settlement: site.id },
+      });
+      this.credit(sim, rng, n, at.id, 'It is the work of {name}.', 'artist', year);
+    }
+    // how it ends
+    const struck = woe && woe.year > g.since && year - woe.year < 12 ? woe : undefined;
+    const reason = struck ? (struck.kind === 'war' ? 'war reached it' : struck.kind === 'plague' ? 'plague emptied its workshops' : struck.kind === 'disaster' ? 'the land itself turned on it' : 'its ruling house was shaken')
+      : n.stability < 0.45 ? 'the country had grown unsteady' : partners === 0 ? 'its trading partners were gone' : n.inequality > 0.82 ? 'its wealth had gathered in too few hands' : towns.length < 3 ? 'too little of the country was left' : '';
+    if (reason) this.endGolden(sim, n, year, reason, struck ? struck.eventId : -1);
+  }
+
+  /** A golden age is over: the chronicle says how long it lasted, what it left and what ended it. */
+  private endGolden(sim: Simulation, n: Nation, year: number, reason: string, cause: number): void {
+    const g = n.golden;
+    if (!g) return;
+    n.golden = undefined;
+    n.goldenEnded = year;
+    const cap = this.settlements[n.capital];
+    const lasted = Math.max(1, Math.round(year - g.since));
+    const ev = sim.emit({
+      type: 'golden-age-end', year, cellId: cap ? cap.cell : -1, title: `The end of ${g.own}`,
+      description: `After ${lasted.toLocaleString('en-US')} ${lasted === 1 ? 'year' : 'years'}, the golden age of ${n.name} is over: ${reason}. ${g.works === 0 ? 'It left no great work behind.' : `${g.works} great ${g.works === 1 ? 'work stands' : 'works stand'} from those years.`}`,
+      causes: [g.eventId, cause].filter((x, i, a) => x >= 0 && sim.events.events[x] && a.indexOf(x) === i), importance: lasted >= 100 ? 2 : 1, speciesIds: [n.species], data: { nation: n.id, years: lasted, works: g.works, reason },
+    });
+    this.credit(sim, null, n, ev.id, 'It ended in the reign of {name}.');
+  }
+
   /** The count of years a nation keeps. */
   calendarOf(n: Nation): Calendar | undefined {
     return this.h.calendars?.[n.calendar ?? -1];
@@ -1560,6 +1643,7 @@ export class Civilization {
           const land = new Set(abroad.land);
           for (let i = 0; i < WEB.length; i++) if (abroad.know.way[i]! < 0 && n.know.way[i]! >= 0 && wayFor(i, land) >= 0) { abroad.know.way[i] = wayFor(i, land); abroad.know.year[i] = year; }
           claimer.claim = -1;
+          if (n.golden) this.endGolden(sim, n, year, `the country was joined to ${abroad.name}`, ev.id);
           n.ended = year; n.pop = 0; n.towns = 0;
           return;
         }
@@ -1750,6 +1834,7 @@ export class Civilization {
   private closeNation(n: Nation, year: number, fate: string): void {
     const h = this.h;
     n.ended = year; n.pop = 0; n.towns = 0;
+    n.golden = undefined;
     const ruler = h.people[n.ruler];
     if (ruler && ruler.died < 0) { ruler.died = year; ruler.reignTo = year; ruler.fate = fate === 'fell apart' ? 'was the last to rule it' : 'died with the country'; }
     const house = h.dynasties[n.dynasty];
@@ -1757,6 +1842,7 @@ export class Civilization {
   }
 
   private endNation(sim: Simulation, n: Nation, year: number): void {
+    if (n.golden) this.endGolden(sim, n, year, 'its last town stood empty', -1);
     this.closeNation(n, year, 'emptied');
     const ev = sim.emit({
       type: 'nation-fall', year, cellId: this.settlements[n.capital]?.cell ?? -1, title: `${n.name} is no more`,

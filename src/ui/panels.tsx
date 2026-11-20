@@ -815,7 +815,7 @@ export function Peoples() {
                   const year = s.stats?.simYear ?? 0;
                   return (
                     <div class={css.when} style={{ color: '#a9a498' }}>
-                      {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}). {realm.ruler ? `${realm.ruler} of the ${realm.house} has ruled ${Math.max(1, Math.round(year - realm.rulerSince)).toLocaleString('en-US')} ${Math.round(year - realm.rulerSince) === 1 ? 'year' : 'years'} (${realm.houseReigns} ${realm.houseReigns === 1 ? 'reign' : 'reigns'} of that house).` : 'It lives by custom and keeps no list of rulers.'} Founded {Math.round(year - realm.founded).toLocaleString('en-US')} years ago. They speak {realm.language}.{realm.calendar ? ` By their count it is ${dateIn({ name: realm.calendar, epoch: realm.calendarEpoch }, year)}, or ${realm.calendarOwn} in their own tongue (sim year ${Math.floor(year).toLocaleString('en-US')}).` : ''}
+                      {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}). {realm.ruler ? `${realm.ruler} of the ${realm.house} has ruled ${Math.max(1, Math.round(year - realm.rulerSince)).toLocaleString('en-US')} ${Math.round(year - realm.rulerSince) === 1 ? 'year' : 'years'} (${realm.houseReigns} ${realm.houseReigns === 1 ? 'reign' : 'reigns'} of that house).` : 'It lives by custom and keeps no list of rulers.'} Founded {Math.round(year - realm.founded).toLocaleString('en-US')} years ago. They speak {realm.language}.{realm.golden ? ` It is in its golden age, ${realm.golden}, ${Math.max(1, Math.round(year - realm.goldenSince)).toLocaleString('en-US')} years old, with ${realm.goldenWorks} great ${realm.goldenWorks === 1 ? 'work' : 'works'} raised so far.` : ''}{realm.calendar ? ` By their count it is ${dateIn({ name: realm.calendar, epoch: realm.calendarEpoch }, year)}, or ${realm.calendarOwn} in their own tongue (sim year ${Math.floor(year).toLocaleString('en-US')}).` : ''}
                     </div>
                   );
                 })()}
@@ -837,6 +837,7 @@ export function Peoples() {
               <div class={css.what} style={{ color: '#ece7db' }}>{st.name}</div>
               <div class={css.when} style={{ color: '#ece7db' }}>A {kind(st.tech)} of {bigNumber(st.pop * 1000)} {sp ? sp.name : 'people'}, founded {formatYear(st.founded).toLowerCase()}.</div>
               {st.relic && <div class={css.when} style={{ color: '#d8b98a' }}>Its {st.relic} were built with a forgotten technique: no one here can make more.</div>}
+              {(st.monuments ?? 0) > 0 && <div class={css.when} style={{ color: '#ffd76a' }}>{st.monuments} great {st.monuments === 1 ? 'work stands' : 'works stand'} here from a golden age.</div>}
               {belief && <div class={css.when} style={{ color: '#ece7db' }}>Its faith remembers: {belief.title.toLowerCase()}.</div>}
               <button class={css.link} onClick={() => actions.flyToCell(st.cell, 0.25)}>fly there</button>
               {st.eventId >= 0 && <button class={css.link} onClick={() => update({ whyEvent: st.eventId })}>its story</button>}

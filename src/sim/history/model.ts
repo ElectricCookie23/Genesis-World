@@ -135,6 +135,10 @@ export interface Nation {
   fatigue: number;
   /** Recent blows to the nation (wars, plagues, disasters, a fallen house), newest last: what a collapse is blamed on. */
   woes: { kind: string; eventId: number; year: number }[];
+  /** Its golden age, while it lasts (system E10): when it began, the event that announced it, what its people call it, and the great works raised in it. */
+  golden?: { since: number; eventId: number; own: string; works: number };
+  /** The year its last golden age ended. */
+  goldenEnded?: number;
   /** The year of its last great migration (system E9). */
   moved?: number;
   /** The count of years it keeps (an index into the history's calendars). */
