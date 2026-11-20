@@ -37,7 +37,7 @@ console.log('ms per part:', JSON.stringify(Object.fromEntries(Object.entries(sim
 const tally: Record<string, number> = {};
 for (const e of sim.events.events) tally[e.type] = (tally[e.type] ?? 0) + 1;
 console.log('event types:', JSON.stringify(tally));
-for (const t of ['painting', 'tamed', 'temple', 'belief', 'tsunami', 'plague', 'convergence', 'living-fossil', 'comet', 'eclipse']) {
+for (const t of ['painting', 'tamed', 'story', 'tsunami', 'plague', 'convergence', 'living-fossil', 'comet', 'eclipse']) {
   const e = sim.events.events.find((x) => x.type === t);
   if (e) console.log(`  sample ${t}: ${e.description.slice(0, 170)}`);
 }

@@ -186,7 +186,7 @@ export class Legacy {
     const open = sim.godEvents.filter((id) => !this.answered.includes(id));
     if (!open.length) return;
     // lights enough to be read from above, or a faith built on the sky's doings and a town that keeps it
-    const towns = sim.civ.settlements.filter((st) => st.ruined < 0 && (st.tech >= 0.85 || (st.temple && st.tech >= 0.5)));
+    const towns = sim.civ.settlements.filter((st) => st.ruined < 0 && st.tech >= 0.85);
     if (!towns.length) return;
     const town = towns.reduce((a, b) => (b.tech > a.tech ? b : a));
     // the one they remember best: the latest thing done to them since they could remember at all

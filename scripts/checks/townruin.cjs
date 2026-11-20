@@ -15,7 +15,7 @@ const { open } = require('./h.cjs');
       if (elev[c] > sea + 0.25 && elev[c] < sea + 0.9 && Math.abs(v - 0.5) < 0.18 && cells.every((o) => Math.abs(g.actions.mapPoint(o)[0] - u) > 0.08)) cells.push(c);
     }
     const ages = [90, 900];
-    const list = cells.map((cell, i) => ({ id: 10 + i, name: 'ruin' + ages[i], cell, species: 0, pop: 0.01, peak: 400, tech: 0.95, founded: 0, belief: -1, eventId: -1, ruined: now - ages[i], nation: -1, temple: true, farms: true, monuments: 1, walls: [40, 0.5, 300, 0.9] }));
+    const list = cells.map((cell, i) => ({ id: 10 + i, name: 'ruin' + ages[i], cell, species: 0, pop: 0.01, peak: 400, tech: 0.95, founded: 0, lore: -1, eventId: -1, ruined: now - ages[i], nation: -1, farms: true, monuments: 1, walls: [40, 0.5, 300, 0.9] }));
     sc.setSettlements(list, []);
     return list.map((t) => ({ name: t.name, uv: g.actions.mapPoint(t.cell) }));
   });

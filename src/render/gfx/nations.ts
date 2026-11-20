@@ -75,11 +75,11 @@ export function lightColour(tech: number, signature: RGB): RGB {
   return [...signature] as RGB;
 }
 
-function nationName(capital: string, seed: number, tech: number, faith: boolean): string {
+function nationName(capital: string, seed: number, tech: number): string {
   const root = capital.replace(/[aeiou]+$/i, '') || capital;
   const r = hash(seed * 31 + 7);
   if (tech < 0.3) return [`The ${capital} Bands`, `People of ${capital}`, `${root}i Clans`][Math.floor(r * 3)]!;
-  if (tech < 0.6) return [`Kingdom of ${capital}`, `${root}ia`, `Realm of ${capital}`, faith ? `Holy ${root}ar` : `${root}an League`, `${root}eth`][Math.floor(r * 5)]!;
+  if (tech < 0.6) return [`Kingdom of ${capital}`, `${root}ia`, `Realm of ${capital}`, `${root}an League`, `${root}eth`][Math.floor(r * 5)]!;
   return [`${root}ia`, `Republic of ${capital}`, `${root}an Union`, `${root}ar Compact`, `United ${root}ia`, `${root}eth Dominion`, `Free ${capital}`][Math.floor(r * 7)]!;
 }
 
@@ -90,7 +90,7 @@ export function settlementSize(pop: number): number {
 
 /**
  * Group living settlements into nations. The oldest settlement in a neighbourhood is the capital;
- * later ones of the same people nearby belong to it (a shared faith reaches further).
+ * later ones of the same people nearby belong to it (towns that tell the same story of themselves hold together further).
  */
 export function deriveNations(settlements: SettlementInfo[], grid: Grid, species: Map<number, SpeciesInfo>, known: NationInfo[] = []): Nation[] {
   // Where the simulation has founded nations, those are the nations: their towns are grouped as the simulation
@@ -110,7 +110,7 @@ export function deriveNations(settlements: SettlementInfo[], grid: Grid, species
       const c = caps[k]!;
       if (c.species !== s.species || (c.nation ?? -1) >= 0) continue;
       const d = Math.acos(Math.max(-1, Math.min(1, sx * pos[c.cell * 3]! + sy * pos[c.cell * 3 + 1]! + sz * pos[c.cell * 3 + 2]!)));
-      const reach = 0.3 + (c.belief >= 0 && c.belief === s.belief ? 0.14 : 0) - (c.belief >= 0 && s.belief >= 0 && c.belief !== s.belief ? 0.12 : 0);
+      const reach = 0.3 + (c.lore >= 0 && c.lore === s.lore ? 0.14 : 0) - (c.lore >= 0 && s.lore >= 0 && c.lore !== s.lore ? 0.12 : 0);
       if (d < reach && d < bd) { bd = d; best = k; }
     }
     if (best < 0 && caps.length >= 24) {
@@ -143,7 +143,7 @@ export function deriveNations(settlements: SettlementInfo[], grid: Grid, species
     n.pop = pop; n.tech = tech;
     const cap = byId.get(n.capital)!;
     const own = cap.nation !== undefined && cap.nation >= 0 ? info.get(cap.nation) : undefined;
-    n.name = own ? own.name : nationName(cap.name, cap.id * 7 + n.species, tech, cap.belief >= 0);
+    n.name = own ? own.name : nationName(cap.name, cap.id * 7 + n.species, tech);
     n.color = lightColour(tech, n.signature);
     // a country in its golden age shows it: its lights and its colour on the map lean warm and bright (system E10)
     n.golden = !!own && !!own.golden;

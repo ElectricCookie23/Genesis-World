@@ -23,7 +23,7 @@ export interface Citizen {
 const TRADES: [number, string, number][] = [
   [0, 'forager', 5], [0, 'hunter', 3], [0, 'toolmaker', 1], [0, 'healer', 0.4], [0, 'storyteller', 0.3],
   [0.22, 'farmer', 14], [0.22, 'herder', 4], [0.22, 'potter', 1.2], [0.22, 'weaver', 1.5],
-  [0.3, 'builder', 1.5], [0.3, 'priest', 0.6], [0.3, 'trader', 1], [0.3, 'smith', 0.8], [0.3, 'brewer', 0.5],
+  [0.3, 'builder', 1.5], [0.3, 'teacher', 0.6], [0.3, 'trader', 1], [0.3, 'smith', 0.8], [0.3, 'brewer', 0.5],
   [0.45, 'soldier', 1.5], [0.45, 'scribe', 0.4], [0.45, 'mason', 1], [0.45, 'carter', 0.8], [0.45, 'innkeeper', 0.4],
   [0.6, 'sailor', 1.5], [0.6, 'shipwright', 0.5], [0.6, 'merchant', 1], [0.6, 'tailor', 0.8], [0.6, 'physician', 0.3], [0.6, 'teacher', 0.3],
   [0.72, 'printer', 0.5], [0.72, 'clerk', 1], [0.72, 'glassmaker', 0.4], [0.72, 'surveyor', 0.2],

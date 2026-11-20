@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { MAX_PLOTS, planCity, planShape, type CitySite } from '../src/render/gfx/cityplan';
 import { buildingFor, townPlots } from '../src/render/gfx/buildings';
 
-const crossroads: CitySite = { seed: 11, roads: [0.3, 2.2, 3.9, 5.2], coast: 0, shore: Infinity, uphill: 1.2, slope: 0.05, temple: false, port: false, capital: true, walls: [] };
-const harbour: CitySite = { seed: 23, roads: [2.6, 4.4], coast: 0.4, shore: 5, uphill: 3.3, slope: 0.5, temple: true, port: true, capital: false, walls: [30, 140] };
-const valley: CitySite = { seed: 37, roads: [1.0, 4.1], coast: 0, shore: Infinity, uphill: 2.6, slope: 0.9, temple: true, port: false, capital: false, walls: [60] };
+const crossroads: CitySite = { seed: 11, roads: [0.3, 2.2, 3.9, 5.2], coast: 0, shore: Infinity, uphill: 1.2, slope: 0.05, school: false, port: false, capital: true, walls: [] };
+const harbour: CitySite = { seed: 23, roads: [2.6, 4.4], coast: 0.4, shore: 5, uphill: 3.3, slope: 0.5, school: true, port: true, capital: false, walls: [30, 140] };
+const valley: CitySite = { seed: 37, roads: [1.0, 4.1], coast: 0, shore: Infinity, uphill: 2.6, slope: 0.9, school: true, port: false, capital: false, walls: [60] };
 
 describe('living city growth (E11)', () => {
   it('a town is laid out the same way every time, and grows by adding to what is there', () => {
@@ -59,10 +59,10 @@ describe('living city growth (E11)', () => {
     expect(planShape(B, 60).walls).toBe(1);
     const outside = B.plots.slice(140).filter((p) => Math.hypot(p.x, p.y) > size(B.walls[0]!)).length;
     expect(outside).toBeGreaterThan(5);
-    // temples: where the site has one there is a place for it and a quarter round it
-    expect(A.temple).toBeNull();
-    expect(B.temple).not.toBeNull();
-    expect(b.share.temple + c.share.temple).toBeGreaterThan(0);
+    // schools: where the site has one there is a place for it and a quarter round it
+    expect(A.school).toBeNull();
+    expect(B.school).not.toBeNull();
+    expect(b.share.school + c.share.school).toBeGreaterThan(0);
     // the capital at a crossroads has more roads out than the valley town with one road through
     expect(a.roads).toBeGreaterThanOrEqual(4);
     expect(c.roads).toBeLessThan(a.roads);
@@ -74,7 +74,7 @@ describe('living city growth (E11)', () => {
 
   it('what stands on a plot follows its quarter, its place in the town and the age', () => {
     // a young town is huts whatever the quarter
-    for (const d of ['market', 'temple', 'homes', 'workshops', 'docks'] as const) for (const r of [0.1, 0.5, 0.9]) expect(['hut', 'house']).toContain(buildingFor(d, 0.5, 0.2, r));
+    for (const d of ['market', 'school', 'homes', 'workshops', 'docks'] as const) for (const r of [0.1, 0.5, 0.9]) expect(['hut', 'house']).toContain(buildingFor(d, 0.5, 0.2, r));
     // halls gather at the market and the docks; homes are houses
     expect(buildingFor('market', 0.9, 0.5, 0.2)).toBe('hall');
     expect(buildingFor('docks', 0.3, 0.5, 0.2)).toBe('hall');
@@ -162,7 +162,7 @@ describe('watch it being built (E12)', () => {
     expect(top('crane')).toBeGreaterThan(top('hoist'));
     expect(top('hoist')).toBeGreaterThan(top('house'));
     // the heights the scaffolding reaches are the heights of the models
-    for (const kind of ['hut', 'house', 'hall', 'tower', 'dome', 'spire', 'temple'] as const) expect(Math.abs(top(kind) - HEIGHT[kind]!)).toBeLessThan(0.12);
+    for (const kind of ['hut', 'house', 'hall', 'tower', 'dome', 'spire'] as const) expect(Math.abs(top(kind) - HEIGHT[kind]!)).toBeLessThan(0.12);
   });
 });
 
@@ -239,7 +239,7 @@ describe('architecture from biology (E13)', () => {
     let towers = 0, domes = 0, perches = 0, plainTowers = 0;
     for (let k = 0; k < 400; k++) {
       const r = (k * 37 % 400) / 400, central = (k * 91 % 400) / 400;
-      const d = (['market', 'temple', 'homes', 'workshops', 'docks'] as const)[k % 5]!;
+      const d = (['market', 'school', 'homes', 'workshops', 'docks'] as const)[k % 5]!;
       const mine = buildingFor(d, central, 0.7, r, digger), plain = buildingFor(d, central, 0.7, r), theirs = buildingFor(d, central, 0.7, r, flier);
       if (mine === 'tower' || mine === 'spire') towers++;
       if (mine === 'dome') domes++;

@@ -9,7 +9,7 @@ const { open } = require('./h.cjs');
     const elev = sc.planet.elevation, sea = g.state.stats.seaLevel;
     let cell = -1;
     for (let c = 0; c < elev.length && cell < 0; c += 7) { const [u, v] = g.actions.mapPoint(c); if (elev[c] > sea + 0.25 && elev[c] < sea + 1.2 && Math.abs(v - 0.5) < 0.2) cell = c; }
-    const st = { id: 1, name: 'Testopolis', cell, species: 0, pop: 600, tech: 1.0, founded: 0, belief: -1, eventId: -1, ruined: -1, nation: -1, temple: true, farms: true, monuments: 2, walls: [40, 0.5, 300, 0.9] };
+    const st = { id: 1, name: 'Testopolis', cell, species: 0, pop: 600, tech: 1.0, founded: 0, lore: -1, eventId: -1, ruined: -1, nation: -1, farms: true, monuments: 2, walls: [40, 0.5, 300, 0.9] };
     sc.setSettlements([st], []);
     g.state.settlements = [st];
     return { cell, uv: g.actions.mapPoint(cell) };

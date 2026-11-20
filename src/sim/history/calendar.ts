@@ -1,9 +1,9 @@
 // Calendars (system E8): each people counts its years from something that really happened to it,
 // an event in the cause graph: the planting of its first fields, a comet's return, an eclipse, a
-// disaster it lived through, the crowning of a house, the teaching of a prophet.
+// disaster it lived through, the crowning of a house, the teaching of a reformer.
 import { hash32 } from './hash';
 
-export type CalendarKind = 'founding' | 'comet' | 'eclipse' | 'disaster' | 'crown' | 'prophet';
+export type CalendarKind = 'founding' | 'comet' | 'eclipse' | 'disaster' | 'crown' | 'teaching';
 
 export interface Calendar {
   id: number;
@@ -41,13 +41,13 @@ const SKY: Record<string, [string, string, string][]> = {
 
 /**
  * What a count of years is called, and the two meanings its name is built from in the people's own tongue.
- * `title` is the title of the event remembered, `who` a name that belongs in it (a house, a prophet, a fallen country).
+ * `title` is the title of the event remembered, `who` a name that belongs in it (a house, a reformer, a fallen country).
  */
 export function calendarName(kind: CalendarKind, seed: number, detail: string, who: string): [string, string, string] {
   const pick = <T>(list: T[]): T => list[hash32(seed, 0xca1) % list.length]!;
   if (kind === 'comet' || kind === 'eclipse') return pick(SKY[kind]!);
   if (kind === 'crown') return [`the ${who}`, 'king', 'new'];
-  if (kind === 'prophet') return [`the Teaching of ${who}`, 'god', 'new'];
+  if (kind === 'teaching') return [`the Teaching of ${who}`, 'people', 'new'];
   if (kind === 'disaster') {
     const t = detail.toLowerCase();
     if (/impact|meteor|asteroid|falls|strike/.test(t)) return ['the Burning Sky', 'fire', 'star'];
