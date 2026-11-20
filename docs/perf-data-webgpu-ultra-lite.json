@@ -1,0 +1,149 @@
+{
+ "meta": {
+  "bundle": "index-C8xtQ58C.js",
+  "backend": "webgpu",
+  "preset": "ultra",
+  "canvas": [
+   3200,
+   1826
+  ],
+  "pr": 2,
+  "post": {
+   "taa": true,
+   "ao": true,
+   "bloom": true,
+   "fringe": true
+  },
+  "cloudSteps": 32,
+  "My": 59.133,
+  "towns": 588,
+  "species": 31,
+  "refresh": 43
+ },
+ "spots": {
+  "forest": [
+   1.619,
+   0.414
+  ],
+  "town": [
+   -2.777,
+   -0.704,
+   "Du",
+   597
+  ]
+ },
+ "views": [
+  {
+   "name": "orbit, day side",
+   "view": {
+    "lon": -1.46,
+    "lat": 0.1,
+    "dist": 2.6,
+    "sun": 0.5,
+    "tilt": 0
+   },
+   "base0": {
+    "fps": 20.3,
+    "ms": 49.23,
+    "cpu": 47.72
+   },
+   "base1": {
+    "fps": 20.3,
+    "ms": 49.26,
+    "cpu": 47.77
+   },
+   "baseInfo": {
+    "calls": 94,
+    "tris": 135160
+   },
+   "rows": [],
+   "extra": [],
+   "state": {
+    "pr": 2,
+    "post": {
+     "taa": true,
+     "ao": true,
+     "bloom": true,
+     "fringe": true
+    },
+    "lum": 0.105,
+    "individuals": 0
+   }
+  },
+  {
+   "name": "mid altitude over the densest forest (dist 0.3)",
+   "view": {
+    "lon": 1.619,
+    "lat": 0.414,
+    "dist": 0.3,
+    "sun": 0.5,
+    "tilt": 0
+   },
+   "base0": {
+    "fps": 17.4,
+    "ms": 57.47,
+    "cpu": 56.56
+   },
+   "base1": {
+    "fps": 17.3,
+    "ms": 57.64,
+    "cpu": 55.83
+   },
+   "baseInfo": {
+    "calls": 106,
+    "tris": 1473918
+   },
+   "rows": [],
+   "extra": [],
+   "state": {
+    "pr": 2,
+    "post": {
+     "taa": true,
+     "ao": true,
+     "bloom": true,
+     "fringe": true
+    },
+    "lum": 0.144,
+    "individuals": 483
+   }
+  },
+  {
+   "name": "forest, ground level (dist 0.02)",
+   "view": {
+    "lon": 1.619,
+    "lat": 0.414,
+    "dist": 0.02,
+    "sun": 0.5,
+    "tilt": -0.5
+   },
+   "base0": {
+    "fps": 17.4,
+    "ms": 57.57,
+    "cpu": 55
+   },
+   "base1": {
+    "fps": 17.4,
+    "ms": 57.5,
+    "cpu": 51.2
+   },
+   "baseInfo": {
+    "calls": 113,
+    "tris": 2992767
+   },
+   "rows": [],
+   "extra": [],
+   "state": {
+    "pr": 2,
+    "post": {
+     "taa": true,
+     "ao": true,
+     "bloom": true,
+     "fringe": true
+    },
+    "lum": 0.071,
+    "individuals": 234
+   }
+  }
+ ],
+ "console": []
+}

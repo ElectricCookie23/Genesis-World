@@ -1,0 +1,149 @@
+{
+ "meta": {
+  "bundle": "index-C8xtQ58C.js",
+  "backend": "webgpu",
+  "preset": "medium",
+  "canvas": [
+   2000,
+   1141
+  ],
+  "pr": 1.25,
+  "post": {
+   "taa": false,
+   "ao": false,
+   "bloom": true,
+   "fringe": false
+  },
+  "cloudSteps": 12,
+  "My": 59.133,
+  "towns": 588,
+  "species": 31,
+  "refresh": 95
+ },
+ "spots": {
+  "forest": [
+   1.619,
+   0.414
+  ],
+  "town": [
+   -2.777,
+   -0.704,
+   "Du",
+   597
+  ]
+ },
+ "views": [
+  {
+   "name": "orbit, day side",
+   "view": {
+    "lon": -1.46,
+    "lat": 0.1,
+    "dist": 2.6,
+    "sun": 0.5,
+    "tilt": 0
+   },
+   "base0": {
+    "fps": 73.5,
+    "ms": 13.61,
+    "cpu": 2.26
+   },
+   "base1": {
+    "fps": 72.4,
+    "ms": 13.81,
+    "cpu": 2.36
+   },
+   "baseInfo": {
+    "calls": 76,
+    "tris": 135142
+   },
+   "rows": [],
+   "extra": [],
+   "state": {
+    "pr": 1.25,
+    "post": {
+     "taa": false,
+     "ao": false,
+     "bloom": true,
+     "fringe": false
+    },
+    "lum": 0.103,
+    "individuals": 0
+   }
+  },
+  {
+   "name": "mid altitude over the densest forest (dist 0.3)",
+   "view": {
+    "lon": 1.619,
+    "lat": 0.414,
+    "dist": 0.3,
+    "sun": 0.5,
+    "tilt": 0
+   },
+   "base0": {
+    "fps": 60.7,
+    "ms": 16.48,
+    "cpu": 2.4
+   },
+   "base1": {
+    "fps": 60.3,
+    "ms": 16.58,
+    "cpu": 2.4
+   },
+   "baseInfo": {
+    "calls": 87,
+    "tris": 1460439
+   },
+   "rows": [],
+   "extra": [],
+   "state": {
+    "pr": 1.25,
+    "post": {
+     "taa": false,
+     "ao": false,
+     "bloom": true,
+     "fringe": false
+    },
+    "lum": 0.16,
+    "individuals": 483
+   }
+  },
+  {
+   "name": "forest, ground level (dist 0.02)",
+   "view": {
+    "lon": 1.619,
+    "lat": 0.414,
+    "dist": 0.02,
+    "sun": 0.5,
+    "tilt": -0.5
+   },
+   "base0": {
+    "fps": 62.4,
+    "ms": 16.02,
+    "cpu": 2.87
+   },
+   "base1": {
+    "fps": 62.7,
+    "ms": 15.96,
+    "cpu": 2.85
+   },
+   "baseInfo": {
+    "calls": 93,
+    "tris": 2561680
+   },
+   "rows": [],
+   "extra": [],
+   "state": {
+    "pr": 1.25,
+    "post": {
+     "taa": false,
+     "ao": false,
+     "bloom": true,
+     "fringe": false
+    },
+    "lum": 0.099,
+    "individuals": 234
+   }
+  }
+ ],
+ "console": []
+}
