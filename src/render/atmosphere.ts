@@ -167,7 +167,9 @@ export function createSky(): Mesh {
   const keepDark = float(1).div(max(uExposure, 0.5));
   // by day, from inside the air, the sky outshines the stars
   const camR = length(cameraPosition);
-  const veil = float(1).sub(float(1).sub(smoothstep(1.02, ATMO_RADIUS, camR)).mul(smoothstep(-0.12, 0.1, dot(cameraPosition.div(camR), uSunDir))));
+  // (the veil used to start lifting at 1.02, which a camera over high ground reaches: a GPU check saw faint stars by
+  // day at 5 km. It now holds until well above the highest land.)
+  const veil = float(1).sub(float(1).sub(smoothstep(1.035, ATMO_RADIUS, camR)).mul(smoothstep(-0.12, 0.1, dot(cameraPosition.div(camR), uSunDir))));
   material.colorNode = stars.mul(pow(keepDark, 0.6)).add(nebula.mul(keepDark)).add(siblings.mul(pow(keepDark, 0.6))).mul(veil).add(sun).add(sun2);
   const mesh = new Mesh(new SphereGeometry(400, 48, 32), material);
   mesh.frustumCulled = false;

@@ -28,6 +28,13 @@ const SLOPE_UNIT = 1 / 0.22;
  * Radius of the ground along a unit direction, for use in vertex shaders: the same baked elevation
  * plus eroded detail that the terrain itself is displaced by. Anything placed with this stands exactly on the land.
  */
+let groundRivers: RiverMap | null = null;
+/**
+ * Rivers cut their beds into the ground that everything stands on. Set once, before any ground is built, so the
+ * land, the plants, the buildings and the animals all agree on where the ground is.
+ */
+export function setGroundRivers(rivers: RiverMap | null): void { groundRivers = rivers; }
+
 export function groundRadiusNode(data: PlanetData, erosionTex: Texture, dir: N): N {
   const s = (uvn: N): N => (texture(erosionTex, uvn) as any).level(0);
   const a = pow(abs(dir), vec3(4, 4, 4));
@@ -37,7 +44,17 @@ export function groundRadiusNode(data: PlanetData, erosionTex: Texture, dir: N):
   const land = smoothstep(-0.25, 0.1, elev.sub(uSeaKm));
   const coarse = mix(float(0.1), float(0.55), smoothstep(0.2, 3.5, elev.sub(uSeaKm))).mul(mix(float(0.3), float(1), land));
   const fine = mix(float(0.012), float(0.04), land);
-  const h = elev.add(tri(TILE_COARSE).sub(0.5).mul(2).mul(coarse)).add(tri(TILE_FINE).sub(0.5).mul(2).mul(fine));
+  // A river runs in a bed. The hills and hummocks of the detail are smoothed away along it and the ground is cut
+  // down a little, so the water lies in a shallow valley. (It was painted on whatever the detail did, and on a real
+  // GPU a river through a town ran up and over the bumps like a ribbon laid on the land.)
+  let bed: N = float(0);
+  if (groundRivers) {
+    const RV: N = (samplePlanet(groundRivers.texture, dir) as any).level(0);
+    const away = RV.rgb.sub(0.5).mul(2 * groundRivers.range).length();
+    const width = RV.a.mul(RIVER_MAX_WIDTH);
+    bed = smoothstep(width.mul(6).add(0.0018), width, away).mul(smoothstep(0.0, 0.02, RV.a)).mul(land);
+  }
+  const h = elev.add(tri(TILE_COARSE).sub(0.5).mul(2).mul(coarse).mul(float(1).sub(bed.mul(0.85)))).add(tri(TILE_FINE).sub(0.5).mul(2).mul(fine).mul(float(1).sub(bed))).sub(bed.mul(0.018));
   return float(1).add(h.mul(EXAG));
 }
 
@@ -188,7 +205,11 @@ export class TerrainSurface {
     seabed = mix(seabed, vec3(0.93, 0.93, 0.9), max(reef.negate(), 0).mul(0.8));
     albedo = mix(albedo, seabed, smoothstep(0.02, -0.05, above));
     // snow and ice: settles on gentle slopes; thick ice shows blue fracture lines
-    const snowAmt = smoothstep(0.25, 1.6, snow.add(e2.r.sub(0.5).mul(0.9))).mul(float(1).sub(steep.mul(0.65))).mul(smoothstep(-0.03, 0.02, above));
+    // Deep snow lies unbroken: the ground's own roughness only shows through a thin cover, and only the steepest
+    // faces shed a thick one. (From 5 km a snowfield was a harsh dark-and-white speckle that read as gravel, on a
+    // real GPU: every bump of the detail noise broke the cover, however deep.)
+    const deepSnow = smoothstep(1.2, 4.0, snow);
+    const snowAmt = smoothstep(0.25, 1.6, snow.add(e2.r.sub(0.5).mul(mix(float(0.9), float(0.15), deepSnow)))).mul(float(1).sub(steep.mul(mix(float(0.65), float(0.25), deepSnow)))).mul(smoothstep(-0.03, 0.02, above));
     const fracture = pow(float(1).sub(abs(e1.r.mul(2).sub(1))), 14).mul(smoothstep(6, 20, snow));
     albedo = mix(albedo, mix(vec3(0.9, 0.93, 0.97), vec3(0.3, 0.62, 0.92), fracture), snowAmt);
 
@@ -324,8 +345,17 @@ export class TerrainSurface {
       const heldBack = float(1).div(max(uExposure, 1)).pow(0.5);
       lit = lit.add(hue.mul(cityLight.mul(1.25).mul(paint).add(roadLight.mul(smoothstep(0.08, 0.7, camDist)))).mul(nightAmt).mul(heldBack));
       // the Night Map: borders as fine bright lines, and a faint wash of each nation's colour over its land
-      const border = float(1).sub(smoothstep(0.2, 0.42, CB.r));
-      const frontier = float(1).sub(smoothstep(0.6, 0.78, CB.r)).mul(0.3);
+      // Borders are known cell by cell, and drawn straight they step along the six-sided cells. The line is read a
+      // little to one side and the other as it goes (a slow wander of about a third of a cell), so it runs like a
+      // border drawn by hand along rivers and ridges instead of along a honeycomb.
+      const wander: N = vec3(
+        sin(dir.y.mul(190).add(dir.z.mul(137))).add(sin(dir.z.mul(83).sub(dir.x.mul(61))).mul(0.6)),
+        sin(dir.z.mul(173).add(dir.x.mul(149))).add(sin(dir.x.mul(79).sub(dir.y.mul(67))).mul(0.6)),
+        sin(dir.x.mul(181).add(dir.y.mul(131))).add(sin(dir.y.mul(89).sub(dir.z.mul(71))).mul(0.6)),
+      ).mul(0.0042);
+      const CBw: N = samplePlanet(civ.b, normalize(dir.add(wander)));
+      const border = float(1).sub(smoothstep(0.2, 0.42, CBw.r));
+      const frontier = float(1).sub(smoothstep(0.6, 0.78, CBw.r)).mul(0.3);
       const lineAmt = max(border, frontier).mul(landMask).mul(uNightMap);
       lit = lit.add(hue.mul(claimed).mul(0.03).mul(uNightMap).mul(landMask));
       lit = mix(lit, hue.mul(1.5).add(0.12), lineAmt.mul(0.9));

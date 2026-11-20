@@ -82,6 +82,12 @@ class Builder {
   /** A flat card. centre, facing normal, up vector along the card, width and height. */
   quad(centre: V3, facing: V3, up: V3, w: number, h: number, part: number, phase: number, flutter: number, colour: V3 = [1, 1, 1], puff = 0.7, segments = 1, droop = 0): void {
     const right = norm(cross(up, facing));
+    // no two leaves are the same green: each card is a little lighter or darker, warmer or cooler than the next.
+    // (A crown of identical cards read as flat single-colour ovals from inside a forest.)
+    if (part === PART.leaf || part === PART.needle || part === PART.frond) {
+      const tone = this.r(0.8, 1.16), warm = this.r(-1, 1);
+      colour = [colour[0] * tone * (1 + 0.08 * warm), colour[1] * tone, colour[2] * tone * (1 - 0.1 * warm)];
+    }
     const rows: number[][] = [];
     for (let s = 0; s <= segments; s++) {
       const t = s / segments;
@@ -123,13 +129,26 @@ class Builder {
 
   /** A small faceted ball (glow bulbs, flower centres). */
   ball(centre: V3, radius: number, part: number, colour: V3, phase: number): void {
-    const dirs: V3[] = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
-    const ids = dirs.map((d) => this.vertex(add(centre, mul(d, radius)), d, colour, 0.5, 0.5, part, 1, Math.max(0, centre[1]) ** 2, phase, 0.5));
-    for (const f of [[0, 2, 4], [2, 1, 4], [1, 3, 4], [3, 0, 4], [2, 0, 5], [1, 2, 5], [3, 1, 5], [0, 3, 5]]) this.idx.push(ids[f[0]!]!, ids[f[1]!]!, ids[f[2]!]!);
+    // a round ball (it was an eight-sided one, which showed as a square cap on every stalk)
+    const rings = 5, segs = 8;
+    const ids: number[][] = [];
+    for (let i = 0; i <= rings; i++) {
+      const lat = (i / rings) * Math.PI, row: number[] = [];
+      for (let k = 0; k <= segs; k++) {
+        const lon = (k / segs) * Math.PI * 2;
+        const d: V3 = [Math.sin(lat) * Math.cos(lon), Math.cos(lat), Math.sin(lat) * Math.sin(lon)];
+        row.push(this.vertex(add(centre, mul(d, radius)), d, colour, 0.5, 0.5, part, 1, Math.max(0, centre[1]) ** 2, phase, 0.5));
+      }
+      ids.push(row);
+    }
+    for (let i = 0; i < rings; i++) for (let k = 0; k < segs; k++) this.idx.push(ids[i]![k]!, ids[i]![k + 1]!, ids[i + 1]![k]!, ids[i]![k + 1]!, ids[i + 1]![k + 1]!, ids[i + 1]![k]!);
   }
 
   /** A surface of revolution around the y axis from a profile of (radius, height) pairs. */
   lathe(profile: [number, number][], sides: number, part: number, colour: V3, phase: number): void {
+    // turned shapes are drawn rounder than they are asked for: the corners of a nine-sided stalk or a fourteen-sided
+    // cap showed, and triangles here cost next to nothing
+    sides = Math.round(sides * 1.8);
     const rings: number[][] = [];
     for (let i = 0; i < profile.length; i++) {
       const [r, y] = profile[i]!;
@@ -175,8 +194,10 @@ interface TreeSpec {
 
 function tree(b: Builder, spec: TreeSpec): void {
   const grow = (base: V3, dir: V3, length: number, radius: number, level: number, phase: number): void => {
-    const segs = level === 0 ? 6 : level === 1 ? 4 : 3;
-    const sides = level === 0 ? 7 : level === 1 ? 5 : 4;
+    // (rounder than they were: seven-sided trunks and four-sided twigs showed their corners from close, and models
+    // cost next to nothing to draw)
+    const segs = level === 0 ? 8 : level === 1 ? 5 : 3;
+    const sides = level === 0 ? 11 : level === 1 ? 7 : 5;
     const path: V3[] = [base];
     // the trunk flares where it meets the ground
     const radii: number[] = [level === 0 ? radius * 1.35 : radius];
@@ -189,6 +210,12 @@ function tree(b: Builder, spec: TreeSpec): void {
       // boughs thin toward their ends and twigs run out to a point: at half thickness they ended in square-cut stubs
       radii.push(radius * (1 - (s / segs) * (level === spec.levels ? 0.96 : level === 0 ? 0.55 : 0.72)));
     }
+    // (children are placed along the limb as it was grown, before the extra rings below are added)
+    const cPath = path.slice(), cRadii = radii.slice();
+    // a trunk spreads into its roots: wide at the soil, drawn in just above it
+    if (level === 0) { path.splice(1, 0, add(base, mul(sub(path[1]!, base), 0.28))); radii.splice(1, 0, radius * 1.08); radii[0] = radius * 1.8; }
+    // and every limb is closed off with a short rounded end: an open tube end showed as a square-cut stub
+    if (level < spec.levels) { path.push(add(p, mul(d, radii[radii.length - 1]! * 1.1))); radii.push(radii[radii.length - 1]! * 0.08); }
     b.limb(path, radii, sides, spec.bark, PART.bark, phase, level === 0 ? 0 : 0.6 + 0.4 * level);
     if (level >= spec.levels) {
       // leaves at the end of the last twigs
@@ -210,14 +237,14 @@ function tree(b: Builder, spec: TreeSpec): void {
     const n = spec.children[level] ?? 2;
     for (let k = 0; k < n; k++) {
       const t = level === 0 ? spec.firstBranch + (1 - spec.firstBranch) * ((k + b.r(0.1, 0.9)) / n) : b.r(0.35, 1);
-      const idx = Math.min(path.length - 2, Math.floor(t * segs));
+      const idx = Math.min(cPath.length - 2, Math.floor(t * segs));
       const f = t * segs - idx;
-      const at = lerp(path[idx]!, path[idx + 1]!, Math.max(0, Math.min(1, f)));
-      const parentDir = norm(sub(path[idx + 1]!, path[idx]!));
+      const at = lerp(cPath[idx]!, cPath[idx + 1]!, Math.max(0, Math.min(1, f)));
+      const parentDir = norm(sub(cPath[idx + 1]!, cPath[idx]!));
       const around = spec.twist * k + b.r(-0.4, 0.4) + level * 1.3;
       const out = rotateAbout(perp(parentDir), parentDir, around);
       const childDir = norm(add(mul(parentDir, Math.cos(spec.angle)), mul(out, Math.sin(spec.angle))));
-      grow(at, childDir, length * spec.ratio * b.r(0.8, 1.15) * (level === 0 ? 1 - t * 0.35 : 1), radii[idx]! * 0.6, level + 1, phase + k * 1.9 + level * 3.1);
+      grow(at, childDir, length * spec.ratio * b.r(0.8, 1.15) * (level === 0 ? 1 - t * 0.35 : 1), cRadii[idx]! * 0.6, level + 1, phase + k * 1.9 + level * 3.1);
     }
   };
   grow([0, 0, 0], [0, 1, 0], spec.height, spec.trunkR, 0, 0);
@@ -302,12 +329,22 @@ export function buildPlant(form: Form, seed = 1): BufferGeometry {
       b.crown = [0, 0.6, 0]; b.crownR = 0.6;
       const fork = (base: V3, dir: V3, length: number, radius: number, level: number, phase: number): void => {
         const tip = add(base, mul(dir, length));
-        b.limb([base, lerp(base, tip, 0.5), tip], [radius, radius * 0.8, radius * 0.6], level < 2 ? 6 : 4, [1, 1, 1], PART.flesh, phase, 0.3 * level);
-        if (level >= 5) { b.ball(add(tip, mul(dir, radius * 1.5)), Math.max(0.014, radius * 2.2), PART.bulb, [1, 1, 1], phase); return; }
+        // each branch curves and swells a little along its length: grown, not cut from pipe. (Under water on a real GPU
+        // these were straight plain tubes forking in a V, with square white caps.)
+        const side = mul(perp(dir), length * b.r(-0.16, 0.16));
+        const knob = b.r(0.92, 1.18);
+        b.limb([base, add(lerp(base, tip, 0.35), side), add(lerp(base, tip, 0.7), mul(side, 0.6)), tip], [radius, radius * 0.86 * knob, radius * 0.74, radius * 0.6], level < 2 ? 8 : 6, [b.r(0.85, 1.1), b.r(0.85, 1.1), 1], PART.flesh, phase, 0.3 * level);
+        if (level >= 5) {
+          // a small round polyp on most tips, not all
+          if (b.r() < 0.7) b.ball(add(tip, mul(dir, radius * 1.1)), Math.max(0.009, radius * 1.5), PART.bulb, [1, 1, 1], phase);
+          return;
+        }
         const spread = 0.42 - level * 0.025;
-        for (const sgn of [-1, 1]) {
-          const d = norm(rotateAbout(dir, [0, 0, 1], sgn * spread * b.r(0.8, 1.2)));
-          fork(tip, norm([d[0], d[1] + 0.12, d[2] + b.r(-0.08, 0.08)]), length * 0.74, radius * 0.68, level + 1, phase + sgn * (level + 1) * 1.3);
+        // two branches at each fork, now and then three, and not all in one plane
+        const forks = b.r() < 0.22 ? [-1, 0, 1] : [-1, 1];
+        for (const sgn of forks) {
+          const d = norm(rotateAbout(dir, [0, 0, 1], sgn * spread * b.r(0.7, 1.25)));
+          fork(tip, norm([d[0], d[1] + 0.12, d[2] + b.r(-0.2, 0.2)]), length * 0.74 * b.r(0.85, 1.12), radius * 0.68, level + 1, phase + sgn * (level + 1) * 1.3);
         }
       };
       fork([0, 0, 0], [0, 1, 0], 0.3, 0.05, 0, 0);
