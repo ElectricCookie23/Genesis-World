@@ -98,4 +98,19 @@ describe('goals', () => {
     // the record survives being written out and read back
     expect(JSON.parse(JSON.stringify(record)).done.green.seed).toBe('a');
   });
+
+  it('does not call a goal reached here in a new run of the same world that has not got there yet', () => {
+    const record = emptyRecord();
+    evaluateGoals(view({ stats: stats({ landCover: 0.06, simYear: 7e6 }) }), record, 'a');
+    // the same seed, started again: year nine thousand, nothing green
+    const again = evaluateGoals(view({ stats: stats({ simYear: 9000 }) }), record, 'a').states.find((s) => s.goal.id === 'green')!;
+    expect(again.reached).toBe(true);
+    expect(again.here).toBe(false);
+    // later in that same world, after the year it was reached in, the record stands even if the green has gone
+    const later = evaluateGoals(view({ stats: stats({ simYear: 9e6 }) }), record, 'a').states.find((s) => s.goal.id === 'green')!;
+    expect(later.here).toBe(true);
+    // and a new run that gets there sooner than the first one did counts at once
+    const sooner = evaluateGoals(view({ stats: stats({ landCover: 0.06, simYear: 3e6 }) }), record, 'a').states.find((s) => s.goal.id === 'green')!;
+    expect(sooner.here).toBe(true);
+  });
 });

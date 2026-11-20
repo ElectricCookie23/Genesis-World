@@ -36,7 +36,6 @@ export function App() {
             <div class={css.sub}>{st ? [st.settlements > 0 ? (st.maxTech >= 0.6 ? 'age of cities' : st.maxTech >= 0.3 ? 'age of villages' : 'first fires') : STAGE[st.stage] ?? '', ERA[st.era] ?? ''].filter(Boolean).join(' · ') : ''}</div>
           </div>
           <GoalMarker />
-          </div>
           {/* the side panels open over this corner: the box steps aside for them */}
           {st && s.panel === 'none' && (
             <div class={`${css.panel} ${css.stats}`}>
@@ -49,6 +48,7 @@ export function App() {
               <span>{s.backend}</span><b>{s.fps.toFixed(0)} fps</b>
             </div>
           )}
+          </div>
           {s.panel === 'chronicle' && <Chronicle />}
           {s.panel === 'tree' && <Tree />}
           {s.panel === 'help' && <Help />}
@@ -110,8 +110,9 @@ export function App() {
           <p>{s.milestone.description}</p>
         </div>
       )}
-      {s.chronicleLine && !s.milestone && <div class={css.narration} key={s.chronicleLine}>{s.chronicleLine}</div>}
-      {!s.opening && !s.chronicleLine && !s.milestone && last && s.panel !== 'chronicle' && !hidden && (st?.simYear ?? 0) - last.simYear < 4e6 && (
+      {/* on a phone a panel is a sheet over the lower screen: the narration would lie across its text */}
+      {s.chronicleLine && !s.milestone && !(s.mobile && s.panel !== 'none') && <div class={css.narration} key={s.chronicleLine}>{s.chronicleLine}</div>}
+      {!s.opening && !s.chronicleLine && !s.milestone && last && s.panel !== 'chronicle' && !(s.mobile && s.panel !== 'none') && !hidden && (st?.simYear ?? 0) - last.simYear < 4e6 && (
         <div class={css.narration} key={last.id}><small>{formatYear(last.simYear).toUpperCase()}</small>{last.description}</div>
       )}
       {s.opening && s.skipVisible && <button class={css.skip} onClick={() => actions.skipOpening()}>SKIP</button>}
