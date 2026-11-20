@@ -16,7 +16,8 @@ export interface Culture {
   born: number;
   /** What its people prize, each 0..1: these bias what nations of the culture do. */
   war: number;
-  faith: number;
+  /** How closely they hold to the ways of their forebears. */
+  custom: number;
   trade: number;
   craft: number;
   /** Signature colour as a hue 0..1. */
@@ -25,7 +26,7 @@ export interface Culture {
   mixedWith?: number;
 }
 
-export type Role = 'ruler' | 'founder' | 'inventor' | 'prophet' | 'general' | 'explorer' | 'artist' | 'scholar' | 'consort' | 'claimant';
+export type Role = 'ruler' | 'founder' | 'inventor' | 'teller' | 'reformer' | 'general' | 'explorer' | 'artist' | 'scholar' | 'consort' | 'claimant';
 
 /** Someone history remembers. Ordinary people are never stored: see citizens.ts. */
 export interface Person {
@@ -45,7 +46,8 @@ export interface Person {
   bold: number;
   wise: number;
   cruel: number;
-  pious: number;
+  /** How readily they listen to what they do not want to hear. */
+  open: number;
   /** Events in the cause graph this person is tied to. */
   events: number[];
   /** How the life ended, once it has. */
@@ -233,7 +235,7 @@ export function emptyHistory(): HistoryState {
 }
 
 /** What a wonder is (system E19). Each kind answers one kind of event. */
-export const WONDER_KINDS = ['observatory', 'sungate', 'crater-temple', 'fire-temple', 'first-tower', 'tomb', 'victory', 'lighthouse', 'memorial', 'colossus', 'peace-hall'] as const;
+export const WONDER_KINDS = ['observatory', 'sungate', 'crater-stair', 'fire-watch', 'first-tower', 'tomb', 'victory', 'lighthouse', 'memorial', 'colossus', 'peace-hall'] as const;
 export type WonderKind = (typeof WONDER_KINDS)[number];
 
 /**
@@ -246,7 +248,7 @@ export interface Wonder {
   id: number;
   kind: WonderKind;
   name: string;
-  /** What it is, in a few words ("a temple facing the crater"). */
+  /** What it is, in a few words ("a stepped mound whose stair faces the crater"). */
   what: string;
   /** Why it was built, in a sentence. */
   why: string;

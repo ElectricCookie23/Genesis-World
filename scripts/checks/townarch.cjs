@@ -27,7 +27,7 @@ const { open } = require('./h.cjs');
       const [u, v] = g.actions.mapPoint(c);
       if (elev[c] > sea + 0.15 && elev[c] < sea + 0.7 && Math.abs(v - 0.5) < 0.18 && cells.every((o) => Math.abs(g.actions.mapPoint(o)[0] - u) > 0.08)) cells.push(c);
     }
-    const list = cells.map((cell, i) => ({ id: 10 + i, name: Object.keys(bodies)[i], cell, species: 900 + i, pop: 120, tech: 0.62, founded: 0, belief: -1, eventId: -1, ruined: -1, nation: -1, temple: i === 0, farms: true, monuments: 0, walls: i === 1 ? [20, 0.4] : undefined }));
+    const list = cells.map((cell, i) => ({ id: 10 + i, name: Object.keys(bodies)[i], cell, species: 900 + i, pop: 120, tech: 0.62, founded: 0, lore: -1, eventId: -1, ruined: -1, nation: -1, farms: true, monuments: 0, walls: i === 1 ? [20, 0.4] : undefined }));
     sc.setSettlements(list, []);
     g.state.settlements = list;
     return list.map((t) => ({ name: t.name, uv: g.actions.mapPoint(t.cell), how: sc.architecture(t) }));

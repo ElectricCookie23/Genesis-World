@@ -185,7 +185,7 @@ const WHERE_TEXT: Record<Where, string> = { any: 'everywhere', initial: 'at the 
 const SOUNDS = Object.keys(DRIFT);
 
 /** The words a change is tested against: it only counts if it alters something people actually say. */
-const PROBE = ['water', 'river', 'sea', 'hill', 'stone', 'sun', 'moon', 'fire', 'people', 'town', 'king', 'god', 'old', 'new', 'great', 'holy', 'tongue', 'land', 'star', 'forest'];
+const PROBE = ['water', 'river', 'sea', 'hill', 'stone', 'sun', 'moon', 'fire', 'people', 'town', 'king', 'herd', 'old', 'new', 'great', 'bright', 'tongue', 'land', 'star', 'forest'];
 
 /**
  * One sound change happens to the language: some sound, in some position, turns into a neighbouring sound or
@@ -235,7 +235,7 @@ export function compound(lang: Language, head: string, modifier?: string, year =
 }
 
 const PLACE_HEADS = ['town', 'ford', 'hill', 'haven', 'field', 'rock', 'well', 'hold', 'bridge', 'grove', 'mouth', 'cross'];
-const PLACE_MODS = ['old', 'new', 'red', 'white', 'black', 'high', 'low', 'great', 'holy', 'cold', 'warm', 'long', 'stone', 'river', 'sea', 'star', 'sun', 'moon', 'wind', 'salt', 'king', 'herd', 'fire', 'green'];
+const PLACE_MODS = ['old', 'new', 'red', 'white', 'black', 'high', 'low', 'great', 'bright', 'cold', 'warm', 'long', 'stone', 'river', 'sea', 'star', 'sun', 'moon', 'wind', 'salt', 'king', 'herd', 'fire', 'green'];
 
 /** The meanings behind a place name, chosen from an identifying number: keep these, and the name can be re-spoken in any year. */
 export function placeMeanings(key: number): { head: string; modifier?: string } {

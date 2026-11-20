@@ -6,7 +6,7 @@ import type { SimEvent } from '../src/sim/events';
 
 const stats = (over: Partial<WorldStats> = {}): WorldStats => ({ simYear: 1e6, iceFraction: 0.2, landCover: 0, oceanFraction: 0.7, livingSpecies: 0, maxTech: 0, settlements: 0, ...over } as WorldStats);
 const kind = (id: number, over: Partial<SpeciesInfo> = {}): SpeciesInfo => ({ id, name: `Kind ${id}`, parent: -1, bornYear: 0, extinctYear: -1, pop: 100, eventId: id, metres: 0.3, land: 0, fly: 0, ...over } as SpeciesInfo);
-const town = (id: number, over: Partial<SettlementInfo> = {}): SettlementInfo => ({ id, name: `Town ${id}`, cell: 0, species: 0, pop: 5, tech: 0.1, founded: 100 + id, belief: 0, eventId: 50 + id, ruined: -1, ...over });
+const town = (id: number, over: Partial<SettlementInfo> = {}): SettlementInfo => ({ id, name: `Town ${id}`, cell: 0, species: 0, pop: 5, tech: 0.1, founded: 100 + id, lore: 0, eventId: 50 + id, ruined: -1, ...over });
 const event = (id: number, over: Partial<SimEvent> = {}): SimEvent => ({ id, type: 'speciation', simYear: id, cellId: 0, title: `Event ${id}`, description: '', causes: [], causeWeights: [], effects: [], importance: 1, ...over });
 const view = (over: Partial<GoalView> = {}): GoalView => ({ stats: stats(), species: new Map(), settlements: [], events: [], nations: 0, ...over });
 const state = (v: GoalView, id: string, record = emptyRecord(), seed = 'a') => evaluateGoals(v, record, seed).states.find((s) => s.goal.id === id)!;

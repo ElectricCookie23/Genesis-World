@@ -157,7 +157,7 @@ function nationDetail(s: Simulation, id: number): NationDetail | null {
   const info = (p: (typeof h.people)[number]): PersonInfo => {
     const ev = s.events.events[p.events[0] ?? -1];
     return {
-      id: p.id, name: p.name, role: p.role, born: p.born, died: p.died, fate: p.fate, bold: p.bold, wise: p.wise, cruel: p.cruel, pious: p.pious, era: p.era ?? n.era,
+      id: p.id, name: p.name, role: p.role, born: p.born, died: p.died, fate: p.fate, bold: p.bold, wise: p.wise, cruel: p.cruel, open: p.open, era: p.era ?? n.era,
       patron: h.people[p.patron]?.name ?? '', rival: h.people[p.rival]?.name ?? '', house: h.dynasties[p.dynasty]?.name ?? '', houseId: h.dynasties[p.dynasty] ? p.dynasty : -1, deed: ev ? ev.title : '', eventId: ev ? ev.id : -1,
     };
   };
@@ -405,7 +405,7 @@ function tick(): void {
     if (s.civ.settlements.length) {
       const joins = linksByTown(s);
       const great = wondersByTown(s);
-      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, belief: t.belief, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, temple: t.temple, farms: t.farms, monuments: t.monuments ?? 0, wonders: great.get(t.id), walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas, links: joins.get(t.id), dam: t.dam !== undefined, mine: t.mine !== undefined, layers: (t.strata ? t.strata.length : 1) + (t.over !== undefined ? 1 : 0), peak: t.peak, feral: t.feral !== undefined ? s.creatures.species[t.feral]?.name ?? '' : '', nesting: t.nesting !== undefined ? s.creatures.species[t.nesting]?.name ?? '' : '' })) , nations: nationList(s) });
+      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, lore: t.lore, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, farms: t.farms, monuments: t.monuments ?? 0, wonders: great.get(t.id), walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas, links: joins.get(t.id), dam: t.dam !== undefined, mine: t.mine !== undefined, layers: (t.strata ? t.strata.length : 1) + (t.over !== undefined ? 1 : 0), peak: t.peak, feral: t.feral !== undefined ? s.creatures.species[t.feral]?.name ?? '' : '', nesting: t.nesting !== undefined ? s.creatures.species[t.nesting]?.name ?? '' : '' })) , nations: nationList(s) });
     }
     speciesVersion = s.creatures.version;
     if (s.plants.version !== plantVersion) {

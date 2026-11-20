@@ -12,7 +12,7 @@ const fresh = () => { const sim = new Simulation('amber-reef-101', N, grid); sim
 const land = (sim: Simulation, skip = 0) => { let k = 0; for (let i = 0; i < sim.grid.count; i++) if (sim.world.elevation[i]! > sim.world.seaLevel + 0.1 && k++ === skip) return i; return 0; };
 const town = (sim: Simulation, species: number, cell: number, tech: number, name: string): Settlement => {
   const ev = sim.emit({ type: 'settlement', cellId: cell, title: `${name} is founded`, description: `A people settles at ${name}.`, importance: 1, speciesIds: [species] });
-  const st = { id: sim.civ.settlements.length, name, cell, region: sim.regions.regionOf[cell]!, species, pop: 50, tech, founded: sim.simYear, belief: -1, eventId: ev.id, ruined: -1, painted: false, temple: false, farms: true, stars: false, nation: -1, head: '', modifier: '', relic: -1 } as Settlement;
+  const st = { id: sim.civ.settlements.length, name, cell, region: sim.regions.regionOf[cell]!, species, pop: 50, tech, founded: sim.simYear, lore: -1, eventId: ev.id, ruined: -1, painted: false, farms: true, stars: false, nation: -1, head: '', modifier: '', relic: -1 } as Settlement;
   sim.civ.settlements.push(st);
   sim.civ.living = sim.civ.settlements.filter((s) => s.ruined < 0).length;
   return st;
@@ -128,7 +128,7 @@ describe('E99 messages to the observer', () => {
     expect(sim.legacy.messages.length).toBe(0);
     sim.god('heat', cell);
     sim.step(1000);
-    expect(sim.legacy.messages.length).toBe(0); // a village of tech 0.5 with no temple cannot be read from above
+    expect(sim.legacy.messages.length).toBe(0); // a village of tech 0.5 cannot be read from above
     st.tech = 0.9;
     sim.step(100);
     expect(sim.legacy.messages.length).toBe(1);

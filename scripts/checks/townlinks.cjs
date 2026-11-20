@@ -19,9 +19,9 @@ const { open } = require('./h.cjs');
       for (const nb of ring) for (let j = 0; j < grid.ncount[nb]; j++) { const far = grid.neighbors[nb * 6 + j]; if (far !== c && !ring.includes(far) && elev[far] > sea + 0.2 && other < 0) other = far; }
       if (other >= 0) cell = c;
     }
-    const base = { species: 0, founded: 0, belief: -1, eventId: -1, ruined: -1, nation: -1, farms: true, monuments: 0 };
-    const a = { ...base, id: 1, name: 'Hub', cell, pop: 300, tech: 1.05, temple: false, links: [2, 0, 2, 1, 2, 2, 2, 3, 2, 4, 2, 5, 2, 6] };
-    const b = { ...base, id: 2, name: 'Far', cell: other, pop: 60, tech: 1.0, temple: false, links: [1, 0, 1, 3, 1, 6] };
+    const base = { species: 0, founded: 0, lore: -1, eventId: -1, ruined: -1, nation: -1, farms: true, monuments: 0 };
+    const a = { ...base, id: 1, name: 'Hub', cell, pop: 300, tech: 1.05, links: [2, 0, 2, 1, 2, 2, 2, 3, 2, 4, 2, 5, 2, 6] };
+    const b = { ...base, id: 2, name: 'Far', cell: other, pop: 60, tech: 1.0, links: [1, 0, 1, 3, 1, 6] };
     sc.setSettlements([a, b], []);
     return { cell, other, uv: g.actions.mapPoint(cell), uv2: g.actions.mapPoint(other) };
   });

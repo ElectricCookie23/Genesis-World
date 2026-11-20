@@ -81,7 +81,7 @@ export class Simulation {
   private geoRng: RNG;
   private nameRng: RNG;
   private milestoneTimer = 0;
-  /** Events caused by the user's god tools (temples are built when there are many). */
+  /** Events caused by the user's tools. */
   godEvents: number[] = [];
   /** Extra sea level from the flood tool, km. Drains away slowly. */
   private seaBias = 0;
@@ -236,6 +236,7 @@ export class Simulation {
 
   /** Rebuild what is derived from the saved state rather than saved itself. Call after loading. */
   refreshDerived(): void {
+    this.civ.mend();
     updateRegions(this.regions, this.world, this.climate);
   }
 
@@ -736,7 +737,7 @@ export class Simulation {
     }
     if (ev) {
       this.godEvents.push(ev.id);
-      this.civ.omen(this, ev.id, this.civRng);
+      this.civ.sighting(this, ev.id, this.civRng);
     }
   }
 
@@ -797,7 +798,7 @@ export class Simulation {
         description: this.say('eclipse', ['The moon slides across the sun. For a few minutes the day goes dark and every animal falls silent.', 'A black disc eats the sun at noon. Stars come out, and the birds stop.']),
         importance: this.civ.living > 0 ? 1 : 0,
       });
-      this.civ.omen(this, ev.id, this.civRng);
+      this.civ.sighting(this, ev.id, this.civRng);
     }
     if (this.simYear >= this.cometNext) {
       // the comets keep the gas giant's time: one full turn of its slow cycle between returns
@@ -808,7 +809,7 @@ export class Simulation {
         causes: this.cometLast >= 0 ? [this.cometLast] : [], importance: this.civ.living > 0 ? 1 : 0,
       });
       this.cometLast = ev.id;
-      this.civ.omen(this, ev.id, this.civRng);
+      this.civ.sighting(this, ev.id, this.civRng);
     }
     cr.mutationBoost = 1 + (cr.mutationBoost - 1) * Math.exp(-0.05 * tau);
     if (r.chance(Math.min(0.2, 0.002 * tau))) {
@@ -822,7 +823,7 @@ export class Simulation {
       const all: number[] = [], kill: number[] = [];
       for (let k = 0; k < this.regions.count; k++) if (this.regions.land[k]! > 0.3) { all.push(k); kill.push(0.14); }
       cr.disaster({ regions: all, kill, eventId: ev.id });
-      this.civ.omen(this, ev.id, this.civRng);
+      this.civ.sighting(this, ev.id, this.civRng);
     }
     for (const raft of cr.rafted.splice(0)) {
       const sp = cr.species[raft.species]!;
@@ -844,7 +845,7 @@ export class Simulation {
     if (this.moons === 1 && r.chance(Math.min(0.05, 0.00018 * tau))) {
       this.moons = 2;
       const ev = this.emit({ type: 'second-moon', title: 'A second moon', description: 'A wandering lump of rock strays too close and cannot leave. From now on two moons cross the night, and the tides keep a more complicated time.', importance: 3 });
-      this.civ.omen(this, ev.id, this.civRng);
+      this.civ.sighting(this, ev.id, this.civRng);
     }
     // coral bleaches when the water gets too hot
     if (this.milestoneTimer % 16 === 0) {
@@ -1515,11 +1516,11 @@ export class Simulation {
       this.emit({ type: 'constellation', cellId: cell, title: `The ${gone.name.split(' ')[0]} constellation`, description: `The people of ${st!.name} dig strange bones out of a hillside. They cannot know the creature was ${gone.name}, but they give its shape to a ring of stars.`, causes: [st!.eventId, why ?? -1].filter((x) => x >= 0), importance: 1, speciesIds: [speciesId, gone.id] });
     } else if (kind === 'war') {
       const other = this.civ.settlements[cause]!;
-      const faith = st!.belief >= 0 && other.belief >= 0 && st!.belief !== other.belief;
+      const apart = st!.lore >= 0 && other.lore >= 0 && st!.lore !== other.lore;
       this.emit({
         type: 'war', cellId: cell, title: `War between ${st!.name} and ${other.name}`,
-        description: faith ? `${st!.name} and ${other.name} remember different wonders and cannot both be right. They go to war over it.` : `${st!.name} and ${other.name} are not the same kind of people, and the land between them is not enough for both. They fight.`,
-        causes: [st!.belief, other.belief, st!.eventId].filter((x) => x >= 0), importance: st!.tech > 0.6 ? 1 : 0, speciesIds: [speciesId],
+        description: apart ? `${st!.name} and ${other.name} each tell the story of the old days differently, and in each telling the other is to blame. This year it comes to war.` : `${st!.name} and ${other.name} are not the same kind of people, and the land between them is not enough for both. They fight.`,
+        causes: [st!.lore, other.lore, st!.eventId].filter((x) => x >= 0), importance: st!.tech > 0.6 ? 1 : 0, speciesIds: [speciesId],
       });
     } else if (kind === 'city-plague') {
       this.emit({ type: 'plague', cellId: cell, title: `Plague in ${st!.name}`, description: this.say('cityplague', [`Sickness arrives in ${st!.name} with the traders and leaves by every road.`, `Half of ${st!.name} is dead of a fever that came along the trade road.`]), causes: [st!.eventId], importance: st!.tech > 0.7 ? 1 : 0, speciesIds: [speciesId] });
@@ -1552,16 +1553,14 @@ export class Simulation {
       const tame = this.creatures.species[cause]!;
       const ev = this.emit({ type: 'tamed', cellId: cell, title: `${tame.name} is tamed`, description: `The people of ${st!.name} keep ${tame.name} close, feed it, and choose which of its young will breed. It will not stay the animal it was.`, causes: [st!.eventId, tame.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [speciesId, tame.id] });
       this.milestone('first-tame', 'First tamed animal', `${tame.name} now lives beside ${sp.name}, by choice or by fence.`, cell, [ev.id], [tame.id]);
-    } else if (kind === 'temple') {
-      this.emit({ type: 'temple', cellId: cell, title: `A temple at ${st!.name}`, description: `Too many wonders have fallen from the sky. At ${st!.name} they raise a temple whose doors face straight up, toward whatever is watching.`, causes: [st!.eventId, ...this.godEvents.slice(-3)].filter((x) => x >= 0), importance: 2, speciesIds: [speciesId] });
-    } else if (kind === 'belief') {
+    } else if (kind === 'story') {
       const src = this.events.get(cause)!;
       this.emit({
-        type: 'belief', cellId: cell, title: `A faith is born at ${st!.name}`,
-        description: this.say('belief', [
-          `The people of ${st!.name} saw ${src.title.toLowerCase()}. They tell the story to their children, and the story becomes a faith.`,
-          `At ${st!.name} they remember ${src.title.toLowerCase()} in song. The song has turned into worship.`,
-          `After ${src.title.toLowerCase()}, the people of ${st!.name} began leaving offerings. They still do.`,
+        type: 'story', cellId: cell, title: `A story takes root at ${st!.name}`,
+        description: this.say('story', [
+          `The people of ${st!.name} saw ${src.title.toLowerCase()}. They tell the story to their children, and it becomes the story of who they are.`,
+          `At ${st!.name} they remember ${src.title.toLowerCase()} in song. The song will outlast everyone who was there.`,
+          `After ${src.title.toLowerCase()}, the people of ${st!.name} began marking the day each year. They still do.`,
         ]),
         causes: [cause, st!.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [speciesId],
       });

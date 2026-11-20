@@ -53,12 +53,11 @@ export interface Settlement {
   /** 0 camp, 0.3 village, 0.6 city, 1 great city. */
   tech: number;
   founded: number;
-  /** Event the people's beliefs are founded on, or -1. */
-  belief: number;
+  /** The event this town's oldest story is about (something its people saw and still tell of), or -1. */
+  lore: number;
   eventId: number;
   ruined: number; // year it was abandoned, or -1
   painted: boolean;
-  temple: boolean;
   farms: boolean;
   stars: boolean;
   /** Nation it belongs to, or -1 while it is still a camp outside history. */
@@ -111,8 +110,8 @@ const LONGEST_HISTORY = 40000;
 const sat = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
 /** What a people may call its golden age: two meanings for its own tongue, and the same in plain words. */
 const GOLDEN_NAMES: [string, string, string][] = [
-  ['sun', 'great', 'the Great Sun'], ['star', 'new', 'the New Star'], ['king', 'old', 'the Old Kings'], ['land', 'holy', 'the Blessed Land'], ['river', 'great', 'the Full River'],
-  ['fire', 'new', 'the Bright Hearth'], ['hill', 'holy', 'the Holy Hill'], ['sea', 'great', 'the Wide Sea'], ['people', 'great', 'the Great People'], ['town', 'new', 'the New Towns'],
+  ['sun', 'great', 'the Great Sun'], ['star', 'new', 'the New Star'], ['king', 'old', 'the Old Kings'], ['land', 'green', 'the Green Land'], ['river', 'great', 'the Full River'],
+  ['fire', 'new', 'the Bright Hearth'], ['hill', 'high', 'the High Hill'], ['sea', 'great', 'the Wide Sea'], ['people', 'great', 'the Great People'], ['town', 'new', 'the New Towns'],
 ];
 /** How the chronicle tells of the first of each kind of network: a title and a line, with the two towns and the nation. */
 const FIRST_LINK: [string, string][] = [
@@ -213,7 +212,7 @@ export class Civilization {
         const nb = reg.grid.neighbors[st.region * 6 + rng.int(reg.grid.ncount[st.region]!)]!;
         if (!this.occupied.has(nb) && reg.land[nb]! > 0.3 && reg.ice[nb]! < 0.5) {
           const d = this.found(sim, rng, st.species, nb, st.id, sim.simYear);
-          if (d) { d.tech = st.tech * 0.6; d.belief = st.belief; st.pop *= 0.85; }
+          if (d) { d.tech = st.tech * 0.6; d.lore = st.lore; st.pop *= 0.85; }
         }
       }
       // the first fields: this camp steps into history
@@ -335,8 +334,8 @@ export class Civilization {
       this.wonder(sim, rng, n, towns, y, year);
       // ---- a people that charts the stars fixes its count of years (system E8)
       if (this.fine && n.know.way[SLOT_INDEX.get('sky2')!]! >= 0 && this.calendarOf(n)?.kind === 'founding' && rng.chance(1 - Math.exp(-y / 40))) this.reformCalendar(sim, rng, n, year);
-      // ---- in hard years a preacher may rise
-      if (this.fine && n.woes.length && year - n.woes[n.woes.length - 1]!.year < 25 && rng.chance(1 - Math.exp(-y * 0.006))) this.preacher(sim, rng, n, year);
+      // ---- in hard years someone may stand up and say what is wrong
+      if (this.fine && n.woes.length && year - n.woes[n.woes.length - 1]!.year < 25 && rng.chance(1 - Math.exp(-y * 0.006))) this.reformer(sim, rng, n, year);
       // ---- a new era
       const era = eraOf(n.tech);
       if (era > n.era) {
@@ -415,7 +414,6 @@ export class Civilization {
     // in a dark age the towns slip back, more slowly than they rose: what was built outlasts the knowing how
     else if (target < st.tech - 0.02) st.tech += (target - st.tech) * (1 - Math.exp(-y / 160));
     if (!st.painted && st.tech > 0.06) st.painted = true;
-    if (!st.temple && st.tech > 0.3 && sim.godEvents.length >= 3) { st.temple = true; const at = sim.events.events.length; sim.civEvent('temple', st.species, st.cell, st.id); this.stepForward(sim, st, at, 'Its carvings are the work of {name}.', 'artist'); }
     if (st.tech >= 0.3 && before < 0.3) { const at = sim.events.events.length; sim.civEvent('village', st.species, st.cell, st.id); if (sim.events.events.length > at) this.credit(sim, null, n, at, 'It answers to {name}.'); }
     if (st.tech >= 0.6 && before < 0.6) { const at = sim.events.events.length; sim.civEvent('city', st.species, st.cell, st.id); if (sim.events.events.length > at) this.credit(sim, rng, n, at, `Its great hall is the work of {name}.`, 'artist', year); }
     // (a town founded by settlers who already knew how to build one begins as what it is, not as a camp)
@@ -432,7 +430,7 @@ export class Civilization {
       const gone = cr.species.filter((x) => x.extinctYear >= 0 && x.peakRegions >= 10 && x.name);
       if (gone.length && rng.chance(0.12)) sim.civEvent('constellation', st.species, st.cell, st.id, rng.pick(gone).id);
     }
-    // war: neighbours of another nation, another kind or another faith sometimes fight (campaigns proper are system E33)
+    // war: neighbours of another nation or another kind sometimes fight, those who tell the same stories of the past less often (campaigns proper are system E33)
     const head = this.h.people[n.ruler];
     if (st.tech > 0.3 && rng.chance(Math.min(0.5, 0.0004 * y * (0.6 + 0.8 * (head ? head.bold : 0.5))))) {
       for (let j = 0; j < reg.grid.ncount[st.region]!; j++) {
@@ -442,7 +440,7 @@ export class Civilization {
         if (o.nation === st.nation && o.species === st.species) continue;
         // a marriage between the ruling houses keeps the peace while it is remembered (system E7)
         if (this.allied(n, o.nation, year)) continue;
-        if (o.species === st.species && (o.belief === st.belief || o.belief < 0 || st.belief < 0) && !rng.chance(0.35)) continue;
+        if (o.species === st.species && (o.lore === st.lore || o.lore < 0 || st.lore < 0) && !rng.chance(0.35)) continue;
         st.pop *= 0.7; o.pop *= 0.65; st.tech = Math.max(0.03, st.tech - 0.02); o.tech = Math.max(0.03, o.tech - 0.02);
         n.fatigue = sat(n.fatigue + 0.22);
         // conquest carries knowledge with it, or burns it (system E3)
@@ -513,7 +511,7 @@ export class Civilization {
             const ev = sim.events.events[d.eventId];
             if (ev) ev.description = `${ev.description} They came by sea from ${st.name}.`;
           }
-          d.tech = Math.max(FARMING, st.tech * 0.6); d.belief = st.belief; d.farms = true; st.pop *= 0.85;
+          d.tech = Math.max(FARMING, st.tech * 0.6); d.lore = st.lore; d.farms = true; st.pop *= 0.85;
           // a country can only hold what its age lets it reach: settlers who go further answer to no one back home
           const cap = this.settlements[n.capital]!, gp = sim.grid.pos;
           const cos = gp[cap.cell * 3]! * gp[d.cell * 3]! + gp[cap.cell * 3 + 1]! * gp[d.cell * 3 + 1]! + gp[cap.cell * 3 + 2]! * gp[d.cell * 3 + 2]!;
@@ -546,7 +544,7 @@ export class Civilization {
     h.languages.push(lang);
     const c: Culture = {
       id: h.cultures.length, name: capital(word(lang, 'people')), species, language: lang.id, parent: -1, born: year,
-      war: sat(g[G.Aggression]! * 0.7 + g[G.Territorial]! * 0.4), faith: sat(0.35 + (1 - g[G.Curiosity]!) * 0.4 + g[G.Sociality]! * 0.2),
+      war: sat(g[G.Aggression]! * 0.7 + g[G.Territorial]! * 0.4), custom: sat(0.35 + (1 - g[G.Curiosity]!) * 0.4 + g[G.Sociality]! * 0.2),
       trade: sat(g[G.Sociality]! * 0.5 + g[G.Curiosity]! * 0.5), craft: sat(g[G.Intelligence]! * 0.7 + g[G.Curiosity]! * 0.3), hue: g[G.Glow]! > 0.4 ? g[G.GlowHue]! : g[G.Hue]!,
     };
     lang.name = c.name;
@@ -563,7 +561,7 @@ export class Civilization {
     const nudge = (v: number) => sat(v + (rng.next() - 0.5) * 0.3);
     const c: Culture = {
       id: h.cultures.length, name: capital(word(lang, 'people')), species: parent.species, language: lang.id, parent: parent.id, born: year,
-      war: nudge(parent.war), faith: nudge(parent.faith), trade: nudge(parent.trade), craft: nudge(parent.craft), hue: (parent.hue + 0.06 + rng.next() * 0.12) % 1,
+      war: nudge(parent.war), custom: nudge(parent.custom), trade: nudge(parent.trade), craft: nudge(parent.craft), hue: (parent.hue + 0.06 + rng.next() * 0.12) % 1,
     };
     lang.name = c.name;
     h.cultures.push(c);
@@ -589,7 +587,7 @@ export class Civilization {
     const cut = Math.max(2, Math.ceil(old.name.length / 2));
     const c: Culture = {
       id: h.cultures.length, name: capital(`${old.name.slice(0, cut)}${guest.name.slice(Math.floor(guest.name.length / 2)).toLowerCase()}`), species: old.species, language: lang.id, parent: old.id, born: year,
-      war: mid(old.war, guest.war), faith: mid(old.faith, guest.faith), trade: sat(mid(old.trade, guest.trade) + 0.05), craft: mid(old.craft, guest.craft),
+      war: mid(old.war, guest.war), custom: mid(old.custom, guest.custom), trade: sat(mid(old.trade, guest.trade) + 0.05), craft: mid(old.craft, guest.craft),
       hue: (old.hue + (((guest.hue - old.hue + 1.5) % 1) - 0.5) * share + 1) % 1, mixedWith: guest.id,
     };
     lang.name = c.name;
@@ -693,7 +691,7 @@ export class Civilization {
         if (made.length >= wanted) break;
         if (this.occupied.has(f.region)) continue;
         const d = this.found(sim, rng, n.species, f.region, origin.id, year);
-        if (d) { d.tech = Math.max(FARMING, tech * 0.92); d.belief = origin.belief; d.farms = true; made.push(d); }
+        if (d) { d.tech = Math.max(FARMING, tech * 0.92); d.lore = origin.lore; d.farms = true; made.push(d); }
       }
     }
     if (!made.length && !host) return;       // nowhere to go: they die where they stand, as before
@@ -791,7 +789,7 @@ export class Civilization {
     const lean = (inherited: number | undefined): number => sat((inherited ?? rng.next()) * 0.5 + rng.next() * 0.5);
     const p: Person = {
       id: h.people.length, name: personName(this.languageOf(n), hash32(this.seedNum, h.people.length, 0x9e0)), role, nation: n.id, culture: n.culture,
-      born: year - age, died: -1, dynasty, parent, bold: lean(elder?.bold), wise: lean(elder?.wise), cruel: lean(elder?.cruel), pious: lean(elder?.pious),
+      born: year - age, died: -1, dynasty, parent, bold: lean(elder?.bold), wise: lean(elder?.wise), cruel: lean(elder?.cruel), open: lean(elder?.open),
       events: [], fate: '', reignFrom: role === 'ruler' ? year : -1, reignTo: -1, patron: role === 'ruler' || role === 'founder' ? -1 : n.ruler, rival: -1, rose: year, era: n.era, gen: elder ? (elder.gen ?? 0) + 1 : 0, spouse: -1,
     };
     h.people.push(p);
@@ -864,7 +862,7 @@ export class Civilization {
     return who;
   }
 
-  /** Someone from a town steps forward at an event there: a prophet at a new faith, a captain on the first ships. */
+  /** Someone from a town steps forward at an event there: a teller where a story takes root, a captain on the first ships. */
   private stepForward(sim: Simulation, st: Settlement, at: number, phrase: string, role: Role): void {
     if (st.nation < 0 || sim.events.events.length <= at) return;
     const n = this.h.nations[st.nation];
@@ -884,12 +882,13 @@ export class Civilization {
       const age = year - p.born;
       const old = age > span * 0.75;
       // some callings are more dangerous than others
-      const risk = old ? 1 : p.role === 'general' ? 5 : p.role === 'explorer' ? 4 : p.role === 'prophet' ? 2.5 : 1;
+      const risk = old ? 1 : p.role === 'general' ? 5 : p.role === 'explorer' ? 4 : p.role === 'reformer' ? 2.5 : 1;
       const hazard = 0.006 * risk * Math.exp((age - 0.55 * span) / (0.14 * span));
       if (!rng.chance(1 - Math.exp(-hazard * y))) continue;
       p.died = year;
       p.fate = p.role === 'general' ? (old ? 'died in bed, to the surprise of many' : rng.pick(['fell in battle', 'died of a wound that would not heal', 'was put to death by a jealous ruler']))
-        : p.role === 'prophet' ? (old ? 'died old, surrounded by followers' : rng.pick(['was stoned by a crowd', 'walked into the hills and was not seen again', 'died fasting']))
+        : p.role === 'reformer' ? (old ? 'died old, still arguing' : rng.pick(['was driven out by a crowd', 'walked into the hills and was not seen again', 'died in prison']))
+        : p.role === 'teller' ? (old ? 'died old, still telling it' : rng.pick(['died on the road between two towns', 'died of a fever', 'died with the story half told']))
         : p.role === 'explorer' ? (old ? 'died at home, still talking of the sea' : rng.pick(['was lost with all hands', 'died of a fever far from home', 'never came back']))
         : p.role === 'artist' ? (old ? 'died old and famous' : rng.pick(['died poor', 'died young, with the great work unfinished', 'drank to death']))
         : p.role === 'consort' ? (old ? 'died old at court' : rng.pick(['died of a fever', 'died young, far from home', 'died in the same year as the wedding feast was remembered']))
@@ -909,7 +908,7 @@ export class Civilization {
   /**
    * Rise and fall (system E4). A nation's stability follows what its people live through: hunger, wealth
    * gathered in few hands, how long its ruling house has held, weariness of war, disasters and plagues,
-   * quarrels of faith, and how much land it is trying to hold. When stability fails the nation loses a
+   * how far its towns have grown apart, and how much land it is trying to hold. When stability fails the nation loses a
    * province, splits in a civil war, or falls apart into successor states. Returns true if the nation has
    * ceased to exist this tick.
    */
@@ -920,15 +919,15 @@ export class Civilization {
     const angle = (a: Settlement, b: Settlement): number => Math.acos(Math.max(-1, Math.min(1, gp[a.cell * 3]! * gp[b.cell * 3]! + gp[a.cell * 3 + 1]! * gp[b.cell * 3 + 1]! + gp[a.cell * 3 + 2]! * gp[b.cell * 3 + 2]!)));
     // ---- what bears on it
     let crowd = 0, far = 0;
-    const faiths = new Map<number, number>();
+    const stories = new Map<number, number>();
     for (const st of towns) {
       crowd += Math.min(2, st.pop / Math.max(0.5, this.capacity(sim, st)));
-      faiths.set(st.belief, (faiths.get(st.belief) ?? 0) + 1);
+      stories.set(st.lore, (stories.get(st.lore) ?? 0) + 1);
       // (a town the capital can reach by rail or by wire is not far, however many miles away)
       if (angle(cap, st) > REACH[n.era]! * spacing && !this.wired.has(st.id)) far++;
     }
     const hunger = sat((crowd / towns.length - 0.97) * 5);
-    const split = towns.length > 1 ? 1 - Math.max(...faiths.values()) / towns.length : 0;
+    const split = towns.length > 1 ? 1 - Math.max(...stories.values()) / towns.length : 0;
     const overreach = far / towns.length;
     // (a country can be inherited or conquered into a size its age has no means to govern: system E7 makes such unions)
     const size = Math.log2(1 + towns.length) / 7 + 1.2 * sat(towns.length / GOVERNABLE[n.era]! - 1);
@@ -945,7 +944,7 @@ export class Civilization {
     // ---- why, in words and in the cause graph
     const blame: [number, string][] = [
       [hunger * 0.3, 'its granaries were empty'], [n.inequality * 0.36, 'a few families owned almost everything'], [n.fatigue * 0.28, 'its people were sick of war'],
-      [split * 0.2, 'its towns no longer shared a faith'], [overreach * 0.3, 'its roads were too long to hold'], [size * 0.3, 'it had grown too large to govern'],
+      [split * 0.2, 'its towns no longer felt themselves one people'], [overreach * 0.3, 'its roads were too long to hold'], [size * 0.3, 'it had grown too large to govern'],
       [(1 - legit) * 0.12, 'its ruling house was new and unloved'],
     ];
     for (const w of n.woes) blame.push([0.12, w.kind === 'war' ? 'it had lost too many to war' : w.kind === 'plague' ? 'plague had emptied its streets' : w.kind === 'disaster' ? 'the land itself had turned on it' : 'the succession was disputed']);
@@ -1180,7 +1179,7 @@ export class Civilization {
           if (reg.land[nb]! <= 0.3) { nb = this.voyage(sim, n, st.region, nb); bySea = true; }
           if (nb >= 0 && !this.occupied.has(nb) && reg.land[nb]! > 0.3 && reg.ice[nb]! < 0.5) {
             const d = this.found(sim, rng, st.species, nb, st.id, year);
-            if (d) { d.tech = st.tech; d.belief = st.belief; d.farms = true; d.nation = n.id; d.pop = Math.max(d.pop, st.pop * 0.1); if (bySea) d.overseas = true; sim.cellLog.note(d.cell, year, Log.Owner, n.id); }
+            if (d) { d.tech = st.tech; d.lore = st.lore; d.farms = true; d.nation = n.id; d.pop = Math.max(d.pop, st.pop * 0.1); if (bySea) d.overseas = true; sim.cellLog.note(d.cell, year, Log.Owner, n.id); }
           }
         }
       }
@@ -1255,26 +1254,29 @@ export class Civilization {
     }
   }
 
-  /** In hard years someone walks from town to town with a new teaching (system E6). What comes of it depends on who rules. */
-  private preacher(sim: Simulation, rng: RNG, n: Nation, year: number): void {
+  /**
+   * In hard years someone walks from town to town saying what went wrong and what should change (system E6).
+   * What comes of it depends on who rules.
+   */
+  private reformer(sim: Simulation, rng: RNG, n: Nation, year: number): void {
     const h = this.h;
     const woe = n.woes[n.woes.length - 1];
-    if (!woe || h.notables.some((id) => h.people[id]!.role === 'prophet' && h.people[id]!.nation === n.id)) return;
+    if (!woe || h.notables.some((id) => h.people[id]!.role === 'reformer' && h.people[id]!.nation === n.id)) return;
     const ruler = h.people[n.ruler];
     const cap = this.settlements[n.capital]!;
-    const who = this.person(rng, n, 'prophet', year, this.lifespan(sim, n.species) * (0.25 + rng.next() * 0.3), -1, -1);
+    const who = this.person(rng, n, 'reformer', year, this.lifespan(sim, n.species) * (0.25 + rng.next() * 0.3), -1, -1);
     const after = woe.kind === 'plague' ? 'After the plague' : woe.kind === 'war' ? 'After the war' : woe.kind === 'disaster' ? 'After the disaster' : 'In the quarrel over who should rule';
-    const says = woe.kind === 'plague' ? rng.pick(['that the sickness was a judgment on the rich', 'that the dead are owed more than a pit', 'that the wells must be kept clean and holy'])
-      : woe.kind === 'war' ? rng.pick(['that no more children should be sent to the wars', 'that the dead of both sides lie in the same ground', 'that the war was lost for want of faith'])
-        : woe.kind === 'disaster' ? rng.pick(['that the land itself has spoken', 'that what was thrown down was built in pride', 'that the sky will ask again'])
-          : rng.pick(['that no house rules by right', 'that the crown belongs to whoever is just', 'that rulers answer to something higher']);
+    const says = woe.kind === 'plague' ? rng.pick(['that the rich fled and left the poor to nurse the sick', 'that the dead are owed more than a pit', 'that the sickness came by the wells, and the wells must be kept clean'])
+      : woe.kind === 'war' ? rng.pick(['that no more children should be sent to the wars', 'that the dead of both sides lie in the same ground', 'that the war was lost by those who ordered it'])
+        : woe.kind === 'disaster' ? rng.pick(['that the town should never have been built where it was', 'that what fell was built too quickly and too cheaply', 'that it will come again, and next time they must be ready'])
+          : rng.pick(['that no house rules by right', 'that the crown belongs to whoever is just', 'that rulers answer to the ruled']);
     let end: string;
-    if (ruler && ruler.cruel > 0.62 && ruler.pious < 0.6) {
+    if (ruler && ruler.cruel > 0.62 && ruler.open < 0.6) {
       who.died = year; who.fate = `was put to death by ${ruler.name}`;
       h.notables.splice(h.notables.indexOf(who.id), 1);
       n.stability = sat(n.stability - 0.06);
-      end = `${ruler.name} has ${who.name} put to death, and the teaching spreads the faster for it.`;
-    } else if (ruler && ruler.pious > 0.55) {
+      end = `${ruler.name} has ${who.name} put to death, and the words spread the faster for it.`;
+    } else if (ruler && ruler.open > 0.55) {
       n.stability = sat(n.stability + 0.08);
       end = `${ruler.name} sends for ${who.name} and listens, and the country is quieter for it.`;
     } else {
@@ -1282,7 +1284,7 @@ export class Civilization {
       end = `The poor follow ${who.name}; the court does not, and the granaries are opened to keep the peace.`;
     }
     const ev = sim.emit({
-      type: 'prophet', year, cellId: cap.cell, title: `${who.name} preaches in ${n.name}`,
+      type: 'reformer', year, cellId: cap.cell, title: `${who.name} speaks out in ${n.name}`,
       description: `${after}, ${who.name} walks from town to town in ${n.name} saying ${says}. ${end}`,
       causes: [woe.eventId, n.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [n.species], data: { nation: n.id, person: who.id },
     });
@@ -1302,7 +1304,7 @@ export class Civilization {
     const c = this.h.cultures[n.culture]!, r = this.h.people[n.ruler];
     return {
       war: 0.55 + 0.9 * c.war + (r ? r.bold * 0.3 : 0), trade: 0.6 + 0.9 * c.trade, craft: 0.7 + 0.6 * c.craft, mind: 0.7 + 0.5 * c.craft + (r ? r.wise * 0.3 : 0),
-      life: 0.8 + 0.4 * c.faith, sea: 0.7 + 0.6 * c.trade, sky: 0.75 + 0.5 * c.craft, build: 0.8 + 0.4 * c.faith, food: 1, power: 1,
+      life: 0.8 + 0.4 * c.custom, sea: 0.7 + 0.6 * c.trade, sky: 0.75 + 0.5 * c.craft, build: 0.8 + 0.4 * c.custom, food: 1, power: 1,
     };
   }
 
@@ -1394,7 +1396,7 @@ export class Civilization {
     const lang = this.languageOf(n);
     ruler.name = personName(lang, hash32(this.seedNum, n.id, Math.floor(year), 0x9e0));
     ruler.born = year - span * (0.3 + rng.next() * 0.3); ruler.reignFrom = year - rng.next() * 0.3 * span;
-    ruler.bold = rng.next(); ruler.wise = rng.next(); ruler.cruel = rng.next(); ruler.pious = rng.next();
+    ruler.bold = rng.next(); ruler.wise = rng.next(); ruler.cruel = rng.next(); ruler.open = rng.next();
     ruler.events.length = 0; ruler.parent = -1; ruler.role = 'ruler';
     if (!house) return;
     const heir = 0.84 + 0.14 * n.stability;
@@ -1450,7 +1452,7 @@ export class Civilization {
       const site = towns[rng.int(Math.min(towns.length, 3))] ?? cap;
       site.monuments = (site.monuments ?? 0) + 1;
       g.works++;
-      const what = rng.pick(['a great hall', 'a library', 'a temple with a roof no one thought could stand', 'a bridge of a hundred arches', 'a tower to watch the stars from', 'a theatre cut into the hill', 'gardens watered from the mountains', 'a harbour wall a mile long']);
+      const what = rng.pick(['a great hall', 'a library', 'a hall with a roof no one thought could stand', 'a bridge of a hundred arches', 'a tower to watch the stars from', 'a theatre cut into the hill', 'gardens watered from the mountains', 'a harbour wall a mile long']);
       const at = sim.emit({
         type: 'monument', year, cellId: site.cell, title: `${capital(what)} at ${site.name}`,
         description: `In ${g.own}, ${n.name} raises ${what} at ${site.name}.`,
@@ -1786,7 +1788,7 @@ export class Civilization {
 
   /**
    * A nation that can chart the stars fixes its count of years on the thing its people remember best: a sight
-   * in the sky, a disaster they lived through, a prophet's teaching, or the crowning of the house that rules them.
+   * in the sky, a disaster they lived through, a reformer's teaching, or the crowning of the house that rules them.
    */
   private reformCalendar(sim: Simulation, rng: RNG, n: Nation, year: number): void {
     const h = this.h;
@@ -1799,7 +1801,7 @@ export class Civilization {
     for (const w of n.woes) { const e = ev(w.eventId); if (e && (w.kind === 'disaster' || w.kind === 'plague')) memories.push({ kind: 'disaster', eventId: e.id, year: w.year, detail: `${e.type} ${e.title}`, who: '', weight: 0.9 }); }
     for (let i = h.people.length - 1, seen = 0; i >= 0 && seen < 400; i--, seen++) {
       const p = h.people[i]!;
-      if (p.role === 'prophet' && p.nation === n.id && year - p.rose < 150 && ev(p.events[0] ?? -1)) { memories.push({ kind: 'prophet', eventId: p.events[0]!, year: p.rose, detail: '', who: p.name, weight: 0.7 + 0.6 * culture.faith }); break; }
+      if (p.role === 'reformer' && p.nation === n.id && year - p.rose < 150 && ev(p.events[0] ?? -1)) { memories.push({ kind: 'teaching', eventId: p.events[0]!, year: p.rose, detail: '', who: p.name, weight: 0.7 + 0.6 * culture.custom }); break; }
     }
     if (house && house.ended < 0) {
       const crowned = ev(h.people[house.founder]?.events[0] ?? -1);
@@ -1859,22 +1861,22 @@ export class Civilization {
     const fall = sim.events.last('impact');
     if (fall && fall.cellId >= 0 && year - fall.simYear < 3e6) {
       const { st, d } = near(fall.cellId);
-      if (d < 0.6 && st.cell !== fall.cellId && !has('crater-temple', fall.id)) {
+      if (d < 0.6 && st.cell !== fall.cellId && !has('crater-stair', fall.id)) {
         const seen = fall.simYear >= h.began && h.began >= 0;
-        plans.push({ kind: 'crater-temple', cause: fall.id, at: st, toward: fall.cellId, name: `${called('holy', 'star', 'stone', 'fire')}, the temple of the fallen star`, what: 'a stepped temple that faces the crater',
+        plans.push({ kind: 'crater-stair', cause: fall.id, at: st, toward: fall.cellId, name: `${called('stone', 'star', 'high', 'fire')}, the stair of the fallen star`, what: 'a stepped mound whose great stair faces the crater',
           why: seen ? `It faces the crater of ${fall.title.replace(/^The /, 'the ')}, which their forebears saw fall.` : `It faces the great ring of hills left by ${fall.title.replace(/^The /, 'the ')}, which no river made and no one living saw.`,
-          say: seen ? `The day the sky fell is still told in ${n.name}. At ${st.name} they raise a temple of many steps, and every stair of it faces the crater.` : `The surveyors of ${n.name} have walked the ring of hills and found it a perfect round. At ${st.name} they raise a temple of many steps to whatever made it, and every stair faces the crater.` });
+          say: seen ? `The day the sky fell is still told in ${n.name}. At ${st.name} they raise a mound of many steps so that it is never forgotten, and its great stair faces the crater.` : `The surveyors of ${n.name} have walked the ring of hills and found it a perfect round. At ${st.name} they raise a mound of many steps, from the top of which the whole ring can be seen at once, and its great stair faces the crater.` });
       }
     }
     // ---- a mountain that burned, or any other disaster the land sent
     const woe = n.woes.length ? n.woes[n.woes.length - 1]! : undefined;
     if (woe && woe.kind === 'disaster' && real(woe.eventId) && year - woe.year < 60 && year - woe.year > 4) {
       const ev = sim.events.events[woe.eventId]!;
-      if (/erupt|volcan/.test(ev.type) && ev.cellId >= 0 && !has('fire-temple', ev.id)) {
+      if (/erupt|volcan/.test(ev.type) && ev.cellId >= 0 && !has('fire-watch', ev.id)) {
         const { st, d } = near(ev.cellId);
-        if (d < 0.5 && st.cell !== ev.cellId) plans.push({ kind: 'fire-temple', cause: ev.id, at: st, toward: ev.cellId, name: `${called('holy', 'fire', 'red', 'hill')}, the temple of the burning mountain`, what: 'a stepped temple that faces the volcano',
-          why: `It faces the mountain that burned in "${ev.title}", and a fire is kept on its summit so that the mountain need not light its own.`,
-          say: `The mountain has been quiet since "${ev.title}", and ${n.name} means to keep it so. At ${st.name} they raise a temple of many steps facing it, and keep a fire on the summit day and night.` });
+        if (d < 0.5 && st.cell !== ev.cellId) plans.push({ kind: 'fire-watch', cause: ev.id, at: st, toward: ev.cellId, name: `${called('hill', 'fire', 'red', 'high')}, the watch on the burning mountain`, what: 'a stepped watch-mound that faces the volcano',
+          why: `It faces the mountain that burned in "${ev.title}", and a watch is kept on its summit day and night, with a beacon ready to light if the mountain stirs.`,
+          say: `No one in ${n.name} means to be caught asleep by the mountain again after "${ev.title}". At ${st.name} they raise a mound of many steps facing it and set a watch on the summit, with a beacon to light as a warning.` });
       } else if (!has('memorial', ev.id)) plans.push({ kind: 'memorial', cause: ev.id, at: cap, name: `${called('stone', 'long', 'cold', 'black')}, the stone of remembrance`, what: 'a single standing stone taller than any tower',
         why: `It was raised for the dead of "${ev.title}".`,
         say: `No one in ${n.name} is without someone lost in "${ev.title}". At ${cap.name} they quarry a single stone taller than any tower and stand it upright, with no name on it, because there were too many.` });
@@ -1915,7 +1917,7 @@ export class Civilization {
     if (house && house.ended < 0 && (house.generations ?? 0) >= 4) {
       const founder = h.people[house.founder];
       const first = founder ? founder.events.find((e) => real(e)) : undefined;
-      if (founder && real(first) && !has('tomb', first)) plans.push({ kind: 'tomb', cause: first, at: cap, name: `${called('hill', 'king', 'old', 'holy')}, the tomb of ${founder.name}`, what: 'a pyramid over the founder of the ruling house',
+      if (founder && real(first) && !has('tomb', first)) plans.push({ kind: 'tomb', cause: first, at: cap, name: `${called('hill', 'king', 'old', 'great')}, the tomb of ${founder.name}`, what: 'a pyramid over the founder of the ruling house',
         why: `It holds ${founder.name}, who founded the ${house.name}, ${house.generations} generations before it was built.`,
         say: `The ${house.name} has ruled ${n.name} for ${house.generations} generations and wishes to be thought eternal. It moves the bones of its founder, ${founder.name}, to ${cap.name} and raises a mountain of dressed stone over them.` });
     }
@@ -1940,7 +1942,7 @@ export class Civilization {
         let site: Settlement | undefined;
         for (const st of this.settlements) if (st.cell === ev.cellId && (!site || st.ruined < 0 || (site.ruined >= 0 && st.ruined > site.ruined))) site = st;
         const { d } = near(ev.cellId);
-        if (site && d < 0.35 && (site.ruined >= 0 || site.nation === n.id)) plans.push({ kind: 'first-tower', cause: firstCity, at: site, name: `${called('town', 'old', 'high', 'holy')}, the tower of the first city`, what: 'a tower where the first city stood',
+        if (site && d < 0.35 && (site.ruined >= 0 || site.nation === n.id)) plans.push({ kind: 'first-tower', cause: firstCity, at: site, name: `${called('town', 'old', 'high', 'great')}, the tower of the first city`, what: 'a tower where the first city stood',
           why: `It stands where ${site.name}, the first city in the world, ${site.ruined >= 0 ? 'stood' : 'was founded'}, ${Math.round((year - ev.simYear) / 100) * 100} years before.`,
           say: site.ruined >= 0
             ? `The scholars of ${n.name} have found the place where the first city stood. There is little left of ${site.name} but mounds. Among them they raise a tower higher than anything its builders could have imagined, so that the place is not lost again.`
@@ -1951,7 +1953,7 @@ export class Civilization {
     // Which of its reasons it acts on: the rarest reasons weigh most (a crater or the first city before another
     // column), and a kind the world already has many of weighs less each time, so that no two wonders in sight of
     // each other are likely to be alike.
-    const rare: Record<WonderKind, number> = { 'crater-temple': 9, 'first-tower': 9, 'fire-temple': 6, sungate: 3, observatory: 2, lighthouse: 2, colossus: 2, tomb: 1.5, victory: 1, memorial: 1, 'peace-hall': 1 };
+    const rare: Record<WonderKind, number> = { 'crater-stair': 9, 'first-tower': 9, 'fire-watch': 6, sungate: 3, observatory: 2, lighthouse: 2, colossus: 2, tomb: 1.5, victory: 1, memorial: 1, 'peace-hall': 1 };
     let sum = 0;
     const weights = plans.map((p) => { const w = rare[p.kind] / (1 + count(p.kind)) ** 2; sum += w; return w; });
     let pick = rng.next() * sum, k = 0;
@@ -2115,7 +2117,7 @@ export class Civilization {
         claimant.events.push(ev.id); heir.events.push(ev.id); old.events.push(ev.id);
         if (war) this.successionWar(sim, rng, n, towns, year, heir, claimant, ev.id);
         else {
-          const end = rng.pick(['flees over the border and is not heard of again', 'is shut up in a temple for life', 'dies in the fighting at the gate', 'is bought off with a province to govern']);
+          const end = rng.pick(['flees over the border and is not heard of again', 'is shut up in a tower for life', 'dies in the fighting at the gate', 'is bought off with a province to govern']);
           const ev2 = sim.events.events[ev.id]!;
           ev2.description += ` ${claimant.name} ${end}.`;
           if (!end.startsWith('is bought')) { claimant.died = end.startsWith('dies') ? year : -1; if (claimant.died >= 0) { claimant.fate = 'died fighting for the throne'; h.notables.splice(h.notables.indexOf(claimant.id), 1); } }
@@ -2505,14 +2507,40 @@ export class Civilization {
     this.spaceAgeYear = -1;
   }
 
-  /** A sight in the sky that every young culture sees: some will build a faith on it. */
-  omen(sim: Simulation, eventId: number, rng: RNG): void {
+  /**
+   * A world saved before religion was taken out of the game (the owner's decision) is read with the names of today:
+   * a town's faith becomes the story it tells, a prophet a teller, a temple nothing at all.
+   */
+  mend(): void {
+    type Old = Record<string, unknown>;
     for (const st of this.settlements) {
-      if (st.ruined >= 0 || st.belief >= 0 || st.tech > 0.7 || !rng.chance(0.5)) continue;
-      st.belief = eventId;
+      const o = st as unknown as Old;
+      if (st.lore === undefined) st.lore = typeof o.belief === 'number' ? o.belief : -1;
+      delete o.belief; delete o.temple;
+    }
+    for (const p of this.h.people) {
+      const o = p as unknown as Old;
+      if (o.role === 'prophet') p.role = 'teller';
+      if (p.open === undefined) p.open = typeof o.pious === 'number' ? o.pious : 0.5;
+      delete o.pious;
+    }
+    for (const c of this.h.cultures) {
+      const o = c as unknown as Old;
+      if (c.custom === undefined) c.custom = typeof o.faith === 'number' ? o.faith : 0.5;
+      delete o.faith;
+    }
+    for (const c of this.h.calendars ?? []) if ((c.kind as string) === 'prophet') c.kind = 'teaching';
+    for (const w of this.h.wonders ?? []) { if ((w.kind as string) === 'crater-temple') w.kind = 'crater-stair'; if ((w.kind as string) === 'fire-temple') w.kind = 'fire-watch'; }
+  }
+
+  /** A sight in the sky that every young culture sees: in some towns it becomes the story they tell of themselves. */
+  sighting(sim: Simulation, eventId: number, rng: RNG): void {
+    for (const st of this.settlements) {
+      if (st.ruined >= 0 || st.lore >= 0 || st.tech > 0.7 || !rng.chance(0.5)) continue;
+      st.lore = eventId;
       const at = sim.events.events.length;
-      sim.civEvent('belief', st.species, st.cell, st.id, eventId);
-      this.stepForward(sim, st, at, 'The one who first preached it was {name}.', 'prophet');
+      sim.civEvent('story', st.species, st.cell, st.id, eventId);
+      this.stepForward(sim, st, at, 'The one who first told it was {name}.', 'teller');
     }
   }
 
@@ -2547,7 +2575,7 @@ export class Civilization {
     let name = compound(lang, meanings.head, meanings.modifier, year);
     for (let salt = 1; salt < 6 && this.settlements.some((x) => x.name === name); salt++) { meanings = placeMeanings(hash32(this.seedNum, id, salt)); name = compound(lang, meanings.head, meanings.modifier, year); }
     const st: Settlement = {
-      id, name, cell, region, species, pop: 0.2, tech: 0.03, founded: year, belief: -1, eventId: -1, ruined: -1, painted: false, temple: false, farms: false, stars: false,
+      id, name, cell, region, species, pop: 0.2, tech: 0.03, founded: year, lore: -1, eventId: -1, ruined: -1, painted: false, farms: false, stars: false,
       nation: -1, head: meanings.head, modifier: meanings.modifier ?? '', relic: -1, homeTemp: reg.landTemp[region]!,
       strata: [{ year, kind: 'camp', tech: 0.03, eventId: -1 }], over: under ? under.id : undefined,
     };
@@ -2561,7 +2589,7 @@ export class Civilization {
     return st;
   }
 
-  /** A disaster near settlements: people die, and young cultures build beliefs on what they saw. */
+  /** A disaster near settlements: people die, and in young towns it becomes the story they tell of themselves. */
   witness(sim: Simulation, eventId: number, regions: number[], kill: number[]): void {
     for (let k = 0; k < regions.length; k++) {
       const id = this.occupied.get(regions[k]!);
@@ -2575,11 +2603,11 @@ export class Civilization {
       }
       const nation = st.nation >= 0 ? this.h.nations[st.nation] : undefined;
       if (nation && nation.ended < 0) this.woe(nation, 'disaster', eventId, sim.simYear, 0.06 + 0.2 * Math.min(0.9, kill[k]!) / Math.max(1, nation.towns));
-      if (st.belief < 0 && st.tech < 0.7) {
-        st.belief = eventId;
+      if (st.lore < 0 && st.tech < 0.7) {
+        st.lore = eventId;
         const at = sim.events.events.length;
-        sim.civEvent('belief', st.species, st.cell, st.id, eventId);
-        this.stepForward(sim, st, at, '{name}, who lived through it, told the story until it became a creed.', 'prophet');
+        sim.civEvent('story', st.species, st.cell, st.id, eventId);
+        this.stepForward(sim, st, at, '{name}, who lived through it, told the story so well that it is still told.', 'teller');
       }
     }
   }

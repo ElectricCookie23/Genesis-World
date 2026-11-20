@@ -2,13 +2,13 @@
 // somewhere, streets that branch off them, plots along the streets, quarters with different
 // work, and walls from the times it was threatened. The plan is computed from the place (where
 // the water is, which way the land rises, where the neighbouring towns lie) and from what has
-// happened there (a temple, a harbour, wars), and from nothing else: it is never stored. Plots
+// happened there (a school, a harbour, wars), and from nothing else: it is never stored. Plots
 // carry a build order, so a town that grows fills in along its streets in the same order every
 // time it is drawn, and a time-lapse of its growth is simply the same plan cut at more plots.
 //
 // Plan units: one unit is about the frontage of a house. East is +x, north is +y.
 
-export type District = 'market' | 'temple' | 'homes' | 'workshops' | 'docks';
+export type District = 'market' | 'school' | 'homes' | 'workshops' | 'docks';
 
 export interface CitySite {
   /** A number that is this town's alone (from the world's seed and the town's id). */
@@ -22,7 +22,8 @@ export interface CitySite {
   uphill: number;
   slope: number;
   /** What has happened here. */
-  temple: boolean;
+  /** Has a school: a place of learning on the high ground, once its people write. */
+  school: boolean;
   port: boolean;
   capital: boolean;
   /** Each time it built a wall: how many plots the town had then. */
@@ -64,8 +65,8 @@ export interface CityPlan {
   walls: Wall[];
   /** Places kept open round the middle of town for great works (system E12): a monument stands on each one that has been built. */
   monuments: [number, number][];
-  /** Where the temple stands (if the site has one) and where the harbour is (if it has one). */
-  temple: [number, number] | null;
+  /** Where the school stands (if the site has one) and where the harbour is (if it has one). */
+  school: [number, number] | null;
   harbour: [number, number] | null;
 }
 
@@ -98,12 +99,12 @@ export function planCity(site: CitySite): CityPlan {
   const dry = (x: number, y: number, margin = 0): boolean => !coastal || x * cx + y * cy < site.shore - margin + 0.6 * Math.sin((x * -cy + y * cx) * 0.45 + site.seed % 7);
   const reach = 24;
 
-  // ---- the roads out of town: toward the neighbours, to the water, up to the temple
+  // ---- the roads out of town: toward the neighbours, to the water, up to the school
   const headings: number[] = [];
   const add = (a: number, apart = 0.55) => { if (headings.every((h) => Math.abs(turn(h - a)) > apart)) headings.push(a); };
   for (const r of site.roads.slice(0, 4)) add(r);
   if (coastal && (site.port || site.shore < 14)) add(site.coast, 0.4);
-  if (site.temple && site.slope > 0.05) add(site.uphill, 0.4);
+  if (site.school && site.slope > 0.05) add(site.uphill, 0.4);
   // every town has at least a way in and a way out, and a crossroads if it is a capital
   for (let k = 0; headings.length < (site.capital ? 4 : 2) && k < 12; k++) add((headings[0] ?? rnd() * 6.28) + Math.PI * (k % 2 ? 0.5 : 1) + (rnd() - 0.5) * 0.5 + k * 0.4);
 
@@ -152,9 +153,9 @@ export function planCity(site: CitySite): CityPlan {
   // ---- the special places
   const harbourRoad = coastal ? streets.findIndex((s, i) => i < mains && Math.abs(turn(Math.atan2(s.points[1]![1], s.points[1]![0]) - site.coast)) < 0.5) : -1;
   const harbour: [number, number] | null = harbourRoad >= 0 ? streets[harbourRoad]!.points[streets[harbourRoad]!.points.length - 1]! : null;
-  const temple: [number, number] | null = site.temple ? [ux * (3.2 + 2 * site.slope) + (rnd() - 0.5), uy * (3.2 + 2 * site.slope) + (rnd() - 0.5)] : null;
-  if (temple && !dry(temple[0], temple[1], 1)) { temple[0] = -cx * 3.5; temple[1] = -cy * 3.5; }
-  // the quarter of smoke and noise lies along one road, away from the temple
+  const school: [number, number] | null = site.school ? [ux * (3.2 + 2 * site.slope) + (rnd() - 0.5), uy * (3.2 + 2 * site.slope) + (rnd() - 0.5)] : null;
+  if (school && !dry(school[0], school[1], 1)) { school[0] = -cx * 3.5; school[1] = -cy * 3.5; }
+  // the quarter of smoke and noise lies along one road, away from the school
   const workRoad = mains > 1 ? (harbourRoad === 0 ? 1 : mains - 1) : -1;
 
   // ---- plots along both sides of every street
@@ -177,7 +178,7 @@ export function planCity(site: CitySite): CityPlan {
     }
     return false;
   };
-  if (temple) claim(temple[0], temple[1]);
+  if (school) claim(school[0], school[1]);
   // room for great works: between the roads, a little way out from the square
   const monuments: [number, number][] = [];
   const bearings = streets.slice(0, mains).map((s) => Math.atan2(s.points[1]![1], s.points[1]![0])).sort((a, b) => a - b);
@@ -206,9 +207,9 @@ export function planCity(site: CitySite): CityPlan {
         if (fromCentre < 1.25 || !dry(x, y, 0.5) || !free(x, y) || onRoad(x, y, s)) continue;
         claim(x, y);
         const walk = startAt[s]! + i;
-        const nearTemple = temple ? Math.hypot(x - temple[0], y - temple[1]) : 99;
+        const nearSchool = school ? Math.hypot(x - school[0], y - school[1]) : 99;
         const nearWater = harbour ? Math.hypot(x - harbour[0], y - harbour[1]) : 99;
-        const district: District = fromCentre < 3.6 ? 'market' : nearTemple < 2.6 ? 'temple' : nearWater < 4.2 ? 'docks' : (s === workRoad || (startAt[s] !== 0 && fromCentre > 7 && Math.abs(turn(Math.atan2(y, x) - Math.atan2(streets[Math.max(0, workRoad)]!.points[1]![1], streets[Math.max(0, workRoad)]!.points[1]![0]))) < 0.6)) && fromCentre > 5 ? 'workshops' : 'homes';
+        const district: District = fromCentre < 3.6 ? 'market' : nearSchool < 2.6 ? 'school' : nearWater < 4.2 ? 'docks' : (s === workRoad || (startAt[s] !== 0 && fromCentre > 7 && Math.abs(turn(Math.atan2(y, x) - Math.atan2(streets[Math.max(0, workRoad)]!.points[1]![1], streets[Math.max(0, workRoad)]!.points[1]![0]))) < 0.6)) && fromCentre > 5 ? 'workshops' : 'homes';
         // what is built first: along the roads, near the middle, near the water if there is a harbour
         const score = walk * (st.rank === 0 ? 0.75 : st.rank === 1 ? 1 : 1.25) + (district === 'docks' ? -2 : 0) + rnd() * 2.2;
         raw.push({ plot: { x, y, yaw: along + (side > 0 ? -Math.PI / 2 : Math.PI / 2), district, central: 0, street: s }, score });
@@ -248,7 +249,7 @@ export function planCity(site: CitySite): CityPlan {
     }
     walls.push({ points: pts, gates, order: n });
   }
-  return { plots, streets, walls, monuments, temple, harbour };
+  return { plots, streets, walls, monuments, school, harbour };
 }
 
 /** What a plan looks like in a few numbers: used to tell two towns apart. */
@@ -266,7 +267,7 @@ export interface PlanShape {
 
 export function planShape(plan: CityPlan, plots = plan.plots.length): PlanShape {
   const list = plan.plots.slice(0, plots);
-  const share: Record<District, number> = { market: 0, temple: 0, homes: 0, workshops: 0, docks: 0 };
+  const share: Record<District, number> = { market: 0, school: 0, homes: 0, workshops: 0, docks: 0 };
   let mx = 0, my = 0;
   for (const p of list) { share[p.district] += 1 / Math.max(1, list.length); mx += p.x; my += p.y; }
   mx /= Math.max(1, list.length); my /= Math.max(1, list.length);

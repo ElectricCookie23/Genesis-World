@@ -7,7 +7,7 @@ import { count, listing, ordinal, write } from '../src/sim/history/grammar';
 
 const big: Voice = { size: 0.9, water: 0.1, flight: 0, hearing: 0.3, harsh: 0.7 };
 const small: Voice = { size: 0.1, water: 0.1, flight: 0.9, hearing: 0.8, harsh: 0.1 };
-const MEANINGS = ['water', 'river', 'sea', 'hill', 'stone', 'sun', 'moon', 'fire', 'people', 'town', 'king', 'god', 'old', 'new', 'great', 'holy', 'land', 'star', 'forest', 'wind'];
+const MEANINGS = ['water', 'river', 'sea', 'hill', 'stone', 'sun', 'moon', 'fire', 'people', 'town', 'king', 'herd', 'old', 'new', 'great', 'bright', 'land', 'star', 'forest', 'wind'];
 
 describe('hashing', () => {
   it('is stable and spreads', () => {
@@ -65,7 +65,8 @@ describe('languages', () => {
     let kin = 0, far = 0, changed = 0;
     for (const m of MEANINGS) { kin += wordDistance(word(east, m), word(west, m)); far += wordDistance(word(east, m), word(stranger, m)); if (word(east, m) !== word(west, m)) changed++; }
     expect(changed).toBeGreaterThan(3);
-    expect(kin / MEANINGS.length).toBeLessThan(0.45);
+    // (sisters score 0.43 to 0.48 depending on which twenty words are asked, strangers 0.92: the line is drawn between, not at the sample)
+    expect(kin / MEANINGS.length).toBeLessThan(0.55);
     expect(far / MEANINGS.length).toBeGreaterThan(kin / MEANINGS.length + 0.25);
   });
 
@@ -546,7 +547,7 @@ function drawn(node: unknown): string {
 
 describe('notable people (E6)', () => {
   /** The kinds of event that belong to history proper: at a human pace each must name its person. */
-  const NAMED = new Set(['nation', 'era', 'invention', 'dynasty', 'war', 'conquest', 'secession', 'civil-war', 'nation-collapse', 'nation-fall', 'knowledge-lost', 'knowledge-regained', 'contact', 'prophet', 'music', 'trade', 'industry']);
+  const NAMED = new Set(['nation', 'era', 'invention', 'dynasty', 'war', 'conquest', 'secession', 'civil-war', 'nation-collapse', 'nation-fall', 'knowledge-lost', 'knowledge-regained', 'contact', 'reformer', 'music', 'trade', 'industry']);
 
   it('every event of history names the person tied to it', () => {
     const runs = fiveHistories();
@@ -555,7 +556,7 @@ describe('notable people (E6)', () => {
       const h = r.sim.civ.h;
       for (const e of r.sim.events.events) {
         if (e.simYear < r.began) continue;
-        const major = NAMED.has(e.type) || ((e.type === 'settlement' || e.type === 'temple') && e.importance >= 2);
+        const major = NAMED.has(e.type) || (e.type === 'settlement' && e.importance >= 2);
         if (!major) continue;
         checked++;
         const who = h.people[Number(e.data?.person ?? -1)];
@@ -567,7 +568,7 @@ describe('notable people (E6)', () => {
     expect(checked).toBeGreaterThan(200);
   }, 900000);
 
-  it('generals, prophets, explorers, artists, scholars and inventors live whole lives with an outcome', () => {
+  it('generals, reformers, explorers, artists, scholars and inventors live whole lives with an outcome', () => {
     const runs = fiveHistories();
     const seen = new Map<string, number>();
     let rivals = 0, martyrs = 0, early = 0, soldiers = 0;
@@ -579,7 +580,7 @@ describe('notable people (E6)', () => {
         seen.set(p.role, (seen.get(p.role) ?? 0) + 1);
         expect(p.name.length).toBeGreaterThan(1);
         expect(h.nations[p.nation]).toBeDefined();
-        for (const t of [p.bold, p.wise, p.cruel, p.pious]) { expect(t).toBeGreaterThanOrEqual(0); expect(t).toBeLessThanOrEqual(1); }
+        for (const t of [p.bold, p.wise, p.cruel, p.open]) { expect(t).toBeGreaterThanOrEqual(0); expect(t).toBeLessThanOrEqual(1); }
         if (p.role === 'ruler' || p.role === 'founder') continue;
         // made by an event, and tied to it
         expect(p.events.length).toBeGreaterThan(0);
@@ -597,13 +598,13 @@ describe('notable people (E6)', () => {
           if (p.died >= 0 && !/in bed/.test(p.fate)) early++;
           if (p.rival >= 0) { rivals++; expect(h.people[p.rival]!.rival).toBe(p.id); expect(h.people[p.rival]!.nation).not.toBe(p.nation); }
         }
-        if (p.role === 'prophet' && /put to death/.test(p.fate)) { martyrs++; expect(p.died).toBe(p.rose); expect(h.people[p.rival]!.cruel).toBeGreaterThan(0.62); }
+        if (p.role === 'reformer' && /put to death/.test(p.fate)) { martyrs++; expect(p.died).toBe(p.rose); expect(h.people[p.rival]!.cruel).toBeGreaterThan(0.62); }
       }
       // the living on record are all alive
       for (const id of h.notables) expect(h.people[id]!.died).toBeLessThan(0);
       expect(roles.size).toBeGreaterThanOrEqual(5);
     }
-    for (const role of ['ruler', 'founder', 'inventor', 'general', 'prophet', 'explorer', 'artist', 'scholar']) expect(seen.get(role) ?? 0, role).toBeGreaterThan(0);
+    for (const role of ['ruler', 'founder', 'inventor', 'general', 'reformer', 'explorer', 'artist', 'scholar']) expect(seen.get(role) ?? 0, role).toBeGreaterThan(0);
     // war is a dangerous trade, and the two sides of a war remember each other
     expect(rivals).toBeGreaterThan(0);
     expect(early).toBeGreaterThan(soldiers * 0.15);
@@ -621,10 +622,10 @@ describe('notable people (E6)', () => {
     // two species do not look alike, nor do two people of one species, nor two callings
     expect(face(a, 4, 'general', 12)).not.toBe(face(b, 4, 'general', 12));
     expect(face(a, 4, 'general', 12)).not.toBe(face(a, 4, 'general', 13));
-    expect(face(a, 4, 'general', 12)).not.toBe(face(a, 4, 'prophet', 12));
+    expect(face(a, 4, 'general', 12)).not.toBe(face(a, 4, 'reformer', 12));
     // five ages, five manners
     expect(new Set([0, 2, 4, 6, 8].map((era) => face(a, era, 'ruler', 3))).size).toBe(5);
-    for (const era of [0, 2, 4, 6, 8]) for (const role of ['ruler', 'founder', 'inventor', 'prophet', 'general', 'explorer', 'artist', 'scholar']) {
+    for (const era of [0, 2, 4, 6, 8]) for (const role of ['ruler', 'founder', 'inventor', 'teller', 'reformer', 'general', 'explorer', 'artist', 'scholar']) {
       const text = face(b, era, role, 40 + era);
       expect(text).not.toMatch(/NaN|undefined/);
       expect(text.length).toBeGreaterThan(1500);
@@ -800,7 +801,7 @@ describe('calendars (E8)', () => {
     expect(calendarName('founding', 1, 'sea', '')[0]).toBe('the Landing');
     expect(calendarName('founding', 1, 'successor', 'Old Country')[0]).toBe('the Fall of Old Country');
     expect(calendarName('crown', 1, '', 'House of Atlei')[0]).toBe('the House of Atlei');
-    expect(calendarName('prophet', 1, '', 'Feipa')[0]).toBe('the Teaching of Feipa');
+    expect(calendarName('teaching', 1, '', 'Feipa')[0]).toBe('the Teaching of Feipa');
     expect(calendarName('disaster', 1, 'eruption The mountain opens', '')[0]).toBe('the Ash');
     expect(calendarName('comet', 5, '', '')).toEqual(calendarName('comet', 5, '', ''));
   });
@@ -861,7 +862,7 @@ describe('migrations of peoples (E9)', () => {
     const before = sim.events.events.length;
     const town = sim.civ.settlements.find((s) => s.ruined < 0)!;
     for (let k = 0; k < times; k++) sim.god(tool, town.cell);
-    // (the act itself, not whatever followed it in the same breath: a town may take it for a sign and found a faith)
+    // (the act itself, not whatever followed it in the same breath: a town may make it the story it tells of itself)
     const strike = sim.godEvents[sim.godEvents.length - 1]!;
     for (let y = 0; y < 2500; y += 10) sim.step(10);
     return { sim, strike, before };
@@ -1355,9 +1356,9 @@ describe('wonders (E19)', () => {
         expect(w.done).toBeGreaterThan(w.year + 5);
         expect(w.why.length).toBeGreaterThan(20);
         // the kind answers the kind of event
-        const fits: Record<string, RegExp> = { observatory: /comet/, sungate: /eclipse/, 'crater-temple': /impact/, 'fire-temple': /erupt|volcan/, 'first-tower': /milestone/, tomb: /./, victory: /war/, lighthouse: /settlement/, memorial: /./, colossus: /golden-age/, 'peace-hall': /long-peace/ };
+        const fits: Record<string, RegExp> = { observatory: /comet/, sungate: /eclipse/, 'crater-stair': /impact/, 'fire-watch': /erupt|volcan/, 'first-tower': /milestone/, tomb: /./, victory: /war/, lighthouse: /settlement/, memorial: /./, colossus: /golden-age/, 'peace-hall': /long-peace/ };
         expect(cause!.type).toMatch(fits[w.kind]!);
-        if (w.kind === 'crater-temple' || w.kind === 'fire-temple') expect(w.toward).toBe(cause!.cellId);
+        if (w.kind === 'crater-stair' || w.kind === 'fire-watch') expect(w.toward).toBe(cause!.cellId);
         if (w.kind === 'observatory') expect(Number.isFinite(w.bearing)).toBe(true);
       }
       // no country raises two at once, and the world is not crowded with them
@@ -1375,10 +1376,10 @@ describe('wonders (E19)', () => {
     expect(JSON.stringify(a.civ.h.wonders ?? [])).toBe(JSON.stringify(b.civ.h.wonders ?? []));
   });
 
-  it('a meteor the player drops is answered, in time, by a temple that faces its crater', () => {
+  it('a meteor the player drops is answered, in time, by a stepped mound whose stair faces its crater', () => {
     // (this changes the shared histories: keep it the last test of the file)
     const runs = fiveHistories();
-    let temples = 0;
+    let stairs = 0;
     for (const { sim } of runs) {
       const big = sim.civ.settlements.filter((s) => s.ruined < 0 && s.nation >= 0).sort((p, q) => q.pop - p.pop)[0];
       if (!big) continue;
@@ -1388,16 +1389,16 @@ describe('wonders (E19)', () => {
       const fall = sim.meteor(cell, 0.2, true);
       for (let y = 0; y < 2500; y++) {
         sim.step(1);
-        if (y % 25 === 0 && (sim.civ.h.wonders ?? []).some((w) => w.kind === 'crater-temple' && w.cause === fall.id)) break;
+        if (y % 25 === 0 && (sim.civ.h.wonders ?? []).some((w) => w.kind === 'crater-stair' && w.cause === fall.id)) break;
       }
-      const temple = (sim.civ.h.wonders ?? []).find((w) => w.kind === 'crater-temple' && w.cause === fall.id);
-      if (!temple) continue;
-      temples++;
-      expect(temple.toward).toBe(cell);
-      expect(sim.civ.settlements[temple.settlement]!.cell).not.toBe(cell);
-      expect(sim.events.events[temple.eventId]!.causes).toContain(fall.id);
-      expect(temple.why).toMatch(/crater/);
+      const stair = (sim.civ.h.wonders ?? []).find((w) => w.kind === 'crater-stair' && w.cause === fall.id);
+      if (!stair) continue;
+      stairs++;
+      expect(stair.toward).toBe(cell);
+      expect(sim.civ.settlements[stair.settlement]!.cell).not.toBe(cell);
+      expect(sim.events.events[stair.eventId]!.causes).toContain(fall.id);
+      expect(stair.why).toMatch(/crater/);
     }
-    expect(temples).toBeGreaterThanOrEqual(2);
+    expect(stairs).toBeGreaterThanOrEqual(2);
   });
 });

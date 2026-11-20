@@ -1,5 +1,5 @@
 // What a people builds, seen up close: huts, houses, halls, towers, domes and spires scattered
-// around each settlement by its size and technology, a stepped temple where one was raised, and
+// around each settlement by its size and technology, a school on the high ground where its people write, and
 // boats working the sea lanes. All of it is instanced models that find the ground in the vertex
 // shader, lit like everything else, with windows that light up at night in the nation's own colour.
 import {
@@ -29,9 +29,9 @@ import { eclipseLight } from './eclipse';
 type N = any;
 
 const PART = { wall: 0, roof: 1, windows: 2, flame: 3, sail: 4, hull: 5, road: 6, water: 7 } as const;
-export const BUILDINGS = ['hut', 'house', 'hall', 'tower', 'dome', 'spire', 'temple', 'boat', 'road', 'wall', 'gate', 'scaffold', 'hoist', 'crane', 'worker', 'rail', 'canal', 'arch', 'pole', 'pipe', 'pylon',
+export const BUILDINGS = ['hut', 'house', 'hall', 'tower', 'dome', 'spire', 'boat', 'road', 'wall', 'gate', 'scaffold', 'hoist', 'crane', 'worker', 'rail', 'canal', 'arch', 'pole', 'pipe', 'pylon',
   // the wonders (system E19)
-  'observatory', 'sungate', 'ziggurat', 'greatspire', 'pyramid', 'column', 'beacon', 'obelisk', 'colossus', 'greatdome'] as const;
+  'observatory', 'sungate', 'stepmound', 'greatspire', 'pyramid', 'column', 'beacon', 'obelisk', 'colossus', 'greatdome'] as const;
 /** The models that lie along the ground corner by corner (streets, walls and everything built between towns). */
 const DRAPED = new Set<string>(['road', 'wall', 'rail', 'canal', 'arch', 'pole', 'pipe', 'pylon']);
 /** What is drawn for each kind of network between towns (system E15), and how far to the side of the road it runs, in plan units. */
@@ -42,8 +42,8 @@ const NETWORK_MODEL: { model: (typeof BUILDINGS)[number]; aside: number; every: 
 /** Where the roof of each kind begins, in the units its model is drawn in. */
 const EAVES: Partial<Record<(typeof BUILDINGS)[number], number>> = { hut: 0.42, house: 0.5, hall: 0.75, tower: 2.3, dome: 0.5, spire: 1.6 };
 /** How tall each kind of building stands, in the units its model is drawn in: what scaffolding has to reach. */
-export const HEIGHT: Partial<Record<(typeof BUILDINGS)[number], number>> = { hut: 1.0, house: 0.92, hall: 1.25, tower: 2.55, dome: 1.2, spire: 4.3, temple: 1.72,
-  observatory: 1.85, sungate: 2.32, ziggurat: 2.3, greatspire: 6.2, pyramid: 2.3, column: 4.5, beacon: 4.5, obelisk: 4.2, colossus: 4.1, greatdome: 2.35 };
+export const HEIGHT: Partial<Record<(typeof BUILDINGS)[number], number>> = { hut: 1.0, house: 0.92, hall: 1.25, tower: 2.55, dome: 1.2, spire: 4.3,
+  observatory: 1.85, sungate: 2.32, stepmound: 2.3, greatspire: 6.2, pyramid: 2.3, column: 4.5, beacon: 4.5, obelisk: 4.2, colossus: 4.1, greatdome: 2.35 };
 /**
  * The wonders (system E19): which model stands for each kind, how much ground it covers (the radius plots keep
  * clear of, in model units), how far from the middle of town it likes to stand (0 at the square, 1 at the edge),
@@ -52,8 +52,8 @@ export const HEIGHT: Partial<Record<(typeof BUILDINGS)[number], number>> = { hut
 export const WONDER_MODEL: Record<string, { model: (typeof BUILDINGS)[number]; foot: number; out: number; lit: number }> = {
   observatory: { model: 'observatory', foot: 1.35, out: 1, lit: 0.12 },
   sungate: { model: 'sungate', foot: 1.85, out: 1.15, lit: 0 },
-  'crater-temple': { model: 'ziggurat', foot: 1.4, out: 1, lit: 0.2 },
-  'fire-temple': { model: 'ziggurat', foot: 1.4, out: 1, lit: 0.2 },
+  'crater-stair': { model: 'stepmound', foot: 1.4, out: 1, lit: 0.2 },
+  'fire-watch': { model: 'stepmound', foot: 1.4, out: 1, lit: 0.2 },
   'first-tower': { model: 'greatspire', foot: 0.8, out: 0.25, lit: 0.4 },
   tomb: { model: 'pyramid', foot: 1.5, out: 1.2, lit: 0.1 },
   victory: { model: 'column', foot: 0.6, out: 0.3, lit: 0 },
@@ -133,7 +133,7 @@ export function buildBuilding(kind: Building): BufferGeometry {
   const s = new Shape();
   // Under every building is the post it would stand on if its builders lifted their floors (system E13): below the
   // ground, and so unseen, for everyone else. And in its front wall a doorway, which is as tall as its builders make it.
-  if (HEIGHT[kind] !== undefined && kind !== 'temple' && !WONDER_MODELS.has(kind)) {
+  if (HEIGHT[kind] !== undefined && !WONDER_MODELS.has(kind)) {
     for (const [x, z] of [[-0.24, -0.18], [0.24, -0.18], [-0.24, 0.18], [0.24, 0.18]] as [number, number][]) s.box(x, -2.2, z, 0.07, 2.2, 0.07, PART.hull, PART.hull);
     const front = kind === 'hut' ? 0.47 : kind === 'house' ? 0.36 : kind === 'hall' ? 0.46 : kind === 'tower' ? 0.32 : kind === 'dome' ? 0.71 : 0.5;
     s.box(0, 0, front, 0.16, 0.3, 0.03, PART.hull, PART.hull);
@@ -168,11 +168,6 @@ export function buildBuilding(kind: Building): BufferGeometry {
       s.ring(0, 0, 0, 0.5, 1.6, 0.4, 8, PART.windows);
       s.ring(0, 0, 1.6, 0.4, 3.2, 0.24, 8, PART.windows);
       s.ring(0, 0, 3.2, 0.24, 4.3, 0, 8, PART.roof);
-      break;
-    case 'temple':
-      for (let t = 0; t < 4; t++) s.box(0, t * 0.28, 0, 1.6 - t * 0.36, 0.28, 1.6 - t * 0.36, PART.wall, PART.wall);
-      s.box(0, 1.12, 0, 0.34, 0.3, 0.34, PART.wall);
-      s.ring(0, 0, 1.42, 0.12, 1.7, 0, 6, PART.flame);
       break;
     case 'boat':
       // a hull that narrows to the bow (+x), a mast with a sail, and a lamp at the stern
@@ -288,8 +283,8 @@ export function buildBuilding(kind: Building): BufferGeometry {
       s.box(0, 1.9, 0, 0.54, 0.42, 2.0, PART.wall, PART.wall);
       for (let i = 0; i < 12; i++) { const a = ((i + 0.5) / 12) * Math.PI * 2; s.box(Math.cos(a) * 1.7, 0, Math.sin(a) * 1.7, 0.22, i % 3 === 0 ? 0.8 : 0.55, 0.22, PART.wall, PART.wall); }
       break;
-    case 'ziggurat':
-      // six steps, a stair up the front, a shrine on top with a fire that is never let out
+    case 'stepmound':
+      // six steps, a great stair up the front, a watch-house on top and a beacon on its roof
       for (let t = 0; t < 6; t++) s.box(0, t * 0.26, 0, 2.7 - t * 0.38, 0.26, 2.7 - t * 0.38, PART.wall, PART.wall);
       for (let t = 0; t < 6; t++) s.box(1.35 - t * 0.19 + 0.1, 0, 0, 0.22, (t + 1) * 0.26 - 0.08, 0.5, PART.road, PART.road);
       s.box(0, 1.56, 0, 0.52, 0.36, 0.52, PART.windows, PART.roof);
@@ -308,7 +303,7 @@ export function buildBuilding(kind: Building): BufferGeometry {
       s.ring(0, 0, 5.0, 0.24, 6.2, 0, 8, PART.roof);
       break;
     case 'pyramid':
-      // a mountain of dressed stone on a paved court, a capstone in the colour of the house, and the mortuary temple at its foot
+      // a mountain of dressed stone on a paved court, a capstone in the colour of the house, and the gatehouse of the tomb at its foot
       s.box(0, 0, 0, 3.0, 0.08, 3.0, PART.road, PART.road);
       s.ring(0, 0, 0.08, 1.9, 2.0, 0.17, 4, PART.wall, Math.PI / 4);
       s.ring(0, 0, 2.0, 0.17, 2.3, 0, 4, PART.roof, Math.PI / 4);
@@ -386,7 +381,7 @@ function hash(n: number): number {
   return (x >>> 0) / 4294967296;
 }
 
-export interface TownInfo extends SettlementInfo { temple?: boolean }
+export type TownInfo = SettlementInfo;
 /** A wonder on its town's plan (system E19): where, how much ground it covers, and how it is drawn. */
 interface WonderSpot { w: WonderInfo; x: number; y: number; r: number; how: (typeof WONDER_MODEL)[string] }
 
@@ -413,7 +408,7 @@ export function buildingFor(district: District, central: number, era: number, r:
 function plainBuilding(district: District, central: number, era: number, r: number): Building {
   if (era < 0.3) return district === 'market' && r < 0.2 && era > 0.22 ? 'house' : 'hut';
   if (district === 'market') return era < 0.6 ? (r < 0.5 ? 'hall' : 'house') : era < 0.85 ? (r < 0.4 ? 'tower' : 'hall') : r < 0.3 ? 'spire' : r < 0.8 ? 'tower' : 'dome';
-  if (district === 'temple') return era < 0.6 ? (r < 0.6 ? 'hall' : 'house') : r < 0.5 ? 'dome' : 'hall';
+  if (district === 'school') return era < 0.6 ? (r < 0.6 ? 'hall' : 'house') : r < 0.5 ? 'dome' : 'hall';
   if (district === 'docks') return r < 0.55 ? 'hall' : 'house';
   if (district === 'workshops') return era < 0.6 ? (r < 0.3 ? 'hall' : r < 0.45 ? 'hut' : 'house') : era < 0.85 ? (r < 0.5 ? 'hall' : 'house') : r < 0.2 ? 'tower' : r < 0.7 ? 'hall' : 'house';
   // homes: houses, with the odd hut at the edge of an early town and towers toward the middle of a late one
@@ -440,7 +435,7 @@ export class Towns {
     const rotate = (v: N, q: N): N => v.add(cross(q.xyz, cross(q.xyz, v).add(v.mul(q.w))).mul(2));
     for (const kind of BUILDINGS) {
       const boat = kind === 'boat';
-      const slotCap = boat ? 96 : kind === 'house' || kind === 'road' ? cap : kind === 'hut' || kind === 'wall' ? Math.ceil(cap / 2) : kind === 'rail' || kind === 'canal' || kind === 'arch' || kind === 'pole' || kind === 'pipe' || kind === 'pylon' ? Math.ceil(cap / 8) : WONDER_MODELS.has(kind) ? 24 : kind === 'temple' || kind === 'gate' ? 64 : kind === 'scaffold' || kind === 'hoist' || kind === 'crane' ? 48 : kind === 'worker' ? 160 : Math.ceil(cap / 4);
+      const slotCap = boat ? 96 : kind === 'house' || kind === 'road' ? cap : kind === 'hut' || kind === 'wall' ? Math.ceil(cap / 2) : kind === 'rail' || kind === 'canal' || kind === 'arch' || kind === 'pole' || kind === 'pipe' || kind === 'pylon' ? Math.ceil(cap / 8) : WONDER_MODELS.has(kind) ? 24 : kind === 'gate' ? 64 : kind === 'scaffold' || kind === 'hoist' || kind === 'crane' ? 48 : kind === 'worker' ? 160 : Math.ceil(cap / 4);
       const g = buildBuilding(kind);
       // per-building data in one shared buffer (WebGPU allows 8 vertex buffers per draw; separately these made 9)
       const { iDir, iQuat, iData, iTint, iLight, iForm, iWall, iStyle } = packAttributes(g, [
@@ -634,7 +629,7 @@ export class Towns {
   }
 
   /**
-   * Where the wonders of a town stand (system E19), in the units of its plan. A temple stands on the side of town
+   * Where the wonders of a town stand (system E19), in the units of its plan. A stepped mound stands on the side of town
    * nearest what it faces, a lighthouse at the last dry ground toward the sea its ships cross, a column or a
    * standing stone near the square, a tomb outside the town altogether. Always on dry ground, and never two on
    * the same spot. Worked out again only when the sea moves.
@@ -824,7 +819,7 @@ export class Towns {
       shore: coastal ? Math.max(2, Math.round(shore) - 1) + Math.round(5 * wade) : Infinity,
       uphill: Math.round(Math.atan2(gy, gx) * 8) / 8,
       slope: Math.round(Math.min(1, steep * 2.5) * 10) / 10,
-      temple: !!st.temple, port: coastal && (!!st.overseas || st.tech > 0.36 || wade > 0.3), capital: !!nat && nat.capital === st.id, walls,
+      school: st.tech >= 0.35, port: coastal && (!!st.overseas || st.tech > 0.36 || wade > 0.3), capital: !!nat && nat.capital === st.id, walls,
     };
     const key = JSON.stringify(site);
     const have = this.plans.get(st.id);
@@ -995,7 +990,8 @@ export class Towns {
         // the ground its wonders stand on is kept clear of everything else (system E19)
         const great = st.wonders && st.wonders.length ? this.spotsOf(st, c, east, north, cells!, U, Math.round(boost * 4)) : null;
         const taken = (x: number, y: number): boolean => { if (great) for (const g of great) if (Math.hypot(x - g.x, y - g.y) < g.r) return true; return false; };
-        if (st.temple && plan.temple && lapse > 0.3 && (!left || left.share > 0.25)) { at(plan.temple[0], plan.temple[1]); this.put('temple', up, hash(st.id * 31) * 6.28, 0.0009 * boost, hash(st.id), lit, st.tech, tint, light); total++; }
+        // the school on the high ground: the largest hall in town, once its people write
+        if (plan.school && lapse > 0.3 && (!left || left.share > 0.25)) { at(plan.school[0], plan.school[1]); if (!wet() && !taken(px, py)) { this.form = shapedForm; this.put('hall', up, 0, 0.00078 * boost * (arch ? arch.scale : 1), hash(st.id), left ? -Math.max(0.08, left.height) : lit, Math.min(era, 0.6), left ? mossy : tint, light, toward(Math.atan2(-plan.school[1], -plan.school[0]))); this.form = plain; total++; } }
         // streets: a stretch of road for every step of every street the town has reached (lanes stay footpaths)
         for (const street of plan.streets) {
           if (street.order > count || street.rank > 1 || (left && left.share < 0.75)) continue;
@@ -1059,7 +1055,7 @@ export class Towns {
           // scaffolding to the height the work has reached, a crane of the age beside anything tall, builders in the street
           const tall = (HEIGHT[kind] ?? 1) * (arch ? arch.rise : 1);
           this.form = arch ? [1, arch.girth, Math.max(0, arch.lift), 0] : plain;
-          this.put('scaffold', up, 0, sz * (kind === 'dome' || kind === 'hall' || kind === 'temple' ? 1.45 : 1), seed, 0, tall * Math.min(1, progress + 0.2), tint, light, toward(heading));
+          this.put('scaffold', up, 0, sz * (kind === 'dome' || kind === 'hall' ? 1.45 : 1), seed, 0, tall * Math.min(1, progress + 0.2), tint, light, toward(heading));
           if (kind !== 'hut' && kind !== 'house' && progress < 0.96) { at(x + Math.cos(heading + 2.2) * 0.62, y + Math.sin(heading + 2.2) * 0.62); this.put(era >= 0.85 ? 'crane' : 'hoist', up, 0, sz * (era >= 0.85 ? 1 : 0.8) * Math.max(0.8, tall / (era >= 0.85 ? 3 : 1.7)), seed, 0, era, tint, light, toward(heading)); }
           this.form = plain;
           for (let w = 0; w < (kind === 'hut' ? 2 : 4); w++) { at(x + Math.cos(heading) * 0.5 + Math.cos(heading + 1.57) * (w - 1.5) * 0.22, y + Math.sin(heading) * 0.5 + Math.sin(heading + 1.57) * (w - 1.5) * 0.22); this.put('worker', up, 0, 0.00006 * boost, hash(seed * 977 + w * 31 + st.id), 0, era, tint, light, toward(heading + 1.57)); }
@@ -1114,7 +1110,7 @@ export class Towns {
             at(plot.x, plot.y);
             this.style = ownStyle;
             raise(kind, sz, h2, progress, plot.yaw, plot.x, plot.y);
-            shown.push({ what: `a ${kind} in the ${plot.district === 'homes' ? 'streets of houses' : plot.district === 'market' ? 'market' : plot.district === 'temple' ? 'temple quarter' : plot.district}`, progress, years: job.years, stage: stageOf(progress) });
+            shown.push({ what: `a ${kind} in the ${plot.district === 'homes' ? 'streets of houses' : plot.district === 'market' ? 'market' : plot.district === 'school' ? 'school quarter' : plot.district}`, progress, years: job.years, stage: stageOf(progress) });
           } else if (left) {
             // what still stands of it: some buildings are gone altogether, the rest are broken off at some height
             if (h3 * 0.999 < left.share) this.put(kind, up, 0, sz, h2, -Math.max(0.08, left.height * (0.55 + 0.9 * hash(st.id * 31 + k * 13))), Math.min(age, 0.55), mossy, light, toward(plot.yaw));

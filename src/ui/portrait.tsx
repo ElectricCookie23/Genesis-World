@@ -37,7 +37,8 @@ const EMBLEM: Record<string, string> = {
   ruler: 'M1 9.5 L1 3 L4 6 L6 2 L8 6 L11 3 L11 9.5 Z',
   founder: 'M3 10.5 L3 4.5 Q6 0.5 9 4.5 L9 10.5 Z',
   inventor: 'M6 3.2 A2.8 2.8 0 1 0 6.01 3.2 Z M6 0.6 V2.4 M6 9.6 V11.4 M0.6 6 H2.4 M9.6 6 H11.4 M2.2 2.2 L3.5 3.5 M8.5 8.5 L9.8 9.8 M9.8 2.2 L8.5 3.5 M3.5 8.5 L2.2 9.8',
-  prophet: 'M6 0.8 Q10.4 6.2 6 11.2 Q1.6 6.2 6 0.8 Z',
+  teller: 'M6 0.8 Q10.4 6.2 6 11.2 Q1.6 6.2 6 0.8 Z',
+  reformer: 'M2 10.5 L6 1.2 L10 10.5 M3.8 6.8 H8.2',
   general: 'M6 0.6 L7.3 7.2 L4.7 7.2 Z M3 7.8 H9 M6 7.8 V11.4',
   explorer: 'M6 0.5 L7.3 4.7 L11.5 6 L7.3 7.3 L6 11.5 L4.7 7.3 L0.5 6 L4.7 4.7 Z',
   artist: 'M1.5 10.5 L6.8 5.2 M6.8 5.2 Q9.6 1.2 11 1 Q10.8 3.6 8.2 6.4 Z',
@@ -153,7 +154,6 @@ export function Portrait({ genes: g, era, role, seed, bold = 0.5, cruel = 0.5, w
     dress.push(<path key="band" d={`M ${f(a.x)} ${f(a.y)} Q ${f(b.x)} ${f(b.y)} ${f(c.x)} ${f(c.y)}`} stroke={look.dress} stroke-width={2.6} fill="none" stroke-linecap="round" />);
     if (role === 'ruler') for (let i = 0; i < 3; i++) { const u = 0.2 + i * 0.3, x = a.x + (c.x - a.x) * u, y = a.y + (c.y - a.y) * u - hr * 0.22 * Math.sin(u * Math.PI) - 1; dress.push(<path key={`pt${i}`} d={`M ${f(x - 2)} ${f(y)} L ${f(x)} ${f(y - 5)} L ${f(x + 2)} ${f(y)} Z`} fill={look.dress} />); }
   }
-  if (role === 'prophet') halo.push(<circle key="halo" cx={f(cx)} cy={f(cy)} r={f(hr * 1.55)} fill="none" stroke={style === 2 ? look.line : style === 0 ? '#d8c08a' : style === 1 ? '#1c130f' : style === 3 ? '#e9dcc3' : '#5fd6e8'} stroke-width={1.4} stroke-dasharray={style === 4 ? '1 2' : 'none'} opacity={0.85} />);
   if (role === 'general') {
     for (let i = 0; i < 3; i++) dress.push(<path key={`g${i}`} d={`M ${f(42 - neckW - 5 + i)} ${f(baseY - 2 - i * 3.2)} Q 42 ${f(baseY + 4 - i * 3.2)} ${f(42 + neckW + 5 - i)} ${f(baseY - i * 3.2)}`} stroke={look.dress} stroke-width={2} fill="none" stroke-linecap="round" />);
     dress.push(<path key="scar" d={`M ${f(cx + hr * 0.7)} ${f(cy - hr * 0.12)} L ${f(cx + hr * 0.95)} ${f(cy + hr * 0.3)}`} stroke={look.cut} stroke-width={0.9} stroke-linecap="round" />);

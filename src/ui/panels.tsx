@@ -705,13 +705,13 @@ const ERA_NAMES = ['Age of Camps', 'Age of Fields', 'Age of Kilns', 'Age of Wall
 const NETWORK_NAMES = ['made roads', 'aqueducts', 'canals', 'railways', 'telegraph wires', 'pipelines', 'power lines'];
 const listOf = (words: string[]): string => (words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}` : words[0] ?? '');
 
-const ROLE_LABEL: Record<string, string> = { ruler: 'Ruler', founder: 'Founder', inventor: 'Inventor', prophet: 'Prophet', general: 'General', explorer: 'Explorer', artist: 'Artist', scholar: 'Scholar', consort: 'Consort', claimant: 'Claimant' };
+const ROLE_LABEL: Record<string, string> = { ruler: 'Ruler', founder: 'Founder', inventor: 'Inventor', teller: 'Storyteller', reformer: 'Reformer', general: 'General', explorer: 'Explorer', artist: 'Artist', scholar: 'Scholar', consort: 'Consort', claimant: 'Claimant' };
 
 /** The two strongest sides of a temperament, in plain words. */
 function temperament(p: PersonInfo): string {
   const sides: [number, string][] = [
     [p.bold - 0.5, p.bold > 0.5 ? 'bold' : 'cautious'], [p.wise - 0.5, p.wise > 0.5 ? 'wise' : 'rash'],
-    [p.cruel - 0.5, p.cruel > 0.5 ? 'cruel' : 'gentle'], [p.pious - 0.5, p.pious > 0.5 ? 'devout' : 'doubting'],
+    [p.cruel - 0.5, p.cruel > 0.5 ? 'cruel' : 'gentle'], [p.open - 0.5, p.open > 0.5 ? 'open to counsel' : 'stubborn'],
   ];
   return sides.filter((x) => Math.abs(x[0]) > 0.15).sort((a, b) => Math.abs(b[0]) - Math.abs(a[0])).slice(0, 2).map((x) => x[1]).join(' and ');
 }
@@ -789,7 +789,7 @@ export function NationPanel() {
             {d.people.slice(0, s.quality === 'low' ? 8 : 24).map((p) => <PersonCard key={p.id} p={p} genes={s.species.get(d.species)?.genes} year={year} />)}
           </div>
         )}
-        {d && d.people.length <= 2 && d.rulers.length > 1 && <p class={css.sub}>Generals, prophets, explorers, artists and scholars are recorded only while time runs at the pace of history or slower.</p>}
+        {d && d.people.length <= 2 && d.rulers.length > 1 && <p class={css.sub}>Generals, reformers, storytellers, explorers, artists and scholars are recorded only while time runs at the pace of history or slower.</p>}
         {d && d.houses.length > 0 && <div class={css.sub} style={{ margin: '8px 0 4px', letterSpacing: '0.08em' }}>RULING HOUSES</div>}
         {d && d.houses.slice(0, 12).map((x) => (
           <div key={x.id} class={css.when} style={{ color: '#cfc9bd', margin: '0 0 3px' }}>
@@ -865,7 +865,7 @@ export function Peoples() {
         {s.nations.length > 0 && <div class={css.sub} style={{ margin: '12px 0 4px' }}>SETTLEMENTS</div>}
         {live.map((st) => {
           const sp = s.species.get(st.species);
-          const belief = s.events[st.belief];
+          const lore = s.events[st.lore];
           return (
             <div class={css.entry} key={st.id} style={{ color: '#ffcf8a', cursor: 'default' }}>
               <i class={css.dot} />
@@ -885,12 +885,12 @@ export function Peoples() {
               ))}
               <WonderLines st={st} year={s.stats?.simYear ?? 0} />
               {(st.monuments ?? 0) > 0 && <div class={css.when} style={{ color: '#ffd76a' }}>{st.monuments} great {st.monuments === 1 ? 'work stands' : 'works stand'} here from a golden age.</div>}
-              {belief && <div class={css.when} style={{ color: '#ece7db' }}>Its faith remembers: {belief.title.toLowerCase()}.</div>}
+              {lore && <div class={css.when} style={{ color: '#ece7db' }}>The story it tells of itself: {lore.title.toLowerCase()}.</div>}
               <button class={css.link} onClick={() => actions.flyToCell(st.cell, 0.25)}>fly there</button>
               {st.tech >= 0.3 && <button class={css.link} title="Fly down and replay this town from its first huts to what it is now" onClick={() => actions.timelapse(st.id, st.cell)}>watch it grow</button>}
               {st.eventId >= 0 && <button class={css.link} onClick={() => update({ whyEvent: st.eventId })}>its story</button>}
               {(st.layers ?? 1) >= 2 && <button class={css.link} title="What lies in the ground under this town" onClick={() => actions.openSite(st.id)}>{st.layers} layers under it</button>}
-              {belief && <button class={css.link} onClick={() => update({ whyEvent: st.belief })}>its faith</button>}
+              {lore && <button class={css.link} onClick={() => update({ whyEvent: st.lore })}>its oldest story</button>}
             </div>
           );
         })}

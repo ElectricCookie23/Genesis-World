@@ -25,7 +25,7 @@ function render(node: unknown): string {
 
 const [out = 'portraits.html', seedArg = '7'] = process.argv.slice(2);
 const rng = new RNG(Number(seedArg));
-const ROLES = ['ruler', 'founder', 'general', 'prophet', 'explorer', 'artist', 'scholar', 'inventor'];
+const ROLES = ['ruler', 'founder', 'general', 'reformer', 'teller', 'explorer', 'artist', 'scholar', 'inventor'];
 const rows: string[] = [];
 for (let sp = 0; sp < 2; sp++) {
   const genes = new Float32Array(GENE_COUNT);

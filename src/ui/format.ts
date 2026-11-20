@@ -37,7 +37,7 @@ export function eventColor(type: string): string {
     case 'wildfire': return '#ff9d4d';
     case 'milestone': return '#fff1c9';
     case 'oxygen': return '#a8e6ff';
-    case 'settlement': case 'belief': case 'prophet': case 'contact': return '#ffcf8a';
+    case 'settlement': case 'story': case 'reformer': case 'contact': return '#ffcf8a';
     case 'migration': case 'culture': return '#9fe0c8';
     case 'marriage': case 'union': case 'dynasty': return '#f0b8d0';
     case 'calendar': return '#d9c8ff';
@@ -50,7 +50,7 @@ export function eventColor(type: string): string {
     case 'earthquake': case 'tsunami': return '#c7b299';
     case 'plague': return '#b7d08a';
     case 'eclipse': case 'comet': return '#d9c8ff';
-    case 'painting': case 'tamed': case 'temple': return '#ffcf8a';
+    case 'painting': case 'tamed': return '#ffcf8a';
     case 'living-fossil': case 'convergence': return '#8fe3a0';
     case 'orbital-shift': return '#d9c8ff';
     default: return type.startsWith('god-') ? '#fff1c9' : '#e9e4d8';
@@ -74,7 +74,7 @@ export function eventGlyph(type: string): string {
     case 'milestone': return '★';
     case 'oxygen': return '○';
     case 'settlement': return '⌂';
-    case 'belief': case 'prophet': return '☼';
+    case 'story': case 'reformer': return '❝';
     case 'contact': return '⇄';
     case 'migration': return '➳';
     case 'culture': return '⚭';
@@ -98,7 +98,6 @@ export function eventGlyph(type: string): string {
     case 'comet': return '☄';
     case 'painting': return '✎';
     case 'tamed': return '∞';
-    case 'temple': return '△';
     case 'living-fossil': return '◈';
     case 'convergence': return '≍';
     case 'orbital-shift': return '◔';

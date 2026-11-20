@@ -3,7 +3,7 @@
 import { writeFileSync } from 'node:fs';
 import { planCity, planShape, type CitySite, type CityPlan } from '../src/render/gfx/cityplan';
 const [out = 'cityplan.html'] = process.argv.slice(2);
-const COLOUR = { market: '#f2c14e', temple: '#c9a0ff', homes: '#d8d2c4', workshops: '#d9825b', docks: '#6fb8d8' } as const;
+const COLOUR = { market: '#f2c14e', school: '#c9a0ff', homes: '#d8d2c4', workshops: '#d9825b', docks: '#6fb8d8' } as const;
 function draw(site: CitySite, plan: CityPlan, n: number, title: string): string {
   const S = 9, C = 260;
   const P = (x: number, y: number) => `${(C + x * S).toFixed(1)},${(C - y * S).toFixed(1)}`;
@@ -25,14 +25,14 @@ function draw(site: CitySite, plan: CityPlan, n: number, title: string): string 
     for (const g of w.gates) svg += `<circle cx="${C + g[0] * S}" cy="${C - g[1] * S}" r="4" fill="#efe6d2" stroke="#3a3530"/>`;
   }
   plan.plots.slice(0, n).forEach((p) => { svg += `<rect x="${-3.2}" y="${-3.2}" width="6.4" height="6.4" fill="${COLOUR[p.district]}" stroke="#2b2620" stroke-width="0.6" transform="translate(${C + p.x * S} ${C - p.y * S}) rotate(${(-p.yaw * 180) / Math.PI})"/>`; });
-  if (plan.temple && site.temple) svg += `<circle cx="${C + plan.temple[0] * S}" cy="${C - plan.temple[1] * S}" r="7" fill="#c9a0ff" stroke="#2b2620"/>`;
+  if (plan.school && site.school) svg += `<circle cx="${C + plan.school[0] * S}" cy="${C - plan.school[1] * S}" r="7" fill="#c9a0ff" stroke="#2b2620"/>`;
   svg += `<text x="10" y="20" fill="#fff" font-family="system-ui" font-size="13">${title} (${n} plots)</text></svg>`;
   return svg;
 }
 const sites: [string, CitySite][] = [
-  ['Inland crossroads, a capital, never attacked', { seed: 11, roads: [0.3, 2.2, 3.9, 5.2], coast: 0, shore: Infinity, uphill: 1.2, slope: 0.05, temple: false, port: false, capital: true, walls: [] }],
-  ['Harbour town under a hill, a temple, walled twice', { seed: 23, roads: [2.6, 4.4], coast: 0.4, shore: 5, uphill: 3.3, slope: 0.5, temple: true, port: true, capital: false, walls: [30, 140] }],
-  ['Valley town on a steep slope, one road through', { seed: 37, roads: [1.0, 4.1], coast: 0, shore: Infinity, uphill: 2.6, slope: 0.9, temple: true, port: false, capital: false, walls: [60] }],
+  ['Inland crossroads, a capital, never attacked', { seed: 11, roads: [0.3, 2.2, 3.9, 5.2], coast: 0, shore: Infinity, uphill: 1.2, slope: 0.05, school: false, port: false, capital: true, walls: [] }],
+  ['Harbour town under a hill, a school, walled twice', { seed: 23, roads: [2.6, 4.4], coast: 0.4, shore: 5, uphill: 3.3, slope: 0.5, school: true, port: true, capital: false, walls: [30, 140] }],
+  ['Valley town on a steep slope, one road through', { seed: 37, roads: [1.0, 4.1], coast: 0, shore: Infinity, uphill: 2.6, slope: 0.9, school: true, port: false, capital: false, walls: [60] }],
 ];
 let html = `<!doctype html><meta charset="utf-8"><body style="background:#14161a;color:#ccc;font:12px system-ui;margin:10px"><div style="display:flex;flex-wrap:wrap;gap:8px">`;
 for (const [title, site] of sites) {

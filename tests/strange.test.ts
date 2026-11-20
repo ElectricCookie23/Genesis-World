@@ -21,7 +21,7 @@ const inner = (sim: Simulation): Strange => sim.strange;
 const land = (sim: Simulation, skip = 0) => { let k = 0; for (let i = 0; i < sim.grid.count; i++) if (sim.world.elevation[i]! > sim.world.seaLevel + 0.1 && k++ === skip) return i; return 0; };
 const town = (sim: Simulation, species: number, cell: number, tech: number, name: string, over: Partial<Settlement> = {}): Settlement => {
   const ev = sim.emit({ type: 'settlement', cellId: cell, title: `${name} is founded`, description: '', importance: 0, speciesIds: [species] });
-  const st = { id: sim.civ.settlements.length, name, cell, region: sim.regions.regionOf[cell]!, species, pop: 50, tech, founded: sim.simYear, belief: -1, eventId: ev.id, ruined: -1, painted: false, temple: false, farms: false, stars: false, nation: -1, head: '', modifier: '', relic: -1, ...over } as Settlement;
+  const st = { id: sim.civ.settlements.length, name, cell, region: sim.regions.regionOf[cell]!, species, pop: 50, tech, founded: sim.simYear, lore: -1, eventId: ev.id, ruined: -1, painted: false, farms: false, stars: false, nation: -1, head: '', modifier: '', relic: -1, ...over } as Settlement;
   sim.civ.settlements.push(st);
   return st;
 };
@@ -152,9 +152,8 @@ describe('E85 trance blooms', () => {
     const use = ofType(sim, 'bloom-use');
     expect(use.length).toBe(1);
     expect(use[0]!.causes).toEqual(expect.arrayContaining([mine.id, st.eventId]));
-    // (no faith is founded on it: the game has no religion, by the owner's decision)
-    expect(st.belief).toBe(-1);
-    expect(st.temple).toBe(false);
+    // (nothing is founded on it but its use: the game has no religion, by the owner's decision)
+    expect(st.lore).toBe(-1);
     inner(sim).blooms(sim);
     expect(ofType(sim, 'bloom-use').length).toBe(1);
     sim.civ.settlements.pop();

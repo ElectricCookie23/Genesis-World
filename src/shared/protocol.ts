@@ -152,9 +152,10 @@ export interface WonderInfo {
 }
 
 export interface SettlementInfo {
-  id: number; name: string; cell: number; species: number; pop: number; tech: number; founded: number; belief: number; eventId: number; ruined: number;
-  /** Has raised a temple (after the sky has meddled often enough). */
-  temple?: boolean;
+  id: number; name: string; cell: number; species: number; pop: number; tech: number; founded: number;
+  /** The event this town's oldest story is about, or -1. */
+  lore: number;
+  eventId: number; ruined: number;
   /** Great works raised here in golden ages. */
   monuments?: number;
   /** The wonders that stand here, or are being built (system E19). */
@@ -219,14 +220,14 @@ export interface TechCell {
 /** One of the people on a nation's record. */
 export interface PersonInfo {
   id: number; name: string;
-  /** 'ruler', 'founder', 'inventor', 'prophet', 'general', 'explorer', 'artist' or 'scholar'. */
+  /** 'ruler', 'founder', 'inventor', 'teller', 'reformer', 'general', 'explorer', 'artist' or 'scholar'. */
   role: string;
   born: number;
   /** Year of death, or -1 while alive. */
   died: number;
   fate: string;
   /** Temperament, each 0..1. */
-  bold: number; wise: number; cruel: number; pious: number;
+  bold: number; wise: number; cruel: number; open: number;
   /** The age their nation was in when they rose: it sets the style of the portrait. */
   era: number;
   /** The ruler they served and a rival, by name ('' if none). */
