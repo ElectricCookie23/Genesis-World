@@ -13,6 +13,22 @@ This is the second version. The first was cut short by a flat battery; this one 
 - Roughly 60 of about 230 captures were looked at. Each finding names the files it rests on; the rest are listed at the end.
 - For part of the second run the machine's owner was also using the same browser window, so the Genesis tab may have been in the background at times. The frame-rate table was finished before that; the creature captures after it were checked to be in a visible tab.
 
+## Follow-up on WebGL2: sky at altitude, a wader, an island (2026-11-21)
+
+The items the check below left open. WebGL2, High, seed `amber-reef-101`, bundle `assets/index-u3vNpV0q.js` (newer than the `DySXvzft` of the check below; I did not record its commit). Plain warp to the dawn, then `through: true` for 100,000 years. Files start `retest7-`; 4 of 9 were looked at. Console: `x1 Failed to load resource: the server responded with a status of 404 ()`.
+
+**Worlds differ by backend or build:** here the plain warp stopped at 81.70 My, against 59.03 My on WebGPU in the check below.
+
+| Item | Result | Evidence |
+|---|---|---|
+| Daytime sky at altitude, WebGL2, sun +0.3, camera toward the horizon (`dist 0.055`, tilt -0.35) | **Fixed at 3 km**: an even lavender sky, no stars (`(-2.74, 1.04)`, 2.92 km). **Nearly fixed at 5 km**: lavender at the horizon darkening to deep violet overhead, with one or two faint stars still visible near the top of the frame (`(1.66, -1.08)`, 4.91 km). The 1.7 km capture was not looked at. | `retest7-webgl-sky-3km.jpg`, `-sky-5km.jpg` |
+| A wading animal close up | **Looks wrong.** A two-legged evolved animal (species 187, in water 0.36 units deep, 0.36 below the surface by its recorded position) is drawn **standing on top of the sea**: both legs and feet are fully visible down to the toes, with no waterline across the legs and no splash or ripple. The numbers say it is on the bottom; the picture says it is walking on water. The water here is clear turquoise shallows, so the legs may simply be showing through an untinted surface. | `retest7-webgl-wader-close.jpg` (camera held on individual 5832780 at 5x its size, tilt -0.15, sun +0.4) |
+| Same animal | Body is a smooth blue-grey shape with a fine scale pattern, a bulbous two-lobed head with no visible eye from this side, wing-like flaps folded along the back, thin legs with small feet. Reads as an animal. | same |
+| A small island | **No missing-sea squares.** A snow-covered islet (`(1.361, 0.998)`, 0.35 km) with sea right up to its shore on all sides and a soft pale shallows ring; the mainland shore behind is also clean. | `retest7-webgl-island-0.05.jpg` |
+| Broadleaf forest from inside | **Not done.** No warm, fully inland, dense forest cell existed in this world. | |
+
+At 5 km the snow terrain is a harsh dark-and-white speckle that reads as gravel rather than snow (`-sky-5km.jpg`).
+
 ## Check of commit 6dddd2d (2026-11-21)
 
 Deploy run for `6dddd2d` green before testing; the page served `assets/index-DySXvzft.js` from start to end (a docs-only push of mine redeployed the site during the run; the open page kept its bundle). WebGPU, High, seed `amber-reef-101`, mains power. One world: a plain warp to the dawn of history, `through: true` for 100,000 years (town captures), then `through: true` on to 200 My (everything else). Files start `retest6-`; 10 of about 30 were looked at. Console over the run: `x2 Failed to load resource: the server responded with a status of 404 ()`, `x42 Max polyphony exceeded. Note dropped.`
