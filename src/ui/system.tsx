@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { actions, update, useStore } from './store';
 import { formatYear, hsl, shortYear } from './format';
 import { LIFE_STAGES, MAP_H, MAP_W, type CosmosInfo, type Report } from '../sim/cosmos';
+import { ENDING_TEXT } from '../sim/future';
 import css from './ui.module.css';
 
 const KIND = { rock: 'a bare rocky world', giant: 'a gas giant', ice: 'an ice world' } as const;
@@ -190,6 +191,25 @@ export function System() {
               <button class={css.link} onClick={() => update({ panel: 'section' })}>the layers in the rock</button>
               <button class={css.link} onClick={() => update({ panel: 'microscope' })}>under the lens</button>
             </div>
+          </div>
+        )}
+        {s.future && (s.future.ring > 0 || s.future.arcologies > 0 || s.future.machines || s.future.uploaded > 0 || s.future.shade > 0 || s.future.projects > 0 || s.future.ending || Object.keys(s.future.origins).length > 0) && (
+          <div class={css.goal}>
+            <div class={css.goalTitle}><b>What its people have made of it</b></div>
+            {s.future.ending && <div><b style={{ font: "500 15px 'Cormorant Garamond', serif" }}>{ENDING_TEXT[s.future.ending][0]}.</b> <span class={css.sub}>{ENDING_TEXT[s.future.ending][1]}</span></div>}
+            <div class={css.sub} style={{ marginTop: '3px' }}>
+              {s.future.ring === 1 && 'A cable hangs from orbit to an anchor on the equator. '}
+              {s.future.ring === 2 && 'A ring of stations circles the world above the equator, with a cable down to the ground. '}
+              {s.future.arcologies > 0 && `${s.future.arcologies === 1 ? 'One city has' : `${s.future.arcologies} cities have`} been built as a single sealed structure. `}
+              {s.future.projects > 0 && `They have tried ${s.future.projects === 1 ? 'once' : `${s.future.projects} times`} to mend the climate by their own hand. `}
+              {s.future.machines && 'Minds that were built keep their own records now. '}
+              {s.future.uploaded > 0 && `${Math.round(s.future.uploaded * 100)}% of the people live inside machines; the towns are emptying. `}
+              {s.future.shade > 0 && `Collectors round the star catch ${(s.future.shade * 100).toFixed(1)}% of its light before it reaches the planet.`}
+            </div>
+            {Object.entries(s.future.origins).map(([id, how]) => {
+              const sp = s.species.get(Number(id));
+              return sp ? <div class={css.sub} key={id} style={{ marginTop: '3px' }}><button class={css.link} style={{ marginRight: '6px' }} onClick={() => actions.selectSpecies(sp.id)}>{sp.name}</button>{how === 'engineered' ? 'was made, not born' : how === 'revived' ? 'was brought back from extinction' : 'was raised to a mind by another people'}{sp.extinctYear >= 0 ? ' (now gone)' : ''}</div> : null;
+            })}
           </div>
         )}
         <div class={css.goal}>

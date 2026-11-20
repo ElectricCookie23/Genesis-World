@@ -294,7 +294,7 @@ function stats(s: Simulation): WorldStats {
     population: s.creatures.totalPop,
     landCover: s.plants.totalLandCover / Math.max(1, s.regions.count),
     storms: s.storms.map((x) => x.cell),
-    solar: s.climate.solar, starSwell: s.cosmos.swell, starPhase: s.cosmos.starPhase, pulseRate: s.strange.pulseRate, health: s.strange.health, poleSign: s.strange.poleSign, poleFlip: s.strange.flipProgress(s.simYear),
+    solar: s.climate.solar, starSwell: s.cosmos.swell, starPhase: s.cosmos.starPhase, orbitalRing: s.future.ring, tetherLon: s.future.ringCell >= 0 ? Math.atan2(s.grid.pos[s.future.ringCell * 3 + 2]!, s.grid.pos[s.future.ringCell * 3]!) : 0, pulseRate: s.strange.pulseRate, health: s.strange.health, poleSign: s.strange.poleSign, poleFlip: s.strange.flipProgress(s.simYear),
     cyclones: s.storms.filter((x) => x.hurricane || x.eternal).map((x) => x.cell),
     moons: s.moons,
     ring: s.ring,
@@ -394,7 +394,7 @@ function tick(): void {
     lastCells = now;
   }
   // the rest of the star system changes slowly: told about now and then
-  if (now - lastCosmos > 1500) { lastCosmos = now; post({ type: 'cosmos', cosmos: s.cosmos.info(s), messages: s.legacy.messages, archives: s.legacy.archives, link: s.neighbor ? linkInfo(s, s.neighbor) : undefined, strange: s.strange.info(s, focus ? nearestCell(s.regions.grid, focus.x, focus.y, focus.z, focusRegion) : 0) }); }
+  if (now - lastCosmos > 1500) { lastCosmos = now; post({ type: 'cosmos', cosmos: s.cosmos.info(s), messages: s.legacy.messages, archives: s.legacy.archives, link: s.neighbor ? linkInfo(s, s.neighbor) : undefined, strange: s.strange.info(s, focus ? nearestCell(s.regions.grid, focus.x, focus.y, focus.z, focusRegion) : 0), future: s.future.info() }); }
   if (now - lastStats > 100) {
     post({ type: 'stats', stats: stats(s) });
     lastStats = now;

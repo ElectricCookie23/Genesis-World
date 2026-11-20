@@ -1,7 +1,7 @@
 // Scene orchestration: owns the renderer, every visual layer, and per-frame updates.
 import { describeArchitecture, type Material } from './gfx/architecture';
 import {
-  BoxGeometry, ConeGeometry, DoubleSide, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshBasicNodeMaterial, Quaternion, RingGeometry, Scene, Vector3,
+  AdditiveBlending, BoxGeometry, ConeGeometry, CylinderGeometry, DoubleSide, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshBasicNodeMaterial, Quaternion, RingGeometry, Scene, TorusGeometry, Vector3,
   WebGPURenderer, type Vector4,
 } from 'three/webgpu';
 import { dot, float, length, mx_fractal_noise_float, normalize, positionLocal, positionWorld, smoothstep, vec3 } from 'three/tsl';
@@ -161,6 +161,8 @@ export class GenesisScene {
   private lastElevation?: Float32Array;
   moonDistance = MOON_DISTANCE;
   fpsAvg = 60;
+  private tether?: Mesh;
+  private orbitalRing?: Mesh;
   private starSwell = 1;
   private starBase?: { size: number; color: Vector3 };
   private starTmp = new Vector3();
@@ -787,6 +789,26 @@ export class GenesisScene {
     if (stats.moons === 0) this.moon.visible = false;
     if (this.moon2) this.moon2.visible = stats.moons >= 2;
     if (this.ringMesh) this.ringMesh.visible = stats.ring;
+    // a people's works in orbit (E71): a tether standing on the equator, then a ring round the world
+    {
+      const level = stats.orbitalRing ?? 0;
+      if (level > 0 && !this.tether) {
+        const glow = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: AdditiveBlending });
+        glow.colorNode = vec3(0.9, 0.95, 1.0).mul(0.9);
+        this.tether = new Mesh(new CylinderGeometry(0.0011, 0.0011, 0.22, 6), glow);
+        this.orbitalRing = new Mesh(new TorusGeometry(1.22, 0.0016, 6, 320), glow);
+        this.orbitalRing.rotation.x = Math.PI / 2;
+        this.tether.renderOrder = 5; this.orbitalRing.renderOrder = 5;
+        this.scene.add(this.tether, this.orbitalRing);
+      }
+      if (this.tether && this.orbitalRing) {
+        const lon = stats.tetherLon ?? 0;
+        this.tether.visible = level > 0;
+        this.tether.position.set(Math.cos(lon) * 1.11, 0, Math.sin(lon) * 1.11);
+        this.tether.quaternion.setFromUnitVectors(this.starTmp.set(0, 1, 0), new Vector3(Math.cos(lon), 0, Math.sin(lon)));
+        this.orbitalRing.visible = level > 1;
+      }
+    }
     uRing.value = stats.ring ? 1 : 0;
     uSun2.value = stats.binary ? 1 : 0;
     if (this.monolithMesh && this.grid && this.monolithMesh.count !== stats.monoliths.length) {

@@ -151,6 +151,7 @@ export function SpeciesCard() {
       <div class={css.desc}>{describe(sp)}</div>
       <div class={css.kv}>
         <span>status</span><b style={{ fontWeight: 400 }}>{sp.extinctYear >= 0 ? `extinct, ${formatYear(sp.extinctYear).toLowerCase()}` : 'living'}</b>
+        {s.future?.origins[sp.id] && <><span>origin</span><b style={{ fontWeight: 400 }}>{s.future.origins[sp.id] === 'engineered' ? 'made by a people, not evolved' : s.future.origins[sp.id] === 'revived' ? 'brought back from extinction' : 'raised to a mind by another people'}</b></>}
         <span>length</span><b style={{ fontWeight: 400 }}>{metres(sp.metres)}</b>
         {sp.extinctYear < 0 && <><span>population</span><b style={{ fontWeight: 400 }}><Num value={sp.pop} format={bigNumber} /></b></>}
         {sp.extinctYear < 0 && <><span>range</span><b style={{ fontWeight: 400 }}>{sp.regions} regions</b></>}

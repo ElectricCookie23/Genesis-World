@@ -13,6 +13,22 @@ This is the second version. The first was cut short by a flat battery; this one 
 - Roughly 60 of about 230 captures were looked at. Each finding names the files it rests on; the rest are listed at the end.
 - For part of the second run the machine's owner was also using the same browser window, so the Genesis tab may have been in the background at times. The frame-rate table was finished before that; the creature captures after it were checked to be in a visible tab.
 
+## Motion pass 2: an animal walking, and the sky-tools panel (2026-11-21)
+
+WebGL2, High, bundle `assets/index-DP-gr_s8.js` (newer than the check below; commit not recorded), seed `amber-reef-101` at its dawn, 99.78 My on this build. One species at a time was placed on open ground and tracked from the side, 12 frames about 150 ms apart, simulation at 1x.
+
+**Walking** (`docs/screenshots/gpu/motion-webgl-walk-2legs-229.jpg`, *Neoaria terrestris*, 0.46 m, two legs; looked at):
+
+1. **It reads as a walk.** The two legs alternate from frame to frame, with a visible knee bend, and the body stays level. This is the first gait seen on a GPU and it is convincing at this distance.
+2. **Feet stay on the ground**: no hovering and no sinking in any of the 12 frames. Sliding could not be judged, because the camera tracks the animal and the ground has no fixed mark beside the feet.
+3. A small puff of dust shows behind the feet in three frames, which looks right.
+4. **The body is rigid.** Head, neck, body and tail hold exactly the same pose in all 12 frames: no head bob, no tail sway, no body pitch. Only the legs move.
+5. The animal is banded in two flat colours (blue front, tan middle, blue tail) with a tan cup-shaped head, as on the species sheet.
+
+A second strip, a 2.43 m two-legged species (`motion-webgl-walk-2legs-232.jpg`), was captured and not looked at. No four-legged land species was among the common ones in this world, and swimmers and fliers were not captured, so four-legged gait, swimming and flight are still unjudged.
+
+**Sky-tools panel (item 6 of the check below): confirmed on screen.** Opened with the ✦ button, the panel is titled "God tools" and lists Hands-off mode, Meteor, Lightning, Plague, Raise mountains, Flood, Ice age, Heat wave, Gene ray, Shield dome, Monolith, Summon comet, then **"Shatter the moon"** at the bottom edge; the rest are below the fold and were not scrolled to. Each has an "aim" button. A small moon drifts across behind the panel text and shows through it. `docs/screenshots/gpu/retest10-webgl-sky-tools-panel.jpg`. Shatter was not used from the panel.
+
 ## Check of commit 841782b, completed items (2026-11-21, on mains power)
 
 Bundle `assets/index-pwzw4nfw.js`. These replace the "not done" and "void" entries for items 2 and 5 in the section below.

@@ -321,16 +321,16 @@ After E6 (2026-11-20), outside the numbered list: settlement by sea, the long pe
 
 | # | System | Status | Notes |
 |---|---|---|---|
-| E71 | Space Elevators and Orbital Rings | not started | |
-| E72 | Arcologies and Sea Cities | not started | |
-| E73 | Engineered Life | not started | |
-| E74 | De-extinction | not started | |
-| E75 | Uplift | not started | |
-| E76 | Machine Minds | not started | |
-| E77 | Upload and the Quiet Planet | not started | |
-| E78 | Terraforming and Geoengineering | not started | |
-| E79 | Far-Future Endings | not started | |
-| E80 | Star Swarm | not started | |
+| E71 | Space Elevators and Orbital Rings | done | `sim/future.ts`: a people that lives on with the means of the space age hangs a tether from orbit to the great town nearest the equator, then closes a ring of stations round the world (`space-elevator`, `orbital-ring`). The ring casts a thin cold band along the equator (`climate.ringShadow`), and both are drawn (a glowing line up from the equator, then a thin ring) from `orbitalRing` in the stats. |
+| E72 | Arcologies and Sea Cities | simplified | when a high-tech world is crowded, or its climate has gone more than three degrees wrong, a great town builds one sealed city: on land, on the sea if the world is hot, under the ice if cold (`arcology`, at most six). Simplified: recorded and counted, not yet drawn as its own structure (town drawing is the build session's). |
+| E73 | Engineered Life | done | a people makes a new animal from a living one (larger, calmer, quicker to breed), marked "made by a people, not evolved" on its card and in the System panel (`engineered`, child of its stock in the tree). When it spreads beyond a few regions it has gone wild (`feral`), and when a species splits from it that is recorded too (`engineered-evolves`). |
+| E74 | De-extinction | done | the most famous of the dead is read from its remains and set free where its kind last lived (`de-extinction`, child of the extinct species, marked "brought back from extinction"). Tested: it lives in the wild when its place is empty; set down beside a thriving twin it is out-competed, which is the brief's "mixed results". |
+| E75 | Uplift | done | in some worlds (set by the seed) a people raises a sociable land animal to a mind (`uplift`, marked "raised to a mind by another people"); the ordinary rules of settlement then give it camps of its own, recorded when the first is founded (`uplift-settles`). |
+| E76 | Machine Minds | simplified | in some worlds built minds appear and later raise places of their own (`machine-minds`, `machine-cities`), each event caused by the last, so they have a history in the chronicle. Simplified: they are not a branch in the tree of life (the tree is built from genomes) and their cities are not drawn. |
+| E77 | Upload and the Quiet Planet | done | in some worlds the people move into machines over a few centuries: towns keep standing but empty (their lights dim with their numbers), recorded at the start and when nine in ten have gone (`upload`, `quiet-planet`). |
+| E78 | Terraforming and Geoengineering | done | when the climate has gone three and a half degrees wrong and they have the means, they try to mend it (`geoengineering`: most of the error is taken away); about one project in four overshoots badly (`geoengineering-backfire`, caused by the project). Tested both ways. |
+| E79 | Far-Future Endings | simplified | a history that goes far enough ends once, by what it did: a world of one city, the gardeners, the silver tide, the long leaving, the next dark age, the lights going out (`ending`, with effects on towns or on the green of the land). Tested: five seeds find at least three endings. Simplified: only the endings that change town sizes or plant cover look different from orbit. |
+| E80 | Star Swarm | done | in some worlds collectors are built round the star until they catch four percent of its light: `climate.solar` falls by that much and the world cools (`star-swarm`, `star-dim`). Without anyone to tend them the collectors drift and the light returns. Not drawn as arcs beside the sun yet. |
 
 ### Section 9. Strange World Systems
 
