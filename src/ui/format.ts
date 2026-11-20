@@ -38,6 +38,10 @@ export function eventColor(type: string): string {
     case 'milestone': return '#fff1c9';
     case 'oxygen': return '#a8e6ff';
     case 'settlement': case 'belief': case 'prophet': case 'contact': return '#ffcf8a';
+    case 'migration': case 'culture': return '#9fe0c8';
+    case 'marriage': case 'union': case 'dynasty': return '#f0b8d0';
+    case 'calendar': return '#d9c8ff';
+    case 'long-peace': case 'peace-broken': return '#fff1c9';
     case 'ruin': return '#b9a48c';
     case 'storm': return '#b5c4de';
     case 'earthquake': case 'tsunami': return '#c7b299';
@@ -69,6 +73,13 @@ export function eventGlyph(type: string): string {
     case 'settlement': return '⌂';
     case 'belief': case 'prophet': return '☼';
     case 'contact': return '⇄';
+    case 'migration': return '➳';
+    case 'culture': return '⚭';
+    case 'marriage': case 'union': return '∞';
+    case 'dynasty': return '♔';
+    case 'calendar': return '◷';
+    case 'long-peace': return '☮';
+    case 'peace-broken': return '⚡';
     case 'ruin': return '∴';
     case 'storm': return '☇';
     case 'earthquake': return '≋';

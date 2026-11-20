@@ -423,6 +423,7 @@ async function boot(): Promise<void> {
       ctx.fillRect(x - 1, y - 1, st.tech > 0.6 ? 3 : 2, st.tech > 0.6 ? 3 : 2);
     }
   };
+  actions.mapPoint = (cell) => [(grid.lon[cell]! + Math.PI) / (Math.PI * 2), 0.5 - grid.lat[cell]! / Math.PI];
   actions.mapClick = (u, v) => {
     scene.cam.flyTo(u * Math.PI * 2 - Math.PI, (0.5 - v) * Math.PI, Math.min(scene.cam.dist, 1.4));
     scene.cam.idle = 0;

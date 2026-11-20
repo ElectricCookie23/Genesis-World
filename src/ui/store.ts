@@ -184,6 +184,8 @@ export const actions = {
   rewind: (_index: number) => {},
   drawMap: (_canvas: HTMLCanvasElement) => {},
   mapClick: (_u: number, _v: number) => {},
+  /** Where a cell lies on the flat map, as fractions of its width and height. */
+  mapPoint: (_cell: number): [number, number] => [0, 0],
   setPhotoFilter: (_f: string) => {},
   savePhoto: () => {},
   toggleRecording: () => {},

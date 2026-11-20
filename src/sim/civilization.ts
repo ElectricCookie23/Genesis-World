@@ -15,7 +15,7 @@ import { calendarName, dateIn, type Calendar, type CalendarKind } from './histor
 import { Log } from './history/celllog';
 import { eraOf, eraSlot, eraTitle, earthNote } from './history/eras';
 import { hash32 } from './history/hash';
-import { capital, compound, makeLanguage, personName, placeMeanings, word, type Language } from './history/language';
+import { capital, compound, makeLanguage, personName, placeMeanings, soundChange, splitLanguage, word, type Language } from './history/language';
 import { emptyHistory, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role } from './history/model';
 import { SLOT_INDEX, WEB, borrowable, chooseNext, copyKnowledge, forget, levelOf, newKnowledge, shed, wayFor, type Land, type Leaning } from './history/tech';
 
@@ -47,6 +47,8 @@ export interface Settlement {
   relic: number;
   /** Founded by settlers who came across the sea. */
   overseas?: boolean;
+  /** How warm its land was when its people last chose to live here: what a later cold is measured against. */
+  homeTemp?: number;
 }
 
 export const INTELLIGENCE_THRESHOLD = 0.5;
@@ -230,6 +232,8 @@ export class Civilization {
       const towns = members.get(n.id);
       if (!towns || !towns.length) { this.endNation(sim, n, year); continue; }
       const sp = cr.species[n.species]!;
+      // ---- a people driven out moves before its towns are counted lost (system E9)
+      this.exodus(sim, rng, n, towns, year);
       let pop = 0, big = towns[0]!;
       for (const st of towns) { pop += st.pop; if (st.pop > big.pop) big = st; }
       n.pop = pop; n.towns = towns.length;
@@ -465,6 +469,208 @@ export class Civilization {
     lang.name = c.name;
     h.cultures.push(c);
     return c;
+  }
+
+  /** A people that has grown apart from its parent: its speech has drifted and its values have shifted a little. */
+  private daughterCulture(rng: RNG, parent: Culture, year: number): Culture {
+    const h = this.h;
+    const lang = splitLanguage(h.languages[parent.language]!, h.languages.length, year);
+    for (let k = 0; k < 3; k++) soundChange(lang, rng, year);
+    h.languages.push(lang);
+    const nudge = (v: number) => sat(v + (rng.next() - 0.5) * 0.3);
+    const c: Culture = {
+      id: h.cultures.length, name: capital(word(lang, 'people')), species: parent.species, language: lang.id, parent: parent.id, born: year,
+      war: nudge(parent.war), faith: nudge(parent.faith), trade: nudge(parent.trade), craft: nudge(parent.craft), hue: (parent.hue + 0.06 + rng.next() * 0.12) % 1,
+    };
+    lang.name = c.name;
+    h.cultures.push(c);
+    return c;
+  }
+
+  /**
+   * Newcomers and the people who took them in become one people (system E9): a new culture whose speech is the
+   * hosts' with sounds and habits of the newcomers, and whose values lie between the two. `share` is the
+   * newcomers' part of the whole.
+   */
+  private mixCulture(sim: Simulation, rng: RNG, host: Nation, guest: Culture, share: number, year: number, cause: number): Culture {
+    const h = this.h;
+    const old = h.cultures[host.culture]!;
+    const lang = splitLanguage(h.languages[old.language]!, h.languages.length, year);
+    // the newcomers' sounds enter the language
+    const theirs = h.languages[guest.language]!;
+    for (const c of theirs.consonants) if (!lang.consonants.includes(c) && lang.consonants.length < 16 && rng.chance(0.5)) lang.consonants.push(c);
+    for (const v of theirs.vowels) if (!lang.vowels.includes(v) && lang.vowels.length < 8 && rng.chance(0.4)) lang.vowels.push(v);
+    for (let k = 0; k < 2; k++) soundChange(lang, rng, year);
+    h.languages.push(lang);
+    const mid = (a: number, b: number) => sat(a * (1 - share) + b * share);
+    const cut = Math.max(2, Math.ceil(old.name.length / 2));
+    const c: Culture = {
+      id: h.cultures.length, name: capital(`${old.name.slice(0, cut)}${guest.name.slice(Math.floor(guest.name.length / 2)).toLowerCase()}`), species: old.species, language: lang.id, parent: old.id, born: year,
+      war: mid(old.war, guest.war), faith: mid(old.faith, guest.faith), trade: sat(mid(old.trade, guest.trade) + 0.05), craft: mid(old.craft, guest.craft),
+      hue: (old.hue + (((guest.hue - old.hue + 1.5) % 1) - 0.5) * share + 1) % 1, mixedWith: guest.id,
+    };
+    lang.name = c.name;
+    h.cultures.push(c);
+    host.culture = c.id;
+    const cap = this.settlements[host.capital]!;
+    sim.emit({
+      type: 'culture', year, cellId: cap.cell, title: `A new people: the ${c.name}`,
+      description: `In ${host.name} the newcomers and the old families have become one people. They call themselves the ${c.name}. Their speech is still that of the ${old.name}, with sounds and words the ${guest.name} brought, and their customs are a little of both.`,
+      causes: [cause, host.eventId].filter((x, i, a) => x >= 0 && a.indexOf(x) === i), importance: 1, speciesIds: [host.species], data: { nation: host.id, culture: c.id, parent: old.id, other: guest.id },
+    });
+    return c;
+  }
+
+  /** The event in the cause graph that explains why a people is on the move. */
+  private pushCause(sim: Simulation, why: string, n: Nation): number {
+    const byHand = (type: string): number => { for (let i = sim.godEvents.length - 1; i >= 0; i--) { const e = sim.events.events[sim.godEvents[i]!]; if (e && e.type === type && sim.simYear - e.simYear < 60000) return e.id; } return -1; };
+    const era = sim.era.eventId;
+    if (why === 'ice') { const g = byHand('god-iceage'); return g >= 0 ? g : sim.era.kind === 'ice' || sim.era.kind === 'winter' ? era : sim.rootClimateCause(); }
+    if (why === 'sea') { const g = byHand('god-flood'); return g >= 0 ? g : sim.seaCause >= 0 ? sim.seaCause : era >= 0 ? era : sim.rootClimateCause(); }
+    return n.woes.length ? n.woes[n.woes.length - 1]!.eventId : era;
+  }
+
+  /**
+   * Migrations of peoples (system E9). When the sea takes a nation's towns, or the ice comes down on them, or
+   * the land can no longer feed them, the people do not simply die: they move. They look for free land they
+   * can reach on foot, or by sea if they have boats, and found new towns there; if every place within reach
+   * is taken they move in with another nation of their kind, and the two peoples mix.
+   */
+  private exodus(sim: Simulation, rng: RNG, n: Nation, towns: Settlement[], year: number): void {
+    if (year - (n.moved ?? -1e9) < 150 || !towns.length) return;
+    const h = this.h, reg = sim.regions, g = reg.grid, w = sim.world;
+    const leaving: { st: Settlement; why: string; share: number }[] = [];
+    let people = 0, total = 0;
+    const tally: Record<string, number> = { sea: 0, ice: 0, famine: 0 };
+    for (const st of towns) {
+      if (st.ruined >= 0) continue;
+      total += st.pop;
+      const room = this.capacity(sim, st);
+      // cold drives people out when it is a change: a town founded in a cold country stays until it grows colder still
+      const cold = reg.landTemp[st.region]!;
+      const base = (st.homeTemp ??= cold);
+      const iced = (cold < base - 4 && cold < 1) || (reg.ice[st.region]! > 0.45 && base > -1);
+      const why = w.elevation[st.cell]! <= w.seaLevel ? 'sea' : iced ? 'ice' : st.pop > 3 && st.pop > 1.7 * room ? 'famine' : '';
+      if (!why) continue;
+      const share = why === 'sea' ? 0.85 : why === 'ice' ? 0.75 : Math.min(0.6, 1 - room / st.pop);
+      leaving.push({ st, why, share });
+      people += st.pop * share; tally[why] = (tally[why] ?? 0) + st.pop * share;
+    }
+    // one town emptying is not the migration of a people
+    const why = tally.sea! >= tally.ice! && tally.sea! >= tally.famine! ? 'sea' : tally.ice! >= tally.famine! ? 'ice' : 'famine';
+    // (unless it is a large town going under the sea: the water takes towns one at a time)
+    if (!leaving.length || people < 2 || (leaving.length < 2 && people < 0.25 * total && !(why === 'sea' && people >= 8))) return;
+    const origin = leaving.reduce((a, b) => (b.st.pop > a.st.pop ? b : a)).st;
+    // ---- where can they go? outward from the largest town that is emptying, over land, and over water as far as their boats reach
+    const knows = (id: string) => n.know.way[SLOT_INDEX.get(id)!]! >= 0;
+    const spacing = Math.sqrt((4 * Math.PI) / reg.count);
+    const water = Math.round((knows('steamship') ? 4 : knows('ship2') ? 1.7 : knows('ship1') ? Math.max(0.55, 5 * spacing) : knows('sail') ? 3 * spacing : knows('boat') ? 1.6 * spacing : 0) / spacing);
+    const here = reg.landTemp[origin.region]!;
+    const seen = new Map<number, number>([[origin.region, 0]]);   // region -> water crossed so far
+    let frontier = [origin.region];
+    const free: { region: number; score: number }[] = [];
+    let host: Settlement | undefined, hostAt = 99, freeAt = 99;
+    for (let depth = 1; depth <= 16 && frontier.length; depth++) {
+      const next: number[] = [];
+      for (const r of frontier) {
+        const wet = seen.get(r)!;
+        for (let k = 0; k < g.ncount[r]!; k++) {
+          const nb = g.neighbors[r * 6 + k]!;
+          if (seen.has(nb)) continue;
+          const land = reg.land[nb]! > 0.3;
+          const crossed = land ? wet : wet + 1;
+          if (crossed > water) continue;
+          seen.set(nb, crossed);
+          next.push(nb);
+          if (!land) continue;
+          const oid = this.occupied.get(nb);
+          if (oid !== undefined) { const o = this.settlements[oid]!; if (!host && o.nation >= 0 && o.nation !== n.id && o.species === n.species && h.nations[o.nation]!.ended < 0) { host = o; hostAt = depth; } continue; }
+          const centre = reg.centre[nb]!;
+          // (people fleeing the sea want ground well above it)
+          if (reg.ice[nb]! > 0.3 || reg.landTemp[nb]! < -2 || w.elevation[centre]! <= w.seaLevel + (why === 'sea' ? 0.03 : 0.004)) continue;
+          if (why === 'ice' && reg.landTemp[nb]! < here + 1.5) continue;
+          if (freeAt > depth) freeAt = depth;
+          free.push({ region: nb, score: sim.plants.landFood[nb]! + 0.02 * Math.min(20, reg.landTemp[nb]! - here) - 0.03 * depth + rng.next() * 0.05 });
+        }
+      }
+      frontier = next;
+      if (free.length >= 12) break;
+    }
+    free.sort((a, b) => b.score - a.score);
+    const wanted = Math.max(1, Math.min(4, Math.round(people / 40) + 1, leaving.length + 1));
+    const cause = this.pushCause(sim, why, n);
+    const gp = sim.grid.pos;
+    const made: Settlement[] = [];
+    let tech = 0;
+    for (const l of leaving) tech = Math.max(tech, l.st.tech);
+    // people on the move go to their own kind when that is much nearer than empty land, and sometimes anyway
+    const toHost = !!host && (hostAt + 2 < freeAt || rng.chance(0.2));
+    if (free.length && !toHost) {
+      for (const f of free) {
+        if (made.length >= wanted) break;
+        if (this.occupied.has(f.region)) continue;
+        const d = this.found(sim, rng, n.species, f.region, origin.id, year);
+        if (d) { d.tech = Math.max(FARMING, tech * 0.92); d.belief = origin.belief; d.farms = true; made.push(d); }
+      }
+    }
+    if (!made.length && !host) return;       // nowhere to go: they die where they stand, as before
+    // (those who stay behind have chosen the place as it now is)
+    for (const l of leaving) { l.st.pop *= 1 - l.share; l.st.homeTemp = reg.landTemp[l.st.region]!; }
+    n.moved = year;
+    const capGoes = leaving.some((l) => l.st.id === n.capital);
+    const from = origin.name, cap = this.settlements[n.capital]!;
+    const peace = (h.peace ?? -1) >= 0;
+    let where: string, target: Settlement, hostNation: Nation | undefined;
+    if (made.length) {
+      for (const d of made) d.pop = Math.max(d.pop, (people * 0.8) / made.length);
+      target = made[0]!;
+      const cos = gp[cap.cell * 3]! * gp[target.cell * 3]! + gp[cap.cell * 3 + 1]! * gp[target.cell * 3 + 1]! + gp[cap.cell * 3 + 2]! * gp[target.cell * 3 + 2]!;
+      const far = Math.acos(Math.max(-1, Math.min(1, cos))) > REACH[n.era]! * spacing;
+      if (capGoes || !far || peace) {
+        // the nation goes with its people: the court moves if its seat is among the towns left behind
+        for (const d of made) { d.nation = n.id; sim.cellLog.note(d.cell, year, Log.Owner, n.id); }
+        if (capGoes) n.capital = target.id;
+      } else {
+        const born = this.newNation(sim, rng, target, year, n, 'far');
+        for (const d of made) if (d.id !== target.id) { d.nation = born.id; sim.cellLog.note(d.cell, year, Log.Owner, born.id); }
+      }
+      where = made.length === 1 ? `at ${target.name}` : `at ${made.slice(0, -1).map((d) => d.name).join(', ')} and ${made[made.length - 1]!.name}`;
+    } else {
+      // every place is taken: they move in with another nation of their kind
+      target = host!;
+      hostNation = h.nations[host!.nation]!;
+      const theirs = this.settlements.filter((x) => x.ruined < 0 && x.nation === hostNation!.id);
+      let hostPop = 0;
+      for (const x of theirs) hostPop += x.pop;
+      const near = [...theirs].sort((a, b) => (gp[b.cell * 3]! * gp[host!.cell * 3]! + gp[b.cell * 3 + 1]! * gp[host!.cell * 3 + 1]! + gp[b.cell * 3 + 2]! * gp[host!.cell * 3 + 2]!) - (gp[a.cell * 3]! * gp[host!.cell * 3]! + gp[a.cell * 3 + 1]! * gp[host!.cell * 3 + 1]! + gp[a.cell * 3 + 2]! * gp[host!.cell * 3 + 2]!)).slice(0, 3);
+      for (const x of near) x.pop += (people * 0.75) / near.length;
+      // what the newcomers know that their hosts do not is learned from them; so many mouths at once strain the country
+      const land = new Set(hostNation.land);
+      for (let k = 0; k < 3; k++) { const i = borrowable(hostNation.know, n.know, land); if (i >= 0) { hostNation.know.way[i] = wayFor(i, land); hostNation.know.year[i] = year; } }
+      hostNation.stability = sat(hostNation.stability - 0.08);
+      where = `among the people of ${hostNation.name}, around ${host!.name}`;
+      const share = (people * 0.75) / Math.max(1, hostPop + people * 0.75);
+      const ev = this.migrationEvent(sim, n, year, why, cause, origin, target, people, from, where, leaving.length, hostNation);
+      if (hostNation.culture !== n.culture && share > 0.15) this.mixCulture(sim, rng, hostNation, h.cultures[n.culture]!, share, year, ev);
+      if (!peace) this.credit(sim, rng, n, ev, '{name} led them.', 'explorer', year);
+      return;
+    }
+    const ev = this.migrationEvent(sim, n, year, why, cause, origin, target, people, from, where, leaving.length, undefined);
+    if (!peace) this.credit(sim, rng, n, ev, '{name} led them.', 'explorer', year);
+  }
+
+  /** The chronicle entry for a migration. Returns its event id. */
+  private migrationEvent(sim: Simulation, n: Nation, year: number, why: string, cause: number, origin: Settlement, target: Settlement, people: number, from: string, where: string, towns: number, host: Nation | undefined): number {
+    const sp = sim.creatures.species[n.species]!;
+    const push = why === 'sea' ? `The sea has come up over the fields of ${n.name}.` : why === 'ice' ? `The ice has come down on ${n.name}, and the summers no longer ripen anything.` : `The land of ${n.name} can no longer feed those who live on it.`;
+    const count = Math.max(1, Math.round(people));
+    const ev = sim.emit({
+      type: 'migration', year, cellId: target.cell, title: `The ${n.name} migration`,
+      description: `${push} From ${from}${towns > 1 ? ` and ${towns - 1} other ${towns - 1 === 1 ? 'town' : 'towns'}` : ''} some ${count.toLocaleString('en-US')} thousand of ${sp.name} take what they can carry and go. They settle ${where}${host ? ', bringing their speech, their gods and their crafts with them' : ''}.`,
+      causes: [cause, n.eventId].filter((x, i, a) => x >= 0 && a.indexOf(x) === i), importance: why === 'famine' ? 1 : 2, speciesIds: [n.species],
+      data: host ? { nation: n.id, cause: why, from: origin.cell, to: target.cell, people: count, host: host.id } : { nation: n.id, cause: why, from: origin.cell, to: target.cell, people: count },
+    });
+    return ev.id;
   }
 
   /** What a nation's present age is called, in plain words: named for how this nation got there. */
@@ -868,6 +1074,7 @@ export class Civilization {
       const towns = members.get(n.id);
       if (!towns || !towns.length) { this.endNation(sim, n, year); continue; }
       if (n.woes.length) { cause = n.woes[n.woes.length - 1]!.eventId; n.woes.length = 0; }
+      this.exodus(sim, rng, n, towns, year);
       let sum = 0, big = towns[0]!;
       for (const st of towns) {
         const sp = sim.creatures.species[st.species]!;
@@ -1477,7 +1684,11 @@ export class Civilization {
   /** A town becomes the first of a new country: on its own (the first farmers of a land) or by going beyond the reach of the one it came from. */
   private newNation(sim: Simulation, rng: RNG, st: Settlement, year: number, from: Nation | null, why: 'far' | 'breakaway' | 'successor' = 'far', because: number[] = [], lead?: Person): Nation {
     const h = this.h;
-    const culture = this.cultureFor(sim, st.species, year);
+    // its people (system E9): a country keeps the culture it came out of, but settlers who crossed the sea to found
+    // their own, and farmers who began apart from every other nation, become a people of their own
+    const root = from ? h.cultures[from.culture]! : this.cultureFor(sim, st.species, year);
+    const apart = from ? (why === 'far' ? !!st.overseas || rng.chance(0.2) : rng.chance(why === 'successor' ? 0.15 : 0.08)) : h.nations.some((x) => x.species === st.species);
+    const culture = apart ? this.daughterCulture(rng, root, year) : root;
     const lang = h.languages[culture.language]!;
     // named for its first town, in its own tongue
     let name = compound(lang, 'land', st.modifier || st.head, year);
@@ -1676,7 +1887,7 @@ export class Civilization {
     for (let salt = 1; salt < 6 && this.settlements.some((x) => x.name === name); salt++) { meanings = placeMeanings(hash32(this.seedNum, id, salt)); name = compound(lang, meanings.head, meanings.modifier, year); }
     const st: Settlement = {
       id, name, cell, region, species, pop: 0.2, tech: 0.03, founded: year, belief: -1, eventId: -1, ruined: -1, painted: false, temple: false, farms: false, stars: false,
-      nation: -1, head: meanings.head, modifier: meanings.modifier ?? '', relic: -1,
+      nation: -1, head: meanings.head, modifier: meanings.modifier ?? '', relic: -1, homeTemp: reg.landTemp[region]!,
     };
     this.settlements.push(st);
     this.occupied.set(region, st.id);

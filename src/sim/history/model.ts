@@ -21,6 +21,8 @@ export interface Culture {
   craft: number;
   /** Signature colour as a hue 0..1. */
   hue: number;
+  /** For a people made of two: the culture of the newcomers it took in (system E9). */
+  mixedWith?: number;
 }
 
 export type Role = 'ruler' | 'founder' | 'inventor' | 'prophet' | 'general' | 'explorer' | 'artist' | 'scholar' | 'consort' | 'claimant';
@@ -133,6 +135,8 @@ export interface Nation {
   fatigue: number;
   /** Recent blows to the nation (wars, plagues, disasters, a fallen house), newest last: what a collapse is blamed on. */
   woes: { kind: string; eventId: number; year: number }[];
+  /** The year of its last great migration (system E9). */
+  moved?: number;
   /** The count of years it keeps (an index into the history's calendars). */
   calendar?: number;
   /** Every nation this one has ever met. */
