@@ -206,6 +206,36 @@ Console during the run: nothing.
 | Ultra | pixel ratio 2, canvas 3200 x 1826, 32 cloud steps, taa+ao+bloom+fringe | 20.3 fps (49.23 ms) | 17.4 fps (57.47 ms) | 17.4 fps (57.57 ms) |
 
 
+## Stutter and a 30-minute soak (added 2026-11-21)
+
+Averages hide stutter, so this measures every frame. WebGPU, High, bundle `index-C8xtQ58C.js`, dawn + 100,000 y, **simulation running at 1x**, step-downs on, mains power, 120 Hz display. Each row is every frame over the period; times are the gap between frames in ms.
+
+| View | Period | Mean fps | Median frame | 95th | 99th | Longest | Frames over 50 ms |
+|---|---|---|---|---|---|---|---|
+| Orbit, parked | 45 s | 48.6 | 16.7 | 58.3 | 66.7 | 83 | 150 (3.3 per second) |
+| Orbit, slow spin | 45 s | 47.9 | 16.7 | 58.3 | 66.7 | 83 | 155 |
+| Forest ground, parked | 45 s | 41.6 | 25.0 | 66.7 | 83.3 | 100 | 160 |
+| Forest ground, panning | 45 s | 45.1 | 24.3 | 58.4 | 75.0 | 100 | 150 |
+| Town ground, parked | 45 s | 44.3 | 24.9 | 66.6 | 83.3 | 92 | 156 |
+| Fly-down, orbit to ground | 20 s | 42.1 | 25.0 | 66.7 | 91.7 | 100 | 72 |
+| Fly-up, ground to orbit | 20 s | 42.6 | 25.0 | 66.6 | 83.3 | 108 | 67 |
+
+1. **The game hitches about three and a half times a second in every view.** The typical frame is 17 to 25 ms, but about 7% of frames take 50 to 100 ms. Frame gaps fall on multiples of 8.33 ms (the display's refresh), so each hitch is four to ten missed refreshes. A reported "45 fps" is really 60 fps with a visible stumble several times a second.
+2. **Camera motion and flying in or out add nothing**: the same hitch rate parked, panning, spinning and during a fly-down. Nothing extra shows while new terrain and plants stream in.
+3. **The cause is the running simulation.** A control at the same spot (orbit, after the soak, pixel ratio stepped down to 1, 25 s each):
+
+   | Condition | Median | 95th | 99th | Frames over 45 ms |
+   |---|---|---|---|---|
+   | Simulation paused | 16.6 | 16.7 | 17.0 | **0** |
+   | Simulation paused, UI layer removed | 16.6 | 16.7 | 16.8 | 0 |
+   | Simulation at 1x | 8.4 | 17 to 25 | 41.6 | 4 to 7, one every 3 to 6 s |
+   | Simulation at speed 3 | 8.4 | 25.0 | 41.7 | 11, one every 1.8 s |
+
+   Paused, every frame is an even 16.7 ms. Running, frames alternate short and long (median 8.4 ms, 95th 25 ms) with a long one every few seconds, more often at higher speed. So the hitches are work arriving from the simulation on the display thread (most likely applying each world snapshot: `GenesisScene.applyCells` and what it uploads), and they bite hardest when the GPU is already near its budget, which is why the soak at pixel ratio 1.5 shows 3.5 per second and the control at ratio 1 shows one every few seconds. The UI layer is not the cause.
+4. **No leak in 30 minutes.** Six five-minute blocks at forest ground level, 1x: mean 41.7 to 42.2 fps in every block, 1,035 to 1,048 frames over 50 ms in every block, script memory between 162 and 194 MB with no trend, renderer geometries 66 and textures 75 throughout, 234 animals throughout.
+
+**Suggestions (untested):** spread a snapshot's work over several frames instead of one (update a slice of the planet's textures per frame, or only what changed); do the packing in the worker and hand over ready-to-upload buffers; skip updates for layers that are not on screen at the current zoom; and cap frame pacing to an even 60 or 40 so the remaining variation is not seen as stumble.
+
 ## Open question: script time on WebGPU
 
 I timed `scene.frame()` itself. From orbit it takes about 3 ms on both backends. At ground level on WebGPU it takes 17 to 21 ms (out of a 20 to 24 ms frame), where WebGL2 takes 2 to 3 ms in the same views. On WebGPU it:
