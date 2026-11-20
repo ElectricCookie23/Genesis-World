@@ -194,8 +194,12 @@ export class OceanSurface {
     const edge = float(1).sub(smoothstep(0.0, 0.00009, path));
     // the line at the water's edge comes and goes with the swash and the wave foam: drawn solid it was a hard white
     // rim along every shore (seen on a real GPU from the ground)
-    const lace = swash.mul(0.55).add(foamTex.mul(0.5)).add(0.25).min(1);
-    const shoreFoam = shore.mul(smoothstep(0.55, 0.95, swash)).mul(0.6).add(edge.mul(lace).mul(0.7)).mul(smoothstep(-0.05, 0.02, depthKm));
+    // (A second GPU check still found the rim solid, and a polygon with sharp corners round a small island: the swash
+    // has the same phase all along a straight shore, so the line only pulsed as a whole. It is now broken along its
+    // length as well, with real gaps, and is fainter.)
+    const along = sin(dir.x.mul(5200).add(dir.z.mul(3100)).add(uTime.mul(0.35))).mul(sin(dir.y.mul(4700).sub(dir.x.mul(2900)).sub(uTime.mul(0.27))));
+    const lace = smoothstep(0.25, 0.85, swash.mul(0.5).add(along.mul(0.38)).add(foamTex.mul(0.6)));
+    const shoreFoam = shore.mul(smoothstep(0.55, 0.95, swash)).mul(0.6).add(edge.mul(lace).mul(0.55)).mul(smoothstep(-0.05, 0.02, depthKm));
     const foam = max(whitecaps, shoreFoam).clamp(0, 1);
     const whiteLit: N = sunColor.mul(sunVis).mul(max(dot(dir, L), 0).mul(0.8).add(0.2)).add(ambient.mul(1.6));
     color = mix(color, vec3(0.94, 0.96, 0.97).mul(whiteLit), foam.mul(0.92));

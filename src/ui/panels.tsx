@@ -542,6 +542,9 @@ export function EmblemSvg({ nation, size = 22 }: { nation: Nation; size?: number
 }
 
 /** Names and emblems of nations floating over their capitals while the Night Map is on. */
+/** Where a name may sit relative to its capital, in order of preference: above, below, right, left (in half-widths and heights). */
+const SPOTS: [number, number][] = [[0, -1], [0, 1], [1, 0], [-1, 0]];
+
 export function NationLabels() {
   const s = useStore();
   const ref = useRef<HTMLDivElement>(null);
@@ -567,17 +570,24 @@ export function NationLabels() {
           if (!n) continue;
           const [x, y, vis] = actions.project(n.dir[0], n.dir[1], n.dir[2]);
           const [w, h] = sizes[i] ?? [120, 22];
-          const x0 = x - w / 2 - 6, y0 = y - h * 1.3 - 3, x1 = x + w / 2 + 6, y1 = y - h * 0.3 + 3;
-          let free = vis > 0.02 && placed.length < 18;
-          // the whole name must lie on the planet: names hung in space beside the limb, pointing at ground seen edge-on
-          if (free && discR < 4000) {
-            const far = Math.max(Math.hypot(x0 - discX, y0 - discY), Math.hypot(x1 - discX, y0 - discY), Math.hypot(x0 - discX, y1 - discY), Math.hypot(x1 - discX, y1 - discY));
-            if (far > discR * 0.98) free = false;
+          // A name may sit above its capital, below it, or to either side: whichever is free. With one fixed place, a
+          // crowded archipelago of small countries showed a single name (2 names for 104 countries on a real GPU).
+          let free = false, shift = SPOTS[0]!;
+          if (vis > 0.02 && placed.length < 22) {
+            for (const spot of SPOTS) {
+              const cx = x + spot[0] * (w / 2 + 10), cy = y + spot[1] * h * 0.85;
+              const x0 = cx - w / 2 - 5, y0 = cy - h / 2 - 2, x1 = cx + w / 2 + 5, y1 = cy + h / 2 + 2;
+              // the whole name must lie on the planet: names hung in space beside the limb, pointing at ground seen edge-on
+              if (discR < 4000 && Math.max(Math.hypot(x0 - discX, y0 - discY), Math.hypot(x1 - discX, y0 - discY), Math.hypot(x0 - discX, y1 - discY), Math.hypot(x1 - discX, y1 - discY)) > discR * 0.98) continue;
+              let clear = true;
+              for (const r of placed) if (x0 < r[2] && x1 > r[0] && y0 < r[3] && y1 > r[1]) { clear = false; break; }
+              if (!clear) continue;
+              placed.push([x0, y0, x1, y1]); free = true; shift = spot;
+              break;
+            }
           }
-          if (free) for (const r of placed) if (x0 < r[2] && x1 > r[0] && y0 < r[3] && y1 > r[1]) { free = false; break; }
-          if (free) placed.push([x0, y0, x1, y1]);
           el.style.opacity = free ? String(vis) : '0';
-          el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -130%)`;
+          el.style.transform = `translate(${(x + shift[0] * (w / 2 + 10)).toFixed(1)}px, ${(y + shift[1] * h * 0.85).toFixed(1)}px) translate(-50%, -50%)`;
         }
       }
       raf = requestAnimationFrame(tick);
