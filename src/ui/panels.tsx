@@ -282,7 +282,7 @@ function renderTree(s: UIState) {
 export function Help() {
   const keys: [string, string][] = [
     ['drag', 'orbit the planet'], ['scroll / pinch', 'zoom, from deep space to the ground'], ['right-drag', 'turn and tilt near the surface'],
-    ['Space', 'pause or play'], ['1 – 6', 'time speed'], ['C', 'chronicle'], ['T', 'tree of life'], ['G', 'god tools'], ['J', 'goals, if you want some'],
+    ['Space', 'pause or play'], ['1 – 6', 'time speed'], ['C', 'chronicle'], ['T', 'tree of life'], ['G', 'god tools'], ['J', 'goals, if you want some'], ['S', 'the star system'],
     ['M', 'flat map'], ['X', 'cross-section'], ['U', 'dive under water'], ['V', 'first-person view while following'], ['O', 'overlays'], ['F', 'follow the selected creature'], ['P', 'postcard mode'], ['H', 'hide the interface'], ['Esc', 'close panels'], ['?', 'this list'],
   ];
   return (
@@ -308,6 +308,8 @@ const GOD_TOOLS: [string, string, string][] = [
   ['shield', 'Shield dome', 'Keep disasters out of one region for three million years.'],
   ['monolith', 'Monolith', 'Animals living beside it grow clever.'],
   ['comet', 'Summon comet', 'Call a comet into the sky. Peoples will remember it.'],
+  ['rogue', 'Rogue planet', 'Send a wandering world through the system. The orbit shifts, the axis rocks, comets fall.'],
+  ['burst', 'Gamma-ray burst', 'A dying star\'s beam strikes the side of the world you click.'],
   ['tilt', 'Tilt the axis', 'Change the seasons for good.'],
   ['life', 'Rain of life', 'Seed the world: start life early, or scatter every plant.'],
 ];

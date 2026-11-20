@@ -1,5 +1,6 @@
 // Message protocol between the simulation worker and the main thread.
 import type { SimEvent } from '../sim/events';
+import type { CosmosInfo } from '../sim/cosmos';
 
 export const SPEEDS = [
   { key: 'pause', label: 'Pause', yearsPerSecond: 0 },
@@ -87,6 +88,9 @@ export interface WorldStats {
   /** Arms race: mean toxicity of land plants and mean toxin resistance of animals. */
   plantToxin: number;
   toxinResist: number;
+  /** How much larger than in its prime the star looks (1 until it leaves its long steady life), and 0 steady, 1 swelling, 2 red giant. */
+  starSwell?: number;
+  starPhase?: number;
   moons: number;
   ring: boolean;
   binary: boolean;
@@ -286,5 +290,6 @@ export type FromWorker =
   | { type: 'dynasty'; detail: DynastyDetail }
   | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[] }
   | { type: 'timeline'; points: TimelinePoint[] }
+  | { type: 'cosmos'; cosmos: CosmosInfo }
   | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }
   | { type: 'error'; message: string };

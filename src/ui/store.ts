@@ -4,8 +4,9 @@ import type { SimEvent } from '../sim/events';
 import type { DynastyDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 import type { Nation } from '../render/gfx/nations';
 import type { GoalRecord, GoalState } from '../game/goals';
+import type { CosmosInfo } from '../sim/cosmos';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'goals';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'goals' | 'system';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
 
 /** One person in an individual's family tree; key is set when that relative is drawn in the world and can be selected. */
@@ -81,6 +82,8 @@ export interface UIState {
   goals: GoalState[];
   goalsDone: GoalRecord['done'];
   goalTracked: string;
+  /** The star system and what has come from or gone beyond it. */
+  cosmos: CosmosInfo | null;
 }
 
 export interface SlotInfo { slot: number; name: string; seed: string; simYear: number; savedAt: number; }
@@ -136,6 +139,7 @@ export const state: UIState = {
   goals: [],
   goalsDone: {},
   goalTracked: '',
+  cosmos: null,
 };
 
 const listeners = new Set<() => void>();

@@ -1,6 +1,7 @@
 import { SPEEDS } from '../shared/protocol';
 import { actions, togglePanel, useStore } from './store';
 import { GoalMarker, Goals } from './goals';
+import { System } from './system';
 import { bigNumber, formatYear } from './format';
 import { DynastyPanel } from './dynasty';
 import { Chronicle, CreatureCard, CrossSection, Designer, FlatMap, GodTools, Graphs, Guide, Futures, Help, NationLabels, NationPanel, Num, Peoples, Settings, SpeciesCard, TimelineStrip, Tree, Why } from './panels';
@@ -58,6 +59,7 @@ export function App() {
           {s.panel === 'dynasty' && <DynastyPanel />}
           {s.panel === 'graphs' && <Graphs />}
           {s.panel === 'goals' && <Goals />}
+          {s.panel === 'system' && <System />}
           {s.whyEvent >= 0 && <Why />}
           {s.selectedSpecies >= 0 && s.whyEvent < 0 && <SpeciesCard />}
           {s.creature && s.selectedSpecies < 0 && s.whyEvent < 0 && <CreatureCard />}
@@ -78,6 +80,7 @@ export function App() {
             <button class={s.panel === 'guide' ? css.active : ''} onClick={() => togglePanel('guide')} title="Field guide and memorial">Guide</button>
             {st && st.settlements > 0 && <button class={s.panel === 'peoples' ? css.active : ''} onClick={() => togglePanel('peoples')} title="Settlements and peoples">Peoples</button>}
             <button class={s.panel === 'goals' ? css.active : ''} onClick={() => togglePanel('goals')} title="Goals, if you want some (J)">Goals</button>
+            <button class={s.panel === 'system' ? css.active : ''} onClick={() => togglePanel('system')} title="The star system (S)">☉</button>
             <button class={s.panel === 'graphs' ? css.active : ''} onClick={() => togglePanel('graphs')} title="Graphs over time">∿</button>
             <button class={s.panel === 'god' ? css.active : ''} onClick={() => togglePanel('god')} title="God tools (G)">✦</button>
             <button class={s.panel === 'settings' ? css.active : ''} onClick={() => togglePanel('settings')} title="World and settings">⚙</button>

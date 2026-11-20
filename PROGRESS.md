@@ -351,13 +351,13 @@ After E6 (2026-11-20), outside the numbered list: settlement by sea, the long pe
 
 | # | System | Status | Notes |
 |---|---|---|---|
-| E91 | The Star System | not started | |
-| E92 | Panspermia | not started | |
-| E93 | Rogue Planet Flyby | not started | |
-| E94 | Gamma-Ray Burst | not started | |
-| E95 | Red Giant | not started | |
-| E96 | Departure Fleets | not started | |
-| E97 | Messages From Beyond | not started | |
+| E91 | The Star System | done | `sim/cosmos.ts`: every world has a rocky neighbour, a gas giant and an ice world on Kepler orbits, the same each time from the seed. The comet returns once per turn of the giant's slow cycle (`cosmos.cycle`), and keeps the new time if that cycle changes. Seen in the System panel (button ☉, key S): an orrery drawn in SVG. `tests/cosmos.test.ts`. Screenshot `E91-star-system.jpg`. |
+| E92 | Panspermia | done | a large impact on a living world can carry life to the rocky neighbour (`ejecta`): a `panspermia` event caused by that impact, then a small biosphere that grows on its own through three stages (`neighbour-life` events) up to what that world can hold. Shown as a green ring on the orrery and a line in the panel. Simplified evolution: one number and a stage, not species. |
+| E93 | Rogue Planet Flyby | done | rare, on a date set by the seed, or from the sky tools ("Rogue planet"). Changes the home orbit for good (1.2 to 3.5 percent, so the star is felt 2 to 7 percent brighter or dimmer), rocks the axis, changes the giant's cycle, floods the coasts for a while and sends three to six impacts inward over the next 1.6 My, each caused by the flyby. No dark disc is drawn crossing the sky yet. |
+| E94 | Gamma-Ray Burst | done | very rare, or from the sky tools ("Gamma-ray burst", aimed where you click). Kills only on the side of the world that faced it, worst where the beam came straight down, less in the sea; strips the ozone; burns land plants there. Tested: the far side loses nothing. The screen flashes; the lasting ozone loss is one number for the whole world. |
+| E95 | Red Giant | done | the star leaves its steady life at a date set by the seed (650 to 900 My), swells for 40 My and becomes a red giant over the next 40: `climate.solar` climbs, the seas boil away (`cosmos.seaLoss` lowers sea level until none is left), life dies back, and a living people either sends its last ships or cannot leave. The star grows and reddens in the sky and its light with it (`starSwell` in the stats). A long run reaches it; the test brings the date forward. |
+| E96 | Departure Fleets | done | when a people leaves (the existing Departure milestone, or the last ships under a red giant) a fast probe and one or two arks set out for nearby stars, each a `fleet` event caused by the departure. The System panel has a star map with the ships on their way and how long each has to go. |
+| E97 | Messages From Beyond | done | when light has had time to bring word home, a `transmission` event arrives with a report on the world at that star: a small map, land, ice and temperature. It is a real world from a different seed (`sim.survey` builds it small), and the report gives the seed code with a link that opens it. |
 | E98 | Neighbor Link | not started | |
 | E99 | Messages to the Observer | not started | |
 | E100 | The Last Archive | not started | |
