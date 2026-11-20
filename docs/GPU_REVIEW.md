@@ -13,6 +13,40 @@ This is the second version. The first was cut short by a flat battery; this one 
 - Roughly 60 of about 230 captures were looked at. Each finding names the files it rests on; the rest are listed at the end.
 - For part of the second run the machine's owner was also using the same browser window, so the Genesis tab may have been in the background at times. The frame-rate table was finished before that; the creature captures after it were checked to be in a visible tab.
 
+## Check of commit f958025 (2026-11-21)
+
+Newest green deploy when testing began: game code `f958025` (it contains `996a702`; `b91e127` on top is docs only). The page served `assets/index-C8xtQ58C.js` throughout. WebGPU, High, seed `amber-reef-101`, mains power. Plain warp to the dawn (stopped at **69.53 My** this time; 59.03 My on the previous build), `through: true` for 100,000 years (367 living towns, 42 realms), then on to 200 My (931 towns, 67 realms). A second short run used `&neighbor=basalt-vale-202`. Files start `retest9-`. Seven files are cited and all seven were looked at; about 20 were captured. Console, main run: `x2 Failed to load resource: the server responded with a status of 404 ()`, `x23 Max polyphony exceeded. Note dropped.` Linked run: one 404.
+
+**A. Fixes from the last check**
+
+| # | Item | Result | Evidence |
+|---|---|---|---|
+| 1 | Day side from orbit | **Not fixed.** After 10 s and after 30 s the cloud belt is still flat white with a white glow round the whole disc (scene luminance 0.108 and 0.106, exposure target 1.86). Land and sea outside the belt are readable. | `retest9-webgpu-orbit-day-30s.jpg`, `setImmediate(-1.46, 0.1, 2.6)`, sun +0.5 |
+| 2 | Shoreline foam | **Not judged.** "Kimanarap" does not exist in this world. The only island town found shows a short pale rim round a tiny islet, too small to judge. | `retest9-webgpu-island-town-0.006.jpg` |
+| 3 | Nest mounds against their builders | **Fixed by the numbers** (largest mound 0.00071, its builder 0.00078, so about the same size; it was many times larger). My picture of it was taken from inside a tree crown and shows nothing, so this is not confirmed by eye. | logs |
+| 4 | Night Map | On the side looked at: **11 names**, none overlapping another. One ("Shezaros") starts outside the planet's left edge with its flag off the disc. The other two sides were captured, not looked at. | `retest9-webgpu-night-map-0.jpg` |
+| 5 | Paved strips into the sea | None seen at the island town, and no pale rectangles under water there. | `retest9-webgpu-island-town-0.006.jpg` |
+
+**B. New features**
+
+| # | Item | Result | Evidence |
+|---|---|---|---|
+| 6 | System panel (S) | **Reads well.** Title "Shiashiakraesh and its worlds"; an orrery with the star, four orbit rings and planets on them, plus a dotted tilted ellipse (a comet's path); a line on the star's age; three planets listed with distance, year length and notes; "A linked world"; then, scrolled down, a star map, probes and arks sent, "Left behind" archives with "open it", and "Word from beyond" with small map thumbnails of other worlds and "open this world" links. Nothing overlaps or is cut off; the panel scrolls. **Whether the planets move was not judged** (two captures 3 s apart were taken with the sim paused and not compared). The stats box is hidden while it is open. | `retest9-webgpu-system-top.jpg`, `-system-bottom.jpg` |
+| 7a | Gamma-ray burst | Chronicle entry "The burning sky" appears. `scene.flashLevel` rose to 0.25 and faded within a second, but scene luminance did not change (0.114 throughout), so the flash is barely visible. The capture during it was not looked at. Triggered with `send({ type: 'god', tool: 'burst', cell })`, the message the panel sends. | logs |
+| 7b | Shatter the moon | **Works.** `stats.moons` 0, `stats.ring` true, chronicle "The moon is broken", and a broad banded ring circles the planet; it looks good. No darker band along the equator is visible in the capture. **"Shatter the moon" is not in the sky-tools list in this build's code** (`GOD_TOOLS` in `src/ui/panels.tsx` has no such entry), so it was triggered with `tool: 'shatter'` directly. | `retest9-webgpu-after-shatter-wide.jpg`, `setImmediate(-1.46, 0.5, 3.4)` |
+| 7c | Rogue planet | Chronicle entry "A dark world passes" appears. What the System panel then says about the orbit was not captured (my text reader returned only the title). | logs |
+| 8 | Linked world | **Works.** After a 5 My warp the System panel shows "A linked world, basalt-vale-202: Running beside this one, year for year: green seas, nothing that moves. Neither world knows the other is there yet..." with "open that world on its own". No console errors beyond the usual 404. | `retest9-webgpu-linked-system-bottom.jpg` |
+| 9 | Hunters | **Not seen.** At the home cells of the ten most numerous land species, no individual had `hunter` set, so there was no chase to watch. Species cards were not opened. | logs |
+| 10 | Designer sliders | **Skipped.** The designer in this build's code (`DESIGN_GENES` in `src/ui/panels.tsx`) has no ornaments, colour change, echolocation, electric sense, larval stage, metabolism, day-or-night or burrowing sliders. | |
+
+The sky-tools panel itself was not captured: my key press did not open it.
+
+**C. New or worse**
+
+1. **A town drawn as one tower on stilts.** "Rari" (`pop` 179, `tech` 0.96, `(-0.224, 0.636)`), on a cell almost surrounded by sea, appears as a single tower block standing on three thin poles on a tiny mound in open water, with the real island behind it empty (`retest9-webgpu-island-town-0.006.jpg`).
+2. The dawn of history moved from 59.03 My to 69.53 My on the same seed and backend, so worlds are not repeatable across builds.
+3. A bright streak with a glowing head (a comet or a launch) shows on the Night Map side looked at.
+
 ## Check of commit 4424753 (2026-11-21)
 
 Newest green deploy when testing began was `4424753` (it contains `b93d708`); the page served `assets/index-u3vNpV0q.js` throughout. WebGPU, High, seed `amber-reef-101`, mains power. Plain warp to the dawn (stopped at 59.03 My), `through: true` for 100,000 years (588 living towns, 104 realms; town, coast and Night Map captures), then on to 200 My (1,023 living towns, 70 realms, `maxTech` 0.23; everything else). Files start **`retest8-`** (`retest7-` was already used by the follow-up below). Ten files are cited and all ten were looked at; about 25 were captured. Console: `x2 Failed to load resource: the server responded with a status of 404 ()`, `x17 Max polyphony exceeded. Note dropped.` WebGL2 console on the same bundle is in the follow-up below (one 404, nothing else).
