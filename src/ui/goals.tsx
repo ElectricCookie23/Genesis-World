@@ -49,13 +49,13 @@ export function Goals() {
   );
 }
 
-/** The goal being followed, as one quiet line inside the title panel. */
+/** The goal being followed, as a small box beside the title (under it on a phone). */
 export function GoalMarker() {
   const s = useStore();
   const g = s.goals.find((x) => x.goal.id === s.goalTracked);
   if (!g) return null;
   return (
-    <button class={css.goalMarker} onClick={() => update({ panel: s.panel === 'goals' ? 'none' : 'goals' })} title="Open goals">
+    <button class={`${css.panel} ${css.goalMarker}`} onClick={() => update({ panel: s.panel === 'goals' ? 'none' : 'goals' })} title="Open goals">
       <span>{g.here ? '✓ ' : ''}{g.goal.title}</span>
       <span class={css.goalMeter}><i style={{ width: `${Math.round((g.here ? 1 : g.result.progress) * 100)}%` }} /></span>
       <span class={css.sub}>{g.result.note}</span>
