@@ -149,6 +149,8 @@ Still partial from the audit: 12 (no individual lives), 40 (same seed, different
 - **For the build session:** "Rari" (`pop` 179, `tech` 0.96, `(-0.224, 0.636)`), on a cell almost surrounded by sea, is drawn as one tower block on three thin poles on a mound in open water, with the real island behind it empty (`retest9-webgpu-island-town-0.006.jpg`). And F8 above is a fix in your yearly loop (`if (n.ended >= 0) continue;` after the succession): please keep it when you next edit there.
 - The Mac session has also written `docs/CREATURE_SCULPTING.md`, a proposal for rounder generated animals; `docs/PERFORMANCE.md` says geometry is nearly free (all animals under 0.4 ms), so there is room for it.
 
+**Animals reshaped (fix session, F11).** `creaturemesh.ts`: trunk profile from landmarks, shoulder and haunch masses, jointed legs, a skull-shaped head, twice the mesh density. Shapes only: rig weights, attributes and the skin shader are unchanged, and `tests/render.test.ts` still holds the buffer limits. Compare `docs/asset-previews/species-sheet-before.jpg` and `species-sheet-after.jpg`; redraw with `npx vite-node scripts/checks/speciessheet.ts out.svg [random]`. Not yet seen on a GPU.
+
 ## Graphics: still open
 - The first real-GPU review is in (see above). Colours, exposure, cloud cost, aurora and preset costs still need tuning from it.
 - Not built: screen-space reflections on water, parallax occlusion mapping, footprints, lens flare, ground fog, canopy texture on far terrain, glow cast on the ground by glowing plants, a WebGPU compute path (WebGL2-style passes run on both backends instead).

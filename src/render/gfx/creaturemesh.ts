@@ -168,10 +168,31 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
   const furLen = cover === COVER.fur ? H * (0.05 + 0.14 * g[G.Insulation]!) : 0;
 
   // ---- the spine: stations from tail tip to snout
-  interface Station { x: number; y: number; ry: number; rz: number; kind: number; w: number; }
+  // `sq` squares the section off (2 is an ellipse), `ridge` raises the line of the back, `lump` is the mass of a
+  // shoulder or haunch on the lower flank where a leg joins.
+  interface Station { x: number; y: number; ry: number; rz: number; kind: number; w: number; sq?: number; ridge?: number; lump?: number; }
   const st: Station[] = [];
-  const taper = (u: number) => 0.72 + 0.28 * Math.sin(u * Math.PI);
-  const endR = 0.5 * taper(0);
+  // ---- anatomy. A body is not a sausage: it is deep at the chest, drawn in at the waist and wide again at the hips,
+  // and a hunter is leaner than a grazer. (With one smooth bump for thickness and plain ellipses for sections,
+  // every animal was a bean on pipes.)
+  const hunterish = Math.max(0, Math.min(1, (g[G.Diet]! - 0.25) / 0.4));
+  const runner = walker ? g[G.LimbLength]! : 0;
+  const bell = (u: number, c: number, wd: number) => Math.exp(-(((u - c) / wd) ** 2));
+  const fish = (u: number, e: number) => Math.pow(Math.sin(Math.PI * Math.pow(Math.min(1, Math.max(0, u * 0.94 + 0.03)), e)), 0.85);
+  /** Depth and width of the trunk along the spine: 0 at the tail root, 1 at the neck. About 1 at the deepest. */
+  const depthAt = (u: number): number => walker
+    ? 0.66 + 0.34 * bell(u, 0.72, 0.3) + 0.1 * bell(u, 0.14, 0.22) + 0.1 * (1 - hunterish) * bell(u, 0.48, 0.3) - (0.03 + 0.1 * hunterish + 0.05 * runner) * bell(u, 0.38, 0.2)
+    : 0.5 + 0.5 * fish(u, 0.85);
+  const widthAt = (u: number): number => walker
+    ? 0.7 + 0.24 * bell(u, 0.74, 0.28) + 0.2 * bell(u, 0.16, 0.24) + 0.06 * (1 - hunterish) * bell(u, 0.46, 0.3)
+    : 0.5 + 0.46 * fish(u, 0.8);
+  // where the legs stand along the body (the same places the legs are built at, below)
+  const legPairsEarly = walker ? (kind === Limb.Wings ? 1 : Math.max(1, Math.round(g[G.LimbPairs]! * 4))) : 0;
+  const legXs: number[] = [];
+  for (let p = 0; p < legPairsEarly; p++) legXs.push(legPairsEarly === 1 ? 0.05 : -L * 0.34 + (p / (legPairsEarly - 1)) * L * 0.68);
+  const endR = 0.5 * depthAt(0);
+  /** Height of the back above the middle of the body, for what stands on it (plates, sails). */
+  const taper = depthAt;
   if (tail > 0.08) {
     const n = 7;
     for (let i = 0; i < n; i++) {
@@ -180,13 +201,21 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
       st.push({ x: -L / 2 - tail * t + 0.02, y: bodyY - tail * 0.1 * t * t, ry: H * r * (swimmer ? 1.15 : 1), rz: W * r * (swimmer ? 0.6 : 1), kind: RIG.tail, w: t });
     }
   } else st.push({ x: -L / 2 - H * 0.12, y: bodyY, ry: 0.004, rz: 0.004, kind: RIG.body, w: 0 });
-  const torsoN = 12;
+  const torsoN = 26;
   for (let i = 0; i <= torsoN; i++) {
     const u = i / torsoN;
     // segmented bodies pinch in between their segments
-    const pinch = segs > 1 ? 1 - 0.2 * Math.pow(0.5 + 0.5 * Math.cos(u * Math.PI * 2 * segs), 6) : 1;
-    const r = 0.5 * taper(u) * pinch;
-    st.push({ x: -L / 2 + u * L, y: bodyY + H * 0.04 * Math.sin(u * Math.PI), ry: H * r, rz: W * r, kind: swimmer ? RIG.tail : RIG.body, w: swimmer ? 0.3 * (1 - u) * (1 - u) : 0 });
+    const pinch = segs > 1 ? 1 - (cover === COVER.chitin ? 0.2 : 0.1) * Math.pow(0.5 + 0.5 * Math.cos(u * Math.PI * 2 * segs), 6) : 1;
+    const r = 0.5 * pinch;
+    const x = -L / 2 + u * L;
+    let lump = 0;
+    for (const lx of legXs) lump = Math.max(lump, bell(x, lx, L * 0.11));
+    // the belly hangs a little between the legs of a grazer; the back carries a low ridge
+    const sag = walker ? H * 0.035 * bell(u, 0.45, 0.2) * (1 - hunterish) : 0;
+    st.push({
+      x, y: bodyY + H * 0.04 * Math.sin(u * Math.PI) - sag, ry: H * r * depthAt(u), rz: W * r * widthAt(u), kind: swimmer ? RIG.tail : RIG.body, w: swimmer ? 0.3 * (1 - u) * (1 - u) : 0,
+      sq: walker ? 2.3 - 0.2 * hunterish : 2, ridge: walker ? 0.06 : 0.1, lump,
+    });
   }
   const front = st[st.length - 1]!;
   if (hasNeck) {
@@ -198,17 +227,25 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
       st.push({ x: front.x + (headX - front.x) * t, y: front.y + (headY - front.y) * e, ry: H * r, rz: W * r * 0.9, kind: RIG.head, w: t * 0.7 });
     }
   }
-  // head: an egg, longer toward the snout
-  const hN = 7;
+  // head: a skull, not an egg. A braincase behind, a brow over the eyes, and a muzzle in front that drops below the
+  // line of the brow and narrows; a meat-eater's is deeper in the jaw, a grazer's blunter.
+  const hN = 16;
   const hx0 = hasNeck ? headX - hs * 0.25 : front.x + hs * 0.05, hy = hasNeck ? headY : front.y + H * 0.12;
   for (let i = 0; i <= hN; i++) {
     const t = i / hN;
-    const prof = Math.pow(Math.sin(Math.min(1, t * 0.92 + 0.08) * Math.PI), 0.62) * (1 - 0.3 * t);
-    const r = i === hN ? 0.012 : Math.max(0.03, prof) * 0.5;
-    st.push({ x: hx0 + t * headLen, y: hy - hs * 0.08 * t, ry: hs * r * (i === 0 && hasNeck ? 0.85 : 1), rz: hs * 0.95 * r, kind: RIG.head, w: 1 });
+    const braincase = 0.5 * bell(t, 0.3, 0.27);
+    const along = t > 0.5 ? 1 - (t - 0.5) / 0.5 : 1;
+    const muzzle = (0.3 + 0.12 * hunterish) * Math.pow(Math.max(0, along), 0.5);
+    const r = i === hN ? 0.012 : Math.max(0.03, Math.max(braincase, muzzle) * (t < 0.1 ? 0.8 + t * 2 : 1));
+    const fore = Math.max(0, Math.min(1, (t - 0.42) / 0.3));
+    st.push({
+      x: hx0 + t * headLen, y: hy - hs * 0.08 * t - hs * 0.07 * fore * fore * (3 - 2 * fore),
+      ry: hs * r * (i === 0 && hasNeck ? 0.85 : 1), rz: hs * r * (0.95 - 0.2 * fore), kind: RIG.head, w: 1,
+      sq: 2.15, ridge: 0.2 * bell(t, 0.4, 0.09),
+    });
   }
   // ---- loft the skin
-  const M = 12;
+  const M = 20;
   const x0 = st[0]!.x, x1 = st[st.length - 1]!.x;
   const loftStart = m.pos.length / 3, loftIndex = m.idx.length;
   const rows: number[][] = [];
@@ -217,9 +254,15 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
     const row: number[] = [];
     for (let k = 0; k <= M; k++) {
       const th = (k / M) * Math.PI * 2;
-      const cy = Math.cos(th), sz = Math.sin(th);
+      const cy0 = Math.cos(th), sz0 = Math.sin(th);
+      // a rounded box where the body is a barrel, an ellipse elsewhere
+      const sq = 2 / (s.sq ?? 2);
+      const cy = Math.sign(cy0) * Math.pow(Math.abs(cy0), sq), sz = Math.sign(sz0) * Math.pow(Math.abs(sz0), sq);
+      // the mass of a shoulder or haunch stands out on the lower flank; the back has a spine line
+      const lump = (s.lump ?? 0) * Math.max(0, 1 - Math.abs(cy0 + 0.3) / 0.8);
+      const ridge = (s.ridge ?? 0) * Math.pow(Math.max(0, cy0), 10);
       // bellies are a little flatter than backs
-      const p: V3 = [s.x, s.y + cy * s.ry * (cy < 0 ? 0.92 : 1), sz * s.rz];
+      const p: V3 = [s.x, s.y + cy * s.ry * (cy < 0 ? 0.92 : 1) + ridge * s.ry - lump * s.ry * 0.06, sz * s.rz * (1 + lump * 0.15)];
       const under = Math.max(0, Math.min(1, (-cy + 0.2) / 0.7));
       const c: V3 = [base.r + (belly.r - base.r) * under * 0.6, base.g + (belly.g - base.g) * under * 0.6, base.b + (belly.b - base.b) * under * 0.6];
       row.push(m.v(p, c, [s.kind, s.w, 0, sz >= 0 ? 1 : -1], [(s.x - x0) / (x1 - x0), 0, 0, 0], [(s.x - x0) / (x1 - x0), k / M, ZONE.skin, 0]));
@@ -252,8 +295,9 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
   for (let e = 0; e < eyes; e++) {
     const side = e % 2 === 0 ? 1 : -1;
     const row = Math.floor(e / 2);
-    const t = 0.55 - row * 0.2;
-    const c: V3 = [hx0 + t * headLen, hy + hs * (0.16 + row * 0.1), side * hs * (0.36 - row * 0.03)];
+    // set into the side of the skull under the brow, not stuck on the surface
+    const t = 0.44 - row * 0.15;
+    const c: V3 = [hx0 + t * headLen, hy + hs * (0.13 + row * 0.1), side * hs * (0.3 - row * 0.03)];
     m.ball(c, [es, es, es], 8, iris, [RIG.head, 1, 0, side], [c[0], c[1], c[2], es], ZONE.eye, eyeGlow);
   }
   // ---- horns: curved, tapering
@@ -285,12 +329,15 @@ export function buildCreatureModel(g: Float32Array): CreatureModel {
         const rig2: [number, number, number, number] = [lx, hipY, hipY, hipZ];
         const path: V3[] = [], radii: number[] = [];
         const ankle = hipY * 0.06;
-        for (let i = 0; i <= 6; i++) {
-          const t = i / 6;
+        // a heavy thigh running up into the shoulder or haunch, a knee, a lean shin and a slight flare at the ankle:
+        // a leg, where there was a pipe of nearly even width
+        const NL = 12, lean = 1 - 0.3 * runner;
+        for (let i = 0; i <= NL; i++) {
+          const t = i / NL;
           path.push([lx, hipY - (hipY - ankle) * t, hipZ]);
-          radii.push(thick * (1.15 - 0.7 * t + 0.18 * Math.sin(t * Math.PI * 2) * (t < 0.5 ? 1 : 0.4)));
+          radii.push(thick * (1.15 * lean * Math.pow(1 - t, 1.8) + 0.5 + 0.1 * bell(t, 0.5, 0.13) + 0.08 * bell(t, 1, 0.12)));
         }
-        m.tube(path, radii, 6, limbC, (i) => [RIG.leg, i / 6, phase, sideCode], rig2, ZONE.limb);
+        m.tube(path, radii, 8, limbC, (i) => [RIG.leg, i / NL, phase, sideCode], rig2, ZONE.limb);
         // foot: a low pad reaching forward, little wider than the shin and set slightly into the ground. As a round
         // ball three shins wide it read as a ball on a stick, and it hovered on uneven ground (seen on a real GPU).
         const footH = Math.max(ankle * 0.5, thick * 0.3);
