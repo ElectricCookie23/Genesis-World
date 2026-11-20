@@ -18,7 +18,7 @@ import { hash32 } from './history/hash';
 import { capital, compound, makeLanguage, personName, placeMeanings, soundChange, splitLanguage, word, type Language } from './history/language';
 import { clearedCover } from './plants';
 import { stillCleared } from './history/decay';
-import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role } from './history/model';
+import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role, type Wonder, type WonderKind } from './history/model';
 import { SLOT_INDEX, WEB, borrowable, chooseNext, copyKnowledge, forget, levelOf, newKnowledge, shed, wayFor, type Land, type Leaning } from './history/tech';
 
 /** One layer in the ground of a town site (system E17). */
@@ -331,6 +331,8 @@ export class Civilization {
       this.network(sim, rng, n, towns, y, year);
       // ---- golden ages begin, raise their monuments and end (system E10)
       this.flourish(sim, rng, n, towns, y, year);
+      // ---- now and then it raises a wonder, because of something that happened (system E19)
+      this.wonder(sim, rng, n, towns, y, year);
       // ---- a people that charts the stars fixes its count of years (system E8)
       if (this.fine && n.know.way[SLOT_INDEX.get('sky2')!]! >= 0 && this.calendarOf(n)?.kind === 'founding' && rng.chance(1 - Math.exp(-y / 40))) this.reformCalendar(sim, rng, n, year);
       // ---- in hard years a preacher may rise
@@ -1138,6 +1140,10 @@ export class Civilization {
       causes: [n ? n.eventId : -1].filter((x) => x >= 0), importance: 3, speciesIds: sp ? [sp.id] : [], data: { why },
     });
     if (n) this.credit(sim, null, n, ev.id, 'The last ruler anyone troubled to remember was {name}.');
+    // and the last great work of the old kind (system E19): a hall for the peace itself
+    if (n && lead && ev.id >= 0 && n.era >= 2) this.raise(sim, null, n, lead, 'peace-hall', ev.id, `${compound(this.languageOf(n), 'hold', 'great', year)}, the hall of the long peace`, 'a domed hall open to anyone',
+      'It was raised when the quarrels of the nations faded into custom, and it belongs to none of them.',
+      `At ${lead.name} they raise a hall under a single dome, with a door on every side and no throne in it. It belongs to no country. Anyone may come in.`, year);
     // the records of rulers close: from here no one keeps them
     for (const x of h.nations) {
       if (x.ended >= 0) continue;
@@ -1815,6 +1821,172 @@ export class Civilization {
       causes: [cal.eventId, n.eventId].filter((x, i, a) => x >= 0 && a.indexOf(x) === i), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, calendar: cal.id },
     });
     this.credit(sim, rng, n, out.id, '{name} worked out the count.', 'scholar', year);
+  }
+
+  /**
+   * Wonders (system E19). A country that is past its first cities, steady and of some size now and then raises a
+   * giant work, and always because of something in the record: the comet that came back when the count said it
+   * would, the day the sun went dark, a crater, a mountain that burned, a war won, a plague outlived, the founder
+   * of its ruling house, its towns across the sea, its golden age, the place where the first city stood. The
+   * wonder keeps the event that inspired it, and its own raising is an event caused by that one. A wonder takes
+   * a lifetime or more to build and outlasts the town it stands in by thousands of years.
+   */
+  private wonder(sim: Simulation, rng: RNG, n: Nation, towns: Settlement[], y: number, year: number): void {
+    const h = this.h;
+    if (n.era < 2 || towns.length < 3 || n.stability < 0.5 || n.fatigue > 0.35) return;
+    const all = (h.wonders ??= []);
+    // (the world raises one every few generations at most, and a country one in several centuries)
+    let lastHere = -1e9, lastAny = -1e9, mine = 0;
+    for (const w of all) { if (w.year > lastAny) lastAny = w.year; if (w.nation === n.id) { mine++; if (w.year > lastHere) lastHere = w.year; if (w.done > year) return; } }
+    if (year - lastAny < 90 || year - lastHere < 350 + 250 * mine) return;
+    if (!rng.chance(1 - Math.exp(-y / 90))) return;
+    const real = (id: number | undefined): id is number => id !== undefined && id >= 0 && !!sim.events.events[id];
+    const has = (kind: WonderKind, cause: number): boolean => all.some((w) => w.kind === kind && (w.cause === cause || (w.nation === n.id && this.settlements[w.settlement]!.ruined < 0)));
+    const cap = this.settlements[n.capital]!;
+    const pos = sim.grid.pos;
+    const near = (cell: number): { st: Settlement; d: number } => {
+      let best = towns[0]!, bd = -2;
+      for (const st of towns) { const d = pos[st.cell * 3]! * pos[cell * 3]! + pos[st.cell * 3 + 1]! * pos[cell * 3 + 1]! + pos[st.cell * 3 + 2]! * pos[cell * 3 + 2]!; if (d > bd) { bd = d; best = st; } }
+      return { st: best, d: Math.acos(Math.min(1, bd)) };
+    };
+    const lang = this.languageOf(n);
+    // (its name in their own tongue: two meanings, the second chosen by the country and the year)
+    const called = (head: string, ...modifiers: string[]): string => compound(lang, head, modifiers[hash32(this.seedNum, n.id, Math.floor(year), 0x30d) % modifiers.length]!, year);
+    const count = (kind: WonderKind): number => { let c = 0; for (const w of all) if (w.kind === kind) c++; return c; };
+    type Plan = { kind: WonderKind; cause: number; at: Settlement; name: string; what: string; why: string; toward?: number; bearing?: number; say: string };
+    const plans: Plan[] = [];
+    // ---- a crater: one people saw it made, a later one only finds the ring of hills
+    const fall = sim.events.last('impact');
+    if (fall && fall.cellId >= 0 && year - fall.simYear < 3e6) {
+      const { st, d } = near(fall.cellId);
+      if (d < 0.6 && st.cell !== fall.cellId && !has('crater-temple', fall.id)) {
+        const seen = fall.simYear >= h.began && h.began >= 0;
+        plans.push({ kind: 'crater-temple', cause: fall.id, at: st, toward: fall.cellId, name: `${called('holy', 'star', 'stone', 'fire')}, the temple of the fallen star`, what: 'a stepped temple that faces the crater',
+          why: seen ? `It faces the crater of ${fall.title.replace(/^The /, 'the ')}, which their forebears saw fall.` : `It faces the great ring of hills left by ${fall.title.replace(/^The /, 'the ')}, which no river made and no one living saw.`,
+          say: seen ? `The day the sky fell is still told in ${n.name}. At ${st.name} they raise a temple of many steps, and every stair of it faces the crater.` : `The surveyors of ${n.name} have walked the ring of hills and found it a perfect round. At ${st.name} they raise a temple of many steps to whatever made it, and every stair faces the crater.` });
+      }
+    }
+    // ---- a mountain that burned, or any other disaster the land sent
+    const woe = n.woes.length ? n.woes[n.woes.length - 1]! : undefined;
+    if (woe && woe.kind === 'disaster' && real(woe.eventId) && year - woe.year < 60 && year - woe.year > 4) {
+      const ev = sim.events.events[woe.eventId]!;
+      if (/erupt|volcan/.test(ev.type) && ev.cellId >= 0 && !has('fire-temple', ev.id)) {
+        const { st, d } = near(ev.cellId);
+        if (d < 0.5 && st.cell !== ev.cellId) plans.push({ kind: 'fire-temple', cause: ev.id, at: st, toward: ev.cellId, name: `${called('holy', 'fire', 'red', 'hill')}, the temple of the burning mountain`, what: 'a stepped temple that faces the volcano',
+          why: `It faces the mountain that burned in "${ev.title}", and a fire is kept on its summit so that the mountain need not light its own.`,
+          say: `The mountain has been quiet since "${ev.title}", and ${n.name} means to keep it so. At ${st.name} they raise a temple of many steps facing it, and keep a fire on the summit day and night.` });
+      } else if (!has('memorial', ev.id)) plans.push({ kind: 'memorial', cause: ev.id, at: cap, name: `${called('stone', 'long', 'cold', 'black')}, the stone of remembrance`, what: 'a single standing stone taller than any tower',
+        why: `It was raised for the dead of "${ev.title}".`,
+        say: `No one in ${n.name} is without someone lost in "${ev.title}". At ${cap.name} they quarry a single stone taller than any tower and stand it upright, with no name on it, because there were too many.` });
+    }
+    if (woe && woe.kind === 'plague' && real(woe.eventId) && year - woe.year < 60 && year - woe.year > 4 && !has('memorial', woe.eventId)) {
+      const ev = sim.events.events[woe.eventId]!;
+      plans.push({ kind: 'memorial', cause: ev.id, at: cap, name: `${called('stone', 'white', 'cold', 'salt')}, the stone of remembrance`, what: 'a single standing stone taller than any tower',
+        why: `It was raised for the dead of "${ev.title}".`,
+        say: `The sickness has passed. At ${cap.name} those who are left quarry a single stone taller than any tower and stand it upright for those who are not.` });
+    }
+    // ---- a war won
+    if (woe && woe.kind === 'war' && real(woe.eventId) && year - woe.year < 40 && !has('victory', woe.eventId)) {
+      const ev = sim.events.events[woe.eventId]!;
+      plans.push({ kind: 'victory', cause: ev.id, at: cap, name: `${called('king', 'high', 'red', 'great')}, the column of the victory`, what: 'a column with the whole war carved in a spiral up it',
+        why: `It tells the story of "${ev.title}" as ${n.name} wishes it remembered.`,
+        say: `${n.name} has come out of "${ev.title}" the stronger. At ${cap.name} it raises a column higher than the walls, with the whole war carved in a spiral up it and the enemy always shown running.` });
+    }
+    // ---- the sky: the comet that keeps its appointments, and the day the sun went dark
+    const watches = n.know.way[SLOT_INDEX.get('sky1')!]! >= 0;
+    const v = h.visitor;
+    if (watches && v && real(v.last) && sim.events.events[v.last]!.causes.length && !has('observatory', v.last)) {
+      // (its long slot lies along the track the comet takes down the sky, which is the same at every return)
+      const bearing = ((hash32(this.seedNum, 0xc0e9) % 360) * Math.PI) / 180;
+      plans.push({ kind: 'observatory', cause: v.last, at: cap, bearing, name: `${called('star', 'well', 'long', 'cold', 'high')}, the house of the Visitor`, what: 'an observatory whose slot lies along the comet\'s path',
+        why: `It was built to watch for the Visitor, the small comet that returns every ${v.period} years, and its slot lies along the comet\'s path down the sky.`,
+        say: `The Visitor came back when the count said it would. ${n.name} resolves never to miss it again: at ${cap.name} it raises a great round house with a slot in its roof that lies along the comet's path, and sets watchers there for the ${v.period} years until the next return.` });
+    }
+    const sign = h.sign;
+    if (watches && sign && sign.kind === 'eclipse' && real(sign.eventId) && year - sign.year < 50 && !has('sungate', sign.eventId)) {
+      const ev = sim.events.events[sign.eventId]!;
+      const at = this.settlements.find((st) => st.cell === ev.cellId && st.ruined < 0 && st.nation === n.id);
+      if (at) plans.push({ kind: 'sungate', cause: ev.id, at, bearing: ((hash32(this.seedNum, ev.id, 0x5a7e) % 360) * Math.PI) / 180, name: `${called('sun', 'cross', 'black', 'stone')}, the gate of the dark sun`, what: 'a gate of three stones, and a ring of stones round it',
+        why: `Through it, on one day of the year, the sun rises where it stood when it went dark in "${ev.title}".`,
+        say: `No one who stood in the streets of ${at.name} when the sun went dark has forgotten it. They raise a gate of three stones, each the size of a hill, set so that once a year the sun rises through it where it stood that noon.` });
+    }
+    // ---- the founder of an old house
+    const house = h.dynasties[n.dynasty];
+    if (house && house.ended < 0 && (house.generations ?? 0) >= 4) {
+      const founder = h.people[house.founder];
+      const first = founder ? founder.events.find((e) => real(e)) : undefined;
+      if (founder && real(first) && !has('tomb', first)) plans.push({ kind: 'tomb', cause: first, at: cap, name: `${called('hill', 'king', 'old', 'holy')}, the tomb of ${founder.name}`, what: 'a pyramid over the founder of the ruling house',
+        why: `It holds ${founder.name}, who founded the ${house.name}, ${house.generations} generations before it was built.`,
+        say: `The ${house.name} has ruled ${n.name} for ${house.generations} generations and wishes to be thought eternal. It moves the bones of its founder, ${founder.name}, to ${cap.name} and raises a mountain of dressed stone over them.` });
+    }
+    // ---- towns across the sea
+    const far = towns.find((st) => st.overseas && real(st.eventId)), port = cap.overseas ? towns.find((st) => !st.overseas) : cap;
+    if (far && port && n.know.way[SLOT_INDEX.get('sail')!]! >= 0 && !has('lighthouse', far.eventId)) {
+      plans.push({ kind: 'lighthouse', cause: far.eventId, at: port, toward: far.cell, name: `${called('fire', 'sea', 'salt', 'wind', 'high')}, the great light`, what: 'a lighthouse seen a day\'s sail away',
+        why: `It guides home the ships that sail between ${port.name} and ${far.name}, the town its people founded across the sea.`,
+        say: `Too many ships bound for ${far.name} have not come back. At ${port.name} ${n.name} raises a tower on the shore with a fire at its head that can be seen a day's sail away.` });
+    }
+    // ---- a golden age
+    const g = n.golden;
+    if (g && real(g.eventId) && year - g.since > 30 && !has('colossus', g.eventId)) plans.push({ kind: 'colossus', cause: g.eventId, at: cap, name: `${called('great', 'king', 'sun', 'red')}, the colossus of ${cap.name}`, what: 'a figure of bronze as tall as a hill',
+      why: `It was cast in ${g.own}, the golden age of ${n.name}, to show what its makers could do.`,
+      say: `In ${g.own} there is nothing ${n.name} thinks beyond it. At ${cap.name} its founders cast a figure in bronze as tall as a hill, with one arm raised, and no one can say afterwards whom it was meant to be.` });
+    // ---- the place where the first city stood
+    const firstCity = sim.milestones.get('first-city');
+    if (real(firstCity) && n.era >= 3 && !all.some((w) => w.kind === 'first-tower')) {
+      const ev = sim.events.events[firstCity]!;
+      if (year - ev.simYear > 1500 && ev.cellId >= 0) {
+        // (whatever stands or lies on that ground now: the town itself, a later one on its ruin, or the ruin)
+        let site: Settlement | undefined;
+        for (const st of this.settlements) if (st.cell === ev.cellId && (!site || st.ruined < 0 || (site.ruined >= 0 && st.ruined > site.ruined))) site = st;
+        const { d } = near(ev.cellId);
+        if (site && d < 0.35 && (site.ruined >= 0 || site.nation === n.id)) plans.push({ kind: 'first-tower', cause: firstCity, at: site, name: `${called('town', 'old', 'high', 'holy')}, the tower of the first city`, what: 'a tower where the first city stood',
+          why: `It stands where ${site.name}, the first city in the world, ${site.ruined >= 0 ? 'stood' : 'was founded'}, ${Math.round((year - ev.simYear) / 100) * 100} years before.`,
+          say: site.ruined >= 0
+            ? `The scholars of ${n.name} have found the place where the first city stood. There is little left of ${site.name} but mounds. Among them they raise a tower higher than anything its builders could have imagined, so that the place is not lost again.`
+            : `${site.name} was the first city in the world, and ${n.name}, which holds it now, wants that remembered. In the oldest part of the town it raises a tower higher than anything the first builders could have imagined.` });
+      }
+    }
+    if (!plans.length) return;
+    // Which of its reasons it acts on: the rarest reasons weigh most (a crater or the first city before another
+    // column), and a kind the world already has many of weighs less each time, so that no two wonders in sight of
+    // each other are likely to be alike.
+    const rare: Record<WonderKind, number> = { 'crater-temple': 9, 'first-tower': 9, 'fire-temple': 6, sungate: 3, observatory: 2, lighthouse: 2, colossus: 2, tomb: 1.5, victory: 1, memorial: 1, 'peace-hall': 1 };
+    let sum = 0;
+    const weights = plans.map((p) => { const w = rare[p.kind] / (1 + count(p.kind)) ** 2; sum += w; return w; });
+    let pick = rng.next() * sum, k = 0;
+    while (k < plans.length - 1 && pick > weights[k]!) pick -= weights[k++]!;
+    const p = plans[k]!;
+    // (and it needs to be worth a generation's work: the tenth of a kind is seldom begun at all)
+    if (!rng.chance(Math.min(1, 3 * weights[k]!))) return;
+    this.raise(sim, rng, n, p.at, p.kind, p.cause, p.name, p.what, p.why, p.say, year, p.toward, p.bearing);
+  }
+
+  /** Begin a wonder: it is an event caused by what inspired it, and work on it lasts a lifetime or more. */
+  private raise(sim: Simulation, rng: RNG | null, n: Nation, at: Settlement, kind: WonderKind, cause: number, name: string, what: string, why: string, say: string, year: number, toward?: number, bearing?: number): Wonder | null {
+    const h = this.h, all = (h.wonders ??= []);
+    const first = !all.length;
+    // (hands and ramps take generations; engines take decades)
+    const years = Math.round((kind === 'memorial' || kind === 'victory' ? 0.4 : 1) * (130 - 100 * sat((n.tech - 0.3) / 0.7)) * (0.8 + 0.4 * (hash32(this.seedNum, all.length, 0xb11d) % 100) / 100));
+    const ev = sim.emit({
+      type: 'wonder', year, cellId: at.cell, title: first ? `The first wonder: ${name}` : capital(name),
+      description: `${say} The work will take ${years} years.`,
+      causes: [cause, n.eventId].filter((x, i, a) => x >= 0 && sim.events.events[x] && a.indexOf(x) === i), causeWeights: [1, 0.3], importance: first ? 3 : 2, speciesIds: [n.species],
+      data: { nation: n.id, settlement: at.id, kind, cause },
+    });
+    if (ev.id < 0 || !ev.causes.includes(cause)) return null;
+    const w: Wonder = { id: (h.wonderSeq = (h.wonderSeq ?? 0) + 1), kind, name: capital(name), what, why, settlement: at.id, nation: n.id, year, done: year + years, eventId: ev.id, cause };
+    if (toward !== undefined) w.toward = toward;
+    if (bearing !== undefined) w.bearing = bearing;
+    all.push(w);
+    // (the list is kept to a page or two: the first to go are those whose towns have been ruins longest)
+    if (all.length > 240) {
+      let worst = -1, since = Infinity;
+      for (let i = 0; i < all.length - 1; i++) { const r = this.settlements[all[i]!.settlement]!.ruined; if (r >= 0 && r < since) { since = r; worst = i; } }
+      all.splice(worst >= 0 ? worst : 0, 1);
+    }
+    this.credit(sim, rng, n, ev.id, kind === 'tomb' || kind === 'victory' || kind === 'colossus' ? 'It was ordered by {name}.' : 'It was begun in the reign of {name}.');
+    return w;
   }
 
   /** The sky on a human clock: a small comet that comes back within living memory, and now and then an eclipse. */

@@ -21,7 +21,7 @@ import type { PlanetData } from './planetdata';
 import type { GroundSampler } from './ground';
 import { standing } from '../../sim/history/decay';
 import { architectureOf, borrowFashion, builtTech, builtYear, fashionOf, materialOf, type Architecture, type Fashion } from './architecture';
-import type { SpeciesInfo } from '../../shared/protocol';
+import type { SpeciesInfo, WonderInfo } from '../../shared/protocol';
 import { groundRadiusNode } from './terrain';
 import { eclipseLight } from './eclipse';
 
@@ -29,7 +29,9 @@ import { eclipseLight } from './eclipse';
 type N = any;
 
 const PART = { wall: 0, roof: 1, windows: 2, flame: 3, sail: 4, hull: 5, road: 6, water: 7 } as const;
-export const BUILDINGS = ['hut', 'house', 'hall', 'tower', 'dome', 'spire', 'temple', 'boat', 'road', 'wall', 'gate', 'scaffold', 'hoist', 'crane', 'worker', 'rail', 'canal', 'arch', 'pole', 'pipe', 'pylon'] as const;
+export const BUILDINGS = ['hut', 'house', 'hall', 'tower', 'dome', 'spire', 'temple', 'boat', 'road', 'wall', 'gate', 'scaffold', 'hoist', 'crane', 'worker', 'rail', 'canal', 'arch', 'pole', 'pipe', 'pylon',
+  // the wonders (system E19)
+  'observatory', 'sungate', 'ziggurat', 'greatspire', 'pyramid', 'column', 'beacon', 'obelisk', 'colossus', 'greatdome'] as const;
 /** The models that lie along the ground corner by corner (streets, walls and everything built between towns). */
 const DRAPED = new Set<string>(['road', 'wall', 'rail', 'canal', 'arch', 'pole', 'pipe', 'pylon']);
 /** What is drawn for each kind of network between towns (system E15), and how far to the side of the road it runs, in plan units. */
@@ -40,7 +42,29 @@ const NETWORK_MODEL: { model: (typeof BUILDINGS)[number]; aside: number; every: 
 /** Where the roof of each kind begins, in the units its model is drawn in. */
 const EAVES: Partial<Record<(typeof BUILDINGS)[number], number>> = { hut: 0.42, house: 0.5, hall: 0.75, tower: 2.3, dome: 0.5, spire: 1.6 };
 /** How tall each kind of building stands, in the units its model is drawn in: what scaffolding has to reach. */
-export const HEIGHT: Partial<Record<(typeof BUILDINGS)[number], number>> = { hut: 1.0, house: 0.92, hall: 1.25, tower: 2.55, dome: 1.2, spire: 4.3, temple: 1.72 };
+export const HEIGHT: Partial<Record<(typeof BUILDINGS)[number], number>> = { hut: 1.0, house: 0.92, hall: 1.25, tower: 2.55, dome: 1.2, spire: 4.3, temple: 1.72,
+  observatory: 1.85, sungate: 2.32, ziggurat: 2.3, greatspire: 6.2, pyramid: 2.3, column: 4.5, beacon: 4.5, obelisk: 4.2, colossus: 4.1, greatdome: 2.35 };
+/**
+ * The wonders (system E19): which model stands for each kind, how much ground it covers (the radius plots keep
+ * clear of, in model units), how far from the middle of town it likes to stand (0 at the square, 1 at the edge),
+ * and whether its windows are lit at night.
+ */
+export const WONDER_MODEL: Record<string, { model: (typeof BUILDINGS)[number]; foot: number; out: number; lit: number }> = {
+  observatory: { model: 'observatory', foot: 1.35, out: 1, lit: 0.12 },
+  sungate: { model: 'sungate', foot: 1.85, out: 1.15, lit: 0 },
+  'crater-temple': { model: 'ziggurat', foot: 1.4, out: 1, lit: 0.2 },
+  'fire-temple': { model: 'ziggurat', foot: 1.4, out: 1, lit: 0.2 },
+  'first-tower': { model: 'greatspire', foot: 0.8, out: 0.25, lit: 0.4 },
+  tomb: { model: 'pyramid', foot: 1.5, out: 1.2, lit: 0.1 },
+  victory: { model: 'column', foot: 0.6, out: 0.3, lit: 0 },
+  lighthouse: { model: 'beacon', foot: 0.8, out: 1.3, lit: 0.3 },
+  memorial: { model: 'obelisk', foot: 0.75, out: 0.35, lit: 0 },
+  colossus: { model: 'colossus', foot: 0.7, out: 0.55, lit: 0 },
+  'peace-hall': { model: 'greatdome', foot: 1.65, out: 0.5, lit: 0.45 },
+};
+const WONDER_MODELS = new Set<string>(Object.values(WONDER_MODEL).map((w) => w.model));
+/** How large a wonder is drawn, as a model unit in planet radii (before the boost every building gets from high up). */
+const WONDER_SIZE = 0.0019;
 export type Building = (typeof BUILDINGS)[number];
 
 type V3 = [number, number, number];
@@ -85,9 +109,9 @@ class Shape {
     this.tri([x0, y0, z0], [x0, y0, z1], [x0, y0 + h, cz], PART.wall);
   }
   /** A round wall or a cone: rings of points around the y axis. */
-  ring(cx: number, cz: number, y0: number, r0: number, y1: number, r1: number, sides: number, part: number): void {
+  ring(cx: number, cz: number, y0: number, r0: number, y1: number, r1: number, sides: number, part: number, turn = 0): void {
     for (let k = 0; k < sides; k++) {
-      const a0 = (k / sides) * Math.PI * 2, a1 = ((k + 1) / sides) * Math.PI * 2;
+      const a0 = (k / sides) * Math.PI * 2 + turn, a1 = ((k + 1) / sides) * Math.PI * 2 + turn;
       const p = (a: number, r: number, y: number): V3 => [cx + Math.cos(a) * r, y, cz + Math.sin(a) * r];
       if (r1 < 1e-4) this.tri(p(a1, r0, y0), p(a0, r0, y0), [cx, y1, cz], part);
       else this.quad(p(a1, r0, y0), p(a0, r0, y0), p(a0, r1, y1), p(a1, r1, y1), part, 1, Math.max(1, Math.round((y1 - y0) / 0.3)));
@@ -109,7 +133,7 @@ export function buildBuilding(kind: Building): BufferGeometry {
   const s = new Shape();
   // Under every building is the post it would stand on if its builders lifted their floors (system E13): below the
   // ground, and so unseen, for everyone else. And in its front wall a doorway, which is as tall as its builders make it.
-  if (HEIGHT[kind] !== undefined && kind !== 'temple') {
+  if (HEIGHT[kind] !== undefined && kind !== 'temple' && !WONDER_MODELS.has(kind)) {
     for (const [x, z] of [[-0.24, -0.18], [0.24, -0.18], [-0.24, 0.18], [0.24, 0.18]] as [number, number][]) s.box(x, -2.2, z, 0.07, 2.2, 0.07, PART.hull, PART.hull);
     const front = kind === 'hut' ? 0.47 : kind === 'house' ? 0.36 : kind === 'hall' ? 0.46 : kind === 'tower' ? 0.32 : kind === 'dome' ? 0.71 : 0.5;
     s.box(0, 0, front, 0.16, 0.3, 0.03, PART.hull, PART.hull);
@@ -243,6 +267,97 @@ export function buildBuilding(kind: Building): BufferGeometry {
       s.box(0, 0, 0, 0.3, 0.62, 0.22, PART.roof, PART.roof);
       s.box(0, 0.62, 0, 0.2, 0.2, 0.2, PART.sail, PART.sail);
       break;
+    // ---- the wonders (system E19). Each faces along +x.
+    case 'observatory': {
+      // a terrace, a great drum, a dome over it, and the slot in the dome from rim to crown, lying along x
+      s.box(0, 0, 0, 2.7, 0.12, 2.7, PART.road, PART.road);
+      s.ring(0, 0, 0.12, 0.95, 0.78, 0.95, 16, PART.windows);
+      s.ring(0, 0, 0.78, 1.03, 0.86, 1.03, 16, PART.wall);
+      s.ring(0, 0, 0.86, 1.03, 0.86, 0, 16, PART.wall);
+      for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI / 2, b = ((i + 1) / 6) * Math.PI / 2; s.ring(0, 0, 0.86 + Math.sin(a) * 0.95, Math.cos(a) * 0.95, 0.86 + Math.sin(b) * 0.95, Math.cos(b) * 0.95, 16, PART.roof); }
+      for (let i = 0; i < 7; i++) { const a = (0.12 + i * 0.22); s.box(Math.cos(a) * 0.93, 0.86 + Math.sin(a) * 0.93 - 0.08, 0, 0.16, 0.16, 0.17, PART.hull, PART.hull); }
+      // a smaller dome beside it, for the instruments that watch the rest of the sky
+      s.ring(-0.95, 0.95, 0.12, 0.3, 0.5, 0.3, 10, PART.wall);
+      for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI / 2, b = ((i + 1) / 3) * Math.PI / 2; s.ring(-0.95, 0.95, 0.5 + Math.sin(a) * 0.3, Math.cos(a) * 0.3, 0.5 + Math.sin(b) * 0.3, Math.cos(b) * 0.3, 10, PART.roof); }
+      break;
+    }
+    case 'sungate':
+      // three stones, each the size of a hill: two uprights and the lintel across them; the way through runs along x.
+      // Round them a ring of twelve lesser stones.
+      for (const z of [-0.62, 0.62]) s.box(0, 0, z, 0.46, 1.9, 0.52, PART.wall, PART.wall);
+      s.box(0, 1.9, 0, 0.54, 0.42, 2.0, PART.wall, PART.wall);
+      for (let i = 0; i < 12; i++) { const a = ((i + 0.5) / 12) * Math.PI * 2; s.box(Math.cos(a) * 1.7, 0, Math.sin(a) * 1.7, 0.22, i % 3 === 0 ? 0.8 : 0.55, 0.22, PART.wall, PART.wall); }
+      break;
+    case 'ziggurat':
+      // six steps, a stair up the front, a shrine on top with a fire that is never let out
+      for (let t = 0; t < 6; t++) s.box(0, t * 0.26, 0, 2.7 - t * 0.38, 0.26, 2.7 - t * 0.38, PART.wall, PART.wall);
+      for (let t = 0; t < 6; t++) s.box(1.35 - t * 0.19 + 0.1, 0, 0, 0.22, (t + 1) * 0.26 - 0.08, 0.5, PART.road, PART.road);
+      s.box(0, 1.56, 0, 0.52, 0.36, 0.52, PART.windows, PART.roof);
+      s.ring(0, 0, 1.92, 0.15, 2.3, 0, 6, PART.flame);
+      break;
+    case 'greatspire':
+      // a tower in four stages, each narrower than the one below, and a lantern at its head
+      s.box(0, 0, 0, 1.5, 0.2, 1.5, PART.road, PART.road);
+      s.ring(0, 0, 0.2, 0.6, 1.6, 0.5, 8, PART.windows);
+      s.ring(0, 0, 1.6, 0.58, 1.72, 0.58, 8, PART.wall); s.ring(0, 0, 1.72, 0.58, 1.72, 0, 8, PART.wall);
+      s.ring(0, 0, 1.72, 0.44, 3.2, 0.36, 8, PART.windows);
+      s.ring(0, 0, 3.2, 0.43, 3.3, 0.43, 8, PART.wall); s.ring(0, 0, 3.3, 0.43, 3.3, 0, 8, PART.wall);
+      s.ring(0, 0, 3.3, 0.3, 4.6, 0.22, 8, PART.windows);
+      s.ring(0, 0, 4.6, 0.29, 4.7, 0.29, 8, PART.wall); s.ring(0, 0, 4.7, 0.29, 4.7, 0, 8, PART.wall);
+      s.ring(0, 0, 4.7, 0.13, 5.0, 0.13, 6, PART.flame);
+      s.ring(0, 0, 5.0, 0.24, 6.2, 0, 8, PART.roof);
+      break;
+    case 'pyramid':
+      // a mountain of dressed stone on a paved court, a capstone in the colour of the house, and the mortuary temple at its foot
+      s.box(0, 0, 0, 3.0, 0.08, 3.0, PART.road, PART.road);
+      s.ring(0, 0, 0.08, 1.9, 2.0, 0.17, 4, PART.wall, Math.PI / 4);
+      s.ring(0, 0, 2.0, 0.17, 2.3, 0, 4, PART.roof, Math.PI / 4);
+      s.box(1.62, 0.08, 0, 0.5, 0.32, 0.7, PART.wall, PART.roof);
+      break;
+    case 'column':
+      // a stepped base, a shaft carved in bands from foot to head, and the victor standing on top
+      s.box(0, 0, 0, 1.2, 0.3, 1.2, PART.wall, PART.wall);
+      s.box(0, 0.3, 0, 0.8, 0.26, 0.8, PART.wall, PART.wall);
+      s.ring(0, 0, 0.56, 0.3, 3.6, 0.25, 12, PART.wall);
+      s.box(0, 3.6, 0, 0.72, 0.14, 0.72, PART.wall, PART.wall);
+      s.box(0, 3.74, 0, 0.22, 0.56, 0.2, PART.roof, PART.roof);
+      s.box(0, 4.3, 0, 0.16, 0.18, 0.16, PART.roof, PART.roof);
+      break;
+    case 'beacon':
+      // a square keep, a round tower on it, a gallery, and the lamp
+      s.box(0, 0, 0, 1.5, 0.36, 1.5, PART.wall, PART.road);
+      s.box(0, 0.36, 0, 0.95, 1.1, 0.95, PART.windows, PART.wall);
+      s.ring(0, 0, 1.46, 0.4, 3.6, 0.27, 12, PART.wall);
+      s.ring(0, 0, 3.6, 0.42, 3.7, 0.42, 12, PART.wall); s.ring(0, 0, 3.7, 0.42, 3.7, 0, 12, PART.wall);
+      s.ring(0, 0, 3.7, 0.2, 4.15, 0.2, 8, PART.flame);
+      s.ring(0, 0, 4.15, 0.3, 4.5, 0, 8, PART.roof);
+      break;
+    case 'obelisk':
+      // one stone, stood upright on a stepped base, with nothing written on it
+      s.box(0, 0, 0, 1.5, 0.14, 1.5, PART.road, PART.road);
+      s.box(0, 0.14, 0, 0.9, 0.2, 0.9, PART.wall, PART.wall);
+      s.ring(0, 0, 0.34, 0.36, 3.8, 0.2, 4, PART.wall, Math.PI / 4);
+      s.ring(0, 0, 3.8, 0.2, 4.2, 0, 4, PART.wall, Math.PI / 4);
+      break;
+    case 'colossus':
+      // a figure on a plinth, facing +x, with one arm raised and a fire in its hand
+      s.box(0, 0, 0, 1.3, 0.42, 1.3, PART.wall, PART.wall);
+      for (const z of [-0.2, 0.2]) s.box(0, 0.42, z, 0.3, 1.3, 0.28, PART.roof, PART.roof);
+      s.box(0, 1.72, 0, 0.42, 1.2, 0.78, PART.roof, PART.roof);
+      s.box(0, 2.92, 0, 0.32, 0.4, 0.34, PART.roof, PART.roof);
+      s.box(0, 1.8, -0.5, 0.24, 1.0, 0.22, PART.roof, PART.roof);
+      s.box(0.12, 2.72, 0.5, 0.24, 1.06, 0.22, PART.roof, PART.roof);
+      s.ring(0.12, 0.5, 3.78, 0.13, 4.1, 0, 5, PART.flame);
+      break;
+    case 'greatdome':
+      // a round hall with a door on every side, a ring of columns about it, and one dome over all with an eye open to the sky
+      s.box(0, 0, 0, 3.3, 0.14, 3.3, PART.road, PART.road);
+      for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; s.box(Math.cos(a) * 1.36, 0.14, Math.sin(a) * 1.36, 0.15, 0.82, 0.15, PART.wall, PART.wall); }
+      s.ring(0, 0, 0.14, 1.08, 1.08, 1.08, 16, PART.windows);
+      s.ring(0, 0, 0.96, 1.48, 1.08, 1.48, 16, PART.wall); s.ring(0, 0, 1.08, 1.48, 1.08, 0, 16, PART.wall);
+      for (let i = 0; i < 5; i++) { const a = (i / 6) * Math.PI / 2, b = ((i + 1) / 6) * Math.PI / 2; s.ring(0, 0, 1.08 + Math.sin(a) * 1.3, Math.cos(a) * 1.3, 1.08 + Math.sin(b) * 1.3, Math.cos(b) * 1.3, 16, PART.roof); }
+      s.ring(0, 0, 1.08 + Math.sin(5 / 6 * Math.PI / 2) * 1.3, Math.cos(5 / 6 * Math.PI / 2) * 1.3, 2.35, 0.2, 16, PART.wall);
+      break;
     case 'gate':
       // two towers either side of the road and a lintel over it
       for (const z of [-0.42, 0.42]) { s.box(0, 0, z, 0.4, 0.95, 0.34, PART.wall, PART.wall); s.box(0, 0.95, z, 0.48, 0.12, 0.42, PART.wall, PART.roof); }
@@ -272,6 +387,8 @@ function hash(n: number): number {
 }
 
 export interface TownInfo extends SettlementInfo { temple?: boolean }
+/** A wonder on its town's plan (system E19): where, how much ground it covers, and how it is drawn. */
+interface WonderSpot { w: WonderInfo; x: number; y: number; r: number; how: (typeof WONDER_MODEL)[string] }
 
 /** How many plots a town of this many people (thousands) and this knowledge fills. */
 export function townPlots(pop: number, tech: number): number {
@@ -323,7 +440,7 @@ export class Towns {
     const rotate = (v: N, q: N): N => v.add(cross(q.xyz, cross(q.xyz, v).add(v.mul(q.w))).mul(2));
     for (const kind of BUILDINGS) {
       const boat = kind === 'boat';
-      const slotCap = boat ? 96 : kind === 'house' || kind === 'road' ? cap : kind === 'hut' || kind === 'wall' ? Math.ceil(cap / 2) : kind === 'rail' || kind === 'canal' || kind === 'arch' || kind === 'pole' || kind === 'pipe' || kind === 'pylon' ? Math.ceil(cap / 8) : kind === 'temple' || kind === 'gate' ? 64 : kind === 'scaffold' || kind === 'hoist' || kind === 'crane' ? 48 : kind === 'worker' ? 160 : Math.ceil(cap / 4);
+      const slotCap = boat ? 96 : kind === 'house' || kind === 'road' ? cap : kind === 'hut' || kind === 'wall' ? Math.ceil(cap / 2) : kind === 'rail' || kind === 'canal' || kind === 'arch' || kind === 'pole' || kind === 'pipe' || kind === 'pylon' ? Math.ceil(cap / 8) : WONDER_MODELS.has(kind) ? 24 : kind === 'temple' || kind === 'gate' ? 64 : kind === 'scaffold' || kind === 'hoist' || kind === 'crane' ? 48 : kind === 'worker' ? 160 : Math.ceil(cap / 4);
       const g = buildBuilding(kind);
       // per-building data in one shared buffer (WebGPU allows 8 vertex buffers per draw; separately these made 9)
       const { iDir, iQuat, iData, iTint, iLight, iForm, iWall, iStyle } = packAttributes(g, [
@@ -502,6 +619,137 @@ export class Towns {
 
   /** Plans of the towns drawn lately, by settlement id, each with the facts it was drawn from. */
   private plans = new Map<number, { key: string; plan: CityPlan; checked: number; wet: Map<number, boolean>; sea: number }>();
+  /** Where each town's wonders stand on its plan (system E19), by town and by how much the town is enlarged for the view. */
+  private wonderSpots = new Map<number, { n: number; checked: number; sea: number; spots: WonderSpot[] }>();
+  private wonderTowns: TownInfo[] = [];
+
+  /** Is the drawn ground under water at this direction? (By the sampled ground where there is one, else by the nearest cell.) */
+  private wetAt(p: Vector3, hint: number, cells: CellSnapshot): boolean {
+    const g = this.ground;
+    if (g) return g.heightAt(p.x, p.y, p.z, g.cellAt(p.x, p.y, p.z, hint)) <= g.sea + 0.012;
+    const { pos, neighbors, ncount } = this.grid;
+    let cell = hint, best = p.x * pos[cell * 3]! + p.y * pos[cell * 3 + 1]! + p.z * pos[cell * 3 + 2]!;
+    for (let j = 0; j < ncount[hint]!; j++) { const nb = neighbors[hint * 6 + j]!; const d = p.x * pos[nb * 3]! + p.y * pos[nb * 3 + 1]! + p.z * pos[nb * 3 + 2]!; if (d > best) { best = d; cell = nb; } }
+    return cells.elevation[cell]! <= cells.seaLevel + 0.01;
+  }
+
+  /**
+   * Where the wonders of a town stand (system E19), in the units of its plan. A temple stands on the side of town
+   * nearest what it faces, a lighthouse at the last dry ground toward the sea its ships cross, a column or a
+   * standing stone near the square, a tomb outside the town altogether. Always on dry ground, and never two on
+   * the same spot. Worked out again only when the sea moves.
+   */
+  private spotsOf(st: TownInfo, c: Vector3, east: Vector3, north: Vector3, cells: CellSnapshot, U: number, bucket: number): WonderSpot[] {
+    const key = st.id * 16 + bucket, now = performance.now();
+    const known = this.wonderSpots.get(key);
+    const list = st.wonders!;
+    if (known && known.n === list.length && now - known.checked < 9000 && Math.abs(known.sea - cells.seaLevel) < 5e-4) return known.spots;
+    const { pos } = this.grid;
+    const edge = 3.5 + 0.5 * Math.sqrt(townPlots(st.ruined >= 0 ? st.peak ?? st.pop : st.pop, st.tech));
+    const probe = Towns.tmp3;
+    const dry = (x: number, y: number): boolean => { probe.copy(c).addScaledVector(east, x * U).addScaledVector(north, y * U).normalize(); return !this.wetAt(probe, st.cell, cells); };
+    const spots: WonderSpot[] = [];
+    const turns = [0, 0.5, -0.5, 1, -1, 1.6, -1.6, 2.3, -2.3, 3.14];
+    for (const w of list) {
+      const how = WONDER_MODEL[w.kind] ?? WONDER_MODEL.memorial!;
+      // (the ground it covers, in plan units: a wonder is enlarged for the view exactly as the plan is, a crowded people's plan less)
+      const r = (how.foot * WONDER_SIZE) / (U / (1 + Math.min(1.6, (bucket / 4 - 1))));
+      let b0 = hash(w.id * 7.31 + st.id * 0.37) * 6.2832;
+      let ahead = false;
+      if (w.toward >= 0 && w.toward !== st.cell) {
+        const dx = pos[w.toward * 3]! - c.x, dy = pos[w.toward * 3 + 1]! - c.y, dz = pos[w.toward * 3 + 2]! - c.z;
+        b0 = Math.atan2(dx * north.x + dy * north.y + dz * north.z, dx * east.x + dy * east.y + dz * east.z);
+        ahead = true;
+      }
+      const free = (x: number, y: number): boolean => !spots.some((o) => Math.hypot(o.x - x, o.y - y) < o.r + r + 0.5);
+      let best: [number, number] | null = null;
+      if (w.kind === 'lighthouse') {
+        // walk out toward the sea its ships cross until the ground ends; failing that, toward any sea there is
+        for (const turn of turns) {
+          const ca = Math.cos(b0 + turn), sa = Math.sin(b0 + turn);
+          let last = 0;
+          for (let d = 2; d <= edge * 2.2; d += 1) { if (!dry(ca * d, sa * d)) break; last = d; }
+          if (last >= 2 && last < edge * 2.2 - 0.5 && free(ca * (last - 0.5), sa * (last - 0.5))) { best = [ca * (last - 0.5), sa * (last - 0.5)]; if (!ahead) b0 += turn; break; }
+        }
+      }
+      const d0 = Math.max(1.2, how.out * edge);
+      for (const scale of [1, 0.7, 0.45, 0.25]) {
+        if (best) break;
+        for (const turn of turns) {
+          const x = Math.cos(b0 + turn) * d0 * scale, y = Math.sin(b0 + turn) * d0 * scale;
+          if (!free(x, y) || !dry(x, y)) continue;
+          best = [x, y];
+          break;
+        }
+      }
+      if (!best) best = [Math.cos(b0) * 1.2, Math.sin(b0) * 1.2];
+      spots.push({ w, x: best[0], y: best[1], r, how });
+    }
+    if (this.wonderSpots.size > 400) this.wonderSpots.delete(this.wonderSpots.keys().next().value as number);
+    this.wonderSpots.set(key, { n: list.length, checked: now, sea: cells.seaLevel, spots });
+    return spots;
+  }
+
+  /**
+   * Draw the wonders (system E19): every frame, from any height. They are the one work of hands that shows from
+   * orbit, so they grow with distance further than towns do. One being built is drawn up to the height the work
+   * has reached; one in a ruin loses its top over thousands of years, long after the town round it is mounds.
+   */
+  private drawWonders(focus: Vector3, dist: number, simYear: number): void {
+    for (const k of WONDER_MODELS) this.slots.get(k as Building)!.n = 0;
+    const cells = this.cells;
+    if (cells && dist < 3.4 && this.wonderTowns.length) {
+      const { pos } = this.grid;
+      const boost = 1 + Math.min(1.6, dist * 3.2), far = Math.min(8, boost + Math.max(0, dist - 0.5) * 5);
+      const reach = Math.cos(Math.min(1.45, 0.3 + dist));
+      const c = new Vector3(), east = new Vector3(), north = new Vector3(), up = new Vector3(), fwd = new Vector3();
+      const form = this.form, wall = this.wallColour, style = this.style;
+      this.form = [1, 1, 0, 0];
+      for (const st of this.wonderTowns) {
+        c.set(pos[st.cell * 3]!, pos[st.cell * 3 + 1]!, pos[st.cell * 3 + 2]!);
+        if (c.dot(focus) < reach) continue;
+        east.set(-c.z, 0, c.x).normalize();
+        north.crossVectors(c, east);
+        const nat = this.nationOf.get(st.id);
+        const tint = nat ? nat.signature : [0.6, 0.4, 0.3], light = nat ? nat.color : [1.0, 0.5, 0.14];
+        const arch = this.architectureFor(st.species);
+        const U = 0.00062 * boost * (arch ? arch.spacing : 1);
+        for (const g of this.spotsOf(st, c, east, north, cells, U, Math.round(boost * 4))) {
+          const w = g.w;
+          // how far the work has got (in a town that was left before it was finished, as far as it had got then)
+          const until = st.ruined >= 0 ? Math.min(simYear, st.ruined) : simYear;
+          const progress = Math.min(1, (until - w.year) / Math.max(1, w.done - w.year));
+          if (progress <= 0.01) continue;
+          const left = st.ruined >= 0 ? standing(Math.max(0, simYear - st.ruined) / 6, 1.2) : null;
+          if (left && left.share <= 0.02) continue;
+          const tall = Math.min(progress, left ? Math.max(0.15, left.height) : 1);
+          up.copy(c).addScaledVector(east, g.x * U).addScaledVector(north, g.y * U).normalize();
+          // which way it faces: at what it was built to face, along the line the sky fixed for it, or at the town
+          if (w.toward >= 0 && w.toward !== st.cell) fwd.set(pos[w.toward * 3]! - up.x, pos[w.toward * 3 + 1]! - up.y, pos[w.toward * 3 + 2]! - up.z);
+          else if (Number.isFinite(w.bearing)) fwd.copy(north).multiplyScalar(Math.cos(w.bearing)).addScaledVector(east, Math.sin(w.bearing));
+          else if (Math.hypot(g.x, g.y) > 2) fwd.copy(east).multiplyScalar(-g.x).addScaledVector(north, -g.y);
+          else { const a = hash(w.id * 3.7) * 6.2832; fwd.copy(east).multiplyScalar(Math.cos(a)).addScaledVector(north, Math.sin(a)); }
+          fwd.addScaledVector(up, -fwd.dot(up)).normalize();
+          const worn = left ? 1 - left.share : 0;
+          this.wallColour = [0.66 * (1 - 0.5 * worn) + 0.1 * worn, 0.61 * (1 - 0.5 * worn) + 0.14 * worn, 0.52 * (1 - 0.5 * worn) + 0.08 * worn];
+          this.style = [1, 1, w.kind === 'memorial' ? 0 : w.kind === 'tomb' || w.kind === 'sungate' ? 0.25 : 1];
+          const colour = w.kind === 'colossus' ? [1.0, 0.66, 0.26] : tint;
+          const shade = left ? [colour[0]! * (1 - 0.6 * worn) + 0.2 * worn, colour[1]! * (1 - 0.6 * worn) + 0.3 * worn, colour[2]! * (1 - 0.6 * worn) + 0.17 * worn] : colour;
+          this.put(g.how.model, up, 0, WONDER_SIZE * far, hash(w.id * 17.3), tall < 0.995 ? -tall : left ? 0 : g.how.lit, 0.5, shade, light, fwd);
+        }
+      }
+      this.form = form; this.wallColour = wall; this.style = style;
+    }
+    for (const k of WONDER_MODELS) {
+      const s = this.slots.get(k as Building)!;
+      // (a model no one has built yet is not drawn at all, so that its shader is never made)
+      if (s.n === 0 && s.mesh.count === 0) continue;
+      s.mesh.count = s.n;
+      s.mesh.visible = s.n > 0;
+      s.iDir.needsUpdate = true;
+    }
+  }
+
   /** A town being replayed from its first huts: which, since when (seconds) and over how long. */
   private lapse: { id: number; start: number; seconds: number } | null = null;
 
@@ -594,6 +842,7 @@ export class Towns {
     for (const s of settlements) this.byId.set(s.id, s);
     this.nationOf.clear();
     for (const n of nations) for (const m of n.members) this.nationOf.set(m, n);
+    this.wonderTowns = settlements.filter((s) => s.wonders && s.wonders.length);
     this.lanes = lanes;
     this.dirty = true;
   }
@@ -636,6 +885,7 @@ export class Towns {
   private static Y = new Vector3(0, 1, 0);
   private static tmp = new Vector3();
   private static tmp2 = new Vector3();
+  private static tmp3 = new Vector3();
   private static m: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0];
 
   /** Rebuild the towns near the camera when it moves; boats move every frame. */
@@ -643,7 +893,8 @@ export class Towns {
     const cells = this.cells;
     const show = dist < 0.55 && !!cells && this.settlements.length > 0;
     if (!show) {
-      if (this.lastDist >= 0) { for (const s of this.slots.values()) s.mesh.count = 0; this.lastDist = -1; }
+      if (this.lastDist >= 0) { for (const [k, s] of this.slots) if (!WONDER_MODELS.has(k)) s.mesh.count = 0; this.lastDist = -1; }
+      this.drawWonders(focus, dist, simYear);
       return;
     }
     const moved = this.lastDist < 0 || focus.distanceToSquared(this.lastFocus) > Math.pow(Math.min(0.03, dist * 0.15), 2) || Math.abs(Math.log(dist / Math.max(1e-6, this.lastDist))) > 0.2;
@@ -662,7 +913,7 @@ export class Towns {
       this.sites.clear();
       this.lastFocus.copy(focus);
       this.lastDist = dist;
-      for (const [k, s] of this.slots) if (k !== 'boat') s.n = 0;
+      for (const [k, s] of this.slots) if (k !== 'boat' && !WONDER_MODELS.has(k)) s.n = 0;
       const reachCos = Math.cos(Math.min(0.5, 0.08 + dist * 0.7));
       const up = new Vector3(), east = new Vector3(), north = new Vector3(), c = new Vector3(), fwd = new Vector3();
       let total = 0;
@@ -741,6 +992,9 @@ export class Towns {
           for (let j = 0; j < ncount[st.cell]!; j++) { const nb = neighbors[st.cell * 6 + j]!; const d = up.x * pos[nb * 3]! + up.y * pos[nb * 3 + 1]! + up.z * pos[nb * 3 + 2]!; if (d > best) { best = d; cell = nb; } }
           return elevation[cell]! <= seaLevel + 0.01;
         };
+        // the ground its wonders stand on is kept clear of everything else (system E19)
+        const great = st.wonders && st.wonders.length ? this.spotsOf(st, c, east, north, cells!, U, Math.round(boost * 4)) : null;
+        const taken = (x: number, y: number): boolean => { if (great) for (const g of great) if (Math.hypot(x - g.x, y - g.y) < g.r) return true; return false; };
         if (st.temple && plan.temple && lapse > 0.3 && (!left || left.share > 0.25)) { at(plan.temple[0], plan.temple[1]); this.put('temple', up, hash(st.id * 31) * 6.28, 0.0009 * boost, hash(st.id), lit, st.tech, tint, light); total++; }
         // streets: a stretch of road for every step of every street the town has reached (lanes stay footpaths)
         for (const street of plan.streets) {
@@ -751,7 +1005,7 @@ export class Towns {
           for (let i = 1; i <= made; i++) {
             const [x0, y0] = pts[i - 1]!, [x1, y1] = pts[i]!;
             at((x0 + x1) / 2, (y0 + y1) / 2);
-            if (wet()) continue;
+            if (wet() || taken(px, py)) continue;
             this.put('road', up, 0, U, 0.5, 0, era, tint, light, toward(Math.atan2(y1 - y0, x1 - x0)));
           }
         }
@@ -817,7 +1071,7 @@ export class Towns {
           const going = m === works && !!nat?.golden && working && !left;
           if (m >= works && !going) break;
           at(mx, my);
-          if (wet()) continue;
+          if (wet() || taken(mx, my)) continue;
           this.form = shapedForm;
           const kind: Building = m % 2 ? 'dome' : 'spire', sz = 0.00094 * boost, seed = hash(st.id * 53 + m * 7), heading = Math.atan2(-my, -mx);
           // a great work takes a generation: thirty years, which is how often the chronicle records one in a golden age
@@ -826,8 +1080,16 @@ export class Towns {
           if (going) { raise(kind, sz, seed, progress, heading, mx, my); shown.push({ what: `a great ${kind}`, progress, years: 30, stage: stageOf(progress) }); }
           total++;
         }
+        // a wonder going up: the cranes of its age at its foot, and it is listed with the other works
+        if (great && !left && lapse >= 1) for (const g of great) {
+          const progress = (simYear - g.w.year) / Math.max(1, g.w.done - g.w.year);
+          if (progress >= 1) continue;
+          for (let q = 0; q < 3; q++) { const a = q * 2.1 + g.w.id; at(g.x + Math.cos(a) * g.r * 0.95, g.y + Math.sin(a) * g.r * 0.95); if (!wet()) this.put(era >= 0.85 ? 'crane' : 'hoist', up, 0, 0.001 * boost * (era >= 0.85 ? 1 : 0.85), hash(g.w.id * 13 + q), 0, era, tint, light, toward(a)); }
+          shown.push({ what: g.w.name, progress: Math.max(0, progress), years: g.w.done - g.w.year, stage: stageOf(Math.max(0.01, progress)) });
+        }
         for (let k = 0; k < count && total < this.budget; k++) {
           const plot = plan.plots[k]!;
+          if (taken(plot.x, plot.y)) continue;
           const h3 = hash(st.id * 1299709 + k * 7), h2 = hash(st.id * 104729 + k * 17);
           at(plot.x, plot.y);
           // not in the sea (unless its builders wade)
@@ -864,7 +1126,7 @@ export class Towns {
         if (shown.length) this.sites.set(st.id, shown);
       }
       for (const [k, s] of this.slots) {
-        if (k === 'boat') continue;
+        if (k === 'boat' || WONDER_MODELS.has(k)) continue;
         s.mesh.count = s.n;
         s.iDir.needsUpdate = true; // one shared buffer: this uploads all of the instance data
       }
@@ -896,5 +1158,6 @@ export class Towns {
     }
     boats.mesh.count = boats.n;
     boats.iDir.needsUpdate = true;
+    this.drawWonders(focus, dist, simYear);
   }
 }

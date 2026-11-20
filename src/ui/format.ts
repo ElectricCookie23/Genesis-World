@@ -43,7 +43,7 @@ export function eventColor(type: string): string {
     case 'calendar': return '#d9c8ff';
     case 'network': return '#c9d6e8';
     case 'landscape': return '#c8b98a';
-    case 'golden-age': case 'golden-age-end': case 'monument': return '#ffd76a';
+    case 'golden-age': case 'golden-age-end': case 'monument': case 'wonder': return '#ffd76a';
     case 'long-peace': case 'peace-broken': return '#fff1c9';
     case 'ruin': return '#b9a48c';
     case 'storm': return '#b5c4de';
@@ -86,6 +86,7 @@ export function eventGlyph(type: string): string {
     case 'golden-age': return '☀';
     case 'golden-age-end': return '☾';
     case 'monument': return '▟';
+    case 'wonder': return '✦';
     case 'long-peace': return '☮';
     case 'peace-broken': return '⚡';
     case 'ruin': return '∴';

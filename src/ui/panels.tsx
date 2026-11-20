@@ -4,7 +4,7 @@ import { CreatureSketch } from './sketch';
 import { ART_NAMES, Portrait, artStyle } from './portrait';
 import { G, GENE_NAMES, HUNTER_DIET } from '../sim/genetics';
 import type { SimEvent } from '../sim/events';
-import type { NationInfo, PersonInfo, SpeciesInfo } from '../shared/protocol';
+import type { NationInfo, PersonInfo, SettlementInfo, SpeciesInfo, WonderInfo } from '../shared/protocol';
 import { dateIn } from '../sim/history/calendar';
 import { describeRuin } from '../sim/history/decay';
 import { actions, state, update, useStore, type Relative, type UIState } from './store';
@@ -809,7 +809,10 @@ export function NationPanel() {
 export function Peoples() {
   const s = useStore();
   const live = s.settlements.filter((x) => x.ruined < 0).sort((a, b) => b.tech * 10 + Math.log(b.pop + 1) - (a.tech * 10 + Math.log(a.pop + 1))).slice(0, 60);
-  const ruins = s.settlements.filter((x) => x.ruined >= 0).slice(-20).reverse();
+  const fallen = s.settlements.filter((x) => x.ruined >= 0);
+  // (the last twenty left, and before them any older ruin a wonder still stands in)
+  const ruins = [...fallen.slice(-20).reverse(), ...fallen.slice(0, -20).filter((x) => x.wonders && x.wonders.length).reverse()];
+  const wonders = s.settlements.flatMap((st) => (st.wonders ?? []).map((w) => ({ w, st }))).sort((a, b) => a.w.year - b.w.year);
   const kind = (t: number) => (t >= 0.9 ? 'great city' : t >= 0.6 ? 'city' : t >= 0.3 ? 'village' : 'camp');
   return (
     <div class={`${css.panel} ${css.side}`}>
@@ -848,6 +851,14 @@ export function Peoples() {
             </div>
           );
         })}
+        {wonders.length > 0 && <div class={css.sub} style={{ margin: '12px 0 4px' }}>WONDERS OF THE WORLD</div>}
+        {wonders.map(({ w, st }) => (
+          <div key={w.id} class={css.when} style={{ color: '#ffe9a8', margin: '2px 0', display: 'flex', gap: '6px', alignItems: 'baseline', flexWrap: 'wrap' }}>
+            <span>✦ {w.name}, at {st.name}{st.ruined >= 0 ? ' (a ruin)' : ''}</span>
+            <button class={css.link} style={{ marginRight: 0 }} title={`What inspired it: ${w.causeTitle}`} onClick={() => update({ whyEvent: w.eventId })}>why</button>
+            <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.flyToCell(st.cell, 0.16)}>see it</button>
+          </div>
+        ))}
         {s.nations.length > 0 && <div class={css.sub} style={{ margin: '12px 0 4px' }}>SETTLEMENTS</div>}
         {live.map((st) => {
           const sp = s.species.get(st.species);
@@ -869,6 +880,7 @@ export function Peoples() {
                   <span>{Math.round(j.progress * 100)}%</span>
                 </div>
               ))}
+              <WonderLines st={st} year={s.stats?.simYear ?? 0} />
               {(st.monuments ?? 0) > 0 && <div class={css.when} style={{ color: '#ffd76a' }}>{st.monuments} great {st.monuments === 1 ? 'work stands' : 'works stand'} here from a golden age.</div>}
               {belief && <div class={css.when} style={{ color: '#ece7db' }}>Its faith remembers: {belief.title.toLowerCase()}.</div>}
               <button class={css.link} onClick={() => actions.flyToCell(st.cell, 0.25)}>fly there</button>
@@ -885,12 +897,38 @@ export function Peoples() {
             <i class={css.dot} />
             <div class={css.what} style={{ color: '#cfc9bd' }}>{st.name}</div>
             <div class={css.when} style={{ color: '#ece7db' }}>Abandoned {formatYear(st.ruined).toLowerCase()}. {st.tech >= 0.3 ? describeRuin(Math.max(0, (s.stats?.simYear ?? 0) - st.ruined), st.tech) : ''}{st.feral ? ` ${st.feral} runs wild in it.` : ''}{st.nesting ? ` ${st.nesting} nests in its towers.` : ''}</div>
+            <WonderLines st={st} year={s.stats?.simYear ?? 0} />
             <button class={css.link} onClick={() => actions.flyToCell(st.cell, 0.25)}>visit the ruins</button>
             <button class={css.link} onClick={() => actions.openSite(st.id)}>dig here</button>
           </div>
         ))}
       </div>
     </div>
+  );
+}
+
+/** A wonder in a few lines (system E19): what it is, why it was built, and the way to the event that inspired it. */
+export function wonderLine(w: WonderInfo, year: number, ruined: number): string {
+  const span = Math.max(1, w.done - w.year);
+  const got = Math.round(Math.max(0, Math.min(1, ((ruined >= 0 ? Math.min(year, ruined) : year) - w.year) / span)) * 100);
+  const state = got >= 100 ? `Finished ${formatYear(w.done).toLowerCase()} after ${Math.round(span)} years of work.`
+    : ruined >= 0 ? `It was ${got}% built when the town was left, and was never finished.`
+      : `Begun ${formatYear(w.year).toLowerCase()}: ${got}% built, ${Math.max(1, Math.round(w.done - year))} years of work to go.`;
+  return `${w.what.charAt(0).toUpperCase()}${w.what.slice(1)}, raised by ${w.builder}. ${w.why} ${state}`;
+}
+
+function WonderLines({ st, year }: { st: SettlementInfo; year: number }) {
+  if (!st.wonders || !st.wonders.length) return null;
+  return (
+    <>
+      {st.wonders.map((w) => (
+        <div key={w.id} class={css.when} style={{ color: '#ffe9a8', margin: '3px 0' }}>
+          <b style={{ fontWeight: 600 }}>✦ {w.name}.</b> {wonderLine(w, year, st.ruined)}{' '}
+          <button class={css.link} title={`What inspired it: ${w.causeTitle}`} onClick={() => update({ whyEvent: w.eventId })}>why it was built</button>
+          <button class={css.link} onClick={() => actions.flyToCell(st.cell, 0.16)}>see it</button>
+        </div>
+      ))}
+    </>
   );
 }
 

@@ -7,6 +7,7 @@ import { nearestCell } from './world';
 import { loadSimulation, saveSimulation, type SaveState } from './snapshot';
 import {
   HISTORY_SPEED, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type DynastyDetail, type HouseMember, type SiteDetail, type NationDetail, type PersonInfo, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
+  type WonderInfo,
 } from '../shared/protocol';
 import { ERAS, earthNote, eraOf } from './history/eras';
 import { compound } from './history/language';
@@ -199,7 +200,22 @@ function shownSettlements(s: Simulation): Simulation['civ']['settlements'] {
   for (const t of all) if (t.ruined >= 0) ruins++;
   if (ruins <= 300) return all;
   let skip = ruins - 300;
-  return all.filter((t) => t.ruined < 0 || skip-- <= 0);
+  // (a ruin with a wonder in it is always shown: the wonder outlasts the town)
+  const kept = new Set<number>();
+  for (const w of s.civ.h.wonders ?? []) kept.add(w.settlement);
+  return all.filter((t) => t.ruined < 0 || skip-- <= 0 || kept.has(t.id));
+}
+
+/** The wonders of each town (system E19), by the town's id. */
+function wondersByTown(s: Simulation): Map<number, WonderInfo[]> {
+  const out = new Map<number, WonderInfo[]>();
+  const h = s.civ.h;
+  for (const w of h.wonders ?? []) {
+    let list = out.get(w.settlement);
+    if (!list) out.set(w.settlement, (list = []));
+    list.push({ id: w.id, kind: w.kind, name: w.name, what: w.what, why: w.why, builder: h.nations[w.nation]?.name ?? '', year: w.year, done: w.done, eventId: w.eventId, cause: w.cause, causeTitle: s.events.events[w.cause]?.title ?? '', toward: w.toward ?? -1, bearing: w.bearing ?? NaN });
+  }
+  return out;
 }
 
 /** A ruling house with its family tree: those who ruled, their husbands and wives, and the children who fought for the throne. */
@@ -388,7 +404,8 @@ function tick(): void {
     post({ type: 'species', species: speciesList(s) });
     if (s.civ.settlements.length) {
       const joins = linksByTown(s);
-      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, belief: t.belief, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, temple: t.temple, farms: t.farms, monuments: t.monuments ?? 0, walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas, links: joins.get(t.id), dam: t.dam !== undefined, mine: t.mine !== undefined, layers: (t.strata ? t.strata.length : 1) + (t.over !== undefined ? 1 : 0), peak: t.peak, feral: t.feral !== undefined ? s.creatures.species[t.feral]?.name ?? '' : '', nesting: t.nesting !== undefined ? s.creatures.species[t.nesting]?.name ?? '' : '' })) , nations: nationList(s) });
+      const great = wondersByTown(s);
+      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, belief: t.belief, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, temple: t.temple, farms: t.farms, monuments: t.monuments ?? 0, wonders: great.get(t.id), walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas, links: joins.get(t.id), dam: t.dam !== undefined, mine: t.mine !== undefined, layers: (t.strata ? t.strata.length : 1) + (t.over !== undefined ? 1 : 0), peak: t.peak, feral: t.feral !== undefined ? s.creatures.species[t.feral]?.name ?? '' : '', nesting: t.nesting !== undefined ? s.creatures.species[t.nesting]?.name ?? '' : '' })) , nations: nationList(s) });
     }
     speciesVersion = s.creatures.version;
     if (s.plants.version !== plantVersion) {
