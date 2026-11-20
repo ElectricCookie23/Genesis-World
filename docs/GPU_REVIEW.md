@@ -13,6 +13,44 @@ This is the second version. The first was cut short by a flat battery; this one 
 - Roughly 60 of about 230 captures were looked at. Each finding names the files it rests on; the rest are listed at the end.
 - For part of the second run the machine's owner was also using the same browser window, so the Genesis tab may have been in the background at times. The frame-rate table was finished before that; the creature captures after it were checked to be in a visible tab.
 
+## Check of commit 841782b, completed items (2026-11-21, on mains power)
+
+Bundle `assets/index-pwzw4nfw.js`. These replace the "not done" and "void" entries for items 2 and 5 in the section below.
+
+**Item 2, Medium frame rates** (WebGPU, `&noadapt`, pixel ratio 1.25, anti-aliasing off so the new edge filter is in use, bloom on; world at the dawn, 109.67 My):
+
+| View | Now | Before (`docs/PERFORMANCE.md`) |
+|---|---|---|
+| Orbit | 92.6 fps (10.8 ms) | 73.5 fps (13.6 ms) |
+| Coast, dist 0.3 | 71.7 fps (13.9 ms) | 60.7 fps (16.5 ms) |
+| Forest ground, dist 0.02 | 68.1 fps (14.7 ms) | 62.4 fps (16.0 ms) |
+
+Medium is 1.3 to 2.8 ms a frame faster and clears 60 fps in all three views. The worlds differ (this one is at its dawn with 5 towns; the earlier one had 588), so some of the gain may be the lighter scene.
+
+**Item 5, reshaped animals.** New sheets: `docs/asset-previews/species-sheet-webgl-evolved-2.jpg` (the 24 most numerous species at 165.6 My) and `species-sheet-webgl-random-2.jpg` (the same 24 random genomes as the baseline). WebGL2, High. Both were looked at. Compare with `species-sheet-webgl-evolved.jpg` and `-random.jpg`.
+
+Against the baseline list:
+
+| Baseline problem | Now |
+|---|---|
+| Bodies are pins and beans | **Improved.** Bodies have a deeper chest and a taper to the tail; land animals read as bird-like or deer-like runners. Swimmers are still a smooth spindle with a fluke. |
+| They all look the same | **Improved.** Three clear body plans now: two-legged runners, four-legged walkers, and finned swimmers, with long-necked variants. This world is also older (165 My against 74), which adds variety by itself. |
+| Head is a plain ball | **Changed, not fixed.** Heads now have a snout or flattened muzzle and sit on a neck, but most read as a **mushroom cap or a bell with an open dark hollow** on the underside or front, like a cup rather than a face. No jaw line or mouth. Eyes show on few. |
+| Legs are straight sticks | **Improved.** Legs have a thicker thigh, a visible knee bend and a small foot pad, and hind legs bend the other way. They are still very long and thin for the body, and several animals are a small body on stilts (*Querolax loricatus*, *Helinella terrestris*, *Zephitherium litoralis*). |
+| Legs poke out of a tube | **Partly.** There is a slight swelling where legs meet the body, but no real shoulder or haunch. |
+| Colour is two flat bands | **Changed.** The evolved animals are now almost all one flat purple-pink with no pattern at all, close to the colour of the plants. Less sock-like, but now monotone. |
+| Boards for wings and flaps | **Not fixed.** Random 14, 19 and 23 still carry large flat single-colour panels sticking out of the body. |
+| Saw-tooth backs | **Not fixed.** A row of identical triangles on random 1, 8, 12, 14, 18, 23. |
+| Beaded bodies | **Not fixed.** Random 2, 9, 10, 17, 24. |
+| Bulb heads on wire necks, plain spike horns | **Not fixed.** Random 1, 2, 7, 19, 24. |
+| Thick ringed column legs | Still there on random 11 and 15. |
+
+Sail ornaments now show (random 3, 7, 19, 23) and read well. Framing missed random 5, 6, 13, 16 and 20.
+
+Overall: a real step up for the ordinary evolved animal, which was the main ask. The head is now the weakest part, and the random-gene failures (boards, saw-teeth, beads) are untouched.
+
+**Still owed:** the sky-tools panel on screen, shoreline foam at a real beach, a hunt and the glowing sea animal by eye.
+
 ## Check of commit 841782b (2026-11-21): partial
 
 Newest green deploy when testing began: `841782b` (it contains `146a27d`). Main run on bundle `assets/index-B2bMw8Ce.js`, WebGPU, High, seed `amber-reef-101`. **History began at 109.67 My** (plain warp stopped there with 5 towns); 416 towns and 61 realms after 100,000 years; 1,152 towns and 75 realms at 200 My. Console over the main run: nothing at all. Files start `retest10-`; eight are cited and all eight were looked at.
