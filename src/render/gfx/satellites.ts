@@ -48,7 +48,11 @@ export class Satellites {
     const lit = max(smoothstep(0.98, 1.02, off), smoothstep(-0.05, 0.05, along));
     const glint = sin(uTime.mul(ph.w.mul(3).add(1)).add(ph.x.mul(9))).mul(0.5).add(0.5).pow(6).mul(2.5).add(0.5);
     const r = length(uv().sub(0.5));
-    material.colorNode = vec3(uLook.star).mul(lit).mul(glint).mul(float(1).sub(smoothstep(0.1, 0.5, r))).mul(shown).mul(1.4);
+    // by day, from inside the air, the sky outshines them as it does the stars (they showed as one or two "stars" in
+    // the daytime sky over a town on a real GPU)
+    const camR = length(cameraPosition);
+    const veil = float(1).sub(float(1).sub(smoothstep(1.035, 1.06, camR)).mul(smoothstep(-0.12, 0.1, dot(cameraPosition.div(camR), uSunDir))));
+    material.colorNode = vec3(uLook.star).mul(lit).mul(glint).mul(float(1).sub(smoothstep(0.1, 0.5, r))).mul(shown).mul(veil).mul(1.4);
     this.mesh = new Copies(g, material, count);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 6;

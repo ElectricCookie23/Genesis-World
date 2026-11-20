@@ -110,11 +110,15 @@ export class OceanSurface {
       const T = tiles[c]!;
       const s = (uvn: N): N => this.detailNodes[c].sample(uvn);
       const ex: N = s(dir.zy.div(T)), ey: N = s(dir.xz.div(T)), ez: N = s(dir.xy.div(T));
-      grad = grad.add(vec3(0, ex.g, ex.r).mul(w.x).add(vec3(ey.r, 0, ey.g).mul(w.y)).add(vec3(ez.r, ez.g, 0).mul(w.z)));
+      // A wave pattern repeats every tile. Seen from far enough that a tile is a few dozen pixels, the repeats line up
+      // into a fine diamond grid over the whole sea (seen on a real GPU from mid height). Each set of waves is faded
+      // out before its tile gets that small; the wide glitter further on stands for waves too small to see.
+      const seen = float(1).sub(smoothstep(T * 22, T * 60, camDist));
+      grad = grad.add(vec3(0, ex.g, ex.r).mul(w.x).add(vec3(ey.r, 0, ey.g).mul(w.y)).add(vec3(ez.r, ez.g, 0).mul(w.z)).mul(seen));
       const f = ex.b.mul(w.x).add(ey.b.mul(w.y)).add(ez.b.mul(w.z));
       const j = ex.a.mul(w.x).add(ey.a.mul(w.y)).add(ez.a.mul(w.z));
-      foamTex = max(foamTex, f.mul(c === 2 ? 0.7 : 1));
-      fold = fold.add(float(1).sub(j).max(0).mul(c === 0 ? 1 : 0.6));
+      foamTex = max(foamTex, f.mul(c === 2 ? 0.7 : 1).mul(seen));
+      fold = fold.add(float(1).sub(j).max(0).mul(c === 0 ? 1 : 0.6).mul(seen));
     }
     grad = grad.mul(state).mul(WAVE_LIFT);
     const Nw: N = normalize(dir.sub(grad.sub(dir.mul(dot(grad, dir)))));
@@ -140,7 +144,10 @@ export class OceanSurface {
     const shallow: N = vec3(uLook.oceanShallow), deep: N = vec3(uLook.oceanDeep);
     const strongest = max(max(shallow.x, shallow.y), shallow.z);
     const absorb: N = vec3(1.08, 1.08, 1.08).sub(shallow.div(strongest));
-    const transmit: N = exp(absorb.mul(path).mul(-3200));
+    // Water is never perfectly clear: besides taking colours one by one it clouds everything a little, so what stands
+    // in it fades below the surface. (An animal wading shin-deep showed its legs to the toes as if it stood on glass,
+    // seen on a real GPU: its own colour of light passed through metres of water untouched.)
+    const transmit: N = exp(absorb.mul(path).mul(-3200)).mul(exp(path.mul(-1800)));
     const sunH = dot(dir, L);
     const day = smoothstep(-0.14, 0.24, sunH);
     const sunColor: N = mix(vec3(uLook.dusk), vec3(uLook.star), smoothstep(-0.05, 0.4, sunH));

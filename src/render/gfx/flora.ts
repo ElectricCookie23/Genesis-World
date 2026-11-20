@@ -160,7 +160,9 @@ export class Flora {
       const fp: N = vCard.z;
       const fThin = is(fp, PART.leaf).add(is(fp, PART.needle)).add(is(fp, PART.frond)).add(is(fp, PART.blade)).add(is(fp, PART.petal));
       // colour by part
-      const leafCol: N = vTint.mul(mix(float(0.5), float(1.3), smoothstep(0.0, 1.0, vCard.y))).mul(vCard.w.mul(0.45).add(0.6));
+      // each leaf has its own tone (from the model) and a darker line down its middle, like a fold
+      const midrib = float(0.86).add(vCard.x.mul(2).sub(1).abs().pow(0.6).mul(0.2));
+      const leafCol: N = vTint.mul(mix(float(0.5), float(1.3), smoothstep(0.0, 1.0, vCard.y))).mul(vCard.w.mul(0.45).add(0.6)).mul(vColor).mul(midrib);
       // bark: grooves running up the trunk that wander a little, with faint rings; a plain dark tube read as plastic
       const vAt: N = varying(positionGeometry);
       const grooves = sin(vAt.x.mul(170).add(sin(vAt.y.mul(13)).mul(1.5))).mul(0.5).add(sin(vAt.z.mul(150).add(vAt.y.mul(9))).mul(0.5));

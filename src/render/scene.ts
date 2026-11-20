@@ -28,7 +28,7 @@ import { applyLook, uLook, worldLook, type WorldLook } from './gfx/look';
 import { PlanetData } from './gfx/planetdata';
 import { ErosionBake } from './gfx/erosion';
 import { dumpUniforms, guardUniforms, summariseCells } from './diagnose';
-import { TerrainSurface } from './gfx/terrain';
+import { TerrainSurface, setGroundRivers } from './gfx/terrain';
 import { GroundSampler } from './gfx/ground';
 import { RiverMap } from './gfx/rivermap';
 import { Precipitation } from './gfx/weather';
@@ -253,6 +253,7 @@ export class GenesisScene {
     this.clouds = new VolumetricClouds(this.data.life, seedHash(`clouds:${seed}`), this.cloudNoiseSize, this.cloudLightSteps, this.civ.a);
     setCloudShadow(this.clouds.shadow);
     this.riverMap = new RiverMap(grid, this.riverSize);
+    setGroundRivers(this.riverMap);
     this.ocean = new OceanSurface(this.data, this.clouds.shadow, this.erosion.texture, this.oceanResolution, seedHash(`ocean:${seed}`), this.civ);
     this.terrain = new TerrainSurface(this.data, this.erosion, this.riverMap, 32, 1200, this.shadowSteps, { node: this.ocean.causticNode, tile: this.ocean.causticTile }, this.civ);
     this.scene.add(this.terrain.sphere.mesh);
