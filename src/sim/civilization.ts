@@ -16,7 +16,7 @@ import { Log } from './history/celllog';
 import { eraOf, eraSlot, eraTitle, earthNote } from './history/eras';
 import { hash32 } from './history/hash';
 import { capital, compound, makeLanguage, personName, placeMeanings, soundChange, splitLanguage, word, type Language } from './history/language';
-import { emptyHistory, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role } from './history/model';
+import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role } from './history/model';
 import { SLOT_INDEX, WEB, borrowable, chooseNext, copyKnowledge, forget, levelOf, newKnowledge, shed, wayFor, type Land, type Leaning } from './history/tech';
 
 export interface Settlement {
@@ -78,6 +78,16 @@ const sat = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
 const GOLDEN_NAMES: [string, string, string][] = [
   ['sun', 'great', 'the Great Sun'], ['star', 'new', 'the New Star'], ['king', 'old', 'the Old Kings'], ['land', 'holy', 'the Blessed Land'], ['river', 'great', 'the Full River'],
   ['fire', 'new', 'the Bright Hearth'], ['hill', 'holy', 'the Holy Hill'], ['sea', 'great', 'the Wide Sea'], ['people', 'great', 'the Great People'], ['town', 'new', 'the New Towns'],
+];
+/** How the chronicle tells of the first of each kind of network: a title and a line, with the two towns and the nation. */
+const FIRST_LINK: [string, string][] = [
+  ['The first made road', 'Between {a} and {b} the track has been dug out, drained and laid with stone. Carts cross in a day what took a week in the rains.'],
+  ['The first aqueduct', 'Water from the hills now runs into {b} along a channel carried on arches. For the first time a town has more water than its wells could ever give.'],
+  ['The first barge canal', '{n} has cut a level waterway from {a} to {b}. One animal on the towpath now pulls what took a hundred on the road.'],
+  ['The first railway', 'Iron rails join {a} and {b}, and an engine on them hauls more in a morning than the canal carries in a week. Distance in {n} will never mean what it did.'],
+  ['The first telegraph', 'A wire runs from {a} to {b}, and a message sent along it arrives before the sender has put down the key. News in {n} has stopped travelling at the speed of a horse.'],
+  ['The first pipeline', 'Rock oil now flows from {a} to {b} through an iron pipe laid across the country, day and night, with no one carrying it.'],
+  ['The first power line', 'A line on tall towers carries power from {a} to {b}. That night the streets of {b} are lit by something made a long way off.'],
 ];
 const NTH = ['Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth'];
 /** How far from its capital a nation of each era can hold a town, counted in regions (the spacing of neighbouring towns). */
@@ -187,6 +197,7 @@ export class Civilization {
     }
     this.tend(sim, tau);
     this.paint(sim);
+    this.glow(sim);
   }
 
   // ------------------------------------------------------------------ history (every simulation step)
@@ -217,6 +228,7 @@ export class Civilization {
     h.pending -= ticks * years;
     this.census();
     this.paint(sim);
+    this.glow(sim);
   }
 
   /** One tick of history, `y` years long, ending in year `year`. */
@@ -274,6 +286,8 @@ export class Civilization {
       }
       // ---- how well it holds together, and what happens when it does not (system E4)
       if (this.fate(sim, rng, n, towns, y, year)) continue;
+      // ---- what is built between its towns (system E15)
+      this.network(sim, rng, n, towns, y, year);
       // ---- golden ages begin, raise their monuments and end (system E10)
       this.flourish(sim, rng, n, towns, y, year);
       // ---- a people that charts the stars fixes its count of years (system E8)
@@ -857,7 +871,8 @@ export class Civilization {
     for (const st of towns) {
       crowd += Math.min(2, st.pop / Math.max(0.5, this.capacity(sim, st)));
       faiths.set(st.belief, (faiths.get(st.belief) ?? 0) + 1);
-      if (angle(cap, st) > REACH[n.era]! * spacing) far++;
+      // (a town the capital can reach by rail or by wire is not far, however many miles away)
+      if (angle(cap, st) > REACH[n.era]! * spacing && !this.wired.has(st.id)) far++;
     }
     const hunger = sat((crowd / towns.length - 0.97) * 5);
     const split = towns.length > 1 ? 1 - Math.max(...faiths.values()) / towns.length : 0;
@@ -1416,6 +1431,133 @@ export class Civilization {
     const last = walls[walls.length - 1];
     if (walls.length >= 4 || (last && st.pop < last.pop * 2.2)) return;
     walls.push({ pop: st.pop, tech: st.tech, year });
+  }
+
+  /** Towns reached by a railway or a wire, as of the last look (system E15). */
+  private wired = new Set<number>();
+
+  /**
+   * Infrastructure networks (system E15). Once a nation knows how, it joins its towns with made roads, then
+   * aqueducts, canals, railways, telegraph wires, pipelines and power lines, a stretch at a time. Each kind grows
+   * as a tree from the capital: the next stretch always goes to the town that is cheapest to reach from one
+   * already joined, where cost is distance made worse by a climb, by a sea in the way (only wires cross water)
+   * and by a border. A stretch to a neighbouring country's town is built now and then, for trade. The first
+   * of each kind in the world is an event.
+   */
+  private network(sim: Simulation, rng: RNG, n: Nation, towns: Settlement[], y: number, year: number): void {
+    if (towns.length < 2) return;
+    const h = this.h, gp = sim.grid.pos, el = sim.world.elevation;
+    const links = (h.links ??= []);
+    // links to towns that are gone are gone too (looked at once per nation per tick: the list is short)
+    if (links.length && rng.chance(0.2)) { const kept = links.filter((l) => this.settlements[l.a]!.ruined < 0 && this.settlements[l.b]!.ruined < 0); if (kept.length !== links.length) h.links = kept; }
+    const list = h.links!;
+    const dist = (a: Settlement, b: Settlement): number => Math.acos(Math.max(-1, Math.min(1, gp[a.cell * 3]! * gp[b.cell * 3]! + gp[a.cell * 3 + 1]! * gp[b.cell * 3 + 1]! + gp[a.cell * 3 + 2]! * gp[b.cell * 3 + 2]!)));
+    for (let k = 0; k < NETWORKS.length; k++) {
+      const net = NETWORKS[k]!;
+      if (n.know.way[SLOT_INDEX.get(net.needs)!]! < 0) continue;
+      // how many stretches this tick: one every `every` years on average, a few at most
+      const due = y / net.every;
+      let stretches = Math.min(3, Math.floor(due) + (rng.chance(due - Math.floor(due)) ? 1 : 0));
+      if (!stretches) continue;
+      const mine = list.filter((l) => l.kind === k);
+      const count = new Map<number, number>();
+      for (const l of mine) { count.set(l.a, (count.get(l.a) ?? 0) + 1); count.set(l.b, (count.get(l.b) ?? 0) + 1); }
+      const joined = new Set<number>([n.capital]);
+      for (const l of mine) if (this.settlements[l.a]!.nation === n.id || this.settlements[l.b]!.nation === n.id) { joined.add(l.a); joined.add(l.b); }
+      // an aqueduct serves a town of some size; the rest join every town
+      const wanted = towns.filter((st) => k !== 1 || st.pop > 25);
+      for (; stretches > 0; stretches--) {
+        let best: [Settlement, Settlement] | undefined, cost = Infinity;
+        for (const from of towns) {
+          if (!joined.has(from.id) || (count.get(from.id) ?? 0) >= 3) continue;
+          for (const to of wanted) {
+            if (joined.has(to.id) || to.id === from.id) continue;
+            const d = dist(from, to);
+            // a climb makes any stretch dearer; water in the way stops everything but wires
+            let c = d * (1 + 2.5 * Math.abs(el[from.cell]! - el[to.cell]!));
+            if (!net.sea && (from.overseas !== to.overseas || this.seaBetween(sim, from.cell, to.cell))) c = Infinity;
+            if (c < cost) { cost = c; best = [from, to]; }
+          }
+        }
+        // now and then, instead, a stretch over the border to the nearest town of a country it is in touch with
+        if ((k === 0 || k === 3 || k === 4) && rng.chance(0.18)) {
+          for (const id of n.contacts) {
+            const o = h.nations[id];
+            if (!o || o.ended >= 0 || o.know.way[SLOT_INDEX.get(net.needs)!]! < 0) continue;
+            const far = this.settlements[o.capital];
+            const near = towns.reduce((m, st) => (far && dist(st, far) < dist(m, far) ? st : m), towns[0]!);
+            if (!far || far.ruined >= 0 || mine.some((l) => (l.a === near.id && l.b === far.id) || (l.b === near.id && l.a === far.id))) continue;
+            if (!net.sea && this.seaBetween(sim, near.cell, far.cell)) continue;
+            const c = dist(near, far) * 1.6;
+            if (c < cost * 1.5) { cost = c; best = [near, far]; }
+          }
+        }
+        if (!best) break;
+        const [from, to] = best;
+        const link: Link = { a: Math.min(from.id, to.id), b: Math.max(from.id, to.id), kind: k, year, nation: n.id };
+        if (list.some((l) => l.a === link.a && l.b === link.b && l.kind === k)) { joined.add(to.id); continue; }
+        list.push(link);
+        mine.push(link);
+        joined.add(to.id);
+        count.set(from.id, (count.get(from.id) ?? 0) + 1); count.set(to.id, (count.get(to.id) ?? 0) + 1);
+        const firsts = (h.firstLinks ??= []);
+        if (firsts[k] === undefined || firsts[k]! < 0) {
+          const told = FIRST_LINK[k]!;
+          const ev = sim.emit({
+            type: 'network', year, cellId: to.cell, title: told[0],
+            description: told[1].replace(/\{a\}/g, from.name).replace(/\{b\}/g, to.name).replace(/\{n\}/g, n.name),
+            causes: [n.eventId, h.firstLinks!.filter((x) => x !== undefined && x >= 0).slice(-1)[0] ?? -1].filter((x) => x >= 0), importance: 2, speciesIds: [n.species], data: { nation: n.id, kind: k, a: link.a, b: link.b },
+          });
+          firsts[k] = ev.id;
+          this.credit(sim, rng, n, ev.id, 'It was laid out by {name}.', 'inventor', year);
+        }
+      }
+    }
+    // which of its towns the capital now reaches quickly
+    for (const st of towns) this.wired.delete(st.id);
+    for (const l of list) if (l.kind === 3 || l.kind === 4) { if (this.settlements[l.a]!.nation === n.id) this.wired.add(l.a); if (this.settlements[l.b]!.nation === n.id) this.wired.add(l.b); }
+  }
+
+  /** The networks show at night (system E15): lamps along the roads and canals, the fires of engines, the glare under power lines. */
+  private glow(sim: Simulation): void {
+    const list = this.h.links;
+    if (!list || !list.length) return;
+    const g = sim.grid, { lights, elevation, seaLevel } = sim.world;
+    // the latest few hundred are enough to draw the web
+    for (let i = Math.max(0, list.length - 500); i < list.length; i++) {
+      const l = list[i]!, shine = NETWORKS[l.kind]!.glow;
+      if (shine <= 0) continue;
+      const from = this.settlements[l.a]!, to = this.settlements[l.b]!;
+      if (from.ruined >= 0 || to.ruined >= 0) continue;
+      const target = to.cell, tx = g.pos[target * 3]!, ty = g.pos[target * 3 + 1]!, tz = g.pos[target * 3 + 2]!;
+      let cur = from.cell;
+      for (let step = 0; step < 60 && cur !== target; step++) {
+        let best = cur, bd = g.pos[cur * 3]! * tx + g.pos[cur * 3 + 1]! * ty + g.pos[cur * 3 + 2]! * tz;
+        for (let k = 0; k < g.ncount[cur]!; k++) { const nb = g.neighbors[cur * 6 + k]!; const d = g.pos[nb * 3]! * tx + g.pos[nb * 3 + 1]! * ty + g.pos[nb * 3 + 2]! * tz; if (d > bd) { bd = d; best = nb; } }
+        if (best === cur) break;
+        cur = best;
+        if (elevation[cur]! > seaLevel) lights[cur] = Math.max(lights[cur]!, shine);
+      }
+    }
+  }
+
+  /** Whether open water lies on the straight way between two cells (looked at in a few places along it). */
+  private seaBetween(sim: Simulation, a: number, b: number): boolean {
+    const gp = sim.grid.pos, el = sim.world.elevation, sea = sim.world.seaLevel;
+    let cur = a;
+    for (let k = 1; k <= 3; k++) {
+      const t = k / 4;
+      const x = gp[a * 3]! * (1 - t) + gp[b * 3]! * t, y = gp[a * 3 + 1]! * (1 - t) + gp[b * 3 + 1]! * t, z = gp[a * 3 + 2]! * (1 - t) + gp[b * 3 + 2]! * t;
+      // walk to the cell nearest that point
+      for (let guard = 0; guard < 400; guard++) {
+        let best = cur, bd = gp[cur * 3]! * x + gp[cur * 3 + 1]! * y + gp[cur * 3 + 2]! * z;
+        for (let j = 0; j < sim.grid.ncount[cur]!; j++) { const nb = sim.grid.neighbors[cur * 6 + j]!; const d = gp[nb * 3]! * x + gp[nb * 3 + 1]! * y + gp[nb * 3 + 2]! * z; if (d > bd) { bd = d; best = nb; } }
+        if (best === cur) break;
+        cur = best;
+      }
+      if (el[cur]! <= sea - 0.05) return true;
+    }
+    return false;
   }
 
   /** The count of years a nation keeps. */

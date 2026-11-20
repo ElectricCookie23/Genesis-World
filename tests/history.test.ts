@@ -1032,3 +1032,60 @@ describe('golden ages (E10)', () => {
     expect(fire[1]).toBeGreaterThan(0.5);
   });
 });
+
+import { NETWORKS } from '../src/sim/history/model';
+
+describe('infrastructure networks (E15)', () => {
+  it('a full run joins its towns with at least five kinds of network, one after another', () => {
+    const runs = fiveHistories();
+    let most = 0, cross = 0, total = 0;
+    for (const r of runs) {
+      const h = r.sim.civ.h, ev = r.sim.events.events, links = h.links ?? [];
+      const kinds = new Set(links.map((l) => l.kind));
+      most = Math.max(most, kinds.size);
+      total += links.length;
+      const seen = new Set<string>();
+      const perTown = new Map<string, number>();
+      for (const l of links) {
+        const a = r.sim.civ.settlements[l.a]!, b = r.sim.civ.settlements[l.b]!;
+        expect(a).toBeDefined(); expect(b).toBeDefined();
+        expect(l.a).toBeLessThan(l.b);
+        expect(NETWORKS[l.kind]).toBeDefined();
+        // never the same stretch twice
+        const key = `${l.a}-${l.b}-${l.kind}`;
+        expect(seen.has(key)).toBe(false);
+        seen.add(key);
+        // the nation that built it knew how
+        expect(h.nations[l.nation]).toBeDefined();
+        for (const t of [l.a, l.b]) perTown.set(`${t}-${l.kind}`, (perTown.get(`${t}-${l.kind}`) ?? 0) + 1);
+        if (a.nation !== b.nation) cross++;
+      }
+      // the first of each kind is in the chronicle, tied to the two towns and to the first of the kind before it
+      const firsts = (h.firstLinks ?? []).map((id, k) => ({ k, e: id !== undefined && id >= 0 ? ev[id]! : undefined })).filter((x) => x.e);
+      for (const { k, e } of firsts) {
+        expect(e!.type).toBe('network');
+        expect(e!.importance).toBe(2);
+        expect(Number(e!.data!.kind)).toBe(k);
+        expect(e!.description).not.toMatch(/\{[abn]\}/);
+        const names = [r.sim.civ.settlements[Number(e!.data!.a)]!.name, r.sim.civ.settlements[Number(e!.data!.b)]!.name];
+        expect(names.some((name) => e!.description.includes(name))).toBe(true);
+        expect(links.filter((l) => l.kind === k).every((l) => l.year >= e!.simYear - 1)).toBe(true);
+      }
+      // a kind is only ever built by a people that had the knowledge for it, so the kinds come in over the centuries
+      const years = firsts.map((x) => x.e!.simYear).sort((a, b) => a - b);
+      if (years.length >= 5) expect(years[years.length - 1]! - years[0]!).toBeGreaterThan(500);
+    }
+    expect(most).toBeGreaterThanOrEqual(5);
+    expect(total).toBeGreaterThan(100);
+    expect(cross).toBeGreaterThan(0);
+  }, 900000);
+
+  it('the kinds of network come in the order a people learns them', () => {
+    const level = (id: string) => WEB[SLOT_INDEX.get(id)!]!.level;
+    for (let k = 1; k < NETWORKS.length; k++) expect(level(NETWORKS[k]!.needs)).toBeGreaterThan(level(NETWORKS[k - 1]!.needs));
+    expect(NETWORKS.length).toBeGreaterThanOrEqual(7);
+    expect(new Set(NETWORKS.map((n) => n.id)).size).toBe(NETWORKS.length);
+    // only wires cross the sea
+    expect(NETWORKS.filter((n) => n.sea).map((n) => n.id)).toEqual(['wire', 'power']);
+  });
+});

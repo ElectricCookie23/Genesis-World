@@ -141,6 +141,8 @@ export interface SettlementInfo {
   walls?: number[];
   /** Founded by settlers who came by sea. */
   overseas?: boolean;
+  /** What joins it to other towns (system E15), as pairs: the other town's id and the kind of network (0 road, 1 aqueduct, 2 canal, 3 railway, 4 telegraph, 5 pipeline, 6 power line). */
+  links?: number[];
   farms?: boolean;
   /** Nation it belongs to, or -1 while it is a camp outside history. */
   nation?: number;
@@ -160,6 +162,8 @@ export interface NationInfo {
   ruler: string; rulerSince: number; house: string; houseReigns: number;
   /** Id of the ruling house, or -1. */
   houseId: number;
+  /** The kinds of network its towns are joined by (system E15), as a list of kind numbers in the order it first built them. */
+  networks: number[];
   /** Its culture's number, the culture it borrows its building fashions from (-1 if none) and how much it borrows, 0..1 (system E14). */
   cultureId: number; fashionFrom: number; fashionShare: number;
   /** What its people call its golden age while one lasts ('' otherwise), the year it began, and its great works so far (system E10). */

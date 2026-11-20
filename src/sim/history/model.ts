@@ -88,6 +88,29 @@ export interface Dynasty {
   branchOf?: number;
 }
 
+/** Something built between two towns (system E15). Where it runs is not stored: it is worked out from the two towns. */
+export interface Link {
+  /** The two towns, lower id first. */
+  a: number;
+  b: number;
+  /** An index into NETWORKS. */
+  kind: number;
+  year: number;
+  /** The nation that built it. */
+  nation: number;
+}
+
+/** The kinds of network, in the order a people comes to them: what each is called, the knowledge it needs, how often a nation adds a stretch (years), and how brightly it shows at night. */
+export const NETWORKS = [
+  { id: 'road', name: 'made road', plural: 'made roads', needs: 'road1', every: 45, glow: 0.05, sea: false },
+  { id: 'aqueduct', name: 'aqueduct', plural: 'aqueducts', needs: 'aqueduct', every: 120, glow: 0, sea: false },
+  { id: 'canal', name: 'barge canal', plural: 'canals', needs: 'canal', every: 90, glow: 0.04, sea: false },
+  { id: 'rail', name: 'railway', plural: 'railways', needs: 'rail', every: 22, glow: 0.1, sea: false },
+  { id: 'wire', name: 'telegraph line', plural: 'telegraph wires', needs: 'telegraph', every: 14, glow: 0, sea: true },
+  { id: 'pipe', name: 'pipeline', plural: 'pipelines', needs: 'oil', every: 40, glow: 0, sea: false },
+  { id: 'power', name: 'power line', plural: 'power lines', needs: 'grid', every: 12, glow: 0.2, sea: true },
+] as const;
+
 export type Government = 'band' | 'chiefdom' | 'kingdom' | 'republic' | 'empire' | 'council' | 'custom';
 
 export interface Nation {
@@ -173,6 +196,10 @@ export interface HistoryState {
   peacePop?: number;
   /** The year the leading nation reached the top of knowledge, or -1. */
   topSince?: number;
+  /** What has been built between towns (system E15): roads, aqueducts, canals, railways, wires, pipelines, power lines. */
+  links?: Link[];
+  /** The first of each kind of network anywhere: the event that recorded it, or undefined. */
+  firstLinks?: number[];
   /** The counts of years peoples have kept (system E8). */
   calendars?: Calendar[];
   /** The first event of this history: the last resort for what a count of years is tied to. */

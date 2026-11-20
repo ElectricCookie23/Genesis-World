@@ -27,8 +27,15 @@ import { eclipseLight } from './eclipse';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
 
-const PART = { wall: 0, roof: 1, windows: 2, flame: 3, sail: 4, hull: 5, road: 6 } as const;
-export const BUILDINGS = ['hut', 'house', 'hall', 'tower', 'dome', 'spire', 'temple', 'boat', 'road', 'wall', 'gate', 'scaffold', 'hoist', 'crane', 'worker'] as const;
+const PART = { wall: 0, roof: 1, windows: 2, flame: 3, sail: 4, hull: 5, road: 6, water: 7 } as const;
+export const BUILDINGS = ['hut', 'house', 'hall', 'tower', 'dome', 'spire', 'temple', 'boat', 'road', 'wall', 'gate', 'scaffold', 'hoist', 'crane', 'worker', 'rail', 'canal', 'arch', 'pole', 'pipe', 'pylon'] as const;
+/** The models that lie along the ground corner by corner (streets, walls and everything built between towns). */
+const DRAPED = new Set<string>(['road', 'wall', 'rail', 'canal', 'arch', 'pole', 'pipe', 'pylon']);
+/** What is drawn for each kind of network between towns (system E15), and how far to the side of the road it runs, in plan units. */
+const NETWORK_MODEL: { model: (typeof BUILDINGS)[number]; aside: number; every: number }[] = [
+  { model: 'road', aside: 0, every: 1 }, { model: 'arch', aside: -0.5, every: 1 }, { model: 'canal', aside: -1.1, every: 1 }, { model: 'rail', aside: 0.75, every: 1 },
+  { model: 'pole', aside: 1.35, every: 1 }, { model: 'pipe', aside: -1.75, every: 1 }, { model: 'pylon', aside: 2.1, every: 2 },
+];
 /** Where the roof of each kind begins, in the units its model is drawn in. */
 const EAVES: Partial<Record<(typeof BUILDINGS)[number], number>> = { hut: 0.42, house: 0.5, hall: 0.75, tower: 2.3, dome: 0.5, spire: 1.6 };
 /** How tall each kind of building stands, in the units its model is drawn in: what scaffolding has to reach. */
@@ -195,6 +202,41 @@ export function buildBuilding(kind: Building): BufferGeometry {
       s.box(0.06, 3.2, 0.1, 0.16, 0.2, 0.14, PART.windows, PART.wall);
       s.box(1.6, 2.5, 0, 0.02, 0.96, 0.02, PART.hull, PART.hull);
       break;
+    case 'rail':
+      // a stretch of railway: sleepers and two rails
+      for (const x of [-0.42, -0.14, 0.14, 0.42]) s.box(x, 0, 0, 0.07, 0.02, 0.32, PART.wall, PART.wall);
+      for (const z of [-0.1, 0.1]) s.box(0, 0.02, z, 1.1, 0.025, 0.03, PART.hull, PART.hull);
+      break;
+    case 'canal':
+      // a stretch of canal: water between two banks, and a towpath
+      s.box(0, 0, 0, 1.1, 0.015, 0.42, PART.water, PART.water);
+      for (const z of [-0.26, 0.26]) s.box(0, 0, z, 1.1, 0.04, 0.1, PART.road, PART.road);
+      break;
+    case 'arch':
+      // one span of an aqueduct: two piers, the arch between them, the channel on top
+      for (const x of [-0.5, 0.5]) s.box(x, 0, 0, 0.14, 0.72, 0.2, PART.wall, PART.wall);
+      s.box(0, 0.62, 0, 1.1, 0.12, 0.2, PART.wall, PART.wall);
+      s.box(0, 0.74, 0, 1.1, 0.02, 0.1, PART.water, PART.water);
+      break;
+    case 'pole':
+      // a telegraph pole with its crossbar and the wire to the next
+      s.box(0, 0, 0, 0.035, 0.7, 0.035, PART.hull, PART.hull);
+      s.box(0, 0.62, 0, 0.03, 0.03, 0.2, PART.hull, PART.hull);
+      for (const z of [-0.08, 0.08]) s.box(0, 0.65, z, 1.1, 0.008, 0.008, PART.hull, PART.hull);
+      break;
+    case 'pipe':
+      // a stretch of pipeline on its cradles
+      s.box(0, 0.07, 0, 1.1, 0.1, 0.1, PART.wall, PART.wall);
+      for (const x of [-0.35, 0.35]) s.box(x, 0, 0, 0.06, 0.07, 0.16, PART.hull, PART.hull);
+      break;
+    case 'pylon':
+      // a power pylon: a tapering tower, two cross-arms, and the lines to the next (two plan units on)
+      s.box(0, 0, 0, 0.16, 0.7, 0.16, PART.wall, PART.wall);
+      s.box(0, 0.7, 0, 0.1, 0.9, 0.1, PART.wall, PART.wall);
+      for (const y of [1.2, 1.5]) s.box(0, y, 0, 0.04, 0.04, y > 1.3 ? 0.5 : 0.7, PART.wall, PART.wall);
+      for (const z of [-0.33, 0.33]) s.box(0, 1.2, z, 2.2, 0.01, 0.01, PART.hull, PART.hull);
+      for (const z of [-0.23, 0.23]) s.box(0, 1.5, z, 2.2, 0.01, 0.01, PART.hull, PART.hull);
+      break;
     case 'worker':
       // one of the builders, seen from far above: a body and a head
       s.box(0, 0, 0, 0.3, 0.62, 0.22, PART.roof, PART.roof);
@@ -280,7 +322,7 @@ export class Towns {
     const rotate = (v: N, q: N): N => v.add(cross(q.xyz, cross(q.xyz, v).add(v.mul(q.w))).mul(2));
     for (const kind of BUILDINGS) {
       const boat = kind === 'boat';
-      const slotCap = boat ? 96 : kind === 'house' || kind === 'road' ? cap : kind === 'hut' || kind === 'wall' ? Math.ceil(cap / 2) : kind === 'temple' || kind === 'gate' ? 64 : kind === 'scaffold' || kind === 'hoist' || kind === 'crane' ? 48 : kind === 'worker' ? 160 : Math.ceil(cap / 4);
+      const slotCap = boat ? 96 : kind === 'house' || kind === 'road' ? cap : kind === 'hut' || kind === 'wall' ? Math.ceil(cap / 2) : kind === 'rail' || kind === 'canal' || kind === 'arch' || kind === 'pole' || kind === 'pipe' || kind === 'pylon' ? Math.ceil(cap / 8) : kind === 'temple' || kind === 'gate' ? 64 : kind === 'scaffold' || kind === 'hoist' || kind === 'crane' ? 48 : kind === 'worker' ? 160 : Math.ceil(cap / 4);
       const g = buildBuilding(kind);
       // per-building data in one shared buffer (WebGPU allows 8 vertex buffers per draw; separately these made 9)
       const { iDir, iQuat, iData, iTint, iLight, iForm, iWall, iStyle } = packAttributes(g, [
@@ -309,7 +351,7 @@ export class Towns {
       const seaR: N = float(1).add(uSeaKm.mul(EXAG));
       const depthOk: N = shaped ? aForm.w.mul(0.00011) : float(0);
       const dry: N = boat ? float(1) : step(seaR.add(0.00002).sub(depthOk), radius);
-      if (kind === 'road' || kind === 'wall') {
+      if (DRAPED.has(kind)) {
         // Streets and walls lie along the ground: every corner finds the ground under itself, where a building
         // stands level on the ground under its middle. (As rigid slabs, stretches of road on a slope were half
         // buried and a street read as a row of dashes.)
@@ -387,7 +429,9 @@ export class Towns {
       const night = float(1).sub(day);
       let albedo: N = wall.mul(is(PART.wall).add(is(PART.windows))).add(roof.mul(is(PART.roof))).add(vec3(0.86, 0.82, 0.7).mul(is(PART.sail))).add(vec3(0.2, 0.14, 0.1).mul(is(PART.hull)))
         // streets go from trodden earth to paving as a people learns to build
-        .add(mix(vec3(0.4, 0.32, 0.22), vec3(0.47, 0.46, 0.44), smoothstep(0.4, 0.75, tech)).mul(is(PART.road)));
+        .add(mix(vec3(0.4, 0.32, 0.22), vec3(0.47, 0.46, 0.44), smoothstep(0.4, 0.75, tech)).mul(is(PART.road)))
+        // water in a canal or an aqueduct's channel
+        .add(vec3(0.16, 0.36, 0.52).mul(is(PART.water)));
       albedo = mix(albedo, vec3(0.06, 0.08, 0.1), glass.mul(0.85));
       // and one that decorates bands every floor of its walls in its own colour
       albedo = mix(albedo, vTint.mul(0.6).add(0.12), vStyle.z.mul(0.75).mul(step(0.86, fract(vUv.y))).mul(is(PART.wall).add(is(PART.windows))));
@@ -419,6 +463,8 @@ export class Towns {
   readonly sites = new Map<number, { what: string; progress: number; years: number; stage: string }[]>();
   private lastYear = -1;
   private lastBuilt = 0;
+
+  private byId = new Map<number, TownInfo>();
 
   /** The species on record: what a town's builders are like (system E13). */
   species: Map<number, SpeciesInfo> | null = null;
@@ -543,6 +589,8 @@ export class Towns {
   /** Settlements, the nations they belong to, and the sea lanes (chains of cells) boats follow. */
   setTowns(settlements: TownInfo[], nations: Nation[], lanes: number[][]): void {
     this.settlements = settlements;
+    this.byId.clear();
+    for (const s of settlements) this.byId.set(s.id, s);
     this.nationOf.clear();
     for (const n of nations) for (const m of n.members) this.nationOf.set(m, n);
     this.lanes = lanes;
@@ -718,6 +766,29 @@ export class Towns {
             }
           }
           for (const g of wall.gates) { at(g[0], g[1]); if (!wet()) this.put('gate', up, 0, U * 1.25, 0.7, 0, era, tint, light, toward(Math.atan2(g[1], g[0]))); }
+        }
+        // ---- what joins this town to others (system E15): each kind runs out of town toward the town it leads to, beside the road
+        if (st.links && lapse >= 1 && dist < 0.2) {
+          let edge = 4;
+          for (let k = 0; k < count; k += 7) edge = Math.max(edge, Math.hypot(plan.plots[k]!.x, plan.plots[k]!.y));
+          const seen = new Set<number>();
+          for (let i = 0; i + 1 < st.links.length; i += 2) {
+            const other = this.byId.get(st.links[i]!), kindOf = st.links[i + 1]!;
+            const how = NETWORK_MODEL[kindOf];
+            if (!other || !how || seen.has(other.id * 8 + kindOf)) continue;
+            seen.add(other.id * 8 + kindOf);
+            // which way, and how far: half way to the other town at most (it draws its own half), a good stretch at least
+            const dx = pos[other.cell * 3]! - c.x, dy = pos[other.cell * 3 + 1]! - c.y, dz = pos[other.cell * 3 + 2]! - c.z;
+            const e = dx * east.x + dy * east.y + dz * east.z, nn = dx * north.x + dy * north.y + dz * north.z;
+            const heading = Math.atan2(nn, e), reach = Math.min(edge + 30, Math.max(edge + 6, (Math.hypot(e, nn) / U) * 0.5));
+            const sx = Math.cos(heading + Math.PI / 2) * how.aside, sy = Math.sin(heading + Math.PI / 2) * how.aside;
+            // an aqueduct comes right into the middle of town; the rest begin at its edge (roads within it are streets already)
+            for (let r = kindOf === 1 ? 1.6 : kindOf === 0 ? edge : Math.max(2, edge * 0.5); r < reach; r += how.every) {
+              at(Math.cos(heading) * r + sx, Math.sin(heading) * r + sy);
+              if (wet()) continue;
+              this.put(how.model, up, 0, U, 0.5, 0, era, tint, light, toward(heading));
+            }
+          }
         }
         // ---- what is being built just now (system E12): each crew at one plot, at its stage
         const jobs: Site[] = working && lapse >= 1 ? buildingSites(st.id * 7919 + 13, count, simYear, (i) => plan.plots[i]!.central).filter((j) => watchable(j, yearsPerSecond)) : [];

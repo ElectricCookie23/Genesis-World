@@ -697,6 +697,10 @@ const FIELD_COLOUR: Record<string, string> = {
 const ERA_NAMES = ['Age of Camps', 'Age of Fields', 'Age of Kilns', 'Age of Walls', 'Age of Sails', 'Age of Presses', 'Age of Engines', 'Age of Signals', 'Age of Orbit', 'Age Beyond'];
 
 /** One nation's knowledge: the tech web era by era, and its rulers on record (expansion system E1). */
+/** The kinds of network between towns (system E15), in the order of `NETWORKS` in the simulation. */
+const NETWORK_NAMES = ['made roads', 'aqueducts', 'canals', 'railways', 'telegraph wires', 'pipelines', 'power lines'];
+const listOf = (words: string[]): string => (words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}` : words[0] ?? '');
+
 const ROLE_LABEL: Record<string, string> = { ruler: 'Ruler', founder: 'Founder', inventor: 'Inventor', prophet: 'Prophet', general: 'General', explorer: 'Explorer', artist: 'Artist', scholar: 'Scholar', consort: 'Consort', claimant: 'Claimant' };
 
 /** The two strongest sides of a temperament, in plain words. */
@@ -831,7 +835,7 @@ export function Peoples() {
                   const year = s.stats?.simYear ?? 0;
                   return (
                     <div class={css.when} style={{ color: '#a9a498' }}>
-                      {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}). {realm.ruler ? `${realm.ruler} of the ${realm.house} has ruled ${Math.max(1, Math.round(year - realm.rulerSince)).toLocaleString('en-US')} ${Math.round(year - realm.rulerSince) === 1 ? 'year' : 'years'} (${realm.houseReigns} ${realm.houseReigns === 1 ? 'reign' : 'reigns'} of that house).` : 'It lives by custom and keeps no list of rulers.'} Founded {Math.round(year - realm.founded).toLocaleString('en-US')} years ago. They speak {realm.language}.{realm.golden ? ` It is in its golden age, ${realm.golden}, ${Math.max(1, Math.round(year - realm.goldenSince)).toLocaleString('en-US')} years old, with ${realm.goldenWorks} great ${realm.goldenWorks === 1 ? 'work' : 'works'} raised so far.` : ''}{realm.calendar ? ` By their count it is ${dateIn({ name: realm.calendar, epoch: realm.calendarEpoch }, year)}, or ${realm.calendarOwn} in their own tongue (sim year ${Math.floor(year).toLocaleString('en-US')}).` : ''}
+                      {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}). {realm.ruler ? `${realm.ruler} of the ${realm.house} has ruled ${Math.max(1, Math.round(year - realm.rulerSince)).toLocaleString('en-US')} ${Math.round(year - realm.rulerSince) === 1 ? 'year' : 'years'} (${realm.houseReigns} ${realm.houseReigns === 1 ? 'reign' : 'reigns'} of that house).` : 'It lives by custom and keeps no list of rulers.'} Founded {Math.round(year - realm.founded).toLocaleString('en-US')} years ago. They speak {realm.language}.{realm.networks.length ? ` Its towns are joined by ${listOf(realm.networks.map((k) => NETWORK_NAMES[k] ?? 'works'))}.` : ''}{realm.golden ? ` It is in its golden age, ${realm.golden}, ${Math.max(1, Math.round(year - realm.goldenSince)).toLocaleString('en-US')} years old, with ${realm.goldenWorks} great ${realm.goldenWorks === 1 ? 'work' : 'works'} raised so far.` : ''}{realm.calendar ? ` By their count it is ${dateIn({ name: realm.calendar, epoch: realm.calendarEpoch }, year)}, or ${realm.calendarOwn} in their own tongue (sim year ${Math.floor(year).toLocaleString('en-US')}).` : ''}
                     </div>
                   );
                 })()}
