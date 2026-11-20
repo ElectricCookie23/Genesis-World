@@ -22,7 +22,33 @@ How the sessions talk:
 - Assets: **not now.** The owner's decision: the collected assets come later, "once the base game is done and the blackbox testing of it is essentially complete. the normal features need to work first." BRIEF.md allows CC0 or public domain only, each logged in `CREDITS.md`.
 - The owner paused this work because of usage limits. Keep to work that matters, and do not start long speculative jobs.
 
-## Where I stopped (second pause, 2026-11-20 about 2:10 am Qatar time, for usage)
+## Where things are (2026-11-21) — read this first
+
+The sections below this one are older background.
+
+**Done since the second pause**
+- The build session fixed both blockers (`6dddd2d`): civilization lasts, and `warp` takes `through: true`.
+- The Mac session checked `6dddd2d` on the GPU (top of `docs/GPU_REVIEW.md`, `retest6-`). Batches four and five are mostly confirmed: night towns, village fires, building spacing, no huts in the surf, labels not overlapping, waders. The summary and what is left is in `HANDOFF.md`, "Check of 6dddd2d on the GPU".
+- Holes in the land: not reproduced on the GPU or here. Closed until seen again.
+- **Goals mode built** (owner's request): `src/game/goals.ts`, `src/ui/goals.tsx`, hook in `main.ts`, `tests/goals.test.ts`, `scripts/checks/goalsweep.ts`. See `HANDOFF.md`, "Goals", and DECISIONS 104.
+
+**Owner said (2026-11-21):** "i am going away from keyboard please queue everything for yourself to do". So: keep working down the list below without waiting; the usage limit is still the constraint.
+
+**Queue, in order**
+1. From the `6dddd2d` check: worked ground between buildings (grass grows to the walls), Night Map labels (only 5 of 95 realms named; two sit outside the planet's edge), night side from orbit still near-black and a hard white dot on the cloud belt, wide pink halo on lit towers from the ground, hard straight foam line where shallows meet the shore, animals as tall as tower blocks beside a town.
+2. Not yet checked on a GPU: sky at altitude on WebGL2, the small-island sea patch, broadleaf trunks and bark from inside a forest, how a wading animal looks, the goals panel. Ask the owner before the next GPU check (standing rule).
+3. Goals, next steps: a short debrief when a goal is reached (the chain of causes in plain words, not only the link), more goals as the build session's systems land (dynasties, first meetings), and the owner's open question on progression (default: all open).
+4. The older look items in `HANDOFF.md` ("Still open, for whoever gets to it").
+5. Side panels overlap the stats box at the top right on short windows, and on a phone the bottom bar shows through an open panel (seen while checking the goals panel; older than it).
+6. Later, only when the owner says: the look pass with the shortlisted assets.
+
+**Practical notes**
+- This container has 4 cores: a software-rendered warp, a headless sweep and a page screenshot at once make screenshots time out. Shrink the 3D view first (`scene.renderer.setSize(160, 100, false)`) when only the interface is being looked at.
+- Preact 11 drops bare numbers in styles (`marginTop: 4` does nothing): write the unit (DECISIONS 103).
+- I cannot wake myself (scheduled messages are refused for this session). Work happens only inside a turn.
+- The Mac session is waiting on the owner for a contact address for Wikimedia Commons sounds, or "skip".
+
+## Earlier: where I stopped (second pause, 2026-11-20 about 2:10 am Qatar time, for usage)
 
 Read this section first; the older sections below are background.
 

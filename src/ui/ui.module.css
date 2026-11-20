@@ -99,6 +99,15 @@
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; }
 .btn { all: unset; cursor: pointer; padding: 7px 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.09); }
 .btn:hover { background: rgba(255, 255, 255, 0.18); }
+.goal { padding: 9px 0 10px; border-top: 1px solid #ffffff14; }
+.goalDone b { color: #cfe6b4; }
+.goalTitle { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 2px; }
+.goalTitle b { font: 500 17px 'Cormorant Garamond', serif; letter-spacing: 0.02em; }
+.goalMeter { display: block; height: 3px; border-radius: 2px; background: #ffffff1c; overflow: hidden; margin: 6px 0 4px; }
+.goalMeter i { display: block; height: 100%; background: #e9e4d8; transition: width 0.6s ease; }
+.goalDone .goalMeter i { background: #cfe6b4; }
+.goalMarker { all: unset; cursor: pointer; display: block; margin-top: 7px; padding-top: 6px; border-top: 1px solid #ffffff14; width: 100%; font-size: 11px; max-width: 230px; }
+.goalMarker:hover { opacity: 0.85; }
 .notice { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); padding: 7px 14px; font-size: 11px; }
 @keyframes rise { from { opacity: 0; transform: translate(-50%, 8px); } }
 @keyframes fade { from { opacity: 0; } }

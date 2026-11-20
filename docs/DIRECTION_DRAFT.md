@@ -46,6 +46,8 @@ Stylised and clean rather than realistic, and readable at a glance. What it lack
 
 ## First steps, in order
 
+Done so far: step 1 in its relaxed form. The game has a Goals panel (button "Goals", key J) with eleven goals, all open from the start, none of which can be failed; each reached goal links to "why did this happen?" and to sharing the world. See `src/game/goals.ts`.
+
 1. A mission framework and five starter missions, each with a win condition, failure messages and a debrief.
 2. The planet tools gathered into one clear toolbar (free to use).
 3. The debrief panel: the chain of causes for the last big event, and "rewind to here".
