@@ -39,7 +39,7 @@ The sections below this one are older background.
 2. Not yet checked on a GPU: the sixth batch, sky at altitude on WebGL2, the small-island sea patch, broadleaf trunks and bark from inside a forest, how a wading animal looks, the goals panel. Ask the owner before the next GPU check (standing rule).
 3. Goals, next steps: a short debrief when a goal is reached (the chain of causes in plain words, not only the link), more goals as the build session's systems land (dynasties, first meetings), and the owner's open question on progression (default: all open).
 4. The older look items in `HANDOFF.md` ("Still open, for whoever gets to it").
-5. ~~Side panels over the stats box~~ Done: the stats box steps aside while a side panel is open, and the followed goal is its own small box beside the title. Still open: on a phone the bottom bar shows through an open panel.
+5. ~~Side panels over the stats box~~ Done: the stats box steps aside while a side panel is open, and the followed goal is its own small box beside the title. On a phone the sheets are now nearly solid, so the time bar no longer reads through them.
 6. Later, only when the owner says: the look pass with the shortlisted assets.
 
 **Practical notes**
