@@ -1036,6 +1036,7 @@ describe('golden ages (E10)', () => {
 });
 
 import { NETWORKS, WONDER_KINDS } from '../src/sim/history/model';
+import { CALAMITIES, REBUILDS, answer, brittle, damage, describeScar, hazards, plotFate, rebuildYears, woodShare, type Ground, type Scar } from '../src/sim/history/calamity';
 
 describe('infrastructure networks (E15)', () => {
   it('a full run joins its towns with at least five kinds of network, one after another', () => {
@@ -1377,7 +1378,7 @@ describe('wonders (E19)', () => {
   });
 
   it('a meteor the player drops is answered, in time, by a stepped mound whose stair faces its crater', () => {
-    // (this changes the shared histories: keep it the last test of the file)
+    // (this changes the shared histories: only tests that can live with a dropped meteor come after it)
     const runs = fiveHistories();
     let stairs = 0;
     for (const { sim } of runs) {
@@ -1400,5 +1401,132 @@ describe('wonders (E19)', () => {
       expect(stair.why).toMatch(/crater/);
     }
     expect(stairs).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('disasters in cities (E20)', () => {
+  const ground: Ground = { dry: 0.6, low: 0.5, fault: 0.6, peak: 0.6 };
+
+  it('damage depends on what a town is built of and where it stands', () => {
+    // timber burns, stone and steel much less; a dry town burns worse than a wet one
+    expect(damage('fire', 0.35, ground, 0.7, undefined)).toBeGreaterThan(damage('fire', 0.95, ground, 0.7, undefined) * 2.5);
+    expect(damage('fire', 0.4, { ...ground, dry: 1 }, 0.7, undefined)).toBeGreaterThan(damage('fire', 0.4, { ...ground, dry: 0 }, 0.7, undefined));
+    expect(woodShare(0.3)).toBe(1);
+    expect(woodShare(1.1)).toBeLessThan(0.2);
+    // tall masonry falls worst: worse than huts, worse than steel
+    expect(brittle(0.65)).toBeGreaterThan(brittle(0.2) * 2);
+    expect(brittle(0.65)).toBeGreaterThan(brittle(1.05) * 2);
+    expect(damage('quake', 0.65, ground, 0.8, undefined)).toBeGreaterThan(damage('quake', 1.05, ground, 0.8, undefined) * 2);
+    // low ground floods; a town close under the mountain is buried deeper
+    expect(damage('flood', 0.6, { ...ground, low: 1 }, 0.6, undefined)).toBeGreaterThan(damage('flood', 0.6, { ...ground, low: 0.1 }, 0.6, undefined) * 2);
+    expect(damage('ash', 0.6, { ...ground, peak: 1 }, 0.6, undefined)).toBeGreaterThan(damage('ash', 0.6, { ...ground, peak: 0.1 }, 0.6, undefined) * 1.8);
+    // a country that has made its laws loses less, and is struck by fire and flood less often
+    const codes = { fire: { year: 10, eventId: -1 }, quake: { year: 10, eventId: -1 }, flood: { year: 10, eventId: -1 } };
+    for (const kind of ['fire', 'quake', 'flood'] as const) expect(damage(kind, 0.5, ground, 0.7, codes)).toBeLessThan(damage(kind, 0.5, ground, 0.7, undefined) * 0.6);
+    expect(hazards(0.5, 1, ground, codes).fire).toBeLessThan(hazards(0.5, 1, ground, undefined).fire * 0.5);
+    expect(hazards(0.5, 1, { ...ground, fault: 0.1 }, undefined).quake).toBe(0);
+    expect(hazards(0.5, 1, { ...ground, peak: 0 }, undefined).ash).toBe(0);
+    // what a town does about it
+    expect(answer('fire', 0.5, 0.45, undefined)).toEqual({ rebuilt: 'stone', law: true });
+    expect(answer('fire', 0.5, 0.3, undefined)).toEqual({ rebuilt: '', law: false }); // no written law yet: it builds as before, and will burn again
+    expect(answer('fire', 0.1, 0.45, codes)).toEqual({ rebuilt: 'stone', law: false });
+    expect(answer('quake', 0.4, 0.6, undefined).rebuilt).toBe('braced');
+    expect(answer('flood', 0.3, 0.4, undefined).rebuilt).toBe('raised');
+    expect(answer('flood', 0.5, 0.7, undefined).rebuilt).toBe('moved');
+    expect(answer('ash', 0.6, 0.7, undefined).rebuilt).toBe('moved');
+    expect(rebuildYears(0.35)).toBeGreaterThan(rebuildYears(1.0) * 2);
+  });
+
+  it('a disaster leads to a visible change in how the city rebuilds', () => {
+    // a round town of 200 plots built over four centuries, and a great fire in year 1000 answered in stone
+    const plots = Array.from({ length: 200 }, (_, k) => { const r = 0.7 * Math.sqrt(k + 0.5), a = k * 2.39996; return { x: r * Math.cos(a), y: r * Math.sin(a), built: 600 + k * 1.8 }; });
+    const radius = Math.max(...plots.map((p) => Math.hypot(p.x, p.y)));
+    const fire: Scar = { year: 1000, kind: 'fire', share: 0.45, eventId: -1, rebuilt: 'stone' };
+    const at = (year: number, scars: Scar[], codes: number[] = [-1, -1, -1]) => plots.map((p, k) => plotFate(k, p.x, p.y, radius, p.built, scars, codes, year, 0.5, 77, 0, () => 0));
+    const count = (fates: ReturnType<typeof at>, f: (x: (typeof fates)[number]) => boolean) => fates.filter(f).length;
+    // before the fire nothing is amiss and nothing is of stone
+    const before = at(999, [fire]);
+    expect(count(before, (x) => x.state === 'standing' && !x.stone)).toBe(200);
+    // the day after, about that share of the town is a wreck, in one quarter of it rather than scattered
+    const after = at(1000.5, [fire]);
+    const wrecked = after.map((x, k) => (x.state === 'wreck' ? k : -1)).filter((k) => k >= 0);
+    expect(wrecked.length / 200).toBeGreaterThan(0.3);
+    expect(wrecked.length / 200).toBeLessThan(0.6);
+    let sx = 0, sy = 0;
+    for (const k of wrecked) { const p = plots[k]!; const r = Math.hypot(p.x, p.y) || 1; sx += p.x / r; sy += p.y / r; }
+    expect(Math.hypot(sx, sy) / wrecked.length).toBeGreaterThan(0.35);
+    // some years on it is being built again: wrecks, sites and finished buildings side by side
+    const during = at(1000 + rebuildYears(0.5) * 0.5, [fire]);
+    expect(count(during, (x) => x.state === 'rebuilding')).toBeGreaterThan(5);
+    expect(count(during, (x) => x.state === 'wreck')).toBeGreaterThan(5);
+    for (const x of during) if (x.state === 'rebuilding') { expect(x.progress).toBeGreaterThan(0); expect(x.progress).toBeLessThan(1); expect(x.stone).toBe(true); }
+    // a lifetime on everything stands again, and exactly what burned is now of stone: the town shows where the fire went
+    const later = at(1000 + rebuildYears(0.5) * 1.5, [fire]);
+    expect(count(later, (x) => x.state === 'standing')).toBe(200);
+    for (let k = 0; k < 200; k++) { expect(later[k]!.stone).toBe(wrecked.includes(k)); if (wrecked.includes(k)) expect(later[k]!.born).toBeGreaterThan(1000); }
+    // the same fire answered with nothing leaves a town that looks as it did
+    expect(count(at(1100, [{ ...fire, rebuilt: '' }]), (x) => x.stone)).toBe(0);
+    // an earthquake takes buildings here and there, and what is built again is low and braced
+    const quake: Scar = { year: 1000, kind: 'quake', share: 0.4, eventId: -1, rebuilt: 'braced' };
+    const shaken = at(1000.5, [quake]).map((x, k) => (x.state === 'wreck' ? k : -1)).filter((k) => k >= 0);
+    sx = 0; sy = 0;
+    for (const k of shaken) { const p = plots[k]!; const r = Math.hypot(p.x, p.y) || 1; sx += p.x / r; sy += p.y / r; }
+    expect(Math.hypot(sx, sy) / shaken.length).toBeLessThan(0.3);
+    expect(count(at(1200, [quake]), (x) => x.braced)).toBe(shaken.length);
+    // a flood takes the side toward the water; a great one makes the town give that ground up for good
+    const flood: Scar = { year: 1000, kind: 'flood', share: 0.3, eventId: -1, rebuilt: 'moved' };
+    const given = at(1500, [flood]);
+    expect(count(given, (x) => x.state === 'given-up')).toBeGreaterThan(20);
+    for (let k = 0; k < 200; k++) if (given[k]!.state === 'given-up') expect(plots[k]!.x).toBeGreaterThan(0);
+    expect(count(at(1500, [{ ...flood, rebuilt: 'raised' }]), (x) => x.raised)).toBe(count(given, (x) => x.state === 'given-up'));
+    // once there is a law, whatever is built after it follows it, burned or not
+    const grown = at(1400, [], [1100, -1, -1]);
+    for (let k = 0; k < 200; k++) expect(grown[k]!.stone).toBe(plots[k]!.built > 1100);
+    // every scar can be said in a sentence, each differently
+    expect(new Set([fire, quake, flood, { ...flood, rebuilt: 'raised' as const }, { ...fire, rebuilt: '' as const }].map((s) => describeScar(s, 120))).size).toBe(5);
+  });
+
+  it('in five histories towns burn, fall and flood, and great fires make building laws that the country then builds by', () => {
+    // (the wonders test above dropped a meteor on each of these worlds and ran them on: that is part of their history now)
+    const runs = fiveHistories();
+    let fires = 0, laws = 0, stone = 0, kinds = new Set<string>();
+    for (const { sim } of runs) {
+      const ev = sim.events.events, h = sim.civ.h;
+      fires += ev.filter((e) => e.type === 'city-fire').length;
+      for (const e of ev) {
+        if (e.type !== 'building-law') continue;
+        laws++;
+        // a law is caused by the calamity that prompted it, at the town where it happened
+        const cause = ev[e.causes[0]!]!;
+        expect(cause.type).toMatch(/city-fire|city-quake|city-flood|tsunami|hurricane|earthquake|impact|eruption/);
+        expect(e.simYear).toBeGreaterThanOrEqual(cause.simYear);
+        const n = h.nations[Number(e.data!.nation)]!;
+        const code = n.codes![e.data!.kind as 'fire' | 'quake' | 'flood']!;
+        expect(code.eventId).toBe(e.id);
+        expect(code.year).toBe(e.simYear);
+      }
+      for (const st of sim.civ.settlements) {
+        const scars = st.scars ?? [];
+        expect(scars.length).toBeLessThanOrEqual(5);
+        for (let i = 0; i < scars.length; i++) {
+          const s = scars[i]!;
+          kinds.add(s.kind);
+          expect(CALAMITIES).toContain(s.kind);
+          expect(REBUILDS).toContain(s.rebuilt);
+          expect(s.share).toBeGreaterThan(0);
+          expect(s.share).toBeLessThanOrEqual(0.95);
+          if (i > 0) expect(s.year).toBeGreaterThanOrEqual(scars[i - 1]!.year);
+          if (s.eventId >= 0) expect(ev[s.eventId]!.simYear).toBeLessThanOrEqual(s.year + 1e-6);
+          if (s.rebuilt === 'stone') stone++;
+          // a town in a country with a fire law always builds again in stone after a fire
+          const n = st.nation >= 0 ? h.nations[st.nation] : undefined;
+          if (s.kind === 'fire' && n && n.id === st.nation && n.codes?.fire && n.codes.fire.year < s.year && st.ruined < 0 && s.year > (st.scars![0]!.year)) expect(['stone', '']).toContain(s.rebuilt);
+        }
+      }
+    }
+    expect(fires).toBeGreaterThan(20);
+    expect(laws).toBeGreaterThan(5);
+    expect(stone).toBeGreaterThan(5);
+    expect(kinds.size).toBeGreaterThanOrEqual(3);
   });
 });

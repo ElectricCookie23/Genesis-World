@@ -20,6 +20,7 @@ import { MAX_PLOTS, buildingSites, planCity, stageOf, watchable, type CityPlan, 
 import type { PlanetData } from './planetdata';
 import type { GroundSampler } from './ground';
 import { standing } from '../../sim/history/decay';
+import { CALAMITIES, REBUILDS, plotFate, rebuildYears, type Scar } from '../../sim/history/calamity';
 import { architectureOf, borrowFashion, builtTech, builtYear, fashionOf, materialOf, type Architecture, type Fashion } from './architecture';
 import type { SpeciesInfo, WonderInfo } from '../../shared/protocol';
 import { groundRadiusNode } from './terrain';
@@ -548,6 +549,8 @@ export class Towns {
       albedo = mix(albedo, vec3(0.06, 0.08, 0.1), glass.mul(0.85));
       // and one that decorates bands every floor of its walls in its own colour
       albedo = mix(albedo, vTint.mul(0.6).add(0.12), vStyle.z.mul(0.75).mul(step(0.86, fract(vUv.y))).mul(is(PART.wall).add(is(PART.windows))));
+      // a wreck (system E20) carries a negative age: it is all of one colour, the colour of what wrecked it (char, rubble, mud, ash)
+      albedo = mix(albedo, local.mul(fract(vData.y.mul(7.3)).mul(0.3).add(0.82)), step(vData.w, -0.5));
       const sunColor: N = mix(vec3(uLook.dusk), vec3(uLook.star), smoothstep(-0.05, 0.4, sunH));
       const sunVis = smoothstep(-0.08, 0.1, sunH).mul(cloudShadow(vBase)).mul(eclipseLight(vBase));
       const sky: N = mix(vec3(uHazeTint), vec3(0.6, 0.6, 0.6), 0.45).mul(0.4).mul(day).mul(dot(nW, up).mul(0.35).add(0.65));
@@ -576,6 +579,8 @@ export class Towns {
   readonly sites = new Map<number, { what: string; progress: number; years: number; stage: string }[]>();
   private lastYear = -1;
   private lastBuilt = 0;
+  /** Is any town in view a wreck or being built again after a calamity (system E20)? Then it is redrawn as the years pass. */
+  private mending = false;
 
   private byId = new Map<number, TownInfo>();
 
@@ -613,7 +618,7 @@ export class Towns {
   ground: GroundSampler | null = null;
 
   /** Plans of the towns drawn lately, by settlement id, each with the facts it was drawn from. */
-  private plans = new Map<number, { key: string; plan: CityPlan; checked: number; wet: Map<number, boolean>; sea: number }>();
+  private plans = new Map<number, { key: string; plan: CityPlan; checked: number; wet: Map<number, boolean>; sea: number; water: number }>();
   /** Where each town's wonders stand on its plan (system E19), by town and by how much the town is enlarged for the view. */
   private wonderSpots = new Map<number, { n: number; checked: number; sea: number; spots: WonderSpot[] }>();
   private wonderTowns: TownInfo[] = [];
@@ -762,7 +767,7 @@ export class Towns {
    * The plan of a town, from where it stands and what has happened to it: the roads lead toward its
    * neighbours, the shore is where the sea is, the land rises where it rises. Kept until those facts change.
    */
-  private planFor(st: TownInfo, c: Vector3, east: Vector3, north: Vector3, nat: Nation | undefined, cells: CellSnapshot, wade = 0): { plan: CityPlan; wet: Map<number, boolean> } {
+  private planFor(st: TownInfo, c: Vector3, east: Vector3, north: Vector3, nat: Nation | undefined, cells: CellSnapshot, wade = 0): { plan: CityPlan; wet: Map<number, boolean>; water: number } {
     // (the ground is read again every few seconds at most: a town is redrawn many times a second while its building
     // sites are being watched, and the shore does not move that fast)
     const now = performance.now();
@@ -824,7 +829,8 @@ export class Towns {
     const key = JSON.stringify(site);
     const have = this.plans.get(st.id);
     if (have && have.key === key && Math.abs(have.sea - cells.seaLevel) < 1e-4) { have.checked = now; return have; }
-    const made = { key, plan: planCity(site), checked: now, wet: new Map<number, boolean>(), sea: cells.seaLevel };
+    // (which way the water lies, for floods: toward the sea if there is one near, else downhill)
+    const made = { key, plan: planCity(site), checked: now, wet: new Map<number, boolean>(), sea: cells.seaLevel, water: coastal ? site.coast : site.uphill + Math.PI };
     if (this.plans.size > 96) this.plans.delete(this.plans.keys().next().value as number);
     this.plans.set(st.id, made);
     return made;
@@ -902,9 +908,12 @@ export class Towns {
     // are redrawn as the work advances, a dozen times a second at most
     const working = dist < 0.14 && yearsPerSecond <= 3.01;
     if (working && Math.abs(simYear - this.lastYear) > 0.0008 && wall - this.lastBuilt > 0.12) this.dirty = true;
+    // a town building itself again after a calamity changes over years, not days: watched at any speed, twice a second
+    if (this.mending && dist < 0.3 && Math.abs(simYear - this.lastYear) > 0.5 && wall - this.lastBuilt > 0.5) this.dirty = true;
     if (moved || this.dirty || this.lapse) {
       this.dirty = false;
       this.lastYear = simYear; this.lastBuilt = wall;
+      this.mending = false;
       this.sites.clear();
       this.lastFocus.copy(focus);
       this.lastDist = dist;
@@ -1083,6 +1092,19 @@ export class Towns {
           for (let q = 0; q < 3; q++) { const a = q * 2.1 + g.w.id; at(g.x + Math.cos(a) * g.r * 0.95, g.y + Math.sin(a) * g.r * 0.95); if (!wet()) this.put(era >= 0.85 ? 'crane' : 'hoist', up, 0, 0.001 * boost * (era >= 0.85 ? 1 : 0.85), hash(g.w.id * 13 + q), 0, era, tint, light, toward(a)); }
           shown.push({ what: g.w.name, progress: Math.max(0, progress), years: g.w.done - g.w.year, stage: stageOf(Math.max(0.01, progress)) });
         }
+        // ---- what calamities have done to it, and how it has built again (system E20)
+        const scars: Scar[] = [];
+        if (!left && st.scars) for (let i = 0; i + 4 < st.scars.length; i += 5) scars.push({ year: st.scars[i]!, kind: CALAMITIES[st.scars[i + 1]!] ?? 'fire', share: st.scars[i + 2]!, eventId: -1, rebuilt: REBUILDS[st.scars[i + 3]!] ?? '', toward: st.scars[i + 4]! >= 0 ? st.scars[i + 4]! : undefined });
+        const codes = !left && st.codes ? st.codes : null;
+        const marked = scars.length > 0 || !!codes;
+        let townR = 3;
+        if (marked) for (let k = 0; k < count; k++) { const r = Math.hypot(plan.plots[k]!.x, plan.plots[k]!.y); if (r > townR) townR = r; }
+        // (in a time-lapse the town's whole life goes by in seconds: its calamities come at their place in it and last long enough to see)
+        const lived = Math.max(1, nowYear - st.founded);
+        const yearShown = lapse < 1 ? st.founded + lived * lapse : nowYear;
+        const stretch = lapse < 1 ? Math.max(1, (0.07 * lived) / rebuildYears(st.tech)) : 1;
+        const bearingTo = (cell: number): number => { const dx = pos[cell * 3]! - c.x, dy = pos[cell * 3 + 1]! - c.y, dz = pos[cell * 3 + 2]! - c.z; return Math.atan2(dx * north.x + dy * north.y + dz * north.z, dx * east.x + dy * east.y + dz * east.z); };
+        const townWall = this.wallColour;
         for (let k = 0; k < count && total < this.budget; k++) {
           const plot = plan.plots[k]!;
           if (taken(plot.x, plot.y)) continue;
@@ -1093,20 +1115,43 @@ export class Towns {
           const drowned = wet();
           shallows = false;
           if (drowned) continue;
-          const kind = buildingFor(plot.district, plot.central, era, h3, arch ?? undefined);
+          const fate = marked ? plotFate(k, plot.x, plot.y, townR, lapse < 1 ? st.founded + lived * Math.sqrt(k / Math.max(1, full)) : builtYear(k, count, st.founded, nowYear), scars, codes ?? [-1, -1, -1], yearShown, st.tech, st.id, laid.water, bearingTo, stretch) : null;
+          let kind = buildingFor(plot.district, plot.central, era, h3, arch ?? undefined);
+          // (a town that has learned what an earthquake does builds nothing tall)
+          if (fate && fate.braced && (kind === 'tower' || kind === 'spire')) kind = 'hall';
           this.form = shapedForm;
-          const job = jobs.length ? jobs.find((j) => j.plot === k) : undefined;
+          if (fate && (fate.braced || fate.raised)) this.form = [shapedForm[0]! * (fate.braced ? 0.72 : 1), shapedForm[1]! * (fate.braced ? 1.12 : 1), fate.raised ? Math.max(shapedForm[2]!, 0.34) : shapedForm[2]!, shapedForm[3]!];
+          const job = !fate || fate.state === 'standing' ? (jobs.length ? jobs.find((j) => j.plot === k) : undefined) : undefined;
           // built in the fashion of its day, of the stuff its builders could then work (what is going up now is of today)
-          const look = fashionAt(job ? nowYear : builtYear(k, count, st.founded, nowYear));
-          const age = job ? era : Math.min(era, builtTech(k, count, era));
+          const look = fashionAt(job ? nowYear : fate ? fate.born : builtYear(k, count, st.founded, nowYear));
+          let age = job ? era : Math.min(era, builtTech(k, count, era));
+          // (stone and tile where the law, or the last fire, says so)
+          // (pale dressed stone under roofs of fired tile, all of one red: the quarter that burned shows from the air for centuries)
+          let roofTint = look.tint;
+          if (fate && fate.stone) { this.wallColour = [0.74 * 0.8 + townWall[0]! * 0.2, 0.71 * 0.8 + townWall[1]! * 0.2, 0.65 * 0.8 + townWall[2]! * 0.2]; age = Math.max(age, 0.58); roofTint = [0.95 * 0.8 + look.tint[0]! * 0.2, 0.4 * 0.8 + look.tint[1]! * 0.2, 0.26 * 0.8 + look.tint[2]! * 0.2]; }
           this.style = look.style;
           // towers and spires stand above the trees and the largest animals (on a real GPU, animals on the skyline were
           // as tall as tower blocks, and from low altitude the blocks read as pins)
           const sz = (kind === 'hut' ? 0.00028 : kind === 'house' ? 0.0004 : kind === 'hall' ? 0.00048 : 0.00064) * boost * (0.85 + 0.3 * h3) * (arch ? arch.scale : 1);
           // it faces its street
-          if (job) {
+          if (fate && (fate.state === 'wreck' || fate.state === 'given-up')) {
+            // what a calamity left: black stumps after a fire, heaps after an earthquake, mud to the eaves after a flood, grey mounds under ash
+            const gone = fate.state === 'given-up';
+            const [stump, shade] = fate.cause === 'fire' ? [0.3, [0.09, 0.08, 0.07]] : fate.cause === 'quake' ? [0.2, [0.42, 0.4, 0.37]] : fate.cause === 'flood' ? [0.7, [0.34, 0.29, 0.21]] : [0.3, [0.5, 0.49, 0.48]];
+            this.wallColour = gone ? shade.map((v, i) => v * 0.6 + [0.16, 0.22, 0.13][i]! * 0.4) : shade;
+            this.put(kind, up, 0, sz, h2, -Math.max(0.06, (gone ? 0.45 : 1) * stump * (0.5 + hash(st.id * 31 + k * 13))), -1, this.wallColour, light, toward(plot.yaw));
+            if (!gone) this.mending = true;
+          } else if (fate && fate.state === 'rebuilding') {
+            const progress = Math.max(0.04, fate.progress);
+            this.put(kind, up, 0, sz, h2, -progress, age, roofTint, light, toward(plot.yaw));
+            at(plot.x, plot.y);
+            this.style = ownStyle;
+            if (dist < 0.14) raise(kind, sz, h2, progress, plot.yaw, plot.x, plot.y);
+            if (shown.length < 6) shown.push({ what: `a ${kind} again after the ${fate.cause === 'quake' ? 'earthquake' : fate.cause === 'ash' ? 'ashfall' : fate.cause}${fate.stone ? ', in stone' : fate.braced ? ', low and braced' : fate.raised ? ', on posts' : ''}`, progress, years: Math.round(rebuildYears(st.tech) * 0.3), stage: stageOf(progress) });
+            this.mending = true;
+          } else if (job) {
             const progress = Math.max(0.04, job.progress);
-            this.put(kind, up, 0, sz, h2, -progress, age, look.tint, light, toward(plot.yaw));
+            this.put(kind, up, 0, sz, h2, -progress, age, roofTint, light, toward(plot.yaw));
             at(plot.x, plot.y);
             this.style = ownStyle;
             raise(kind, sz, h2, progress, plot.yaw, plot.x, plot.y);
@@ -1114,8 +1159,9 @@ export class Towns {
           } else if (left) {
             // what still stands of it: some buildings are gone altogether, the rest are broken off at some height
             if (h3 * 0.999 < left.share) this.put(kind, up, 0, sz, h2, -Math.max(0.08, left.height * (0.55 + 0.9 * hash(st.id * 31 + k * 13))), Math.min(age, 0.55), mossy, light, toward(plot.yaw));
-          } else this.put(kind, up, 0, sz, h2, lit, age, look.tint, light, toward(plot.yaw));
+          } else this.put(kind, up, 0, sz, h2, lit, age, roofTint, light, toward(plot.yaw));
           this.style = ownStyle;
+          this.wallColour = townWall;
           total++;
         }
         this.form = plain;
