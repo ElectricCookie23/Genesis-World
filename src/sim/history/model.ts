@@ -162,6 +162,8 @@ export interface Nation {
   golden?: { since: number; eventId: number; own: string; works: number };
   /** The year its last golden age ended. */
   goldenEnded?: number;
+  /** The year its forests were recorded as cut (system E16). */
+  felled?: number;
   /** The year of its last great migration (system E9). */
   moved?: number;
   /** The count of years it keeps (an index into the history's calendars). */
@@ -196,6 +198,8 @@ export interface HistoryState {
   peacePop?: number;
   /** The year the leading nation reached the top of knowledge, or -1. */
   topSince?: number;
+  /** The first dam, the first mine and the first felling of a nation's forests anywhere (system E16): the events that recorded them. */
+  firstWorks?: { dam?: number; mine?: number; felled?: number };
   /** What has been built between towns (system E15): roads, aqueducts, canals, railways, wires, pipelines, power lines. */
   links?: Link[];
   /** The first of each kind of network anywhere: the event that recorded it, or undefined. */

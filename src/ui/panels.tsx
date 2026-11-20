@@ -857,6 +857,7 @@ export function Peoples() {
               <div class={css.what} style={{ color: '#ece7db' }}>{st.name}</div>
               <div class={css.when} style={{ color: '#ece7db' }}>A {kind(st.tech)} of {bigNumber(st.pop * 1000)} {sp ? sp.name : 'people'}, founded {formatYear(st.founded).toLowerCase()}.</div>
               {(() => { const how = st.tech >= 0.22 ? actions.architecture(st) : ''; return how ? <div class={css.when} style={{ color: '#cfc9bd' }}>{how}</div> : null; })()}
+              {(st.dam || st.mine) && <div class={css.when} style={{ color: '#cfc9bd' }}>{st.dam && st.mine ? 'It has dammed its river and mines the hills above it.' : st.dam ? 'It has dammed its river: a lake stands above the town.' : 'It works a mine in the hills above it.'}</div>}
               {st.relic && <div class={css.when} style={{ color: '#d8b98a' }}>Its {st.relic} were built with a forgotten technique: no one here can make more.</div>}
               {actions.construction(st.id).map((j, i) => (
                 <div key={i} class={css.when} style={{ color: '#ece7db', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>

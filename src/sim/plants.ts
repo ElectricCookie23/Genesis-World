@@ -51,6 +51,11 @@ export function landSuitability(genes: Float32Array, temp: number, moisture: num
   return sw * Math.exp(-d * d) * cold;
 }
 
+/** Plant cover where a share `cut` of the wild cover has been cleared: what is left of it, plus the crops, pasture and scrub that replace it. */
+export function clearedCover(wild: number, cut: number): number {
+  return wild * (1 - 0.8 * cut) + 0.22 * cut;
+}
+
 export class Plants {
   species: PlantSpecies[] = [];
   living = 0;
@@ -401,9 +406,13 @@ export class Plants {
       }
       const scorch = 1 - Math.min(1, ash[i]! * 1.2);
       const target = Math.min(1, v) * scorch;
-      vegetation[i] = target;
+      // where people have cleared the land (system E16) the wild cover is mostly gone: crops, pasture and scrub
+      // stand in its place, and no trees
+      const cut = world.cleared[i]!;
+      vegetation[i] = clearedCover(target, cut);
       // after a fire, low growth returns before the canopy does
-      canopy[i] = v > 0 ? (h / v) * scorch * scorch : 0;
+      canopy[i] = (v > 0 ? (h / v) * scorch * scorch : 0) * (1 - cut);
+      world.clearedApplied[i] = cut;
       flora[i] = best;
     }
   }

@@ -16,6 +16,7 @@ import { Log } from './history/celllog';
 import { eraOf, eraSlot, eraTitle, earthNote } from './history/eras';
 import { hash32 } from './history/hash';
 import { capital, compound, makeLanguage, personName, placeMeanings, soundChange, splitLanguage, word, type Language } from './history/language';
+import { clearedCover } from './plants';
 import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role } from './history/model';
 import { SLOT_INDEX, WEB, borrowable, chooseNext, copyKnowledge, forget, levelOf, newKnowledge, shed, wayFor, type Land, type Leaning } from './history/tech';
 
@@ -47,6 +48,9 @@ export interface Settlement {
   relic: number;
   /** Founded by settlers who came across the sea. */
   overseas?: boolean;
+  /** Where it has dammed a river, and where it mines (cells), once it has (system E16). */
+  dam?: number;
+  mine?: number;
   /** The walls it has built (system E11): how many people it held and what it knew each time it was threatened and walled itself in. */
   walls?: { pop: number; tech: number; year: number }[];
   /** Great works raised here in golden ages (system E10). */
@@ -198,6 +202,7 @@ export class Civilization {
     this.tend(sim, tau);
     this.paint(sim);
     this.glow(sim);
+    this.clear(sim);
   }
 
   // ------------------------------------------------------------------ history (every simulation step)
@@ -229,6 +234,7 @@ export class Civilization {
     this.census();
     this.paint(sim);
     this.glow(sim);
+    this.clear(sim);
   }
 
   /** One tick of history, `y` years long, ending in year `year`. */
@@ -286,6 +292,8 @@ export class Civilization {
       }
       // ---- how well it holds together, and what happens when it does not (system E4)
       if (this.fate(sim, rng, n, towns, y, year)) continue;
+      // ---- what it does to the land (system E16)
+      this.works(sim, rng, n, towns, y, year);
       // ---- what is built between its towns (system E15)
       this.network(sim, rng, n, towns, y, year);
       // ---- golden ages begin, raise their monuments and end (system E10)
@@ -1433,6 +1441,79 @@ export class Civilization {
     walls.push({ pop: st.pop, tech: st.tech, year });
   }
 
+  /** False switches off every change people make to the land (system E16): used to measure what those changes do. */
+  landUse = true;
+
+  /**
+   * Landscape change (system E16). A nation with water mills dams the rivers by its towns; one that smelts and has
+   * ore in its hills opens mines; and one whose towns stand in forest fells it. Each is recorded: the first dam and
+   * the first mine anywhere, and for every nation the time its forests went.
+   */
+  private works(sim: Simulation, rng: RNG, n: Nation, towns: Settlement[], y: number, year: number): void {
+    const h = this.h, w = sim.world, g = sim.grid;
+    const knows = (id: string) => n.know.way[SLOT_INDEX.get(id)!]! >= 0;
+    const firsts = (h.firstWorks ??= {});
+    // dams
+    if (knows('mill1') && rng.chance(1 - Math.exp(-y / 90))) {
+      const st = towns[rng.int(towns.length)]!;
+      if (st.dam === undefined && st.tech > 0.45) {
+        let site = -1, most = 3;
+        for (let j = 0; j < g.ncount[st.cell]!; j++) { const nb = g.neighbors[st.cell * 6 + j]!; if (w.elevation[nb]! > w.seaLevel && w.elevation[nb]! >= w.elevation[st.cell]! && w.flow[nb]! > most) { most = w.flow[nb]!; site = nb; } }
+        if (site >= 0) {
+          st.dam = site;
+          const first = firsts.dam === undefined;
+          const ev = sim.emit({
+            type: 'landscape', year, cellId: site, title: first ? 'The first dam' : `A dam above ${st.name}`,
+            description: first
+              ? `Above ${st.name} the people of ${n.name} have closed the valley with a wall of earth and stone. The river stops, spreads and becomes a lake, and below it the mills turn all year.`
+              : `${n.name} has dammed the river above ${st.name}. A lake stands where there were meadows.`,
+            causes: [st.eventId, n.eventId].filter((x) => x >= 0), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, settlement: st.id, work: 'dam' },
+          });
+          if (first && ev.id >= 0) firsts.dam = ev.id;
+          this.credit(sim, rng, n, ev.id, 'It is the work of {name}.', 'inventor', year);
+        }
+      }
+    }
+    // mines
+    if (knows('edge') && n.land.includes('ore') && rng.chance(1 - Math.exp(-y / 70))) {
+      const st = towns[rng.int(towns.length)]!;
+      if (st.mine === undefined) {
+        let site = -1, top = w.elevation[st.cell]! + 0.05;
+        for (let j = 0; j < g.ncount[st.cell]!; j++) { const nb = g.neighbors[st.cell * 6 + j]!; if (w.elevation[nb]! > top) { top = w.elevation[nb]!; site = nb; } }
+        if (site >= 0) {
+          st.mine = site;
+          const first = firsts.mine === undefined;
+          const ev = sim.emit({
+            type: 'landscape', year, cellId: site, title: first ? 'The first mine' : `A mine in the hills of ${st.name}`,
+            description: first
+              ? `In the hills above ${st.name} they no longer gather ore from the surface. They follow the vein into the rock, and a grey scar of broken stone spreads down the slope below the adit.`
+              : `${n.name} has opened a mine above ${st.name}. The hillside below it is bare spoil.`,
+            causes: [st.eventId, n.eventId].filter((x) => x >= 0), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, settlement: st.id, work: 'mine' },
+          });
+          if (first && ev.id >= 0) firsts.mine = ev.id;
+          this.credit(sim, rng, n, ev.id, 'The first to go underground was {name}.', 'explorer', year);
+        }
+      }
+    }
+    // the felling of the forests: when most of its towns that stand in forest country have grown past villages
+    if (n.felled === undefined && towns.length >= 4) {
+      let wooded = 0, cut = 0;
+      for (const st of towns) if (sim.plants.canopy[st.region]! > 0.4) { wooded++; if (st.tech > 0.45) cut++; }
+      if (wooded >= 3 && cut >= wooded * 0.6) {
+        n.felled = year;
+        const first = firsts.felled === undefined;
+        const cap = this.settlements[n.capital]!;
+        const ev = sim.emit({
+          type: 'landscape', year, cellId: cap.cell, title: first ? 'The forests fall' : `The forests of ${n.name} are cut`,
+          description: `Round the towns of ${n.name} the woods have gone for fields, beams and charcoal, a ring at a time, and the rings have met. Where the trees stood the ground dries sooner after rain, and the rain itself comes a little less often.`,
+          causes: [n.eventId].filter((x) => x >= 0), importance: first ? 2 : 1, speciesIds: [n.species], data: { nation: n.id, work: 'felling', towns: cut },
+        });
+        if (first && ev.id >= 0) firsts.felled = ev.id;
+        this.credit(sim, null, n, ev.id, 'It was done by the reign of {name}.');
+      }
+    }
+  }
+
   /** Towns reached by a railway or a wire, as of the last look (system E15). */
   private wired = new Set<number>();
 
@@ -1516,6 +1597,23 @@ export class Civilization {
     // which of its towns the capital now reaches quickly
     for (const st of towns) this.wired.delete(st.id);
     for (const l of list) if (l.kind === 3 || l.kind === 4) { if (this.settlements[l.a]!.nation === n.id) this.wired.add(l.a); if (this.settlements[l.b]!.nation === n.id) this.wired.add(l.b); }
+  }
+
+  /**
+   * A change in what is cleared shows at once (system E16): the plant cover of a cell is recomputed for its new
+   * clearing from what it would be wild, without waiting for the plants' own next step. (That step applies the
+   * clearing itself and notes that it has.)
+   */
+  private clear(sim: Simulation): void {
+    const { cleared, clearedApplied: applied, vegetation, canopy } = sim.world;
+    for (let i = 0; i < cleared.length; i++) {
+      const c = cleared[i]!, a = applied[i]!;
+      if (c === a) continue;
+      const wild = Math.max(0, Math.min(1, (vegetation[i]! - 0.22 * a) / (1 - 0.8 * a)));
+      vegetation[i] = clearedCover(wild, c);
+      canopy[i] = a < 0.999 ? (canopy[i]! / (1 - a)) * (1 - c) : 0;
+      applied[i] = c;
+    }
   }
 
   /** The networks show at night (system E15): lamps along the roads and canals, the fires of engines, the glare under power lines. */
@@ -2166,9 +2264,39 @@ export class Civilization {
     const { lights, fields, elevation, seaLevel } = sim.world;
     lights.fill(0);
     fields.fill(0);
+    const cleared = sim.world.cleared, flow = sim.world.flow;
+    cleared.fill(0);
     const g = sim.grid, reg = sim.regions;
     for (const st of this.settlements) {
       if (st.ruined >= 0) continue;
+      // ---- the land a town uses (system E16): its fields, the woods it cuts beyond them, its mine and its dam
+      if (st.farms && this.landUse) {
+        const far = st.tech > 0.3, further = st.pop > 60 && st.tech > 0.45;
+        // (a late age plants as it cuts: its outer woods are thinned, not felled)
+        const outer = st.tech > 1.05 ? 0.22 : 0.45;
+        for (let j = 0; j < g.ncount[st.cell]!; j++) {
+          const nb = g.neighbors[st.cell * 6 + j]!;
+          if (elevation[nb]! <= seaLevel) continue;
+          cleared[nb] = 1;
+          if (!far) continue;
+          for (let k = 0; k < g.ncount[nb]!; k++) {
+            const n2 = g.neighbors[nb * 6 + k]!;
+            if (elevation[n2]! <= seaLevel) continue;
+            cleared[n2] = Math.max(cleared[n2]!, st.tech > 0.7 ? 1 : 0.5);
+            if (further) for (let m = 0; m < g.ncount[n2]!; m++) { const n3 = g.neighbors[n2 * 6 + m]!; if (elevation[n3]! > seaLevel) cleared[n3] = Math.max(cleared[n3]!, outer); }
+          }
+        }
+        cleared[st.cell] = 1;
+        if (st.mine !== undefined && elevation[st.mine]! > seaLevel) { cleared[st.mine] = 1; lights[st.mine] = Math.max(lights[st.mine]!, st.tech > 0.85 ? 0.12 : 0.04); }
+        // a dam holds a lake behind it: the river stands wide at the dam and for a way upstream
+        const dam: number = st.dam ?? -1;
+        if (dam >= 0 && elevation[dam]! > seaLevel) {
+          flow[dam] = Math.max(flow[dam]!, 34);
+          let above = -1, most = 0;
+          for (let j = 0; j < g.ncount[dam]!; j++) { const cell: number = g.neighbors[dam * 6 + j]!; if (sim.world.downhill[cell] === dam && flow[cell]! > most) { most = flow[cell]!; above = cell; } }
+          if (above >= 0) flow[above] = Math.max(flow[above]!, 24);
+        }
+      }
       const glow = Math.min(1, 0.12 + st.tech * 0.9);
       lights[st.cell] = Math.max(lights[st.cell]!, glow);
       for (let j = 0; j < g.ncount[st.cell]!; j++) {
