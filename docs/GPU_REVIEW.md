@@ -13,6 +13,34 @@ This is the second version. The first was cut short by a flat battery; this one 
 - Roughly 60 of about 230 captures were looked at. Each finding names the files it rests on; the rest are listed at the end.
 - For part of the second run the machine's owner was also using the same browser window, so the Genesis tab may have been in the background at times. The frame-rate table was finished before that; the creature captures after it were checked to be in a visible tab.
 
+## Motion review, first pass (2026-11-21)
+
+The first time anything was judged across consecutive frames instead of single stills. WebGPU, High, bundle `index-C8xtQ58C.js`, seed `amber-reef-101` at the dawn + 100,000 y, simulation running at 1x. Each sequence is 8 or 12 frames tiled into one strip, with the mean pixel change between neighbouring frames (0 to 255, measured on a 200 x 125 copy) as a rough motion figure. Files: `docs/screenshots/gpu/motion-webgpu-*.jpg`. Six strips were looked at.
+
+**This pass half failed on camera placement**: in dense forest the ground camera ends up inside tree crowns, and two tracked animals were not in frame. What it did show:
+
+| Sequence | Camera | Change per frame | What the strip shows |
+|---|---|---|---|
+| Fly-down, orbit to forest floor, 12 steps of 0.55 s | `(1.619, 0.414)`, dist 2.6 to 0.012, tilt -0.4 | 17 to 69 | **Works well.** Every step has its content: continents, then tree pictures, then real conifers by dist 0.08, with nothing missing or half-loaded. Step 2 (dist 1.4) shows the far trees on one landmass as a **regular grid of dots**, an obvious pattern. From dist 0.05 down the camera is inside the canopy and the frame is filled with flat frond cards and a featureless brown trunk. |
+| Shore, camera still, 8 frames over 2 s | a coastal town from above | 1.1 to 1.3 | **The waterline does not move.** Across two seconds the foam line and the water are identical; nothing laps the beach. The same strip shows the town from above: **streets are broken grey strips with gaps**, ending in mid-air, and one building is an open scaffold frame (under construction). |
+| Town at night, camera still | largest town, dist 0.02 | 0.7 to 0.8 | Static, as expected. Not looked at. |
+| Inside a tree crown, camera still, 180 ms apart | forest, dist 0.004 | 15 to 27 | **Leaves thrash.** Large flat leaf cards are in a completely different place in every frame; from frame to frame the crown is unrecognisable. Either the wind sway is far too large and fast close up, or leaves near the camera swing through it. |
+| Forest, camera still, 180 ms apart | forest, dist 0.012 | 6 to 10 | Camera inside a crown again: frond cards shift visibly between frames but far less than above. |
+| Clouds from the ground, 1.5 s apart | looking up | 14 to 16 | Not looked at. |
+| An animal walking, tracked from the side | *Rhyia grandis*, 0.5 m | 15 to 20 | **Not judged**: the animal is hidden behind conifer fronds; only its legs show at the top of the frame. |
+| A swimmer under water | largest swimmer in view | 2 to 43 | **A one-frame flash.** Seven frames show a flat grey seabed; frame 5 is a solid dark blue rectangle, then the seabed returns (change figure jumps to 42 for two frames). The swimmer itself is not in frame; small blue fish specks appear at the top edge. |
+
+**Findings to act on**
+
+1. Waves do not move at the shoreline.
+2. A single-frame full-screen colour flash under water.
+3. Leaf motion close to the camera is violent.
+4. Nothing stops the camera entering tree crowns, and from inside one the picture is abstract flat shapes; this is the default view at ground level in any dense forest.
+5. The dot-grid pattern of far trees from about dist 1.4.
+6. Streets drawn as disconnected strips.
+
+Gait, foot sliding, wing and fin motion and popping are still unjudged; a second pass with open-ground placement is queued.
+
 ## Check of commit f958025 (2026-11-21)
 
 Newest green deploy when testing began: game code `f958025` (it contains `996a702`; `b91e127` on top is docs only). The page served `assets/index-C8xtQ58C.js` throughout. WebGPU, High, seed `amber-reef-101`, mains power. Plain warp to the dawn (stopped at **69.53 My** this time; 59.03 My on the previous build), `through: true` for 100,000 years (367 living towns, 42 realms), then on to 200 My (931 towns, 67 realms). A second short run used `&neighbor=basalt-vale-202`. Files start `retest9-`. Seven files are cited and all seven were looked at; about 20 were captured. Console, main run: `x2 Failed to load resource: the server responded with a status of 404 ()`, `x23 Max polyphony exceeded. Note dropped.` Linked run: one 404.
