@@ -1,12 +1,67 @@
 // The star system panel (expansion section 10): the planets around this star, the star's age, the stars that ships
 // have been sent to, and what has come back. Drawn as plain SVG so it costs a phone nothing.
-import { update, useStore } from './store';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import { actions, update, useStore } from './store';
 import { formatYear, hsl, shortYear } from './format';
 import { LIFE_STAGES, MAP_H, MAP_W, type CosmosInfo, type Report } from '../sim/cosmos';
 import css from './ui.module.css';
 
 const KIND = { rock: 'a bare rocky world', giant: 'a gas giant', ice: 'an ice world' } as const;
 const MAP_COLOURS = ['#1c3f63', '#8a7a55', '#e9eef2', '#5f5446'];
+
+/**
+ * One sign of a people's writing in lights: strokes between the points of a three by three grid, chosen by the
+ * number the simulation made from the word. The same word is always the same sign.
+ */
+const STROKES: [number, number, number, number][] = [
+  [0, 0, 1, 0], [1, 0, 2, 0], [0, 1, 1, 1], [1, 1, 2, 1], [0, 2, 1, 2], [1, 2, 2, 2],
+  [0, 0, 0, 1], [0, 1, 0, 2], [1, 0, 1, 1], [1, 1, 1, 2], [2, 0, 2, 1], [2, 1, 2, 2],
+];
+export function Glyphs({ signs, size = 14, colour = '#ffd9a0', perRow = 10 }: { signs: number[]; size?: number; colour?: string; perRow?: number }) {
+  const step = size * 1.45, line = size + 6;
+  const cols = Math.min(perRow, signs.length), rows = Math.ceil(signs.length / perRow);
+  return (
+    <svg width={cols * step} height={rows * line} viewBox={`0 0 ${cols * step} ${rows * line}`} style={{ display: 'block', maxWidth: '100%', margin: '0 auto 0 0', filter: `drop-shadow(0 0 3px ${colour})` }} role="img" aria-label="A message written in lights">
+      {signs.map((g, k) => {
+        // every sign has at least two strokes
+        const bits = g | (1 << (g % 12)) | (1 << ((g >> 4) % 12));
+        const ox = (k % perRow) * step + 2, oy = Math.floor(k / perRow) * line + 2;
+        return STROKES.map(([x0, y0, x1, y1], i) => ((bits >> i) & 1 ? <line key={`${k}-${i}`} x1={ox + x0 * size / 2} y1={oy + y0 * size / 2} x2={ox + x1 * size / 2} y2={oy + y1 * size / 2} stroke={colour} stroke-width="1.4" stroke-linecap="round" /> : null));
+      })}
+    </svg>
+  );
+}
+
+/** A message that has just been written, held over the town whose lights spell it. */
+export function SkyMessage() {
+  const s = useStore();
+  const ref = useRef<HTMLDivElement>(null);
+  const m = s.skyMessage ? s.skyMessages[s.skyMessage.id] : undefined;
+  useEffect(() => {
+    if (!m) return;
+    let raf = 0;
+    const dir = actions.cellDir(m.cell);
+    const tick = () => {
+      const el = ref.current;
+      if (el) {
+        const [x, y, vis] = actions.project(dir[0], dir[1], dir[2]);
+        el.style.opacity = String(Math.max(0.0, vis));
+        el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -115%)`;
+      }
+      if (s.skyMessage && performance.now() > s.skyMessage.until) update({ skyMessage: null });
+      else raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  });
+  if (!m) return null;
+  return (
+    <div ref={ref} style={{ position: 'absolute', left: 0, top: 0, opacity: 0, pointerEvents: 'auto', cursor: 'pointer', textAlign: 'center', maxWidth: '300px' }} onClick={() => update({ panel: 'system', skyMessage: null })} title="A message written in lights. Click to read it.">
+      <div style={{ display: 'inline-block' }}><Glyphs signs={m.glyphs} size={13} perRow={8} /></div>
+      <div class={css.sub} style={{ marginTop: '3px' }}>{m.town} is writing to you</div>
+    </div>
+  );
+}
 
 /** Planets on their orbits, turning by CSS alone. Distances are squeezed so the outer worlds fit. */
 function Orrery({ c }: { c: CosmosInfo }) {
@@ -84,6 +139,7 @@ function WorldPicture({ r }: { r: Report }) {
 export function System() {
   const s = useStore();
   const c = s.cosmos;
+  const [open, setOpen] = useState(-1);
   const year = s.stats?.simYear ?? 0;
   if (!c) return null;
   const toComet = c.nextComet - year;
@@ -125,6 +181,33 @@ export function System() {
             );
           })}
         </div>
+        {s.skyMessages.length > 0 && (
+          <div class={css.goal}>
+            <div class={css.goalTitle}><b>Written to you, in lights</b></div>
+            {[...s.skyMessages].reverse().map((m) => (
+              <div key={m.id} style={{ marginTop: '8px' }}>
+                <Glyphs signs={m.glyphs} size={11} />
+                <div style={{ marginTop: '4px' }}>"{m.text}"</div>
+                <div class={css.sub}>{m.town}, {formatYear(m.year)}</div>
+                <button class={css.link} onClick={() => update({ whyEvent: m.eventId, panel: 'none' })}>what is this about?</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {s.archives.length > 0 && (
+          <div class={css.goal}>
+            <div class={css.goalTitle}><b>Left behind</b><span class={css.sub}>{s.archives.length === 1 ? 'one archive' : `${s.archives.length} archives`}</span></div>
+            {[...s.archives].reverse().slice(0, 12).map((a) => (
+              <div key={a.id} style={{ marginTop: '6px' }}>
+                <div>{a.people}: {a.kind === 'orbital monument' ? `a monument in orbit above ${a.place}` : a.kind === 'vault' ? `the vault under ${a.place}` : `a record buried near ${a.place}`}</div>
+                <div class={css.sub}>sealed {formatYear(a.year)}{a.foundBy >= 0 ? `; opened ${formatYear(a.foundYear)} by a later people` : '; no one has found it'}</div>
+                <button class={css.link} onClick={() => setOpen(open === a.id ? -1 : a.id)}>{open === a.id ? 'close it' : 'open it'}</button>
+                {a.foundEvent >= 0 && <button class={css.link} onClick={() => update({ whyEvent: a.foundEvent, panel: 'none' })}>who found it?</button>}
+                {open === a.id && a.lines.map((line, i) => <p key={i} class={css.sub} style={{ margin: '5px 0 0' }}>{line}</p>)}
+              </div>
+            ))}
+          </div>
+        )}
         {c.reports.length > 0 && (
           <div class={css.goal}>
             <div class={css.goalTitle}><b>Word from beyond</b></div>

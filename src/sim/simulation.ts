@@ -16,6 +16,7 @@ import { placeName } from './names';
 import { Civilization } from './civilization';
 import { CellLog, Log } from './history/celllog';
 import { Cosmos, MAP_H, MAP_W } from './cosmos';
+import { Legacy } from './legacy';
 
 /** Sim years covered by one full ecological step (one tick at Epoch speed). */
 export const ECO_YEARS = 15000;
@@ -86,6 +87,8 @@ export class Simulation {
   cometNext = 0;
   /** The rest of the star system, and what reaches the planet from outside it (expansion section 10). */
   cosmos: Cosmos;
+  /** Messages written to the watcher, and the archives peoples leave behind (expansion E99, E100). */
+  legacy: Legacy;
   private cometLast = -1;
   private cometName = '';
   private convergentNoted = new Set<string>();
@@ -159,6 +162,7 @@ export class Simulation {
     this.cometNext = this.cometPeriod * this.lifeRng.range(0.4, 1);
     this.cometName = placeName(this.nameRng);
     this.cosmos = new Cosmos(this.rng.fork('cosmos'), this.cometPeriod);
+    this.legacy = new Legacy(this.rng.fork('legacy'));
     this.lifeYear = this.lifeRng.range(0.35e6, 0.9e6);
     this.algaeDelay = this.lifeRng.range(1.2e6, 3e6);
     this.animalDelay = this.lifeRng.range(5e6, 10e6);
@@ -254,6 +258,7 @@ export class Simulation {
     this.updateEras(dt);
     this.geologyEvents(dt);
     this.cosmos.step(this, dt);
+    this.legacy.step(this);
     // continents drift: slow enough that it only shows at high time speeds
     this.driftAcc += dt;
     if (this.driftAcc >= 2e6) {
@@ -1080,7 +1085,7 @@ export class Simulation {
 
   /** Nudge every random stream, so that a copy of this world takes a different road from here on. */
   diverge(): void {
-    for (let i = 0; i < 7; i++) { this.rng.next(); this.lifeRng.next(); this.civRng.next(); this.nameRng.next(); this.cosmos.rng.next(); }
+    for (let i = 0; i < 7; i++) { this.rng.next(); this.lifeRng.next(); this.civRng.next(); this.nameRng.next(); this.cosmos.rng.next(); this.legacy.rng.next(); }
   }
 
   /** A per-cell layer for the overlays: how many kinds of animal live here, or how much oxygen is being made here. 0..1. */

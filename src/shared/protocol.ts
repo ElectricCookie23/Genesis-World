@@ -1,6 +1,7 @@
 // Message protocol between the simulation worker and the main thread.
 import type { SimEvent } from '../sim/events';
 import type { CosmosInfo } from '../sim/cosmos';
+import type { Archive, ObserverMessage } from '../sim/legacy';
 
 export const SPEEDS = [
   { key: 'pause', label: 'Pause', yearsPerSecond: 0 },
@@ -290,6 +291,6 @@ export type FromWorker =
   | { type: 'dynasty'; detail: DynastyDetail }
   | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[] }
   | { type: 'timeline'; points: TimelinePoint[] }
-  | { type: 'cosmos'; cosmos: CosmosInfo }
+  | { type: 'cosmos'; cosmos: CosmosInfo; messages: ObserverMessage[]; archives: Archive[] }
   | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }
   | { type: 'error'; message: string };

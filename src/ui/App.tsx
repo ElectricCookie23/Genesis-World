@@ -1,7 +1,7 @@
 import { SPEEDS } from '../shared/protocol';
 import { actions, togglePanel, useStore } from './store';
 import { GoalMarker, Goals } from './goals';
-import { System } from './system';
+import { SkyMessage, System } from './system';
 import { bigNumber, formatYear } from './format';
 import { DynastyPanel } from './dynasty';
 import { Chronicle, CreatureCard, CrossSection, Designer, FlatMap, GodTools, Graphs, Guide, Futures, Help, NationLabels, NationPanel, Num, Peoples, Settings, SpeciesCard, TimelineStrip, Tree, Why } from './panels';
@@ -23,6 +23,7 @@ export function App() {
   return (
     <div class={css.root}>
       {!s.opening && s.overlay === 'nations' && <NationLabels />}
+      {!s.opening && s.skyMessage && !hidden && <SkyMessage />}
       {!s.opening && (
         <div class={`${css.fade} ${hidden ? css.hidden : ''}`}>
           <div class={css.topRow}>

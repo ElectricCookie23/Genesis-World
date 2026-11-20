@@ -5,6 +5,7 @@ import type { DynastyDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo
 import type { Nation } from '../render/gfx/nations';
 import type { GoalRecord, GoalState } from '../game/goals';
 import type { CosmosInfo } from '../sim/cosmos';
+import type { Archive, ObserverMessage } from '../sim/legacy';
 
 export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'goals' | 'system';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
@@ -84,6 +85,10 @@ export interface UIState {
   goalTracked: string;
   /** The star system and what has come from or gone beyond it. */
   cosmos: CosmosInfo | null;
+  /** What peoples have written to the watcher, the archives they left, and the message being shown over the globe just now. */
+  skyMessages: ObserverMessage[];
+  archives: Archive[];
+  skyMessage: { id: number; until: number } | null;
 }
 
 export interface SlotInfo { slot: number; name: string; seed: string; simYear: number; savedAt: number; }
@@ -140,6 +145,9 @@ export const state: UIState = {
   goalsDone: {},
   goalTracked: '',
   cosmos: null,
+  skyMessages: [],
+  archives: [],
+  skyMessage: null,
 };
 
 const listeners = new Set<() => void>();
@@ -214,6 +222,8 @@ export const actions = {
   fork: () => {},
   /** Screen position of a direction on the globe: [x, y, visible 0..1]. */
   project: (_x: number, _y: number, _z: number): [number, number, number] => [0, 0, 0],
+  /** Direction of a cell on the globe. */
+  cellDir: (_cell: number): [number, number, number] => [0, 1, 0],
   /** The planet's disc on screen: centre x, y and radius in pixels. */
   disc: (): [number, number, number] => [0, 0, 1e9],
 };
