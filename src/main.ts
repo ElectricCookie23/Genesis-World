@@ -248,6 +248,7 @@ async function boot(): Promise<void> {
   actions.project = (x, y, z) => scene.projectDir(x, y, z);
   actions.disc = () => scene.discOnScreen();
   actions.construction = (id) => scene.construction(id);
+  actions.cellDir = (cell) => { const p = grid.pos; return [p[cell * 3]!, p[cell * 3 + 1]!, p[cell * 3 + 2]!]; };
   actions.timelapse = (id, cell) => { actions.flyToCell(cell, 0.045); update({ panel: 'none' }); window.setTimeout(() => scene.timelapse(id), 1800); };
   actions.openDynasty = (id) => { update({ panel: 'dynasty', dynastyDetail: state.dynastyDetail?.id === id ? state.dynastyDetail : null }); send({ type: 'requestDynasty', id }); };
   actions.openNation = (id) => { update({ panel: 'nation', nationDetail: state.nationDetail?.id === id ? state.nationDetail : null }); send({ type: 'requestNation', id }); };
@@ -700,9 +701,12 @@ async function boot(): Promise<void> {
         scene.setFossils(fossilCells(), state.overlay === 'fossils');
         update({});
         break;
-      case 'cosmos':
-        update({ cosmos: msg.cosmos });
+      case 'cosmos': {
+        // a message that has just been written is held over the globe for a while (not the ones a loaded world already had)
+        const fresh = state.cosmos && msg.messages.length > state.skyMessages.length ? { id: msg.messages.length - 1, until: performance.now() + 60000 } : state.skyMessage;
+        update({ cosmos: msg.cosmos, skyMessages: msg.messages, archives: msg.archives, skyMessage: fresh && fresh.until > performance.now() ? fresh : null });
         break;
+      }
       case 'settlements':
         scene.setSettlements(msg.settlements, msg.nations);
         update({ settlements: msg.settlements, realms: msg.nations ?? state.realms });

@@ -352,7 +352,7 @@ function tick(): void {
     lastCells = now;
   }
   // the rest of the star system changes slowly: told about now and then
-  if (now - lastCosmos > 1500) { lastCosmos = now; post({ type: 'cosmos', cosmos: s.cosmos.info(s) }); }
+  if (now - lastCosmos > 1500) { lastCosmos = now; post({ type: 'cosmos', cosmos: s.cosmos.info(s), messages: s.legacy.messages, archives: s.legacy.archives }); }
   if (now - lastStats > 100) {
     post({ type: 'stats', stats: stats(s) });
     lastStats = now;
