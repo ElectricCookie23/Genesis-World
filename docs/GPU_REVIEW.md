@@ -1,5 +1,7 @@
 # Genesis on a real GPU: review
 
+> **Pre-merge checks are possible (2026-11-21).** The review Mac can build any branch or commit locally and run the same GPU checks against it before it reaches `main` or the live site. Proven once: `origin/main` built in about 6 s, loaded on WebGPU at High with an empty console. To use it, push the work to a branch and ask for a check of that branch by name.
+
 Observations only. Nothing under `src/` was changed. Screenshots are in `docs/screenshots/gpu/`.
 
 This is the second version. The first was cut short by a flat battery; this one adds frame rates on mains power, a clean WebGL2 pass, a proper look at creatures, and corrects the first version's account of the black ground (C3).
