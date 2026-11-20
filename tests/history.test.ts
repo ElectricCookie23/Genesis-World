@@ -1089,3 +1089,93 @@ describe('infrastructure networks (E15)', () => {
     expect(NETWORKS.filter((n) => n.sea).map((n) => n.id)).toEqual(['wire', 'power']);
   });
 });
+
+import { updateMoisture } from '../src/sim/climate';
+import { clearedCover } from '../src/sim/plants';
+
+describe('farmland and landscape change (E16)', () => {
+  it('cutting a forest measurably lowers the rainfall where it stood', () => {
+    const sim = atDawn(0)!;
+    const w = sim.world, g = sim.grid;
+    // the most wooded land in this world: the forty cells with the thickest cover
+    const land: number[] = [];
+    for (let i = 0; i < g.count; i++) if (w.elevation[i]! > w.seaLevel && w.cleared[i] === 0) land.push(i);
+    sim.plants.paint(w, sim.climate);
+    land.sort((p, q) => w.vegetation[q]! * (0.3 + w.canopy[q]!) - w.vegetation[p]! * (0.3 + w.canopy[p]!));
+    const block = land.slice(0, 40);
+    expect(block.length).toBe(40);
+    const mean = (layer: Float32Array) => block.reduce((a, c) => a + layer[c]!, 0) / block.length;
+    // the rain as it is, with the forest standing
+    sim.plants.paint(w, sim.climate);
+    updateMoisture(w, sim.climate, 8);
+    const rainBefore = mean(w.moisture), coverBefore = mean(w.vegetation), treesBefore = mean(w.canopy);
+    expect(coverBefore).toBeGreaterThan(0.2);
+    // fell it
+    for (const c of block) w.cleared[c] = 1;
+    sim.plants.paint(w, sim.climate);
+    updateMoisture(w, sim.climate, 8);
+    const rainAfter = mean(w.moisture), coverAfter = mean(w.vegetation);
+    expect(coverAfter).toBeLessThan(coverBefore * 0.75);
+    expect(mean(w.canopy)).toBe(0);
+    expect(treesBefore).toBeGreaterThan(0);
+    // less rain where the trees stood: by a measurable amount
+    expect(rainBefore - rainAfter).toBeGreaterThan(0.008);
+    expect(rainAfter).toBeLessThan(rainBefore * 0.985);
+    // and it comes back when the land is left alone
+    for (const c of block) w.cleared[c] = 0;
+    sim.plants.paint(w, sim.climate);
+    updateMoisture(w, sim.climate, 8);
+    expect(mean(w.moisture)).toBeGreaterThan(rainAfter + 0.006);
+  }, 300000);
+
+  it('towns clear the land round them, dam rivers, open mines, and the chronicle records it', () => {
+    expect(clearedCover(0.8, 0)).toBeCloseTo(0.8);
+    expect(clearedCover(0.8, 1)).toBeCloseTo(0.38);
+    expect(clearedCover(0, 1)).toBeCloseTo(0.22);
+    const runs = fiveHistories();
+    let dams = 0, mines = 0, fellings = 0, clearedCells = 0;
+    for (const r of runs) {
+      const w = r.sim.world, ev = r.sim.events.events, civ = r.sim.civ;
+      for (let i = 0; i < w.cleared.length; i++) {
+        const c = w.cleared[i]!;
+        expect(c).toBeGreaterThanOrEqual(0); expect(c).toBeLessThanOrEqual(1);
+        // what the cells show is what the clearing says, exactly once
+        expect(w.clearedApplied[i]).toBe(c);
+        expect(w.vegetation[i]!).toBeGreaterThanOrEqual(0); expect(w.vegetation[i]!).toBeLessThanOrEqual(1.0001);
+        if (c > 0) { clearedCells++; expect(w.elevation[i]!).toBeGreaterThan(w.seaLevel); }
+        if (c === 1) expect(w.canopy[i]).toBe(0);
+      }
+      // every living farming town has cleared the land at its door
+      for (const st of civ.settlements) {
+        if (st.ruined >= 0 || !st.farms) continue;
+        expect(w.cleared[st.cell]).toBe(1);
+        if (st.dam !== undefined) { dams++; expect(w.flow[st.dam]!).toBeGreaterThanOrEqual(34); }
+        if (st.mine !== undefined) { mines++; expect(w.cleared[st.mine]).toBe(1); expect(w.elevation[st.mine]!).toBeGreaterThan(w.elevation[st.cell]!); }
+      }
+      for (const e of ev.filter((x) => x.type === 'landscape')) {
+        expect(['dam', 'mine', 'felling']).toContain(e.data!.work);
+        expect(e.causes.length).toBeGreaterThan(0);
+        if (e.data!.work === 'felling') { fellings++; expect(e.description).toMatch(/rain itself comes a little less often/); expect(civ.h.nations[Number(e.data!.nation)]!.felled).toBe(e.simYear); }
+      }
+      const first = civ.h.firstWorks ?? {};
+      for (const id of [first.dam, first.mine, first.felled]) if (id !== undefined) expect(ev[id]!.importance).toBe(2);
+    }
+    expect(clearedCells).toBeGreaterThan(200);
+    expect(dams).toBeGreaterThan(3);
+    expect(mines).toBeGreaterThan(3);
+    expect(fellings).toBeGreaterThan(0);
+    // left alone, the land goes back: with land use switched off the next step restores the wild cover
+    const sim = runs[0]!.sim;
+    const town = sim.civ.settlements.find((s) => s.ruined < 0 && s.farms)!;
+    const was = sim.world.vegetation[town.cell]!;
+    sim.civ.landUse = false;
+    sim.step(1);
+    expect(sim.world.cleared[town.cell]).toBe(0);
+    expect(sim.world.clearedApplied[town.cell]).toBe(0);
+    expect(sim.world.vegetation[town.cell]!).not.toBe(was);
+    sim.civ.landUse = true;
+    sim.step(1);
+    expect(sim.world.cleared[town.cell]).toBe(1);
+    expect(sim.world.vegetation[town.cell]!).toBeCloseTo(was, 4);
+  }, 900000);
+});

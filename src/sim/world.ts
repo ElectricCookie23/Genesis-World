@@ -215,6 +215,10 @@ export interface World {
   /** 0..1: how worn the ground is by herds that migrate across it, year after year. */
   trail: Float32Array;
   fields: Float32Array; // 0..1 farmland
+  /** 0..1: how much of the wild cover people have cleared here for fields, timber and mines (system E16). */
+  cleared: Float32Array;
+  /** The clearing already counted in `vegetation` and `canopy`, so that a change can be applied at once and only once. */
+  clearedApplied: Float32Array;
   reef: Float32Array; // 0..1 living coral, negative when bleached
   bloom: Float32Array; // 0..1 plankton in the water
   canopy: Float32Array; // 0..1 height of the plant canopy
@@ -247,6 +251,8 @@ export function createWorld(grid: Grid): World {
     lights: new Float32Array(c),
     trail: new Float32Array(c),
     fields: new Float32Array(c),
+    cleared: new Float32Array(c),
+    clearedApplied: new Float32Array(c),
     reef: new Float32Array(c),
     bloom: new Float32Array(c),
     canopy: new Float32Array(c),

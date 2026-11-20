@@ -141,6 +141,9 @@ export interface SettlementInfo {
   walls?: number[];
   /** Founded by settlers who came by sea. */
   overseas?: boolean;
+  /** Has dammed a river; works a mine (system E16). */
+  dam?: boolean;
+  mine?: boolean;
   /** What joins it to other towns (system E15), as pairs: the other town's id and the kind of network (0 road, 1 aqueduct, 2 canal, 3 railway, 4 telegraph, 5 pipeline, 6 power line). */
   links?: number[];
   farms?: boolean;
