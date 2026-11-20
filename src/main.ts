@@ -715,7 +715,7 @@ async function boot(): Promise<void> {
         update({});
         break;
       case 'cosmos': {
-        // a message that has just been written is held over the globe for a while (not the ones a loaded world already had)
+        // a message that has just been sent to the stars is held over the globe for a while (not the ones a loaded world already had)
         const fresh = state.cosmos && msg.messages.length > state.skyMessages.length ? { id: msg.messages.length - 1, until: performance.now() + 60000 } : state.skyMessage;
         scene.setMimics(msg.strange.mimics);
         update({ cosmos: msg.cosmos, strange: msg.strange, future: msg.future, industry: msg.industry, link: msg.link ?? null, skyMessages: msg.messages, archives: msg.archives, skyMessage: fresh && fresh.until > performance.now() ? fresh : null });
@@ -813,7 +813,7 @@ async function boot(): Promise<void> {
     if (state.creature) refreshCreature(on);
   };
   scene.cam.onTap = (x, y, double) => {
-    if (!state.godTool) {
+    if (!state.tool) {
       const ind = scene.pickCreature(x, y);
       const info = ind ? state.species.get(ind.species) : undefined;
       if (ind && info) {
@@ -824,16 +824,16 @@ async function boot(): Promise<void> {
         return;
       }
     }
-    if (state.godTool && !state.handsOff) {
+    if (state.tool && !state.handsOff) {
       const hit = scene.pick(x, y);
       if (hit) {
-        const genes = state.godTool === 'species' ? Array.from({ length: GENE_COUNT }, (_, i) => state.design[i] ?? 0.3) : undefined;
-        send({ type: 'god', tool: state.godTool, cell: scene.cellAt(hit.x, hit.y, hit.z), power: 0.8, genes });
-        update({ godTool: '', panel: 'none' });
+        const genes = state.tool === 'species' ? Array.from({ length: GENE_COUNT }, (_, i) => state.design[i] ?? 0.3) : undefined;
+        send({ type: 'tool', tool: state.tool, cell: scene.cellAt(hit.x, hit.y, hit.z), power: 0.8, genes });
+        update({ tool: '', panel: 'none' });
       }
     }
   };
-  scene.cam.onLongPress = () => update({ panel: 'god' });
+  scene.cam.onLongPress = () => update({ panel: 'tools' });
 
   // the UI hides itself after 4 seconds without input
   let lastActivity = performance.now();
@@ -854,7 +854,7 @@ async function boot(): Promise<void> {
     else if (k === 'h') update({ uiHidden: !state.uiHidden });
     else if (k === 'c') togglePanel('chronicle');
     else if (k === 't') togglePanel('tree');
-    else if (k === 'g') togglePanel('god');
+    else if (k === 'g') togglePanel('tools');
     else if (k === 'j') togglePanel('goals');
     else if (k === 's') togglePanel('system');
     else if (k === 'n') togglePanel('microscope');

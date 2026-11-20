@@ -861,9 +861,9 @@ describe('migrations of peoples (E9)', () => {
     for (let y = 0; y < 3000; y++) sim.step(1);
     const before = sim.events.events.length;
     const town = sim.civ.settlements.find((s) => s.ruined < 0)!;
-    for (let k = 0; k < times; k++) sim.god(tool, town.cell);
+    for (let k = 0; k < times; k++) sim.intervene(tool, town.cell);
     // (the act itself, not whatever followed it in the same breath: a town may make it the story it tells of itself)
-    const strike = sim.godEvents[sim.godEvents.length - 1]!;
+    const strike = sim.interventions[sim.interventions.length - 1]!;
     for (let y = 0; y < 2500; y += 10) sim.step(10);
     return { sim, strike, before };
   }

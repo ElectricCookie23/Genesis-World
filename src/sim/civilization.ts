@@ -604,10 +604,10 @@ export class Civilization {
 
   /** The event in the cause graph that explains why a people is on the move. */
   private pushCause(sim: Simulation, why: string, n: Nation): number {
-    const byHand = (type: string): number => { for (let i = sim.godEvents.length - 1; i >= 0; i--) { const e = sim.events.events[sim.godEvents[i]!]; if (e && e.type === type && sim.simYear - e.simYear < 60000) return e.id; } return -1; };
+    const byHand = (type: string): number => { for (let i = sim.interventions.length - 1; i >= 0; i--) { const e = sim.events.events[sim.interventions[i]!]; if (e && e.type === type && sim.simYear - e.simYear < 60000) return e.id; } return -1; };
     const era = sim.era.eventId;
-    if (why === 'ice') { const g = byHand('god-iceage'); return g >= 0 ? g : sim.era.kind === 'ice' || sim.era.kind === 'winter' ? era : sim.rootClimateCause(); }
-    if (why === 'sea') { const g = byHand('god-flood'); return g >= 0 ? g : sim.seaCause >= 0 ? sim.seaCause : era >= 0 ? era : sim.rootClimateCause(); }
+    if (why === 'ice') { const g = byHand('tool-iceage'); return g >= 0 ? g : sim.era.kind === 'ice' || sim.era.kind === 'winter' ? era : sim.rootClimateCause(); }
+    if (why === 'sea') { const g = byHand('tool-flood'); return g >= 0 ? g : sim.seaCause >= 0 ? sim.seaCause : era >= 0 ? era : sim.rootClimateCause(); }
     return n.woes.length ? n.woes[n.woes.length - 1]!.eventId : era;
   }
 

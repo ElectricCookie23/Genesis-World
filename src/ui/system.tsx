@@ -34,7 +34,7 @@ export function Glyphs({ signs, size = 14, colour = '#ffd9a0', perRow = 10 }: { 
   );
 }
 
-/** A message that has just been written, held over the town whose lights spell it. */
+/** A message that has just been sent to the stars, held over the town that sent it. */
 export function SkyMessage() {
   const s = useStore();
   const ref = useRef<HTMLDivElement>(null);
@@ -58,9 +58,9 @@ export function SkyMessage() {
   });
   if (!m) return null;
   return (
-    <div ref={ref} style={{ position: 'absolute', left: 0, top: 0, opacity: 0, pointerEvents: 'auto', cursor: 'pointer', textAlign: 'center', maxWidth: '300px' }} onClick={() => update({ panel: 'system', skyMessage: null })} title="A message written in lights. Click to read it.">
+    <div ref={ref} style={{ position: 'absolute', left: 0, top: 0, opacity: 0, pointerEvents: 'auto', cursor: 'pointer', textAlign: 'center', maxWidth: '300px' }} onClick={() => update({ panel: 'system', skyMessage: null })} title="A message sent to the stars. Click to read it.">
       <div style={{ display: 'inline-block' }}><Glyphs signs={m.glyphs} size={13} perRow={8} /></div>
-      <div class={css.sub} style={{ marginTop: '3px' }}>{m.town} is writing to you</div>
+      <div class={css.sub} style={{ marginTop: '3px' }}>{m.town} is sending this to the stars</div>
     </div>
   );
 }
@@ -274,13 +274,13 @@ export function System() {
         </div>
         {s.skyMessages.length > 0 && (
           <div class={css.goal}>
-            <div class={css.goalTitle}><b>Written to you, in lights</b></div>
+            <div class={css.goalTitle}><b>Sent to the stars</b></div>
             {[...s.skyMessages].reverse().map((m) => (
               <div key={m.id} style={{ marginTop: '8px' }}>
                 <Glyphs signs={m.glyphs} size={11} />
                 <div style={{ marginTop: '4px' }}>"{m.text}"</div>
-                <div class={css.sub}>{m.town}, {formatYear(m.year)}</div>
-                <button class={css.link} onClick={() => update({ whyEvent: m.eventId, panel: 'none' })}>what is this about?</button>
+                <div class={css.sub}>{m.town}, {formatYear(m.year)}. It passes {m.toward} {m.years.toLocaleString('en-US')} years after it was sent.</div>
+                <button class={css.link} onClick={() => update({ whyEvent: m.eventId, panel: 'none' })}>who sent it?</button>
               </div>
             ))}
           </div>

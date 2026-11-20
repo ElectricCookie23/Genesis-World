@@ -68,7 +68,7 @@ Quality presets (Settings): Low, Medium, High and Ultra. High is the default on 
 | 1 to 6 | Speed: pause, 1x, 10x, 100x, 1000x, Epoch |
 | C | Chronicle |
 | T | Tree of life |
-| G | God tools |
+| G | Experiments |
 | M | Flat map (click it to fly there) |
 | X | Cross-section of the ground under the view |
 | O | Overlays: temperature, rain, life, people, fossils, nations (the Night Map) |
@@ -85,8 +85,8 @@ Quality presets (Settings): Low, Medium, High and Ultra. High is the default on 
 - **The tree of life (T) and field guide.** Every named species as a glowing branch, a card for each living one, and a memorial for those that are gone.
 - **Down on the ground.** Trees, shrubs, grass and mushrooms grow from the genes of the local plants; creatures are built from their genomes. Hunters chase, herds bolt, night animals sleep by day, the young of some species look nothing like their parents.
 - **The Night Map.** Press O until the overlay reads nations, or use the Peoples panel: borders, names and emblems of every nation, each lit in its own colour, with roads and sea lanes between its towns.
-- **Peoples.** In some worlds a lineage grows clever. Then come fire, cave paintings of real animals, villages, farms, tamed herds, faiths founded on real eclipses and eruptions, cities whose lights show from orbit, wars, ships, and sometimes a space age and a departure. In other worlds nobody ever lights a fire.
-- **God tools (G).** Meteor, lightning, plague, raise mountains, flood, ice age, heat wave, gene ray, shield dome, monolith, summon a comet, tilt the axis, rain of life, shatter the moon into a ring, or design a species and set it down. Use them often enough and the villagers build temples that face the sky. Hands-off mode locks them all.
+- **Peoples.** In some worlds a lineage grows clever. Then come fire, cave paintings of real animals, villages, farms, tamed herds, stories told about real eclipses and eruptions, cities whose lights show from orbit, wars, ships, and sometimes a space age and a departure. In other worlds nobody ever lights a fire.
+- **Experiments (G).** Change one thing and watch what follows. The tools are grouped by what they change. Astronomical: a meteor, a comet, a rogue planet, a gamma-ray burst, break up the moon, tilt the axis. Geological: raise mountains, flip the magnetic poles. Environmental: cool or warm the world, raise the sea, start a wildfire, shelter one region as a control. Ecological: a disease outbreak, seed life. Genetic: radiation, a test of wits, or design a species, release it and see whether it lasts. Every change is written into the chronicle with its effects. Hands-off mode locks them all.
 - **Keepsakes.** Photo filters and PNG export, video recording, a printable illustrated history of your planet, ten save slots, rewind points at every great event, and a seed link that replays the same world.
 
 ## How it works

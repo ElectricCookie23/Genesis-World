@@ -1,4 +1,4 @@
-// Messages to the observer (E99) and the last archive (E100).
+// A message to the stars (E99) and the last archive (E100).
 import { describe, expect, it } from 'vitest';
 import { Simulation } from '../src/sim/simulation';
 import { buildGrid } from '../src/sim/world';
@@ -87,64 +87,79 @@ describe('E100 the last archive', () => {
   });
 });
 
-describe('E99 messages to the observer', () => {
-  it('answers what the player really did, once a people has lights to write with', () => {
+describe('E99 a message to the stars', () => {
+  it('is sent once by a people with radio, and says only what is true of their world', () => {
     const sim = fresh();
     const cell = land(sim, 20);
     const st = town(sim, 1, cell, 0.9, 'Zohan');
+    town(sim, 1, land(sim, 60), 0.5, 'Oske');
     sim.step(200);
-    expect(sim.legacy.messages.length).toBe(0); // nothing has been done to them
-    sim.god('mountain', cell);
-    const deed = sim.godEvents[sim.godEvents.length - 1]!;
-    sim.step(5);
-    expect(sim.legacy.messages.length).toBe(0); // not the same season
-    sim.step(40);
+    expect(sim.legacy.messages.length).toBe(0); // no transmitter yet
+    st.tech = 1.02;
+    sim.step(1);
     expect(sim.legacy.messages.length).toBe(1);
     const m = sim.legacy.messages[0]!;
-    expect(m.about).toBe(deed);
     expect(m.town).toBe('Zohan');
-    expect(m.text.toLowerCase()).toMatch(/mountain|lifted/);
+    expect(m.text).toContain('in two towns');
+    expect(m.text).toContain(`around the star we call ${sim.cosmos.starName}`);
+    const inner = sim.cosmos.bodies.filter((b) => b.au < sim.cosmos.au).length;
+    expect(m.text).toContain(['first', 'second', 'third', 'fourth', 'fifth'][inner]!);
+    expect(m.text).toContain('It has one moon.');
     expect(m.glyphs.length).toBe(m.text.split(' ').length);
+    // it is aimed at no one: the nearest star is only where it passes first
+    const near = sim.cosmos.stars.reduce((a, b) => (b.ly < a.ly ? b : a));
+    expect(m.toward).toBe(near.name);
+    expect(m.years).toBeCloseTo(near.ly, 1);
     const ev = sim.events.events[m.eventId]!;
-    expect(ev.type).toBe('observer-message');
-    expect(ev.causes).toEqual(expect.arrayContaining([deed, st.eventId]));
+    expect(ev.type).toBe('star-message');
+    expect(ev.causes).toContain(st.eventId);
     expect(ev.description).toContain(m.text);
-    // the same deed is never answered twice; a new one is, later
+    expect(ev.description).toContain('addressed to no one');
+    // a people sends once, whatever is done to its world afterwards; another people sends its own
+    sim.intervene('mountain', cell);
     sim.step(5000);
     expect(sim.legacy.messages.length).toBe(1);
-    sim.god('flood', cell);
-    sim.step(5000);
+    town(sim, 2, land(sim, 200), 1.1, 'Morrow');
+    sim.step(1);
     expect(sim.legacy.messages.length).toBe(2);
-    expect(sim.legacy.messages[1]!.text.toLowerCase()).toMatch(/sea|flood/);
+    expect(sim.legacy.messages[1]!.text).toContain('in one town');
   });
 
-  it('says nothing about what happened before anyone was there to remember it, or without lights to write with', () => {
+  it('tells of a ring once the moon is gone', () => {
     const sim = fresh();
     const cell = land(sim, 20);
-    sim.god('mountain', cell);
-    sim.step(1000);
-    const st = town(sim, 1, cell, 0.5, 'Oske');
-    sim.step(1000);
-    expect(sim.legacy.messages.length).toBe(0);
-    sim.god('heat', cell);
-    sim.step(1000);
-    expect(sim.legacy.messages.length).toBe(0); // a village of tech 0.5 cannot be read from above
-    st.tech = 0.9;
+    sim.intervene('shatter', cell);
+    town(sim, 1, cell, 1.05, 'Zohan');
+    sim.step(1);
+    expect(sim.legacy.messages[0]!.text).toContain('a ring where its moon used to be');
+  });
+
+  it('is carried in a save, and a save from before reads without the old messages', () => {
+    const sim = fresh();
+    const cell = land(sim, 20);
+    town(sim, 1, cell, 1.05, 'Zohan');
+    sim.intervene('tilt', cell);
     sim.step(100);
     expect(sim.legacy.messages.length).toBe(1);
-    expect(sim.legacy.messages[0]!.text.toLowerCase()).toMatch(/air|summer/);
-  });
-
-  it('is carried in a save', () => {
-    const sim = fresh();
-    const cell = land(sim, 20);
-    town(sim, 1, cell, 0.9, 'Zohan');
-    sim.god('tilt', cell);
-    sim.step(100);
+    const save = saveSimulation(sim);
     const back = new Simulation('amber-reef-101', N, grid);
-    loadSimulation(back, saveSimulation(sim));
+    loadSimulation(back, save);
     expect(back.legacy.messages).toEqual(sim.legacy.messages);
+    expect(back.interventions).toEqual(sim.interventions);
     back.step(5000); sim.step(5000);
-    expect(back.legacy.messages.length).toBe(sim.legacy.messages.length);
+    expect(back.legacy.messages.length).toBe(1);
+    // an old save: the tools under their old names, and a message of the old kind
+    const old = structuredClone(save) as unknown as { data: Record<string, unknown> };
+    const data = old.data as { interventions?: number[]; godEvents?: number[]; events: { __nested: { events: { type: string; title: string; description: string }[] } }; legacy: { __nested: { messages: Record<string, unknown>[] } } };
+    data.godEvents = data.interventions; delete data.interventions;
+    for (const e of data.events.__nested.events) if (e.type.startsWith('tool-')) e.type = `god-${e.type.slice(5)}`;
+    data.legacy.__nested.messages.push({ id: 1, year: 5, town: 'Zohan', cell, species: 1, glyphs: [1], text: 'old', about: 3, eventId: 0 });
+    const again = new Simulation('amber-reef-101', N, grid);
+    loadSimulation(again, old as never);
+    expect(again.interventions).toEqual(sim.interventions.slice(0, again.interventions.length));
+    expect(again.interventions.length).toBeGreaterThan(0);
+    expect(again.events.events.some((e) => e.type.startsWith('god-'))).toBe(false);
+    expect(again.events.events.some((e) => e.type === 'tool-tilt')).toBe(true);
+    expect(again.legacy.messages.length).toBe(1);
   });
 });

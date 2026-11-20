@@ -12,7 +12,7 @@ const line = (tag: string) => console.log(`${tag}: +${Math.round(sim.simYear - b
 line('before');
 if (tool !== 'none') {
   const cap = sim.civ.settlements.find((s) => s.ruined < 0)!;
-  sim.god(tool, cap.cell);
+  sim.intervene(tool, cap.cell);
   console.log(`called down: ${sim.events.events[sim.events.events.length - 1]!.title}`);
 }
 for (let y = 0, k = 0; y < Number(after); y += 20, k++) { sim.step(20); if (k % 50 === 49) line('  then'); }

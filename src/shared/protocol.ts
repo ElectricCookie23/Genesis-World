@@ -1,7 +1,7 @@
 // Message protocol between the simulation worker and the main thread.
 import type { SimEvent } from '../sim/events';
 import type { CosmosInfo } from '../sim/cosmos';
-import type { Archive, ObserverMessage } from '../sim/legacy';
+import type { Archive, StarMessage } from '../sim/legacy';
 import type { LinkInfo } from '../sim/link';
 import type { StrangeInfo } from '../sim/strange';
 import type { FutureInfo } from '../sim/future';
@@ -323,7 +323,7 @@ export type ToWorker =
   | { type: 'speed'; index: number }
   | { type: 'focus'; x: number; y: number; z: number; altitude: number }
   | { type: 'requestCells' }
-  | { type: 'god'; tool: string; cell: number; power?: number; genes?: number[] }
+  | { type: 'tool'; tool: string; cell: number; power?: number; genes?: number[] }
   | { type: 'settings'; slowOnEvents?: boolean }
   | { type: 'save'; name: string; slot: string }
   | { type: 'rewind'; index: number }
@@ -353,6 +353,6 @@ export type FromWorker =
   | { type: 'site'; detail: SiteDetail }
   | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[] }
   | { type: 'timeline'; points: TimelinePoint[] }
-  | { type: 'cosmos'; cosmos: CosmosInfo; messages: ObserverMessage[]; archives: Archive[]; link?: LinkInfo; strange: StrangeInfo; future: FutureInfo; industry: IndustryInfo }
+  | { type: 'cosmos'; cosmos: CosmosInfo; messages: StarMessage[]; archives: Archive[]; link?: LinkInfo; strange: StrangeInfo; future: FutureInfo; industry: IndustryInfo }
   | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }
   | { type: 'error'; message: string };

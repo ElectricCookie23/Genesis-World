@@ -5,13 +5,13 @@ import type { DynastyDetail, SiteDetail, NationDetail, NationInfo, PlantInfo, Se
 import type { Nation } from '../render/gfx/nations';
 import type { GoalRecord, GoalState } from '../game/goals';
 import type { CosmosInfo } from '../sim/cosmos';
-import type { Archive, ObserverMessage } from '../sim/legacy';
+import type { Archive, StarMessage } from '../sim/legacy';
 import type { LinkInfo } from '../sim/link';
 import type { StrangeInfo } from '../sim/strange';
 import type { FutureInfo } from '../sim/future';
 import type { IndustryInfo } from '../sim/industry';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'god' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'goals' | 'system' | 'microscope';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'goals' | 'system' | 'microscope';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
 
 /** One person in an individual's family tree; key is set when that relative is drawn in the world and can be selected. */
@@ -46,7 +46,7 @@ export interface UIState {
   creature: { key: number; species: number; name: string; age: string; action: string; following: boolean } | null;
   milestone: SimEvent | null;
   notice: string;
-  godTool: string;
+  tool: string;
   slowOnEvents: boolean;
   hintStep: number;
   mobile: boolean;
@@ -75,7 +75,7 @@ export interface UIState {
   earthNotes: boolean;
   /** An age has just begun somewhere for the first time: shown as a banner for a few seconds. */
   eraBanner: { title: string; nation: string; own: string; earth: string; year: number } | null;
-  /** When on, god tools are locked and the world runs untouched. */
+  /** When on, the experiment tools are locked and the world runs untouched. */
   handsOff: boolean;
   /** Documentary director: the camera flies to whatever just happened. */
   director: boolean;
@@ -91,8 +91,8 @@ export interface UIState {
   goalTracked: string;
   /** The star system and what has come from or gone beyond it. */
   cosmos: CosmosInfo | null;
-  /** What peoples have written to the watcher, the archives they left, and the message being shown over the globe just now. */
-  skyMessages: ObserverMessage[];
+  /** What peoples have sent to the stars, the archives they left, and the message being shown over the globe just now. */
+  skyMessages: StarMessage[];
   archives: Archive[];
   skyMessage: { id: number; until: number } | null;
   /** The linked second world, if there is one. */
@@ -131,7 +131,7 @@ export const state: UIState = {
   creature: null,
   milestone: null,
   notice: '',
-  godTool: '',
+  tool: '',
   slowOnEvents: true,
   hintStep: 0,
   mobile: false,
