@@ -236,7 +236,33 @@ Averages hide stutter, so this measures every frame. WebGPU, High, bundle `index
 
 **Suggestions (untested):** spread a snapshot's work over several frames instead of one (update a slice of the planet's textures per frame, or only what changed); do the packing in the worker and hand over ready-to-upload buffers; skip updates for layers that are not on screen at the current zoom; and cap frame pacing to an even 60 or 40 so the remaining variation is not seen as stumble.
 
-## Open question: script time on WebGPU
+## Answer to the script-time question: 5 MB of vertex data is re-uploaded every frame (added 2026-11-21)
+
+A JavaScript CPU profile and a count of every `GPUQueue.writeBuffer` call, on WebGPU, High, `&noadapt`, bundle `index-DP-gr_s8.js`, world at dawn + 100,000 y (681 towns), pixel ratio 1.5, simulation paused unless stated. Raw profiles are on the review Mac (`tool/out/trace-webgpu-*.cpuprofile`).
+
+| View | Frame | Script share of the main thread | Time inside `writeBuffer` | `writeBuffer` calls per frame | Data uploaded per frame |
+|---|---|---|---|---|---|
+| Orbit | 17.7 ms (56 fps) | 89%, 15.8 ms per frame | 77.5% of the thread; 14.2 ms per frame | 217 | **4.99 MB** |
+| Forest ground | 23.3 ms (43 fps) | 92%, 21.6 ms | 81.5%; 19.6 ms per frame | 224 | **5.14 MB** |
+| Forest ground, sim at 1x | 23.0 ms | 92%, 21.3 ms | 65.0% | not counted | not counted |
+
+1. **Every frame the page uploads about 5 MB in about 220 buffer writes, and the main thread spends 14 to 20 ms inside those calls.** That is the "script time" asked about below. It is the same from orbit, where no plant, animal or building is on screen.
+2. **Whole buffers are written, at their full allocated size, every frame.** The largest per frame: 3 writes of 480,000 bytes, 2 of 432,000, 1 of 640,000, 2 of 216,000, 4 of 108,000, 6 of 54,000, 9 of 27,200. In every case the write size equals the buffer size. These are instance-attribute buffers sized for the preset's budgets (for example 40,000 plants at 12 bytes), uploaded in full whether 40,000 instances are in use or none.
+3. **The call path** is the post-processing pipeline's render → scene render → each object's `updateBefore` → `updateAttributes` → `writeBuffer`: attributes flagged as changed on every frame.
+4. The time is not spread evenly: one of the first large writes takes about 11 ms by itself (a 432 kB write from orbit, a 480 kB write on the ground) and the rest take fractions of a millisecond. So most of it is the first write of the frame waiting on the GPU, as guessed below; but it waits *because* there is a write to make, and the 5 MB is real work for the driver either way.
+5. With the simulation running, two more costs appear on the same thread: `fill` (repacking world data into cube-map textures, `fill(e,t,n,r,i)` in the planet-data code) at 80 ms per second and `writeTexture` at 70 ms per second. Those are the hitches measured in the stutter section.
+
+**What to change (untested, but each is standard):**
+
+- Do not mark instance attributes as changed when nothing moved. From orbit, and whenever the camera and the instances are still, nothing needs uploading.
+- When something did change, upload only the used range (three.js `addUpdateRange` on the attribute, or `count` times the stride) instead of the whole allocation. A forest view uses a few hundred to a few thousand instances of a 40,000-instance buffer.
+- Skip the upload entirely for meshes whose instance count is zero.
+- For the per-frame animated ones (animals), write one packed buffer per mesh, not one write per attribute.
+- Move the cube-map repacking (`fill`) into the simulation worker and transfer the finished arrays, and spread texture uploads over several frames.
+
+If the uploads go, the main thread at orbit drops from about 16 ms of script per frame to about 2, which should also remove most of the difference between WebGPU and WebGL2 seen in the tables above.
+
+## Open question: script time on WebGPU (answered above)
 
 I timed `scene.frame()` itself. From orbit it takes about 3 ms on both backends. At ground level on WebGPU it takes 17 to 21 ms (out of a 20 to 24 ms frame), where WebGL2 takes 2 to 3 ms in the same views. On WebGPU it:
 
