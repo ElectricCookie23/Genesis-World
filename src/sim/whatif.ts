@@ -219,7 +219,13 @@ export class Counterfactual {
 
   state(): WhatIfState {
     const wa = outcome(this.a), wb = outcome(this.b);
-    return { change: this.change, from: this.from, to: this.to, progress: this.progress, done: this.done, with: wa, without: wb, differences: this.done ? differences(wa, wb) : [], spread: this.spread };
+    const diffs = this.done ? differences(wa, wb) : [];
+    // a difference that came and went is still an answer: say so, or "the same" would hide it
+    if (this.done && this.spread.length) {
+      const peak = this.spread.reduce((m, x) => (x.share > m.share ? x : m)), last = this.spread[this.spread.length - 1]!;
+      if (peak.share > 0.02 && last.share < peak.share * 0.3) diffs.unshift(`The two worlds did differ for a time: across ${Math.round(peak.share * 100)}% of the planet at most, ${Math.round(peak.year - Math.max(this.from, this.change.year)).toLocaleString('en-US')} years after the change. Most of that has since faded.`);
+    }
+    return { change: this.change, from: this.from, to: this.to, progress: this.progress, done: this.done, with: wa, without: wb, differences: diffs, spread: this.spread };
   }
 
   /** Each copy's surface as one byte a cell: the biome, or 255 for open water. */

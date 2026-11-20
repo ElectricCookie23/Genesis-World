@@ -11,6 +11,7 @@ import { CALAMITIES, REBUILDS, describeScar } from '../sim/history/calamity';
 import { actions, state, update, useStore, type Relative, type UIState } from './store';
 import { bigNumber, eventColor, eventGlyph, formatYear, hsl, metres, shortYear } from './format';
 import { Strata } from './strange';
+import { canUndo } from './memory';
 import css from './ui.module.css';
 
 /** The date of an event in the count of years of the nation it belongs to, when the page knows that nation (system E8). */
@@ -104,6 +105,7 @@ export function Why() {
                 <h3>{e.title}</h3>
                 <p>{e.description}</p>
                 {e.cellId >= 0 && <button class={css.link} onClick={() => actions.flyToCell(e.cellId)}>show place</button>}
+                {canUndo(e.type) && <button class={css.link} onClick={() => actions.whatIf(e.id)}>what if this had not happened?</button>}
                 {(e.speciesIds ?? []).slice(0, 1).map((id) => s.species.has(id) && (
                   <button class={css.link} onClick={() => actions.selectSpecies(id)}>{s.species.get(id)!.name}</button>
                 ))}

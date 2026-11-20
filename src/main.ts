@@ -473,6 +473,52 @@ async function boot(): Promise<void> {
       ctx.fillRect(x - 1, y - 1, st.tech > 0.6 ? 3 : 2, st.tech > 0.6 ? 3 : 2);
     }
   };
+  // one byte a cell, as a flat map of any size: a surface by biome (255 is open water), and over it, if given, how
+  // different two worlds are there (the butterfly tracker)
+  const lookups = new Map<string, Int32Array>();
+  const lookupFor = (W: number, H: number): Int32Array => {
+    const key = `${W}x${H}`;
+    let m = lookups.get(key);
+    if (!m) {
+      m = new Int32Array(W * H);
+      let c = 0;
+      for (let y = 0; y < H; y++) {
+        const lat = (0.5 - (y + 0.5) / H) * Math.PI;
+        for (let x = 0; x < W; x++) { const lon = ((x + 0.5) / W) * Math.PI * 2 - Math.PI; c = nearestCell(grid, Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon), c); m[y * W + x] = c; }
+      }
+      lookups.set(key, m);
+    }
+    return m;
+  };
+  const BIOME_RGB = [[12, 44, 92], [18, 62, 120], [44, 112, 150], [214, 200, 150], [236, 240, 245], [150, 150, 130], [62, 96, 72], [62, 122, 62], [142, 162, 82], [152, 142, 92], [214, 186, 130], [182, 172, 92], [32, 102, 52], [72, 112, 92], [132, 132, 132], [84, 62, 60], [222, 232, 242], [230, 226, 212]];
+  actions.drawCellBytes = (cv, bytes, over) => {
+    const ctx = cv.getContext('2d');
+    if (!ctx || bytes.length !== grid.count) return;
+    const W = cv.width, H = cv.height, m = lookupFor(W, H);
+    const img = ctx.createImageData(W, H);
+    for (let i = 0; i < W * H; i++) {
+      const c = m[i]!, b = bytes[c]!;
+      let [r, g, bl] = b === 255 ? [20, 58, 112] : (BIOME_RGB[b] ?? [120, 120, 120]) as [number, number, number];
+      if (over) {
+        // the surface goes grey and dim; the difference glows over it
+        const grey = (r + g + bl) / 3 * 0.45, d = over[c]! / 255;
+        r = grey + (255 - grey) * d; g = grey + (150 - grey) * d * 0.9; bl = grey + (40 - grey) * d;
+      }
+      img.data[i * 4] = r; img.data[i * 4 + 1] = g; img.data[i * 4 + 2] = bl; img.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  };
+  actions.whatIf = (eventId) => {
+    if (eventId < 0) { send({ type: 'whatif', stop: true }); return; }
+    update({ panel: 'archive', memTab: 'whatif', whatIf: null, whatIfMaps: null, whatIfProblem: '', whyEvent: -1 });
+    send({ type: 'whatif', eventId });
+  };
+  actions.whatIfHerd = () => {
+    const hit = scene.pick(innerWidth / 2, innerHeight / 2);
+    if (!hit) { update({ whatIfProblem: 'Point the view at the planet first: the herd is spared under the centre of the screen.' }); return; }
+    update({ whatIf: null, whatIfMaps: null, whatIfProblem: '' });
+    send({ type: 'whatif', herdAt: scene.cellAt(hit.x, hit.y, hit.z) });
+  };
   actions.drawMap = (cv) => drawMapOn(cv, false);
   actions.drawBareMap = (cv) => drawMapOn(cv, true);
   actions.mapPoint = (cell) => [(grid.lon[cell]! + Math.PI) / (Math.PI * 2), 0.5 - grid.lat[cell]! / Math.PI];
@@ -773,6 +819,9 @@ async function boot(): Promise<void> {
         break;
       case 'site':
         update({ siteDetail: msg.detail });
+        break;
+      case 'whatif':
+        update({ whatIf: msg.state, whatIfMaps: msg.maps ?? (msg.state ? state.whatIfMaps : null), whatIfProblem: msg.problem ?? '' });
         break;
       case 'memory': {
         const a = msg.answer;

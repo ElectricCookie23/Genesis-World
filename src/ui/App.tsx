@@ -114,8 +114,8 @@ export function App() {
         </div>
       )}
       {/* on a phone a panel is a sheet over the lower screen: the narration would lie across its text */}
-      {s.chronicleLine && !s.milestone && !(s.mobile && s.panel !== 'none') && <div class={css.narration} key={s.chronicleLine}>{s.chronicleLine}</div>}
-      {!s.opening && !s.chronicleLine && !s.milestone && last && s.panel !== 'chronicle' && !(s.mobile && s.panel !== 'none') && !hidden && (st?.simYear ?? 0) - last.simYear < 4e6 && (
+      {s.chronicleLine && !s.milestone && s.panel !== 'archive' && !(s.mobile && s.panel !== 'none') && <div class={css.narration} key={s.chronicleLine}>{s.chronicleLine}</div>}
+      {!s.opening && !s.chronicleLine && !s.milestone && last && s.panel !== 'chronicle' && s.panel !== 'archive' && !(s.mobile && s.panel !== 'none') && !hidden && (st?.simYear ?? 0) - last.simYear < 4e6 && (
         <div class={css.narration} key={last.id}><small>{formatYear(last.simYear).toUpperCase()}</small>{last.description}</div>
       )}
       {s.opening && s.skipVisible && <button class={css.skip} onClick={() => actions.skipOpening()}>SKIP</button>}

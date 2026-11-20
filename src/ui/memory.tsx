@@ -16,6 +16,7 @@ const TABS: [MemoryTab, string, string][] = [
   ['ancestry', 'Ancestry', 'one person, traced back to the first life'],
   ['chronoscope', 'Chronoscope', 'a town as it stood in any year'],
   ['forecasts', 'Forecasts', 'what scholars said would happen, and whether it did'],
+  ['whatif', 'What if', 'the same world run twice: once with an event, once without'],
 ];
 
 /** A date, said the way the rest of the page says dates: by how long ago while that means something, else by the year. */
@@ -203,21 +204,32 @@ export function braidRows(lanes: Lane[], now: number): Map<number, number> {
 
 function BraidView() {
   const s = useStore();
+  const [zoom, setZoom] = useState(1);
+  const box = useRef<HTMLDivElement>(null);
   useEffect(() => { actions.askMemory({ what: 'braid' }); }, []);
+  // nations multiply toward the present: when zoomed in, start at the recent end
+  useEffect(() => { if (box.current) box.current.scrollLeft = box.current.scrollWidth; }, [zoom]);
   const b = s.memBraid;
   if (!b) return <p class={css.sub}>The braid begins with the first nation.</p>;
   const rows = braidRows(b.lanes, b.to);
   const count = Math.max(1, ...rows.values()) + 1;
   const span = Math.max(1, b.to - b.from);
-  const W = Math.max(680, Math.min(5200, span * 0.45)), LH = 20, H = count * LH + 30;
+  const W = 680 * zoom, LH = 20, H = count * LH + 30;
   const x = (year: number) => 6 + ((year - b.from) / span) * (W - 130);
   const y = (id: number) => 16 + (rows.get(id) ?? 0) * LH;
-  const ticks = Math.max(1, Math.round(span / Math.max(100, Math.pow(10, Math.floor(Math.log10(span))) / 2)));
+  const ticks = 4 * zoom;
   return (
     <div>
       <p class={css.sub} style={{ marginTop: 0 }}>Time runs left to right. A line is a nation; it rises out of the one it broke from and runs into the one it was joined to. A dot is something that happened to it: click one to see why.</p>
-      <div style={{ overflowX: 'auto', background: '#0c0e14', borderRadius: '8px' }}>
-        <svg width={W} height={H} style={{ display: 'block' }}>
+      <div class={css.row} style={{ padding: '0 0 6px' }}>
+        <span class={css.sub}>{zoom === 1 ? 'the whole of history' : `${zoom} times closer: scroll sideways`}</span>
+        <span>
+          <button class={css.btn} disabled={zoom <= 1} style={{ opacity: zoom <= 1 ? 0.4 : 1 }} onClick={() => setZoom(Math.max(1, zoom / 2))}>wider</button>{' '}
+          <button class={css.btn} disabled={zoom >= 8} style={{ opacity: zoom >= 8 ? 0.4 : 1 }} onClick={() => setZoom(Math.min(8, zoom * 2))}>closer</button>
+        </span>
+      </div>
+      <div ref={box} style={{ overflowX: 'auto', background: '#0c0e14', borderRadius: '8px' }}>
+        <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', maxWidth: zoom === 1 ? '100%' : undefined, height: zoom === 1 ? 'auto' : undefined }}>
           {Array.from({ length: ticks + 1 }, (_, i) => {
             const year = b.from + (span * i) / ticks;
             return <g key={i}><line x1={x(year)} y1={0} x2={x(year)} y2={H - 14} stroke="#ffffff10" /><text x={x(year) + 2} y={H - 3} fill="#ffffff66" font-size="9">{i === ticks ? 'now' : `${Math.round(b.to - year).toLocaleString('en-US')} years ago`}</text></g>;
@@ -415,6 +427,73 @@ function ForecastsView() {
   );
 }
 
+// ---------------------------------------------------------------------------------------------- what if
+
+/** Events that can be made to happen again by hand, and so can be taken away (the same rule the simulation uses). */
+export const canUndo = (type: string): boolean => type === 'impact' || type === 'plague' || type === 'rogue-planet' || type === 'gamma-burst' || (type.startsWith('tool-') && type !== 'tool-species');
+
+function WhatIfView() {
+  const s = useStore();
+  const w = s.whatIf, maps = s.whatIfMaps;
+  const a = useRef<HTMLCanvasElement>(null), b = useRef<HTMLCanvasElement>(null), heat = useRef<HTMLCanvasElement>(null);
+  const [at, setAt] = useState(0);
+  useEffect(() => { if (maps) setAt(maps.heat.length - 1); }, [maps]);
+  useEffect(() => {
+    if (!maps || !w?.done) return;
+    if (a.current) actions.drawCellBytes(a.current, maps.withMap);
+    if (b.current) actions.drawCellBytes(b.current, maps.withoutMap);
+    if (heat.current && maps.heat[at]) actions.drawCellBytes(heat.current, maps.withMap, maps.heat[at]);
+  }, [maps, w?.done, at]);
+  const recent = s.events.filter((e) => e && canUndo(e.type) && e.importance >= 1).slice(-10).reverse();
+  const herd = w?.change.kind === 'herd';
+  const it = herd ? 'the herd' : 'it';
+  return (
+    <div>
+      <p class={css.sub} style={{ marginTop: 0 }}>An experiment with a control. Two copies of the world are started from the same saved moment and stepped forward in exactly the same way. In one the event happens; in the other it does not. Whatever differs afterwards is the work of that one event. Neither copy is the world on screen: a world run again never comes out quite the same, which is why the two re-runs are compared with each other.</p>
+      {s.whatIfProblem && <p style={{ color: '#f0a56a' }}>{s.whatIfProblem}</p>}
+      {w && (
+        <div class={css.goal}>
+          <div class={css.goalTitle}><b>{herd ? 'One small herd, spared' : `Without: ${w.change.title}`}</b><span class={css.sub}>{w.done ? 'done' : `${Math.round(w.progress * 100)}%`}</span></div>
+          <div class={css.goalMeter}><i style={{ width: `${Math.round(w.progress * 100)}%` }} /></div>
+          <div class={css.sub}>Both copies start <When year={w.from} /> and are taken to <When year={w.to} />{w.to > (s.stats?.simYear ?? 0) + 1 ? ' (past the present: the change is too recent to have done much yet)' : ''}.</div>
+          {!w.done && <button class={css.link} onClick={() => actions.whatIf(-1)}>stop</button>}
+        </div>
+      )}
+      {w?.done && (
+        <>
+          <div class={css.split} style={{ borderTop: 'none' }}>
+            <div><b>With {it}</b><canvas ref={a} width={340} height={170} style={{ width: '100%', borderRadius: '6px', display: 'block', margin: '4px 0' }} /><div class={css.sub}>{w.with.species} kinds of animal, {Math.round(w.with.animals).toLocaleString('en-US')} animals{w.with.towns ? `, ${w.with.towns} towns` : ''}, {w.with.meanTemp.toFixed(1)} °C</div></div>
+            <div><b>Without {it}</b><canvas ref={b} width={340} height={170} style={{ width: '100%', borderRadius: '6px', display: 'block', margin: '4px 0' }} /><div class={css.sub}>{w.without.species} kinds of animal, {Math.round(w.without.animals).toLocaleString('en-US')} animals{w.without.towns ? `, ${w.without.towns} towns` : ''}, {w.without.meanTemp.toFixed(1)} °C</div></div>
+          </div>
+          <div class={css.goalTitle}><b>What is different</b></div>
+          {w.differences.map((d, i) => <div key={i} class={css.article} style={{ margin: '0 0 3px' }}>{d}</div>)}
+          <div class={css.goalTitle} style={{ marginTop: '12px' }}><b>How the difference spread</b><span class={css.sub}>{maps?.heat[at] ? `${Math.round((w.spread[at]?.share ?? 0) * 100)}% of the planet differs` : ''}</span></div>
+          <canvas ref={heat} width={680} height={340} style={{ width: '100%', borderRadius: '8px', display: 'block' }} />
+          <input type="range" min="0" max={Math.max(0, (maps?.heat.length ?? 1) - 1)} step="1" value={at} style={{ width: '100%' }} onInput={(e) => setAt(Number((e.target as HTMLInputElement).value))} />
+          <div class={css.sub}>{w.spread[at] ? <>{Math.round(w.spread[at]!.year - Math.max(w.from, w.change.year)).toLocaleString('en-US')} years after the change. Bright is where the two copies differ: in what grows there, in how many animals live there, in who holds it. The checkpoints crowd toward the start, where the spreading happens.</> : ''}</div>
+          <svg viewBox="0 0 680 60" style={{ width: '100%', display: 'block', marginTop: '4px' }}>
+            <polyline fill="none" stroke="#f0a56a" stroke-width="1.5" points={w.spread.map((p, i) => `${(i / Math.max(1, w.spread.length - 1)) * 680},${58 - p.share * 56}`).join(' ')} />
+            <circle cx={(at / Math.max(1, w.spread.length - 1)) * 680} cy={58 - (w.spread[at]?.share ?? 0) * 56} r="3" fill="#fff4d8" />
+          </svg>
+        </>
+      )}
+      <div class={css.goalTitle} style={{ marginTop: '12px' }}><b>Take one thing away</b></div>
+      {recent.length === 0 && <p class={css.sub}>Nothing has happened yet that can be taken away. Impacts, plagues, a passing planet, a burst of radiation from a dying star, and anything done with the experiment tools can be.</p>}
+      {recent.map((e) => (
+        <div class={css.row} key={e.id}>
+          <span>{e.title}<br /><span class={css.sub}><When year={e.simYear} /></span></span>
+          <button class={css.btn} onClick={() => actions.whatIf(e.id)}>what if not?</button>
+        </div>
+      ))}
+      <div class={css.goalTitle} style={{ marginTop: '12px' }}><b>The butterfly</b></div>
+      <div class={css.row}>
+        <span>Spare one small herd<br /><span class={css.sub}>Forty animals, under the centre of the view, that would otherwise have died. Then watch how far so small a thing reaches.</span></span>
+        <button class={css.btn} onClick={() => actions.whatIfHerd()}>try it</button>
+      </div>
+    </div>
+  );
+}
+
 export function Memory() {
   const s = useStore();
   const tab = TABS.find((t) => t[0] === s.memTab) ?? TABS[0]!;
@@ -433,6 +512,7 @@ export function Memory() {
         {s.memTab === 'ancestry' && <AncestryView />}
         {s.memTab === 'chronoscope' && <ChronoscopeView />}
         {s.memTab === 'forecasts' && <ForecastsView />}
+        {s.memTab === 'whatif' && <WhatIfView />}
       </div>
     </div>
   );

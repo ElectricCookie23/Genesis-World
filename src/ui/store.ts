@@ -13,9 +13,10 @@ import type { IndustryInfo } from '../sim/industry';
 import type { Article, Atlas, IndexGroup, Lane, PastPlace, Records, Ref, Step } from '../sim/memory';
 import type { MemoryAsk } from '../shared/protocol';
 import type { ForecastInfo } from '../sim/forecast';
+import type { WhatIfMaps, WhatIfState } from '../sim/whatif';
 
 export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'tongues' | 'goals' | 'system' | 'microscope' | 'archive';
-export type MemoryTab = 'archive' | 'atlas' | 'braid' | 'records' | 'ancestry' | 'chronoscope' | 'forecasts';
+export type MemoryTab = 'archive' | 'atlas' | 'braid' | 'records' | 'ancestry' | 'chronoscope' | 'forecasts' | 'whatif';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
 
 /** One person in an individual's family tree; key is set when that relative is drawn in the world and can be selected. */
@@ -80,6 +81,10 @@ export interface UIState {
   chrono: { id: number; year: number } | null;
   memPlace: PastPlace | null;
   memForecasts: ForecastInfo | null;
+  /** A what-if: how far the two re-runs have got, their pictures once they are done, and why one could not be started. */
+  whatIf: WhatIfState | null;
+  whatIfMaps: WhatIfMaps | null;
+  whatIfProblem: string;
   /** The town site whose layers are open (system E17). */
   siteDetail: SiteDetail | null;
   /** The ruling house whose family tree is open. */
@@ -180,6 +185,9 @@ export const state: UIState = {
   chrono: null,
   memPlace: null,
   memForecasts: null,
+  whatIf: null,
+  whatIfMaps: null,
+  whatIfProblem: '',
   timeline: [],
   other: null,
   overlay: 'none',
@@ -271,6 +279,11 @@ export const actions = {
   openArticle: (_ref: Ref) => {},
   /** Set the chronoscope's dial for a town (null puts the town back in the present). */
   setChrono: (_id: number, _year: number | null) => {},
+  /** Ask what the world would be had an event not happened (-1 stops the run in hand); or spare one small herd under the view and watch the difference spread. */
+  whatIf: (_eventId: number) => {},
+  whatIfHerd: () => {},
+  /** Draw one byte a cell as a flat map: a surface (biome, 255 for sea), or how different two worlds are over a dim surface. */
+  drawCellBytes: (_canvas: HTMLCanvasElement, _bytes: Uint8Array, _over?: Uint8Array) => {},
   /** The flat map of the present with no towns marked, for drawing the past over. */
   drawBareMap: (_canvas: HTMLCanvasElement) => {},
   /** Open the languages of the world, at one of them if its name is given. */

@@ -3,6 +3,7 @@ import type { SimEvent } from '../sim/events';
 import type { CosmosInfo } from '../sim/cosmos';
 import type { Archive, StarMessage } from '../sim/legacy';
 import type { ForecastInfo } from '../sim/forecast';
+import type { WhatIfMaps, WhatIfState } from '../sim/whatif';
 import type { Article, Atlas, IndexGroup, Kind, Lane, PastPlace, Records, Step } from '../sim/memory';
 import type { LinkInfo } from '../sim/link';
 import type { StrangeInfo } from '../sim/strange';
@@ -385,6 +386,8 @@ export type ToWorker =
   | { type: 'requestLanguages' }
   | { type: 'requestSite'; id: number }
   | { type: 'requestMemory'; ask: MemoryAsk }
+  /** Run the world twice from before an event, with it and without it (E55); or with and without one small herd spared at a cell (E56); or stop. */
+  | { type: 'whatif'; eventId?: number; herdAt?: number; stop?: boolean }
   | { type: 'rewindLimit'; count: number }
   /** Jump ahead by running the sim flat out (used by automated checks). */
   /** Jump ahead. It stops where a history begins, unless `through` is set (for scripts that need to reach a date). */
@@ -405,6 +408,7 @@ export type FromWorker =
   | { type: 'languages'; lexicon: string[]; sayings: string[]; list: LanguageInfo[] }
   | { type: 'site'; detail: SiteDetail }
   | { type: 'memory'; answer: MemoryAnswer }
+  | { type: 'whatif'; state: WhatIfState | null; maps?: WhatIfMaps; problem?: string }
   | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[] }
   | { type: 'timeline'; points: TimelinePoint[] }
   | { type: 'cosmos'; cosmos: CosmosInfo; messages: StarMessage[]; archives: Archive[]; link?: LinkInfo; strange: StrangeInfo; future: FutureInfo; industry: IndustryInfo }

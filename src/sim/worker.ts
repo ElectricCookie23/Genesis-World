@@ -2,6 +2,7 @@
 // Worker entry point: owns all world state and runs the fixed-timestep loop.
 import { Simulation } from './simulation';
 import { linkInfo } from './link';
+import { Counterfactual, changeFor, replayable, type Change } from './whatif';
 import { ancestry, archiveIndex, article, atlas, braid, placeAt, records } from './memory';
 import { G, P, PHEN_COUNT, sizeMetres } from './genetics';
 import { nearestCell } from './world';
@@ -35,6 +36,34 @@ let speciesVersion = -1;
 let plantVersion = -1;
 const sentExtinct = new Set<number>();
 const rewinds: { simYear: number; title: string; save: SaveState; era?: boolean }[] = [];
+/** The world as it was just before the last tool was used: where "what if I had not?" starts from. */
+let beforeTool: SaveState | null = null;
+/** A what-if being worked out, a slice at a time between ticks (expansion E55, E56). */
+let job: Counterfactual | null = null;
+let lastJobPost = 0;
+
+/** Start the two re-runs for a change, from the latest saved moment before it. */
+function startWhatIf(s: Simulation, change: Change, save: SaveState | null): void {
+  const live = s.civ.historyLive;
+  // how far past the change the two copies are taken: to the present if that is near enough, never further than can be run in a minute or two
+  const cap = live ? 6000 : 20e6, least = live ? 300 : 1.5e6;
+  if (!save) { post({ type: 'whatif', state: null, problem: 'There is no saved moment from before this to start again from. Rewind points are kept at great events; an event older than the oldest of them cannot be taken away.' }); return; }
+  if (change.year - save.simYear > cap) { post({ type: 'whatif', state: null, problem: 'The nearest saved moment is too long before this event to run forward from in reasonable time.' }); return; }
+  const to = change.year + Math.max(least, Math.min(cap, s.simYear - change.year));
+  job = new Counterfactual(save, change, to);
+  lastJobPost = 0;
+}
+
+function runWhatIf(): void {
+  if (!job) return;
+  job.advance(35);
+  const now = performance.now();
+  if (job.done) {
+    const maps = job.maps();
+    post({ type: 'whatif', state: job.state(), maps }, [maps.withMap.buffer, maps.withoutMap.buffer, ...new Set(maps.heat.map((h) => h.buffer))] as Transferable[]);
+    job = null;
+  } else if (now - lastJobPost > 400) { lastJobPost = now; post({ type: 'whatif', state: job.state() }); }
+}
 /** While a history is unfolding, time is held at the pace of history unless the user picks a faster speed on purpose. */
 const HISTORY_YPS = SPEEDS[HISTORY_SPEED]!.yearsPerSecond;
 let historyOverride = false;
@@ -463,6 +492,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         break;
       case 'tool':
         if (sim) {
+          beforeTool = saveSimulation(sim, 'before');
           if (msg.tool === 'species' && msg.genes) sim.designSpecies(msg.cell, msg.genes);
           else sim.intervene(msg.tool, msg.cell, msg.power ?? 0.8);
           slowUntil = performance.now() + 6000;
@@ -498,6 +528,19 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
             };
             post({ type: 'site', detail });
           }
+        }
+        break;
+      case 'whatif':
+        if (msg.stop) { job = null; post({ type: 'whatif', state: null }); }
+        else if (sim && msg.herdAt !== undefined) startWhatIf(sim, { kind: 'herd', title: 'One small herd is spared', year: sim.simYear, cell: msg.herdAt, count: 40 }, saveSimulation(sim, 'now'));
+        else if (sim && msg.eventId !== undefined) {
+          const e = sim.events.events[msg.eventId];
+          if (!e || !replayable(e)) { post({ type: 'whatif', state: null, problem: 'This is not something that can be taken away and run again.' }); break; }
+          // the latest saved moment that does not already hold the event
+          let save: SaveState | null = null;
+          for (const r of rewinds) if (r.simYear < e.simYear && (!save || r.simYear > save.simYear)) save = r.save;
+          if (beforeTool && beforeTool.simYear <= e.simYear && e.data?.byHand === 1 && (!save || beforeTool.simYear >= save.simYear)) save = beforeTool;
+          startWhatIf(sim, changeFor(e), save);
         }
         break;
       case 'requestMemory':
@@ -581,6 +624,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
 
 setInterval(() => {
   try {
+    runWhatIf();
     tick();
   } catch (err) {
     post({ type: 'error', message: err instanceof Error ? (err.stack ?? err.message) : String(err) });
