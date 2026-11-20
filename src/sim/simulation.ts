@@ -1,6 +1,6 @@
 // The whole deterministic simulation. Runs in the worker and in headless tests.
 import { RNG, hashSeed } from './rng';
-import { BIOME_NAMES, buildGrid, createWorld, GRID_N, type Grid, type World } from './world';
+import { BIOME_NAMES, buildGrid, createWorld, GRID_N, nearestCell, type Grid, type World } from './world';
 import { driftPlatesMoving } from './tectonics';
 import { dustFall, shapeLandforms } from './landforms';
 import { carveFjords, computeConvergence, computeDrainage, countContinents, erode, erupt, uplift, generateTerrain, impact, type GeologyState, type VolcanoSite } from './geology';
@@ -15,6 +15,7 @@ import { nameSpecies, plantName } from './naming';
 import { placeName } from './names';
 import { Civilization } from './civilization';
 import { CellLog, Log } from './history/celllog';
+import { Cosmos, MAP_H, MAP_W } from './cosmos';
 
 /** Sim years covered by one full ecological step (one tick at Epoch speed). */
 export const ECO_YEARS = 15000;
@@ -36,7 +37,7 @@ export class Simulation {
   /** What changed at every cell and when: built in the constructor, once the grid is known. */
   cellLog!: CellLog;
   private loggedBiome!: Uint8Array;
-  private civRng: RNG;
+  civRng: RNG;
   simYear = 0;
   moonAngle = 0;
   terrainDirty = true;
@@ -72,7 +73,7 @@ export class Simulation {
   private radiationCount = 0;
   private radiationDeclared = true;
   /** Last disaster event to touch each region. */
-  private regionEvent: Int32Array;
+  regionEvent: Int32Array;
   private lifeRng: RNG;
   private geoRng: RNG;
   private nameRng: RNG;
@@ -82,7 +83,9 @@ export class Simulation {
   /** Extra sea level from the flood tool, km. Drains away slowly. */
   private seaBias = 0;
   private cometPeriod = 0;
-  private cometNext = 0;
+  cometNext = 0;
+  /** The rest of the star system, and what reaches the planet from outside it (expansion section 10). */
+  cosmos: Cosmos;
   private cometLast = -1;
   private cometName = '';
   private convergentNoted = new Set<string>();
@@ -155,6 +158,7 @@ export class Simulation {
     this.cometPeriod = this.lifeRng.range(18e6, 34e6);
     this.cometNext = this.cometPeriod * this.lifeRng.range(0.4, 1);
     this.cometName = placeName(this.nameRng);
+    this.cosmos = new Cosmos(this.rng.fork('cosmos'), this.cometPeriod);
     this.lifeYear = this.lifeRng.range(0.35e6, 0.9e6);
     this.algaeDelay = this.lifeRng.range(1.2e6, 3e6);
     this.animalDelay = this.lifeRng.range(5e6, 10e6);
@@ -225,6 +229,8 @@ export class Simulation {
     const c = this.climate;
     const w = this.world;
     const tc = performance.now();
+    // the star as the planet feels it: its age, and how far the planet now is from it
+    c.solar = this.cosmos.solar(this.simYear);
     c.aerosol *= Math.exp(-dt / 6);
     c.forced *= Math.exp(-dt / 30000);
     c.greenhouse += (2.5 - c.greenhouse) * (1 - Math.exp(-dt / 2.5e6));
@@ -233,7 +239,7 @@ export class Simulation {
     updateSnow(w, c, dt);
     // ice sheets lock up water: sea level falls in cold eras and rises in warm ones
     this.seaBias *= Math.exp(-dt / 60000);
-    const target = Math.max(-0.3, Math.min(0.2, -(this.iceVolume() - this.baseIce) * 0.035)) + this.seaBias;
+    const target = Math.max(-0.3, Math.min(0.2, -(this.iceVolume() - this.baseIce) * 0.035)) + this.seaBias - this.cosmos.seaLoss;
     w.seaLevel += (target - w.seaLevel) * 0.15;
     classifyBiomes(w, c);
     // visual fields fade by sim time, but stay visible for about a second at high speed
@@ -247,6 +253,7 @@ export class Simulation {
     this.weather(dt);
     this.updateEras(dt);
     this.geologyEvents(dt);
+    this.cosmos.step(this, dt);
     // continents drift: slow enough that it only shows at high time speeds
     this.driftAcc += dt;
     if (this.driftAcc >= 2e6) {
@@ -368,7 +375,6 @@ export class Simulation {
     } else if (this.snowballNoted && c.iceFraction < 0.3) this.snowballNoted = false;
     // far future: the sun slowly brightens
     if (this.simYear > 380e6) {
-      c.solar = 1 + ((this.simYear - 380e6) / 1e9) * 0.3;
       if (!this.sunNoted) {
         this.sunNoted = true;
         this.emit({ type: 'sun-brightens', title: 'The sun grows brighter', description: 'The star this world circles is ageing. Each age it burns a little hotter, and it will not stop.', importance: 2 });
@@ -686,6 +692,8 @@ export class Simulation {
       }
     }
     else if (tool === 'generay') { this.creatures.irradiate(region, this.lifeRng, 4); ev = note('A strange light', 'A beam of unseen light sweeps the land. Everything born there afterwards is a little different from its parents.'); }
+    else if (tool === 'rogue') ev = this.cosmos.flyby(this, true);
+    else if (tool === 'burst') { const p = this.grid.pos; ev = this.cosmos.burst(this, [p[cell * 3]!, p[cell * 3 + 1]!, p[cell * 3 + 2]!], true); }
     else if (tool === 'comet') { this.cometNext = this.simYear; ev = note('A comet is called', 'A new light with a long tail swings in from the dark, as if summoned.'); }
     else if (tool === 'tilt') { c.tilt = c.tilt > 0.6 ? 0.12 : c.tilt + 0.17; ev = note('The world tips', 'The axis of the world leans to a new angle. The seasons will never be what they were.'); }
     else if (tool === 'shield') { this.shields.set(region, this.simYear + 3e6); ev = note('A dome of calm', 'Over one stretch of the world, fire, ash and wave simply stop at an unseen wall.'); }
@@ -762,7 +770,8 @@ export class Simulation {
       this.civ.omen(this, ev.id, this.civRng);
     }
     if (this.simYear >= this.cometNext) {
-      this.cometNext += this.cometPeriod;
+      // the comets keep the gas giant's time: one full turn of its slow cycle between returns
+      this.cometNext += this.cosmos.cycle;
       const ev = this.emit({
         type: 'comet', title: `Comet ${this.cometName} returns`,
         description: this.cometLast < 0 ? `A long-tailed comet crosses the night sky for the first time anyone could have seen it.` : `The comet is back, right on time, hanging in the evening sky like a pale feather.`,
@@ -931,7 +940,7 @@ export class Simulation {
   }
 
   /** A meteor strike. size 0..1. Used by the god tool and by rare natural impacts. */
-  meteor(cell: number, size: number, byHand: boolean): SimEvent {
+  meteor(cell: number, size: number, byHand: boolean, cause = -1): SimEvent {
     const w = this.world;
     const name = placeName(this.nameRng);
     const hitInfo = impact(w, cell, size);
@@ -946,7 +955,7 @@ export class Simulation {
       description: sea
         ? `A mountain of rock falls from the sky into the sea. Waves race outward and steam climbs to the edge of space.`
         : `A mountain of rock falls from the sky. The flash is seen across half the world, and the ground rings like a bell.`,
-      importance: 3,
+      causes: cause >= 0 ? [cause] : [], importance: 3,
       data: { size, byHand: byHand ? 1 : 0 },
     });
     const hit = this.regionsOf(hitInfo.cells, (k) => Math.max(0, 1 - hitInfo.dist[k]! / (hitInfo.radius * 2.5)));
@@ -961,6 +970,35 @@ export class Simulation {
     this.era = { kind: 'winter', eventId: winter.id };
     this.globalDieback(0.3 + 0.5 * size, winter.id);
     return ev;
+  }
+
+  /** The sea climbs its shores for a while (a passing planet's pull). */
+  surge(km: number): void { this.seaBias += km; }
+
+  /** Heat from a swollen star: plants and animals die back everywhere. */
+  scorch(fraction: number, eventId: number): void { if (fraction > 0) this.globalDieback(fraction, eventId); }
+
+  /**
+   * A first look at another world: the planet a different seed makes, as a ship arriving there would see it. A real
+   * world, built small, so the seed code in a report opens the same planet.
+   */
+  survey(seed: string): { land: number; ice: number; temp: number; map: number[] } {
+    const other = new Simulation(seed, 15);
+    const w = other.world, g = other.grid;
+    let land = 0;
+    for (let i = 0; i < g.count; i++) if (w.elevation[i]! > w.seaLevel) land++;
+    const map: number[] = [];
+    let cell = 0;
+    for (let j = 0; j < MAP_H; j++) {
+      const lat = (0.5 - (j + 0.5) / MAP_H) * Math.PI;
+      for (let i = 0; i < MAP_W; i++) {
+        const lon = ((i + 0.5) / MAP_W) * Math.PI * 2 - Math.PI;
+        cell = nearestCell(g, Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon), cell);
+        const sea = w.elevation[cell]! <= w.seaLevel;
+        map.push(sea ? (w.temperature[cell]! < -6 ? 2 : 0) : w.snow[cell]! > 0.5 ? 2 : w.elevation[cell]! > w.seaLevel + 2.2 ? 3 : 1);
+      }
+    }
+    return { land: land / g.count, ice: other.climate.iceFraction, temp: other.climate.meanTemp, map };
   }
 
   /** Darkness and cold kill plants everywhere; animals starve afterwards on their own. */
@@ -1042,7 +1080,7 @@ export class Simulation {
 
   /** Nudge every random stream, so that a copy of this world takes a different road from here on. */
   diverge(): void {
-    for (let i = 0; i < 7; i++) { this.rng.next(); this.lifeRng.next(); this.civRng.next(); this.nameRng.next(); }
+    for (let i = 0; i < 7; i++) { this.rng.next(); this.lifeRng.next(); this.civRng.next(); this.nameRng.next(); this.cosmos.rng.next(); }
   }
 
   /** A per-cell layer for the overlays: how many kinds of animal live here, or how much oxygen is being made here. 0..1. */

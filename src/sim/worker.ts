@@ -20,6 +20,7 @@ let speedIndex = 0;
 let lastCells = 0;
 let lastStats = 0;
 let lastSpecies = 0;
+let lastCosmos = 0;
 let tickMs = 0;
 let cellsRequested = false;
 let slowOnEvents = true;
@@ -251,7 +252,7 @@ function stats(s: Simulation): WorldStats {
     population: s.creatures.totalPop,
     landCover: s.plants.totalLandCover / Math.max(1, s.regions.count),
     storms: s.storms.map((x) => x.cell),
-    solar: s.climate.solar,
+    solar: s.climate.solar, starSwell: s.cosmos.swell, starPhase: s.cosmos.starPhase,
     cyclones: s.storms.filter((x) => x.hurricane || x.eternal).map((x) => x.cell),
     moons: s.moons,
     ring: s.ring,
@@ -350,6 +351,8 @@ function tick(): void {
     cellsRequested = false;
     lastCells = now;
   }
+  // the rest of the star system changes slowly: told about now and then
+  if (now - lastCosmos > 1500) { lastCosmos = now; post({ type: 'cosmos', cosmos: s.cosmos.info(s) }); }
   if (now - lastStats > 100) {
     post({ type: 'stats', stats: stats(s) });
     lastStats = now;

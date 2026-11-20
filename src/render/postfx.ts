@@ -203,7 +203,8 @@ export class PostFX {
             const mean = Math.pow(Math.exp(a / w), 0.15) * Math.pow(Math.max(1e-5, lin / w), 0.85);
             this.measured = mean;
             // aim for a mid-grey picture, but do not chase a few lit pixels in a dark frame
-            const wanted = Math.max(0.6, Math.min(this.maxExposure, 0.2 / mean));
+            // (the floor was 0.6: a day side under a wide cloud belt stayed flat white with a glow round it on a real GPU)
+            const wanted = Math.max(0.38, Math.min(this.maxExposure, 0.2 / mean));
             this.target = 1 + (wanted - 1) * Math.min(1, cover * 6);
           } else this.target = Math.min(1.6, this.maxExposure);
           this.lumBusy = false;

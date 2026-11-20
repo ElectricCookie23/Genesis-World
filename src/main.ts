@@ -623,6 +623,7 @@ async function boot(): Promise<void> {
       if (ev.title === 'Departure') { const home = [...state.settlements].filter((x) => x.ruined < 0).sort((p1, p2) => p2.tech - p1.tech)[0]; if (home) scene.launchAt(home.cell); }
       if (ev.type === 'impact') { scene.flash(0.9); scene.impactAt(ev.cellId); }
       else if (ev.type === 'super-eruption') scene.flash(0.35);
+      else if (ev.type === 'gamma-burst') scene.flash(0.75);
       else if (ev.type === 'mass-extinction') hushUntil = performance.now() + 45000;
     }
     // After a fast-forward, or at the fastest speeds, hundreds of thousands of years of milestones arrive at once.
@@ -698,6 +699,9 @@ async function boot(): Promise<void> {
         scene.setSpecies(state.species);
         scene.setFossils(fossilCells(), state.overlay === 'fossils');
         update({});
+        break;
+      case 'cosmos':
+        update({ cosmos: msg.cosmos });
         break;
       case 'settlements':
         scene.setSettlements(msg.settlements, msg.nations);
@@ -831,6 +835,7 @@ async function boot(): Promise<void> {
     else if (k === 't') togglePanel('tree');
     else if (k === 'g') togglePanel('god');
     else if (k === 'j') togglePanel('goals');
+    else if (k === 's') togglePanel('system');
     else if (e.key === '?' || k === '/') togglePanel('help');
     else if (k === 'p') { update({ postcard: !state.postcard }); scene.cam.idle = state.postcard ? 100 : 0; }
     else if (k === 'm') togglePanel('map');

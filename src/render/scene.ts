@@ -23,7 +23,7 @@ import { Rivers } from './rivers';
 import { AuroraVolume, uAurora } from './gfx/aurora';
 import { PG } from '../sim/genetics';
 import { CLOUD_TOP } from './gfx/volclouds';
-import { applyLook, worldLook, type WorldLook } from './gfx/look';
+import { applyLook, uLook, worldLook, type WorldLook } from './gfx/look';
 import { PlanetData } from './gfx/planetdata';
 import { ErosionBake } from './gfx/erosion';
 import { dumpUniforms, guardUniforms, summariseCells } from './diagnose';
@@ -160,6 +160,9 @@ export class GenesisScene {
   private lastElevation?: Float32Array;
   moonDistance = MOON_DISTANCE;
   fpsAvg = 60;
+  private starSwell = 1;
+  private starBase?: { size: number; color: Vector3 };
+  private starTmp = new Vector3();
   flashLevel = 0;
   /** When false the opening sequence owns the flash uniform. */
   ownsFlash = false;
@@ -750,6 +753,15 @@ export class GenesisScene {
     this.eraHazeTarget = stats.era === 'winter' ? 1 : 0;
     this.stormCells = stats.storms;
     this.solar = stats.solar ?? 1;
+    // the star in old age: larger in the sky and redder, and its light with it
+    const swell = stats.starSwell ?? 1;
+    if (swell !== this.starSwell) {
+      if (!this.starBase) this.starBase = { size: uLook.starSize.value as number, color: (uLook.star.value as Vector3).clone() };
+      this.starSwell = swell;
+      const old = Math.min(1, (swell - 1) / 6);
+      uLook.starSize.value = this.starBase.size * Math.min(9, swell);
+      (uLook.star.value as Vector3).copy(this.starBase.color).lerp(this.starTmp.set(1.0, 0.36, 0.14).multiplyScalar(Math.max(this.starBase.color.x, this.starBase.color.y, this.starBase.color.z)), old * 0.8);
+    }
     this.satellites?.set(stats.maxTech >= 0.9 && stats.settlements > 0 ? Math.min(1, (stats.maxTech - 0.9) * 12 + 0.3) : 0);
     if (this.clouds && this.grid) { const g = this.grid; this.clouds.setCyclones((stats.cyclones ?? []).slice(0, 4).map((c) => [g.pos[c * 3]!, g.pos[c * 3 + 1]!, g.pos[c * 3 + 2]!])); }
     this.moons = stats.moons;

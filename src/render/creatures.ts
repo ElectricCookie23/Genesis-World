@@ -280,7 +280,7 @@ export class CreatureLayer {
       seen.add(key);
       // Sized from the animals that build them: a hive stands about twice as tall as its builders are long, and a
       // nest is a low ring about one body wide. (Fixed sizes made hives taller than the trees around them.)
-      this.moundData.push({ ind, size: hive ? ind.size * 1.5 : ind.size * 0.9, hive });
+      this.moundData.push({ ind, size: hive ? ind.size * 0.9 : ind.size * 0.5, hive });
     }
   }
 
