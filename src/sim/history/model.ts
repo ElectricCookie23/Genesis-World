@@ -1,3 +1,4 @@
+import type { Codes } from './calamity';
 // The entities of history. All of them are plain data, so the whole of history saves, loads and
 // rewinds with the rest of the simulation.
 import type { Calendar } from './calendar';
@@ -160,6 +161,8 @@ export interface Nation {
   fatigue: number;
   /** Recent blows to the nation (wars, plagues, disasters, a fallen house), newest last: what a collapse is blamed on. */
   woes: { kind: string; eventId: number; year: number }[];
+  /** Its building laws, each made after a calamity in one of its towns (system E20). */
+  codes?: Codes;
   /** Its golden age, while it lasts (system E10): when it began, the event that announced it, what its people call it, and the great works raised in it. */
   golden?: { since: number; eventId: number; own: string; works: number };
   /** The year its last golden age ended. */
@@ -200,6 +203,8 @@ export interface HistoryState {
   peacePop?: number;
   /** The year the leading nation reached the top of knowledge, or -1. */
   topSince?: number;
+  /** The first building law of each kind anywhere (system E20): the events that recorded them. */
+  firstCodes?: { fire?: number; quake?: number; flood?: number };
   /** The wonders of this history (system E19): giant works, each raised because of something that really happened. */
   wonders?: Wonder[];
   /** How many wonders have ever been begun (their ids run from 1). */

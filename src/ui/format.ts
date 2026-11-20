@@ -34,7 +34,7 @@ export function eventColor(type: string): string {
     case 'extinction': case 'mass-extinction': case 'plant-extinct': return '#c9c2d6';
     case 'speciation': case 'radiation': return '#8fe3a0';
     case 'plant-species': return '#b7e07a';
-    case 'wildfire': return '#ff9d4d';
+    case 'wildfire': case 'city-fire': return '#ff9d4d';
     case 'milestone': return '#fff1c9';
     case 'oxygen': return '#a8e6ff';
     case 'settlement': case 'story': case 'reformer': case 'contact': return '#ffcf8a';
@@ -47,7 +47,7 @@ export function eventColor(type: string): string {
     case 'long-peace': case 'peace-broken': return '#fff1c9';
     case 'ruin': return '#b9a48c';
     case 'storm': return '#b5c4de';
-    case 'earthquake': case 'tsunami': return '#c7b299';
+    case 'earthquake': case 'tsunami': case 'city-quake': case 'city-flood': case 'building-law': return '#c7b299';
     case 'plague': return '#b7d08a';
     case 'eclipse': case 'comet': return '#d9c8ff';
     case 'painting': case 'tamed': return '#ffcf8a';
@@ -70,7 +70,7 @@ export function eventGlyph(type: string): string {
     case 'mass-extinction': return '‡';
     case 'speciation': case 'radiation': return '⑂';
     case 'plant-species': return '❦';
-    case 'wildfire': return '♨';
+    case 'wildfire': case 'city-fire': return '♨';
     case 'milestone': return '★';
     case 'oxygen': return '○';
     case 'settlement': return '⌂';
@@ -91,8 +91,9 @@ export function eventGlyph(type: string): string {
     case 'peace-broken': return '⚡';
     case 'ruin': return '∴';
     case 'storm': return '☇';
-    case 'earthquake': return '≋';
-    case 'tsunami': return '≈';
+    case 'earthquake': case 'city-quake': return '≋';
+    case 'building-law': return '▤';
+    case 'tsunami': case 'city-flood': return '≈';
     case 'plague': return '✚';
     case 'eclipse': return '◐';
     case 'comet': return '☄';

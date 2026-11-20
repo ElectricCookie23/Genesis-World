@@ -18,6 +18,7 @@ import { hash32 } from './history/hash';
 import { capital, compound, makeLanguage, personName, placeMeanings, soundChange, splitLanguage, word, type Language } from './history/language';
 import { clearedCover } from './plants';
 import { stillCleared } from './history/decay';
+import { answer, damage, hazards, type CalamityKind, type Ground, type Rebuild, type Scar } from './history/calamity';
 import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role, type Wonder, type WonderKind } from './history/model';
 import { SLOT_INDEX, WEB, borrowable, chooseNext, copyKnowledge, forget, levelOf, newKnowledge, shed, wayFor, type Land, type Leaning } from './history/tech';
 
@@ -55,6 +56,8 @@ export interface Settlement {
   founded: number;
   /** The event this town's oldest story is about (something its people saw and still tell of), or -1. */
   lore: number;
+  /** What calamities have left on it (system E20): the last few, oldest first. */
+  scars?: Scar[];
   eventId: number;
   ruined: number; // year it was abandoned, or -1
   painted: boolean;
@@ -430,6 +433,8 @@ export class Civilization {
       const gone = cr.species.filter((x) => x.extinctYear >= 0 && x.peakRegions >= 10 && x.name);
       if (gone.length && rng.chance(0.12)) sim.civEvent('constellation', st.species, st.cell, st.id, rng.pick(gone).id);
     }
+    // ---- fire, earthquake, flood and ash (system E20)
+    this.calamity(sim, rng, n, st, capacity, y, year);
     // war: neighbours of another nation or another kind sometimes fight, those who tell the same stories of the past less often (campaigns proper are system E33)
     const head = this.h.people[n.ruler];
     if (st.tech > 0.3 && rng.chance(Math.min(0.5, 0.0004 * y * (0.6 + 0.8 * (head ? head.bold : 0.5))))) {
@@ -2589,6 +2594,101 @@ export class Civilization {
     return st;
   }
 
+  /** The ground a town stands on, as calamities see it (system E20). */
+  private groundOf(sim: Simulation, st: Settlement): Ground & { mountain: number } {
+    const w = sim.world, g = sim.grid, cell = st.cell;
+    let coast = false;
+    for (let j = 0; j < g.ncount[cell]!; j++) if (w.elevation[g.neighbors[cell * 6 + j]!]! <= w.seaLevel) coast = true;
+    const river = Math.min(1, w.flow[cell]! * 4);
+    const shore = coast ? sat(1 - (w.elevation[cell]! - w.seaLevel) / 0.15) : 0;
+    // the nearest volcano, if one is within a few days' walk
+    let peak = 0, mountain = -1;
+    const p = g.pos;
+    for (const v of sim.geology.volcanoes) {
+      const d = p[cell * 3]! * p[v.cell * 3]! + p[cell * 3 + 1]! * p[v.cell * 3 + 1]! + p[cell * 3 + 2]! * p[v.cell * 3 + 2]!;
+      const near = sat((d - 0.9925) / 0.0075);
+      if (near > peak && v.cell !== cell) { peak = near; mountain = v.cell; }
+    }
+    return { dry: sat(1 - w.moisture[cell]!), low: Math.max(river > 0.3 ? river : 0, shore), fault: Math.min(1, Math.abs(sim.geology.convergence[cell] ?? 0)), peak, mountain };
+  }
+
+  /**
+   * Disasters in cities (system E20). A town of timber in a dry country burns; one on the edge of a plate is
+   * shaken down; one on low ground by a river or the sea is flooded; one under a volcano is buried in ash. How
+   * much is lost depends on what it is built of and where it stands (`sim/history/calamity.ts`).
+   */
+  private calamity(sim: Simulation, rng: RNG, n: Nation, st: Settlement, capacity: number, y: number, year: number): void {
+    if (st.tech < 0.3 || st.pop < 1) return;
+    // (a cheap gate first: no town suffers more than one calamity in sixty years on average, and most far fewer)
+    const ceiling = 1 / 60;
+    if (!rng.chance(1 - Math.exp(-y * ceiling))) return;
+    const ground = this.groundOf(sim, st);
+    const risk = hazards(st.tech, st.pop / Math.max(0.5, capacity), ground, n.codes);
+    const total = risk.fire + risk.quake + risk.flood + risk.ash;
+    if (!rng.chance(Math.min(1, total / ceiling))) return;
+    let pick = rng.next() * total;
+    const kind: CalamityKind = (pick -= risk.fire) < 0 ? 'fire' : (pick -= risk.quake) < 0 ? 'quake' : (pick -= risk.flood) < 0 ? 'flood' : 'ash';
+    const share = damage(kind, st.tech, ground, rng.next(), n.codes);
+    const part = share >= 0.75 ? 'almost all' : share >= 0.55 ? 'more than half' : share >= 0.4 ? 'nearly half' : share >= 0.27 ? 'a third' : share >= 0.17 ? 'a fifth' : 'a part';
+    const great = share >= 0.33;
+    const peakName = kind === 'ash' ? sim.geology.volcanoes.find((v) => v.cell === ground.mountain)?.name ?? 'the mountain' : '';
+    const [type, title, description] = kind === 'fire'
+      ? ['city-fire', great ? `The great fire of ${st.name}` : `Fire in ${st.name}`, rng.pick([`A fire that began in one kitchen crosses ${st.name} on the wind. By morning ${part} of the town is ash.`, `In a dry season ${st.name} burns for three days. ${capital(part)} of it is gone when the wind drops.`, `Fire runs along the roofs of ${st.name} faster than anyone can pull them down. ${capital(part)} of the town is lost.`])]
+      : kind === 'quake'
+        ? ['city-quake', `${st.name} is thrown down`, rng.pick([`The ground under ${st.name} moves for less than a minute. ${capital(part)} of the town is rubble at the end of it.`, `An earthquake brings down ${part} of ${st.name}. ${st.tech < 0.8 && st.tech > 0.45 ? 'The tallest buildings fall first.' : 'What was built light is still standing.'}`])]
+        : kind === 'flood'
+          ? ['city-flood', `The flood at ${st.name}`, rng.pick([`The water rises through ${st.name} in a night and stays for a month. ${capital(part)} of the town stood on the low ground.`, `After weeks of rain the water comes into ${st.name}. ${capital(part)} of the town is under it.`])]
+          : ['eruption', `${capital(peakName)} buries ${st.name}`, `${capital(peakName)} wakes. Ash falls on ${st.name} for days, and ${part} of the town, the side toward the mountain, lies under it.`];
+    const ev = sim.emit({
+      type, year, cellId: kind === 'ash' && ground.mountain >= 0 ? ground.mountain : st.cell, title, description,
+      causes: [st.eventId, n.eventId].filter((x, i, a) => x >= 0 && sim.events.events[x] && a.indexOf(x) === i), causeWeights: [1, 0.3],
+      importance: share >= 0.55 && st.id === n.capital ? 2 : great ? 1 : 0, speciesIds: [st.species], data: { nation: n.id, settlement: st.id, share: Math.round(share * 100) / 100 },
+    });
+    // people: most get out of a fire, fewer out of falling walls or ash
+    st.pop *= 1 - share * (kind === 'fire' ? 0.15 : kind === 'flood' ? 0.2 : kind === 'quake' ? 0.35 : 0.5);
+    if (kind === 'ash' && ground.mountain >= 0) sim.world.ash[st.cell] = Math.max(sim.world.ash[st.cell]!, 0.5 * share);
+    this.layer(st, year, kind === 'fire' ? 'burnt' : kind === 'quake' ? 'shaken' : kind === 'flood' ? 'flood' : 'ash', ev.id, 30);
+    this.woe(n, 'disaster', ev.id, year, 0.03 + 0.12 * share / Math.max(1, n.towns));
+    if (kind === 'quake') this.fortify(st, year);
+    this.scar(sim, rng, n, st, kind, share, ev.id, year, kind === 'ash' && ground.mountain >= 0 ? ground.mountain : undefined);
+  }
+
+  /**
+   * A calamity leaves its mark on a town, and the town answers it (system E20): it builds again as before, or
+   * differently. The first answer of a kind in a country is a building law, an event caused by the calamity,
+   * and every town of that country builds by it from then on.
+   */
+  private scar(sim: Simulation, rng: RNG | null, n: Nation | undefined, st: Settlement, kind: CalamityKind, share: number, eventId: number, year: number, toward?: number): void {
+    if (st.tech < 0.3) return;
+    const how = answer(kind, share, st.tech, n?.codes);
+    let rebuilt: Rebuild = how.rebuilt;
+    if (how.law && n) {
+      const which = kind === 'fire' ? 'fire' : kind === 'quake' ? 'quake' : 'flood';
+      const firsts = (this.h.firstCodes ??= {});
+      const first = firsts[which] === undefined;
+      const text = kind === 'fire'
+        ? [`${n.name} forbids thatch and timber in its towns`, `After the fire at ${st.name}, ${n.name} rules that within a town nothing may be roofed in thatch or fronted in timber. What burned is to be built again in stone and tile, and the streets made wide enough to stop a fire.`]
+        : kind === 'quake'
+          ? [`${n.name} rules how its towns may be built`, `After the earthquake at ${st.name}, ${n.name} rules that nothing in its towns may stand taller than three floors, and that every wall be tied with timber so that it bends before it breaks.`]
+          : rebuilt === 'moved'
+            ? [`${n.name} gives up the low ground`, `After the flood at ${st.name}, ${n.name} rules that no one may build again below the mark the water reached. The low quarter of ${st.name} is left to the reeds.`]
+            : [`${n.name} raises its floors`, `After the flood at ${st.name}, ${n.name} rules that by the water every floor must stand on posts, a man's height above the mark the water reached.`];
+      const ev = sim.emit({
+        type: 'building-law', year, cellId: st.cell, title: first ? `The first building law: ${text[0]!}` : text[0]!, description: text[1]!,
+        causes: [eventId, n.eventId].filter((x, i, a) => x >= 0 && sim.events.events[x] && a.indexOf(x) === i), causeWeights: [1, 0.3],
+        importance: first ? 2 : 1, speciesIds: [n.species], data: { nation: n.id, settlement: st.id, kind: which },
+      });
+      (n.codes ??= {})[which] = { year, eventId: ev.id };
+      if (first) firsts[which] = ev.id;
+      this.credit(sim, rng, n, ev.id, 'The law was drawn up by {name}.', 'scholar', year);
+    } else if (how.law) rebuilt = how.rebuilt === 'moved' ? 'moved' : '';
+    const scars = (st.scars ??= []);
+    const s: Scar = { year, kind, share, eventId, rebuilt };
+    if (toward !== undefined) s.toward = toward;
+    scars.push(s);
+    if (scars.length > 5) scars.shift();
+  }
+
   /** A disaster near settlements: people die, and in young towns it becomes the story they tell of themselves. */
   witness(sim: Simulation, eventId: number, regions: number[], kill: number[]): void {
     for (let k = 0; k < regions.length; k++) {
@@ -2602,6 +2702,12 @@ export class Civilization {
         this.layer(st, sim.simYear, /erupt|impact|winter|volcan/.test(what) ? 'ash' : /tsunami|flood|sea|wave|storm/.test(what) ? 'flood' : /quake/.test(what) ? 'shaken' : 'burnt', eventId, 60);
       }
       const nation = st.nation >= 0 ? this.h.nations[st.nation] : undefined;
+      // and it shows in the town afterwards (system E20): what the planet does to a town is answered like any other calamity
+      if (kill[k]! >= 0.12 && this.historyActive) {
+        const what = sim.events.events[eventId], type = what?.type ?? '';
+        const kind: CalamityKind = /erupt|impact|winter|volcan/.test(type) ? 'ash' : /tsunami|flood|sea|wave|storm|hurricane/.test(type) ? 'flood' : /quake/.test(type) ? 'quake' : 'fire';
+        this.scar(sim, null, nation && nation.ended < 0 ? nation : undefined, st, kind, Math.min(0.9, kill[k]!), eventId, sim.simYear, kind === 'ash' && what && what.cellId >= 0 && what.cellId !== st.cell ? what.cellId : undefined);
+      }
       if (nation && nation.ended < 0) this.woe(nation, 'disaster', eventId, sim.simYear, 0.06 + 0.2 * Math.min(0.9, kill[k]!) / Math.max(1, nation.towns));
       if (st.lore < 0 && st.tech < 0.7) {
         st.lore = eventId;

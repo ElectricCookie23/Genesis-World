@@ -7,6 +7,7 @@ import type { SimEvent } from '../sim/events';
 import type { NationInfo, PersonInfo, SettlementInfo, SpeciesInfo, WonderInfo } from '../shared/protocol';
 import { dateIn } from '../sim/history/calendar';
 import { describeRuin } from '../sim/history/decay';
+import { CALAMITIES, REBUILDS, describeScar } from '../sim/history/calamity';
 import { actions, state, update, useStore, type Relative, type UIState } from './store';
 import { bigNumber, eventColor, eventGlyph, formatYear, hsl, metres, shortYear } from './format';
 import { Strata } from './strange';
@@ -904,6 +905,7 @@ export function Peoples() {
                   <span>{Math.round(j.progress * 100)}%</span>
                 </div>
               ))}
+              {scarLines(st, s.stats?.simYear ?? 0).map((line, i) => <div key={`scar${i}`} class={css.when} style={{ color: '#e8b49a' }}>{line}</div>)}
               <WonderLines st={st} year={s.stats?.simYear ?? 0} />
               {(st.monuments ?? 0) > 0 && <div class={css.when} style={{ color: '#ffd76a' }}>{st.monuments} great {st.monuments === 1 ? 'work stands' : 'works stand'} here from a golden age.</div>}
               {lore && <div class={css.when} style={{ color: '#ece7db' }}>The story it tells of itself: {lore.title.toLowerCase()}.</div>}
@@ -929,6 +931,16 @@ export function Peoples() {
       </div>
     </div>
   );
+}
+
+/** What calamities have left on a town (system E20): the last two, newest first, each in a sentence. */
+export function scarLines(st: SettlementInfo, year: number): string[] {
+  const out: string[] = [];
+  const a = st.scars ?? [];
+  for (let i = a.length - 5; i >= 0 && out.length < 2; i -= 5) {
+    out.push(describeScar({ year: a[i]!, kind: CALAMITIES[a[i + 1]!] ?? 'fire', share: a[i + 2]!, eventId: -1, rebuilt: REBUILDS[a[i + 3]!] ?? '' }, year - a[i]!));
+  }
+  return out;
 }
 
 /** A wonder in a few lines (system E19): what it is, why it was built, and the way to the event that inspired it. */

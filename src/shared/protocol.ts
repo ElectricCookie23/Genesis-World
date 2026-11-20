@@ -165,6 +165,14 @@ export interface SettlementInfo {
   monuments?: number;
   /** The wonders that stand here, or are being built (system E19). */
   wonders?: WonderInfo[];
+  /**
+   * What calamities have left on it (system E20), oldest first, five numbers each: the year, the kind (an index into
+   * CALAMITIES: fire, quake, flood, ash), the share of the town lost, how it built again (an index into REBUILDS:
+   * as before, stone, braced, raised, moved) and the cell the harm came from (-1 if none).
+   */
+  scars?: number[];
+  /** The years its country's building laws were made: fire, earthquake, flood (-1 for none). */
+  codes?: number[];
   /** Its walls, oldest first, as pairs: the people it held (thousands) and what it knew when each was built. */
   walls?: number[];
   /** Founded by settlers who came by sea. */

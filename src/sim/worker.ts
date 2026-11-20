@@ -10,6 +10,7 @@ import {
   type WonderInfo,
 } from '../shared/protocol';
 import { ERAS, earthNote, eraOf } from './history/eras';
+import { CALAMITIES, REBUILDS } from './history/calamity';
 import { compound } from './history/language';
 import { WEB, wayFor } from './history/tech';
 
@@ -204,6 +205,12 @@ function shownSettlements(s: Simulation): Simulation['civ']['settlements'] {
   const kept = new Set<number>();
   for (const w of s.civ.h.wonders ?? []) kept.add(w.settlement);
   return all.filter((t) => t.ruined < 0 || skip-- <= 0 || kept.has(t.id));
+}
+
+/** The years a country's building laws were made (system E20): fire, earthquake, flood; undefined if it has none. */
+function codeYears(s: Simulation, nation: number): number[] | undefined {
+  const c = nation >= 0 ? s.civ.h.nations[nation]?.codes : undefined;
+  return c && (c.fire || c.quake || c.flood) ? [c.fire?.year ?? -1, c.quake?.year ?? -1, c.flood?.year ?? -1] : undefined;
 }
 
 /** The wonders of each town (system E19), by the town's id. */
@@ -405,7 +412,7 @@ function tick(): void {
     if (s.civ.settlements.length) {
       const joins = linksByTown(s);
       const great = wondersByTown(s);
-      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, lore: t.lore, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, farms: t.farms, monuments: t.monuments ?? 0, wonders: great.get(t.id), walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas, links: joins.get(t.id), dam: t.dam !== undefined, mine: t.mine !== undefined, layers: (t.strata ? t.strata.length : 1) + (t.over !== undefined ? 1 : 0), peak: t.peak, feral: t.feral !== undefined ? s.creatures.species[t.feral]?.name ?? '' : '', nesting: t.nesting !== undefined ? s.creatures.species[t.nesting]?.name ?? '' : '' })) , nations: nationList(s) });
+      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, lore: t.lore, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, farms: t.farms, monuments: t.monuments ?? 0, wonders: great.get(t.id), scars: t.scars && t.scars.length ? t.scars.flatMap((x) => [x.year, CALAMITIES.indexOf(x.kind), x.share, REBUILDS.indexOf(x.rebuilt), x.toward ?? -1]) : undefined, codes: codeYears(s, t.nation), walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas, links: joins.get(t.id), dam: t.dam !== undefined, mine: t.mine !== undefined, layers: (t.strata ? t.strata.length : 1) + (t.over !== undefined ? 1 : 0), peak: t.peak, feral: t.feral !== undefined ? s.creatures.species[t.feral]?.name ?? '' : '', nesting: t.nesting !== undefined ? s.creatures.species[t.nesting]?.name ?? '' : '' })) , nations: nationList(s) });
     }
     speciesVersion = s.creatures.version;
     if (s.plants.version !== plantVersion) {
