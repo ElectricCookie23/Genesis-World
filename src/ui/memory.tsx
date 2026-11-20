@@ -73,6 +73,10 @@ function ArchiveView() {
             {a.body.map((para, i) => <p key={i} class={css.article}><Pieces of={para} /></p>)}
             {a.events.length > 0 && s.events[a.events[0]!] && <button class={css.link} onClick={() => update({ whyEvent: a.events[0]!, panel: 'none' })}>why did this happen?</button>}
             {a.ref.kind === 'place' && <button class={css.link} onClick={() => { update({ memTab: 'chronoscope' }); actions.setChrono(a.ref.id, s.stats?.simYear ?? 0); }}>see it in another year</button>}
+            {a.ref.kind === 'place' && <button class={css.link} onClick={() => actions.meet(a.ref.id, 7)}>meet someone who lives here</button>}
+            {a.ref.kind === 'war' && <button class={css.link} onClick={() => actions.openBattle(a.ref.id)}>the battle, on the field</button>}
+            {a.ref.kind === 'nation' && <button class={css.link} onClick={() => actions.openMuseum(a.ref.id)}>its museum</button>}
+            {a.ref.kind === 'species' && <button class={css.link} onClick={() => { update({ panel: 'ground', groundTab: 'senses' }); actions.seeAs(a.ref.id); }}>see as it sees</button>}
             {a.ref.kind === 'nation' && <button class={css.link} onClick={() => { update({ memTab: 'records', memRecords: null }); actions.askMemory({ what: 'records', id: a.ref.id }); }}>its own history of itself</button>}
           </div>
         )}

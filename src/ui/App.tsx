@@ -4,6 +4,7 @@ import { GoalMarker, Goals } from './goals';
 import { SkyMessage, System } from './system';
 import { Microscope, Pulse } from './strange';
 import { FilmOverlay, Memory } from './memory';
+import { Ground, GroundHud } from './ground';
 import { bigNumber, formatYear } from './format';
 import { DynastyPanel } from './dynasty';
 import { LanguagesPanel } from './tongues';
@@ -22,7 +23,7 @@ const HINTS = [
 export function App() {
   const s = useStore();
   const st = s.stats;
-  const hidden = s.uiHidden || s.postcard || !!s.film;
+  const hidden = s.uiHidden || s.postcard || !!s.film || s.walking || s.skyView;
   const last = s.chronicle.length ? s.events[s.chronicle[s.chronicle.length - 1]!] : undefined;
   return (
     <div class={css.root}>
@@ -69,6 +70,7 @@ export function App() {
           {s.panel === 'system' && <System />}
           {s.panel === 'microscope' && <Microscope />}
           {s.panel === 'archive' && <Memory />}
+          {s.panel === 'ground' && <Ground />}
           {s.whyEvent >= 0 && <Why />}
           {s.selectedSpecies >= 0 && s.whyEvent < 0 && <SpeciesCard />}
           {s.creature && s.selectedSpecies < 0 && s.whyEvent < 0 && <CreatureCard />}
@@ -89,6 +91,7 @@ export function App() {
             <button class={s.panel === 'guide' ? css.active : ''} onClick={() => togglePanel('guide')} title="Field guide and memorial">Guide</button>
             {st && st.settlements > 0 && <button class={s.panel === 'peoples' ? css.active : ''} onClick={() => togglePanel('peoples')} title="Settlements and peoples">Peoples</button>}
             <button class={s.panel === 'archive' ? css.active : ''} onClick={() => togglePanel('archive')} title="The record: archive, atlas, braid, ancestry (A)">Record</button>
+            <button class={s.panel === 'ground' ? css.active : ''} onClick={() => togglePanel('ground')} title="On the ground: a citizen, an anchor, a museum, a battle, an animal's senses, walking (B)">Ground</button>
             <button class={s.panel === 'goals' ? css.active : ''} onClick={() => togglePanel('goals')} title="Goals, if you want some (J)">Goals</button>
             <button class={s.panel === 'system' ? css.active : ''} onClick={() => togglePanel('system')} title="The star system (S)">☉</button>
             <button class={s.panel === 'graphs' ? css.active : ''} onClick={() => togglePanel('graphs')} title="Graphs over time">∿</button>
@@ -99,6 +102,7 @@ export function App() {
         </div>
       )}
       {s.film && <FilmOverlay />}
+      {!s.film && !s.opening && <GroundHud />}
       {s.notice && <div class={`${css.panel} ${css.notice}`}>{s.notice}</div>}
       {s.eraBanner && !s.milestone && !s.opening && (
         <div key={`${s.eraBanner.title}${s.eraBanner.year}`} style={{ position: 'fixed', left: '50%', top: '13%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'none', maxWidth: '92vw', textShadow: '0 2px 18px #000c' }}>
@@ -115,8 +119,8 @@ export function App() {
         </div>
       )}
       {/* on a phone a panel is a sheet over the lower screen: the narration would lie across its text */}
-      {s.chronicleLine && !s.milestone && !s.film && s.panel !== 'archive' && !(s.mobile && s.panel !== 'none') && <div class={css.narration} key={s.chronicleLine}>{s.chronicleLine}</div>}
-      {!s.opening && !s.chronicleLine && !s.milestone && last && s.panel !== 'chronicle' && s.panel !== 'archive' && !(s.mobile && s.panel !== 'none') && !hidden && (st?.simYear ?? 0) - last.simYear < 4e6 && (
+      {s.chronicleLine && !s.milestone && !s.film && !s.walking && !s.skyView && s.panel !== 'archive' && s.panel !== 'ground' && !(s.mobile && s.panel !== 'none') && <div class={css.narration} key={s.chronicleLine}>{s.chronicleLine}</div>}
+      {!s.opening && !s.chronicleLine && !s.milestone && last && s.panel !== 'chronicle' && s.panel !== 'archive' && s.panel !== 'ground' && !(s.mobile && s.panel !== 'none') && !hidden && (st?.simYear ?? 0) - last.simYear < 4e6 && (
         <div class={css.narration} key={last.id}><small>{formatYear(last.simYear).toUpperCase()}</small>{last.description}</div>
       )}
       {s.opening && s.skipVisible && <button class={css.skip} onClick={() => actions.skipOpening()}>SKIP</button>}

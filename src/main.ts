@@ -24,6 +24,7 @@ import { Music } from './audio/music';
 import type { SlotInfo, UIState } from './ui/store';
 import { GOALS, emptyRecord, evaluateGoals, type GoalRecord } from './game/goals';
 import { planFilm, shotAt, type Shot } from './game/film';
+import { vision } from './sim/senses';
 import { actions, state, togglePanel, update } from './ui/store';
 
 const bootBar = document.getElementById('boot-bar') as HTMLElement;
@@ -588,6 +589,78 @@ async function boot(): Promise<void> {
     wrap(ctx, shot.text, W * 0.78).slice(0, 4).forEach((line, n) => ctx.fillText(line, W / 2, H - 110 + n * 29));
     ctx.globalAlpha = 1;
   };
+  // ---- on the ground (expansion Section 5)
+  const underView = (): number => { const hit = scene.pick(innerWidth / 2, innerHeight / 2); return hit ? scene.cellAt(hit.x, hit.y, hit.z) : -1; };
+  actions.meet = (town, index) => { update({ panel: 'ground', groundTab: 'citizen', gCitizen: null }); send({ type: 'requestMemory', ask: { what: 'citizen', town, index } }); };
+  actions.dropAnchor = (cell) => {
+    const c = cell ?? underView();
+    if (c < 0) { update({ notice: 'Point the view at the planet first: the anchor drops under the centre of the screen.' }); window.setTimeout(() => update({ notice: '' }), 3500); return; }
+    update({ panel: 'ground', groundTab: 'anchor', gAnchor: null });
+    send({ type: 'requestMemory', ask: { what: 'anchor', cell: c } });
+  };
+  actions.eyewitness = (eventId) => { update({ panel: 'ground', groundTab: 'witness', gWitness: null, whyEvent: -1 }); send({ type: 'requestMemory', ask: { what: 'witness', eventId } }); };
+  actions.openMuseum = (nation) => { update({ panel: 'ground', groundTab: 'museum', gMuseum: null }); send({ type: 'requestMemory', ask: { what: 'museum', id: nation } }); };
+  actions.openBattle = (eventId) => { update({ panel: 'ground', groundTab: 'battle', gBattle: null, whyEvent: -1 }); send({ type: 'requestMemory', ask: { what: 'battle', eventId } }); };
+  actions.seeAs = (species) => {
+    const sp = state.species.get(species);
+    if (!sp) { scene.post.setVision(null); update({ seeingAs: null }); return; }
+    const v = vision(sp.genes);
+    scene.post.setVision(v);
+    update({ seeingAs: { ...v, species } });
+  };
+  // walking: the keys are read each frame so that held keys move smoothly
+  const held = new Set<string>();
+  let pad: [number, number] = [0, 0];
+  actions.setWalking = (on) => {
+    held.clear(); pad = [0, 0];
+    if (on) { scene.cam.zoomTo(Math.min(scene.cam.dist, 0.02)); scene.cam.tiltTo(-0.95); if (state.skyView) actions.setSkyView(false); }
+    else scene.cam.tiltTo(0);
+    update({ walking: on, panel: on ? 'none' : state.panel });
+  };
+  actions.walkInput = (forward, right) => { pad = [forward, right]; };
+  window.addEventListener('keyup', (e) => held.delete(e.key.toLowerCase()));
+  window.addEventListener('blur', () => held.clear());
+  const walkFrame = (dt: number): void => {
+    if (!state.walking) return;
+    const f = (held.has('w') || held.has('arrowup') ? 1 : 0) - (held.has('s') || held.has('arrowdown') ? 1 : 0) + pad[0];
+    const r = (held.has('d') || held.has('arrowright') ? 1 : 0) - (held.has('a') || held.has('arrowleft') ? 1 : 0) + pad[1];
+    // a stride that fits the height: you cross what you can see in a second or two, whether on foot or high up
+    const stride = scene.cam.dist * 0.75 * Math.min(0.05, dt);
+    if (f || r) scene.cam.walk(f * stride, r * stride);
+    if (held.has('r')) scene.cam.zoomBy(1 + 1.2 * dt);
+    if (held.has('f')) scene.cam.zoomBy(1 - 1.2 * dt);
+    scene.cam.idle = 0;
+  };
+  actions.setSkyView = (on) => {
+    if (!on) { scene.cam.sky = 0; scene.cam.tiltTo(0); update({ skyView: false }); return; }
+    const c = underView();
+    if (c < 0) { update({ notice: 'Point the view at the planet first: you stand under the centre of the screen.' }); window.setTimeout(() => update({ notice: '' }), 3500); return; }
+    if (state.walking) actions.setWalking(false);
+    const lon = grid.lon[c]!, lat = grid.lat[c]!;
+    scene.cam.flyTo(lon, lat, 0.012);
+    scene.cam.tiltTo(0.5);
+    scene.cam.sky = 2.4;
+    // face north, where the pole star would be and where a comet is hung
+    scene.cam.faceToward(lon, Math.min(1.5, lat + 0.3));
+    // midnight here
+    scene.dayAngle = lon + Math.PI;
+    scene.cometOver(lon, lat);
+    update({ skyView: true, panel: 'none' });
+  };
+  actions.skyLabels = () => {
+    const f = scene.skyFacts(), out: { text: string; x: number; y: number }[] = [];
+    const put = (text: string, p: [number, number, number] | null) => { if (!p) return; const [x, y, vis] = scene.projectSky(p[0], p[1], p[2]); if (vis > 0) out.push({ text, x, y }); };
+    const phase = f.moonLit > 0.95 ? 'full' : f.moonLit > 0.6 ? 'gibbous' : f.moonLit > 0.4 ? 'half' : f.moonLit > 0.08 ? 'a crescent' : 'new';
+    put(`the moon, ${phase} (${Math.round(f.moonLit * 100)}% lit)`, f.moon);
+    put('the comet', f.comet);
+    // the figures peoples have named among the stars: each hangs where its naming put it, and turns with the sky
+    const named = state.events.filter((e) => e && e.type === 'constellation').slice(-6);
+    for (const e of named) {
+      const a = ((e.id * 0.6180339887) % 1) * Math.PI * 2 - scene.dayAngle, b = (((e.id * 0.7548776662) % 1) - 0.5) * 1.6;
+      put(e.title.replace(/^The /, 'the '), [Math.cos(b) * Math.cos(a) * 300, Math.sin(b) * 300, Math.cos(b) * Math.sin(a) * 300]);
+    }
+    return out;
+  };
   actions.whatIf = (eventId) => {
     if (eventId < 0) { send({ type: 'whatif', stop: true }); return; }
     update({ panel: 'archive', memTab: 'whatif', whatIf: null, whatIfMaps: null, whatIfProblem: '', whyEvent: -1 });
@@ -621,6 +694,7 @@ async function boot(): Promise<void> {
   };
   actions.setPhotoFilter = (f) => { update({ photoFilter: f }); canvas.style.filter = FILTERS[f] ?? 'none'; };
   actions.savePhoto = () => download(snapshot(), `genesis-${seed}-${Math.round((state.stats?.simYear ?? 0) / 1e6)}My.png`);
+  let lastWalk = performance.now();
   let recorder: MediaRecorder | null = null;
   actions.toggleRecording = () => {
     if (recorder) { recorder.stop(); return; }
@@ -773,6 +847,8 @@ async function boot(): Promise<void> {
   const takeEvents = (events: SimEvent[], live: boolean) => {
     for (const ev of events) {
       state.events[ev.id] = ev;
+      // a comet the chronicle reports hangs in the sky for a while (E47)
+      if (live && (ev.type === 'comet' || ev.type === 'tool-comet')) scene.showComet(90, ev.id);
       // keep effect links current on the events we already hold
       for (const c of ev.causes) {
         const cause = state.events[c];
@@ -912,7 +988,20 @@ async function boot(): Promise<void> {
         else if (a.what === 'records') update({ memRecords: a.data });
         else if (a.what === 'ancestry') update({ memAncestry: a.data });
         else if (a.what === 'forecasts') update({ memForecasts: a.data });
-        else if (state.chrono && a.data && a.data.id === state.chrono.id) { update({ memPlace: a.data }); scene.setSettlements(withPast(state.settlements), state.realms); }
+        else if (a.what === 'citizen') update({ gCitizen: a.data });
+        else if (a.what === 'anchor') update({ gAnchor: a.data });
+        else if (a.what === 'museum') update({ gMuseum: { asked: a.asked, data: a.data } });
+        else if (a.what === 'battle') update({ gBattle: a.data });
+        else if (a.what === 'witness') {
+          update({ gWitness: a.data });
+          // stand where they stood, low, and turn to face it
+          if (a.data) {
+            const w = a.data;
+            scene.cam.flyTo(grid.lon[w.cell]!, grid.lat[w.cell]!, 0.014);
+            scene.cam.faceToward(grid.lon[w.target]!, grid.lat[w.target]!, w.cell === w.target ? -0.5 : -1.0);
+            scene.cam.idle = 0;
+          }
+        } else if (a.what === 'place' && state.chrono && a.data && a.data.id === state.chrono.id) { update({ memPlace: a.data }); scene.setSettlements(withPast(state.settlements), state.realms); }
         break;
       }
       case 'languages': {
@@ -1030,8 +1119,14 @@ async function boot(): Promise<void> {
   window.addEventListener('keydown', activity);
 
   window.addEventListener('keydown', (e) => {
-    if (e.target instanceof HTMLInputElement || e.metaKey || e.ctrlKey) return;
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.metaKey || e.ctrlKey) return;
     const k = e.key.toLowerCase();
+    // while walking, the movement keys are movement keys and nothing else
+    if (state.walking) {
+      if (k === 'escape') { actions.setWalking(false); return; }
+      if (['w', 'a', 's', 'd', 'r', 'f', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) { held.add(k); e.preventDefault(); return; }
+    }
+    if (state.skyView && k === 'escape') { actions.setSkyView(false); return; }
     if (e.code === 'Space') { e.preventDefault(); actions.togglePause(); }
     else if (e.key >= '1' && e.key <= '7') setSpeed(Number(e.key) - 1);
     else if (k === 'h') update({ uiHidden: !state.uiHidden });
@@ -1042,6 +1137,7 @@ async function boot(): Promise<void> {
     else if (k === 's') togglePanel('system');
     else if (k === 'n') togglePanel('microscope');
     else if (k === 'a') togglePanel('archive');
+    else if (k === 'b') togglePanel('ground');
     else if (e.key === '?' || k === '/') togglePanel('help');
     else if (k === 'p') { update({ postcard: !state.postcard }); scene.cam.idle = state.postcard ? 100 : 0; }
     else if (k === 'm') togglePanel('map');
@@ -1129,6 +1225,9 @@ async function boot(): Promise<void> {
       if (!state.uiHidden && !state.opening && !busy && now - lastActivity > 4000) update({ uiHidden: true });
     }
     filmFrame(now);
+    walkFrame(Math.min(0.1, (now - lastWalk) / 1000));
+    if (state.seeingAs) scene.post.setReach(scene.cam.dist);
+    lastWalk = now;
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);

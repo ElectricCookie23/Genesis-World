@@ -1,15 +1,19 @@
 // Scene orchestration: owns the renderer, every visual layer, and per-frame updates.
 import { describeArchitecture, type Material } from './gfx/architecture';
 import {
-  AdditiveBlending, BoxGeometry, ConeGeometry, CylinderGeometry, DoubleSide, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshBasicNodeMaterial, Quaternion, RingGeometry, Scene, TorusGeometry, Vector3,
+  AdditiveBlending, BoxGeometry, ConeGeometry, CylinderGeometry, DoubleSide, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshBasicNodeMaterial, PlaneGeometry, Quaternion, RingGeometry, Scene, TorusGeometry, Vector3,
   WebGPURenderer, type Vector4,
 } from 'three/webgpu';
-import { dot, float, length, mx_fractal_noise_float, normalize, positionLocal, positionWorld, smoothstep, vec3 } from 'three/tsl';
+import { dot, exp, float, length, mx_fractal_noise_float, normalize, positionLocal, positionWorld, smoothstep, uniform, uv, vec3 } from 'three/tsl';
 import type { Grid } from '../sim/world';
 import { nearestCell } from '../sim/world';
 import type { CellSnapshot, NationInfo, WorldStats, SettlementInfo } from '../shared/protocol';
 import { hashSeed } from '../sim/rng';
 import { PlanetMesh } from './planet';
+
+const tmpA = new Vector3(), tmpB = new Vector3(), tmpC = new Vector3();
+/** How far out the comet hangs: beyond the moon, inside the far edge of what is drawn. */
+const COMET_AT = 8;
 import { OceanSurface } from './gfx/ocean';
 import { faceDirection } from './gfx/cubebake';
 import { setCloudShadow } from './clouds';
@@ -120,6 +124,12 @@ export class GenesisScene {
   private moon2?: Mesh;
   private ringMesh?: Mesh;
   private monolithMesh?: InstancedMesh;
+  /** A comet in the sky (expansion E47): shown for a while after the chronicle reports one. */
+  private cometMesh?: Mesh;
+  private readonly uComet = uniform(0);
+  private cometFrom = -1e9;
+  private cometFor = 0;
+  private readonly cometDir = new Vector3(0.35, 0.45, 0.82).normalize();
   private boneMesh?: InstancedMesh;
   private oldTree?: Mesh;
   private boneCells: number[] = [];
@@ -188,6 +198,32 @@ export class GenesisScene {
     const backend = (this.renderer.backend as unknown as { isWebGPUBackend?: boolean }).isWebGPUBackend;
     this.backend = backend ? 'webgpu' : 'webgl2';
     this.resize();
+  }
+
+  /** Put a comet in the sky for so many seconds. Where it hangs is fixed by the number given (the event that reported it). */
+  showComet(seconds: number, seed: number): void {
+    const a = ((seed * 0.6180339887) % 1) * Math.PI * 2, b = (((seed * 0.7548776662) % 1) - 0.5) * 0.9;
+    this.cometDir.set(Math.cos(b) * Math.cos(a), Math.sin(b), Math.cos(b) * Math.sin(a)).normalize();
+    this.cometFrom = this.time;
+    this.cometFor = seconds;
+  }
+
+  /** If a comet is in the sky, hang it over this place, high in the north: a comet's path is not worked out, only that it is there. */
+  cometOver(lon: number, lat: number): void {
+    const cl = Math.cos(lat);
+    const up = tmpA.set(cl * Math.cos(lon), Math.sin(lat), cl * Math.sin(lon));
+    const north = tmpB.set(0, 1, 0).addScaledVector(up, -up.y).normalize();
+    this.cometDir.copy(up).multiplyScalar(0.9).addScaledVector(north, 0.44).normalize();
+  }
+
+  /** What is in the sky just now, for the labels of the night-sky view: where the moon and any comet are, and how much of the moon is lit. */
+  skyFacts(): { moon: [number, number, number] | null; moonLit: number; comet: [number, number, number] | null; ring: boolean; sun: [number, number, number] } {
+    const sun = uSunDir.value as Vector3, m = this.moon.position;
+    const md = tmpA.copy(m).normalize();
+    // seen from the planet, the moon is full when it is opposite the sun
+    const lit = (1 - md.dot(sun)) / 2;
+    const comet = this.cometMesh?.visible ? ([this.cometDir.x * COMET_AT, this.cometDir.y * COMET_AT, this.cometDir.z * COMET_AT] as [number, number, number]) : null;
+    return { moon: this.moon.visible ? [m.x, m.y, m.z] : null, moonLit: lit, comet, ring: !!this.ringMesh?.visible, sun: [sun.x, sun.y, sun.z] };
   }
 
   setPixelRatio(max: number): void {
@@ -282,6 +318,25 @@ export class GenesisScene {
     this.ringMesh.rotation.x = -Math.PI / 2;
     this.ringMesh.visible = false;
     this.ringMesh.renderOrder = 4;
+    // a comet: a small bright head and a long faint tail, far out, lit only by itself
+    {
+      const mat = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide });
+      const u = uv().x, v = uv().y.sub(0.5);
+      const dx = u.sub(0.08).mul(5);
+      const head = exp(dx.mul(dx).add(v.mul(v)).mul(-260));
+      const along = u.sub(0.08).div(0.92).max(0);
+      const wide = along.mul(0.3).add(0.035);
+      const tail = exp(v.div(wide).mul(v.div(wide)).negate()).mul(float(1).sub(along).pow(2)).mul(0.5).mul(smoothstep(0.06, 0.1, u));
+      mat.colorNode = vec3(0.78, 0.92, 1.0).mul(head.mul(6).add(tail).mul(this.uComet));
+      mat.opacityNode = head.add(tail).min(1).mul(this.uComet);
+      // (it hangs just beyond the moon: the far edge of what is drawn is set a little past the moon's path)
+      this.cometMesh = new Mesh(new PlaneGeometry(1.9, 0.38).translate(0.95 - 0.152, 0, 0), mat);
+      this.cometMesh.visible = false;
+      this.cometMesh.frustumCulled = false;
+      this.cometMesh.renderOrder = 3;
+      this.cometMesh.matrixAutoUpdate = false;
+      this.scene.add(this.cometMesh);
+    }
     // monoliths, and bones of the dead
     const dark = new MeshBasicNodeMaterial();
     dark.colorNode = vec3(0.012, 0.012, 0.016);
@@ -406,6 +461,21 @@ export class GenesisScene {
     // a label appears only once its place is well clear of the limb: right at the edge of the disc the ground is seen
     // edge-on and names hung over the rim of the planet for places that could not be made out
     const vis = p.z < 1 && Math.abs(p.x) < 1.05 && Math.abs(p.y) < 1.05 ? Math.max(0, Math.min(1, (facing - 1 / camR - 0.1) * 6)) : 0;
+    return [(p.x * 0.5 + 0.5) * w, (-p.y * 0.5 + 0.5) * h, vis];
+  }
+  /** Where a point far out in the sky falls on screen, and whether it can be seen (in view, and not behind the planet). */
+  projectSky(x: number, y: number, z: number): [number, number, number] {
+    const cam = this.cam.camera, c = cam.position;
+    const p = this.projTmp.set(x, y, z).project(cam);
+    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    // behind the planet if the straight line to it passes through the globe
+    const dx = x - c.x, dy = y - c.y, dz = z - c.z;
+    const t = Math.max(0, Math.min(1, -(c.x * dx + c.y * dy + c.z * dz) / (dx * dx + dy * dy + dz * dz)));
+    const near = Math.hypot(c.x + dx * t, c.y + dy * t, c.z + dz * t);
+    // (standing on the ground the line starts at the surface itself: only a line that dips well into the globe is blocked)
+    // (in front of the eye is asked of the camera itself: the far edge of the picture is nearer than the stars are)
+    const ahead = dx * -cam.matrixWorld.elements[8]! + dy * -cam.matrixWorld.elements[9]! + dz * -cam.matrixWorld.elements[10]! > 0;
+    const vis = ahead && Math.abs(p.x) < 1 && Math.abs(p.y) < 1 && (t <= 0 || near > 0.985) ? 1 : 0;
     return [(p.x * 0.5 + 0.5) * w, (-p.y * 0.5 + 0.5) * h, vis];
   }
   /** The planet's disc on screen: centre x, y and radius in pixels (larger than the screen from close in). */
@@ -835,6 +905,23 @@ export class GenesisScene {
     const cd = Math.cos(this.declination);
     (uSunDir.value as Vector3).set(cd * Math.cos(this.dayAngle), Math.sin(this.declination), cd * Math.sin(this.dayAngle)).normalize();
     uSkyAngle.value = -this.dayAngle;
+    // the comet: far out in one part of the sky, its tail streaming away from the sun
+    if (this.cometMesh) {
+      const age = this.time - this.cometFrom;
+      const on = age >= 0 && age < this.cometFor;
+      this.cometMesh.visible = on;
+      if (on) {
+        this.uComet.value = Math.min(1, age / 3, (this.cometFor - age) / 8);
+        const d = this.cometDir, sun = uSunDir.value as Vector3;
+        const tail = tmpA.copy(d).sub(sun).addScaledVector(d, -tmpA.copy(d).sub(sun).dot(d));
+        if (tail.lengthSq() < 1e-6) tail.set(0, 1, 0).addScaledVector(d, -d.y);
+        tail.normalize();
+        const side = tmpB.crossVectors(d, tail).normalize();
+        this.cometMesh.matrix.makeBasis(tail, side, tmpC.copy(d).negate());
+        this.cometMesh.matrix.setPosition(d.x * COMET_AT, d.y * COMET_AT, d.z * COMET_AT);
+        this.cometMesh.matrixWorldNeedsUpdate = true;
+      }
+    }
     const mi = 0.09;
     const md = (uMoonDir.value as Vector3).set(Math.cos(this.moonAngle), Math.sin(mi) * Math.sin(this.moonAngle), Math.sin(this.moonAngle)).normalize();
     this.moon.position.copy(md).multiplyScalar(this.moonDistance);

@@ -29,6 +29,8 @@ export class OrbitCamera {
   tiltOffset = 0;
   /** 1 lets a positive tilt raise the gaze above the focus point (used under water); 0 keeps it on the ground. */
   lookUp = 0;
+  /** Raises the gaze off the ground by this many times the camera's distance: for looking at the sky from the surface. */
+  sky = 0;
   private tLon = this.lon;
   private tLat = this.lat;
   private tDist = this.dist;
@@ -143,6 +145,42 @@ export class OrbitCamera {
     if (dist !== undefined) this.tDist = dist;
   }
 
+  /**
+   * Walk: move the focus point over the ground, forward along the way the camera faces and to its right, by so much
+   * arc (radians). The camera stays behind the point as it always does, so this is walking with a camera on your shoulder.
+   */
+  walk(forward: number, right: number): void {
+    const cl = Math.cos(this.tLat);
+    const S = tmpS.set(cl * Math.cos(this.tLon), Math.sin(this.tLat), cl * Math.sin(this.tLon));
+    tmpN.copy(Y).addScaledVector(S, -S.dot(Y)).normalize();
+    tmpE.crossVectors(tmpN, S).normalize();
+    tmpF.copy(tmpN).multiplyScalar(Math.cos(this.tHeading)).addScaledVector(tmpE, Math.sin(this.tHeading));
+    tmpUp.crossVectors(tmpF, S); // to the right of the way faced
+    S.addScaledVector(tmpF, forward).addScaledVector(tmpUp, right).normalize();
+    this.flyTo(Math.atan2(S.z, S.x), Math.asin(Math.max(-1, Math.min(1, S.y))));
+    this.touch();
+  }
+
+  /** Turn to face a point on the surface, and (if given) tilt: negative looks toward the horizon. */
+  faceToward(lon: number, lat: number, tilt?: number): void {
+    const cl = Math.cos(this.tLat);
+    const S = tmpS.set(cl * Math.cos(this.tLon), Math.sin(this.tLat), cl * Math.sin(this.tLon));
+    tmpN.copy(Y).addScaledVector(S, -S.dot(Y)).normalize();
+    tmpE.crossVectors(tmpN, S).normalize();
+    const ct = Math.cos(lat);
+    tmpF.set(ct * Math.cos(lon), Math.sin(lat), ct * Math.sin(lon));
+    let h = Math.atan2(tmpF.dot(tmpE), tmpF.dot(tmpN));
+    // the short way round from where it faces now
+    h = this.tHeading + ((((h - this.tHeading) + Math.PI) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+    this.tHeading = h;
+    if (tilt !== undefined) this.tTilt = Math.max(-1.2, Math.min(0.5, tilt));
+  }
+
+  /** Tilt the view: negative looks toward the horizon, positive more nearly straight down. */
+  tiltTo(tilt: number): void {
+    this.tTilt = Math.max(-1.2, Math.min(0.5, tilt));
+  }
+
   zoomTo(dist: number): void {
     this.tDist = Math.max(MIN_DIST, Math.min(MAX_DIST, dist));
   }
@@ -203,6 +241,7 @@ export class OrbitCamera {
     cam.up.copy(tmpUp);
     // under water a raised tilt lifts the gaze off the sea bed, toward the horizon and then up to the surface
     if (this.lookUp > 0 && this.tiltOffset > 0) tmpFocus.addScaledVector(S, this.lookUp * this.tiltOffset * this.dist * 3);
+    if (this.sky > 0) tmpFocus.addScaledVector(S, this.sky * this.dist);
     cam.lookAt(tmpFocus);
     cam.near = Math.max(0.0004, this.dist * 0.05);
     cam.far = 1200;

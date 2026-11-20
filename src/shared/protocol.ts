@@ -3,6 +3,7 @@ import type { SimEvent } from '../sim/events';
 import type { CosmosInfo } from '../sim/cosmos';
 import type { Archive, StarMessage } from '../sim/legacy';
 import type { ForecastInfo } from '../sim/forecast';
+import type { Battle, CitizenLife, Museum, Witness, AnchorState } from '../sim/ground';
 import type { WhatIfMaps, WhatIfState } from '../sim/whatif';
 import type { Article, Atlas, IndexGroup, Kind, Lane, PastPlace, Records, Step } from '../sim/memory';
 import type { LinkInfo } from '../sim/link';
@@ -358,7 +359,12 @@ export type MemoryAsk =
   | { what: 'records'; id: number }
   | { what: 'ancestry'; town: number; index: number }
   | { what: 'place'; id: number; year: number }
-  | { what: 'forecasts' };
+  | { what: 'forecasts' }
+  | { what: 'citizen'; town: number; index: number }
+  | { what: 'anchor'; cell: number }
+  | { what: 'witness'; eventId: number }
+  | { what: 'museum'; id: number }
+  | { what: 'battle'; eventId: number };
 export type MemoryAnswer =
   | { what: 'index'; data: IndexGroup[] }
   | { what: 'article'; data: Article | null }
@@ -367,7 +373,12 @@ export type MemoryAnswer =
   | { what: 'records'; data: Records | null }
   | { what: 'ancestry'; data: { name: string; town: string; steps: Step[] } | null }
   | { what: 'place'; data: PastPlace | null }
-  | { what: 'forecasts'; data: ForecastInfo };
+  | { what: 'forecasts'; data: ForecastInfo }
+  | { what: 'citizen'; data: CitizenLife | null }
+  | { what: 'anchor'; data: { cell: number; states: AnchorState[] } | null }
+  | { what: 'witness'; data: Witness | null }
+  | { what: 'museum'; data: Museum | null; asked: number }
+  | { what: 'battle'; data: Battle | null };
 
 export type ToWorker =
   | { type: 'init'; seed: string; gridN?: number; neighbor?: string }

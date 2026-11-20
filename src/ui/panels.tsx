@@ -106,6 +106,8 @@ export function Why() {
                 <p>{e.description}</p>
                 {e.cellId >= 0 && <button class={css.link} onClick={() => actions.flyToCell(e.cellId)}>show place</button>}
                 {canUndo(e.type) && <button class={css.link} onClick={() => actions.whatIf(e.id)}>what if this had not happened?</button>}
+                {e.cellId >= 0 && e.importance >= 1 && <button class={css.link} onClick={() => actions.eyewitness(e.id)}>see it from the ground</button>}
+                {(e.type === 'war' || e.type === 'civil-war') && <button class={css.link} onClick={() => actions.openBattle(e.id)}>the battle</button>}
                 {(e.speciesIds ?? []).slice(0, 1).map((id) => s.species.has(id) && (
                   <button class={css.link} onClick={() => actions.selectSpecies(id)}>{s.species.get(id)!.name}</button>
                 ))}
@@ -288,7 +290,7 @@ function renderTree(s: UIState) {
 export function Help() {
   const keys: [string, string][] = [
     ['drag', 'orbit the planet'], ['scroll / pinch', 'zoom, from deep space to the ground'], ['right-drag', 'turn and tilt near the surface'],
-    ['Space', 'pause or play'], ['1 – 6', 'time speed'], ['C', 'chronicle'], ['T', 'tree of life'], ['G', 'experiments'], ['J', 'goals, if you want some'], ['S', 'the star system'], ['N', 'the microscope'], ['A', 'the record'],
+    ['Space', 'pause or play'], ['1 – 6', 'time speed'], ['C', 'chronicle'], ['T', 'tree of life'], ['G', 'experiments'], ['J', 'goals, if you want some'], ['S', 'the star system'], ['N', 'the microscope'], ['A', 'the record'], ['B', 'on the ground'],
     ['M', 'flat map'], ['X', 'cross-section'], ['U', 'dive under water'], ['V', 'first-person view while following'], ['O', 'overlays'], ['F', 'follow the selected creature'], ['P', 'postcard mode'], ['H', 'hide the interface'], ['Esc', 'close panels'], ['?', 'this list'],
   ];
   return (

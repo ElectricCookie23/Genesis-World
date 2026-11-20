@@ -2,6 +2,7 @@
 // Worker entry point: owns all world state and runs the fixed-timestep loop.
 import { Simulation } from './simulation';
 import { linkInfo } from './link';
+import { anchor, battle, citizenLife, museum, witness } from './ground';
 import { Counterfactual, changeFor, replayable, type Change } from './whatif';
 import { ancestry, archiveIndex, article, atlas, braid, placeAt, records } from './memory';
 import { G, P, PHEN_COUNT, sizeMetres } from './genetics';
@@ -553,6 +554,11 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
             : a.what === 'records' ? { what: 'records', data: records(sim, a.id) }
             : a.what === 'ancestry' ? { what: 'ancestry', data: ancestry(sim, a.town, a.index) }
             : a.what === 'forecasts' ? { what: 'forecasts', data: sim.forecast.info() }
+            : a.what === 'citizen' ? { what: 'citizen', data: citizenLife(sim, a.town, a.index) }
+            : a.what === 'anchor' ? { what: 'anchor', data: anchor(sim, a.cell) }
+            : a.what === 'witness' ? { what: 'witness', data: witness(sim, a.eventId) }
+            : a.what === 'museum' ? { what: 'museum', data: museum(sim, a.id), asked: a.id }
+            : a.what === 'battle' ? { what: 'battle', data: battle(sim, a.eventId) }
             : { what: 'place', data: placeAt(sim, a.id, a.year) };
           post({ type: 'memory', answer });
         }

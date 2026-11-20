@@ -14,9 +14,12 @@ import type { Article, Atlas, IndexGroup, Lane, PastPlace, Records, Ref, Step } 
 import type { MemoryAsk } from '../shared/protocol';
 import type { ForecastInfo } from '../sim/forecast';
 import type { Shot } from '../game/film';
+import type { AnchorState, Battle, CitizenLife, Museum, Witness } from '../sim/ground';
+import type { Vision } from '../sim/senses';
 import type { WhatIfMaps, WhatIfState } from '../sim/whatif';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'tongues' | 'goals' | 'system' | 'microscope' | 'archive';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'tongues' | 'goals' | 'system' | 'microscope' | 'archive' | 'ground';
+export type GroundTab = 'citizen' | 'anchor' | 'witness' | 'museum' | 'battle' | 'senses' | 'explore';
 export type MemoryTab = 'archive' | 'atlas' | 'braid' | 'records' | 'ancestry' | 'chronoscope' | 'forecasts' | 'whatif' | 'film';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
 
@@ -86,6 +89,19 @@ export interface UIState {
   whatIf: WhatIfState | null;
   whatIfMaps: WhatIfMaps | null;
   whatIfProblem: string;
+  /** On the ground (expansion Section 5): which view is open and what the simulation has answered for each. */
+  groundTab: GroundTab;
+  gCitizen: CitizenLife | null;
+  gAnchor: { cell: number; states: AnchorState[] } | null;
+  gWitness: Witness | null;
+  /** The museum asked for: the nation, and what came back (null if that nation keeps none). */
+  gMuseum: { asked: number; data: Museum | null } | null;
+  gBattle: Battle | null;
+  /** The animal whose senses the picture is being shown through, or null for our own eyes. */
+  seeingAs: (Vision & { species: number }) | null;
+  /** Walking or flying over the ground with the keys (E44); looking up at the night sky from the surface (E47). */
+  walking: boolean;
+  skyView: boolean;
   /** A documentary being shown (expansion E59): its shots, the one on screen, and whether it is being recorded to a file. */
   film: { shots: Shot[]; index: number; minutes: number; recording: boolean } | null;
   /** The town site whose layers are open (system E17). */
@@ -192,6 +208,15 @@ export const state: UIState = {
   whatIfMaps: null,
   whatIfProblem: '',
   film: null,
+  groundTab: 'citizen',
+  gCitizen: null,
+  gAnchor: null,
+  gWitness: null,
+  gMuseum: null,
+  gBattle: null,
+  seeingAs: null,
+  walking: false,
+  skyView: false,
   timeline: [],
   other: null,
   overlay: 'none',
@@ -283,6 +308,21 @@ export const actions = {
   openArticle: (_ref: Ref) => {},
   /** Set the chronoscope's dial for a town (null puts the town back in the present). */
   setChrono: (_id: number, _year: number | null) => {},
+  /** Meet a citizen of a town (E41); drop an anchor at a cell, or under the centre of the view (E45); find who saw an event and stand where they stood (E46). */
+  meet: (_town: number, _index: number) => {},
+  dropAnchor: (_cell?: number) => {},
+  eyewitness: (_eventId: number) => {},
+  openMuseum: (_nation: number) => {},
+  openBattle: (_eventId: number) => {},
+  /** Show the picture as a species senses it (-1 for our own eyes) (E50). */
+  seeAs: (_species: number) => {},
+  /** Walk over the ground with the keys or the pad (E44); `walkInput` is the pad: forward and right, each -1..1. */
+  setWalking: (_on: boolean) => {},
+  walkInput: (_forward: number, _right: number) => {},
+  /** Stand on the ground under the centre of the view at night and look up (E47). */
+  setSkyView: (_on: boolean) => {},
+  /** What is in the sky just now, with where each thing falls on screen. */
+  skyLabels: (): { text: string; x: number; y: number }[] => [],
   /** Make and show a documentary of this world's story, of so many minutes; `record` also saves it as a video file. */
   playFilm: (_minutes: number, _record: boolean) => {},
   stopFilm: () => {},

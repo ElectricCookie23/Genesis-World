@@ -119,6 +119,11 @@
 .filmWords h1 { margin: 6px 0 6px; font: 500 clamp(28px, 4.4vw, 46px)/1.1 'Cormorant Garamond', serif; color: #fff6dc; }
 .filmWords p { margin: 0 auto; max-width: 900px; font: italic 500 clamp(16px, 2vw, 22px)/1.35 'Cormorant Garamond', serif; opacity: 0.94; }
 @keyframes filmWords { 0% { opacity: 0; } 8%, 92% { opacity: 1; } 100% { opacity: 0; } }
+.exhibit { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.hud { position: fixed; left: 50%; top: max(14px, env(safe-area-inset-top)); transform: translateX(-50%); padding: 7px 12px; display: flex; flex-direction: column; gap: 3px; max-width: min(640px, calc(100vw - 32px)); text-align: center; z-index: 6; }
+.skyLabel { position: fixed; transform: translate(-50%, 14px); pointer-events: none; font: italic 500 15px 'Cormorant Garamond', serif; color: #e8efff; text-shadow: 0 1px 8px #000, 0 0 3px #000; white-space: nowrap; }
+.pad { position: fixed; left: 22px; bottom: max(24px, env(safe-area-inset-bottom)); width: 120px; height: 120px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.25); touch-action: none; z-index: 6; }
+.pad i { position: absolute; left: 50%; top: 50%; width: 36px; height: 36px; margin: -18px; border-radius: 50%; background: rgba(255, 255, 255, 0.3); }
 .btn { all: unset; cursor: pointer; padding: 7px 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.09); }
 .btn:hover { background: rgba(255, 255, 255, 0.18); }
 .goal { padding: 9px 0 10px; border-top: 1px solid #ffffff14; }

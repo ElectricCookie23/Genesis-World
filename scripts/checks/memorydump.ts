@@ -3,6 +3,7 @@
 import { writeFileSync } from 'node:fs';
 import { Simulation } from '../../src/sim/simulation';
 import { ancestry, archiveIndex, article, atlas, braid, placeAt, records } from '../../src/sim/memory';
+import { anchor, battle, citizenLife, museum, witness } from '../../src/sim/ground';
 
 const out = process.argv[2]!;
 const seed = process.argv[3] ?? 'amber-reef-101';
@@ -27,6 +28,13 @@ const data = {
   atlas: atlas(sim), braid: braid(sim), records: records(sim, big.id), ancestry: ancestry(sim, town.id, 7),
   place: placeAt(sim, town.id, town.founded + (sim.simYear - town.founded) * 0.4),
   town: town.id,
+  // Section 5: a citizen, an anchor, an eyewitness, a museum, a battle
+  citizen: citizenLife(sim, town.id, 7),
+  anchor: anchor(sim, sim.civ.settlements.map((s) => ({ s, n: new Set(anchor(sim, s.cell)!.states.map((x) => x.kind + x.name)).size })).sort((x, y) => y.n - x.n)[0]!.s.cell),
+  witness: (() => { const e = [...sim.events.events].reverse().find((x) => x.importance >= 2 && x.cellId >= 0); return e ? witness(sim, e.id) : null; })(),
+  museum: (() => { const n = [...h.nations].filter((x) => x.ended < 0).sort((x, y) => y.tech - x.tech)[0]!; return { asked: n.id, data: museum(sim, n.id) }; })(),
+  battle: (() => { const w = [...sim.events.events].reverse().find((x) => x.type === 'war'); return w ? battle(sim, w.id) : null; })(),
+  events: sim.events.events.filter((e) => e.importance >= 2 || e.type === 'war').slice(-60),
   settlements: sim.civ.settlements.map((s) => ({ id: s.id, name: s.name, cell: s.cell, species: s.species, pop: s.pop, tech: s.tech, founded: s.founded, lore: s.lore, eventId: s.eventId, ruined: s.ruined, nation: s.nation, peak: s.peak })),
   realms: h.nations.filter((n) => n.ended < 0).map((n) => ({ id: n.id, name: n.name, pop: n.pop })),
 };

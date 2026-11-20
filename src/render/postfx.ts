@@ -25,6 +25,13 @@ export const uBloomStrength = uniform(0.35);
 export const uGrain = uniform(0.022);
 export const uVignette = uniform(0.4);
 const uFocus = uniform(1);
+/** Through an animal's eyes (expansion E50): which sense (0 sight, 1 echoes, 2 warmth, 3 the electric sense), how sharp, how much colour, how good in the dark. */
+const uSense = uniform(0);
+const uAcuity = uniform(1);
+const uColour = uniform(0.6);
+const uNight = uniform(0);
+/** How far the animal is from what it is looking at: a call carries about that far, whether it is on the ground or the view is from orbit. */
+const uReach = uniform(1);
 
 export interface PostOptions {
   /** Temporal anti-aliasing with a history buffer and sharpening. */
@@ -42,6 +49,8 @@ export class PostFX {
   readonly pipeline: RenderPipeline;
   private options: PostOptions = { taa: true, ao: true, bloom: true, fringe: true };
   private dofEnabled = false;
+  /** Whether the picture is being shown as an animal senses it. Costs nothing while off: the filter is not in the chain. */
+  private senses = false;
   /** Depth of field is skipped on low quality. */
   allowDof = true;
   /** Auto exposure can be switched off (photo mode locks it). */
@@ -85,6 +94,22 @@ export class PostFX {
     if (next.taa === this.options.taa && next.ao === this.options.ao && next.bloom === this.options.bloom && next.fringe === this.options.fringe) return;
     this.options = next;
     this.build();
+  }
+
+  /**
+   * Show the world as an animal senses it, or (null) as we do. The numbers come from the species' genes
+   * (sim/senses.ts): the filter only draws what they say.
+   */
+  setVision(v: { mode: 'sight' | 'echo' | 'heat' | 'electric'; acuity: number; colour: number; night: number } | null): void {
+    if (v) { uSense.value = v.mode === 'echo' ? 1 : v.mode === 'heat' ? 2 : v.mode === 'electric' ? 3 : 0; uAcuity.value = v.acuity; uColour.value = v.colour; uNight.value = v.night; }
+    if (!!v === this.senses) return;
+    this.senses = !!v;
+    this.build();
+  }
+
+  /** The distance from the eye to what is being looked at: the senses that reach out (echoes, the electric sense) are scaled to it. */
+  setReach(distance: number): void {
+    uReach.value = Math.max(1e-4, distance);
   }
 
   setBloom(enabled: boolean): void {
@@ -169,6 +194,37 @@ export class PostFX {
       const waver = vec2(sin(st.y.mul(140).add(uTime.mul(6))).mul(0.0016), sin(st.x.mul(90).add(uTime.mul(4.3))).mul(0.0009)).mul(uShimmer).mul(smoothstep(0.4, 0.8, st.y));
       const sw = st.add(waver);
       rgb = vec3(t.sample(sw.sub(shift)).r, t.sample(sw).g, t.sample(sw.add(shift)).b);
+    }
+    if (this.senses) {
+      // ---- through their eyes. Sight first: how sharp, how much colour, how well in the dark.
+      const seen: N = convertToTexture(vec4(rgb, 1));
+      // poor eyes see in coarse patches: the picture is read at fewer places
+      const cells = mix(float(46), float(1400), uAcuity.mul(uAcuity));
+      const at = st.mul(cells).floor().add(0.5).div(cells);
+      let eye: N = mix(seen.sample(at).rgb, seen.sample(st).rgb, smoothstep(0.85, 1, uAcuity));
+      // eyes made for the dark lift the shadows
+      eye = eye.max(0).pow(vec3(1, 1, 1).mul(float(1).sub(uNight.mul(0.5))));
+      const lum = dot(eye, vec3(0.2126, 0.7152, 0.0722));
+      // colour: none, a few dull ones, ours, or past violet (where blue leads, a colour we have no name for is added)
+      const beyond = smoothstep(0.75, 1, uColour);
+      eye = mix(vec3(lum, lum, lum), eye, uColour.mul(1.7).min(1.3)).add(vec3(0.5, 0.05, 0.6).mul(beyond).mul(eye.b.sub(eye.g).max(0).mul(2.2)));
+      // ---- echoes: no light at all. A call goes out and comes back: near things answer loud, far things faintly, in rings
+      const away: N = this.scenePass.getViewZNode().negate().max(1e-5);
+      const ring = sin(log(away).mul(26).sub(uTime.mul(5))).mul(0.5).add(0.5).pow(5);
+      const near = exp(away.div(uReach.mul(2.2)).negate());
+      const echo = vec3(0.55, 0.85, 1).mul(ring.mul(0.9).add(0.14)).mul(near.mul(1.9).add(0.08)).mul(lum.mul(0.8).add(0.45));
+      // ---- warmth: what is bright and warm-coloured stands out against the cold; black, violet, red, yellow, white
+      const warm = lum.mul(0.75).add(eye.r.sub(eye.b).max(0).mul(0.9)).min(1);
+      const heat = mix(mix(mix(vec3(0.02, 0.0, 0.08), vec3(0.45, 0.0, 0.5), smoothstep(0.0, 0.3, warm)), vec3(0.95, 0.25, 0.05), smoothstep(0.25, 0.6, warm)), vec3(1, 0.95, 0.6), smoothstep(0.55, 0.95, warm));
+      // ---- the electric sense: rock and water are dark; what is alive (what has colour of its own) glows and flickers
+      const most = max(max(eye.r, eye.g), eye.b), least = eye.r.min(eye.g).min(eye.b);
+      const alive = most.sub(least).div(most.add(0.05)).pow(1.4);
+      const flicker = sin(uTime.mul(17).add(st.x.mul(90)).add(st.y.mul(70))).mul(0.12).add(0.88);
+      const field = vec3(0.02, 0.05, 0.14).add(vec3(0.35, 0.95, 1).mul(alive).mul(flicker).mul(2.6)).mul(near.mul(0.8).add(0.45));
+      const isEcho = smoothstep(0.5, 0.51, uSense).mul(float(1).sub(smoothstep(1.5, 1.51, uSense)));
+      const isHeat = smoothstep(1.5, 1.51, uSense).mul(float(1).sub(smoothstep(2.5, 2.51, uSense)));
+      const isField = smoothstep(2.5, 2.51, uSense);
+      rgb = mix(mix(mix(eye, echo, isEcho), heat, isHeat), field, isField);
     }
     const vig = float(1).sub(smoothstep(0.45, 1.15, length(fromCentre).mul(1.45)).mul(uVignette));
     const grain = fract(sin(dot(st.add(fract(uTime)), vec2(12.9898, 78.233))).mul(43758.5453)).sub(0.5).mul(uGrain);
