@@ -193,7 +193,9 @@ export class Civilization {
     }
     h.pending += dt;
     if (h.pending < 1) return;
-    const years = Math.max(1, Math.ceil(h.pending / MAX_TICKS));
+    // (in the long peace nothing happens that needs fine steps: a whole call is one tick, which keeps a jump
+    // through millions of years as quick with a living civilization as without one)
+    const years = (h.peace ?? -1) >= 0 ? Math.max(1, Math.floor(h.pending)) : Math.max(1, Math.ceil(h.pending / MAX_TICKS));
     const ticks = Math.floor(h.pending / years);
     const start = sim.simYear - h.pending;
     sim.quietEvents = years > SUMMARY_YEARS;
