@@ -543,7 +543,9 @@ export function EmblemSvg({ nation, size = 22 }: { nation: Nation; size?: number
 export function NationLabels() {
   const s = useStore();
   const ref = useRef<HTMLDivElement>(null);
-  const top = [...s.nations].sort((a, b) => b.pop - a.pop).slice(0, 14);
+  // Every sizeable nation is a candidate; how many names show is decided each frame from what faces the viewer.
+  // (With a fixed top fourteen, a world of ninety-five nations showed five names: the rest were on the far side.)
+  const top = [...s.nations].sort((a, b) => b.pop - a.pop).slice(0, 72);
   useEffect(() => {
     let raf = 0;
     // Sizes are measured once per render, not every frame. Labels are placed largest nation first, and one that
@@ -556,6 +558,7 @@ export function NationLabels() {
       const host = ref.current;
       if (host) {
         placed.length = 0;
+        const [discX, discY, discR] = actions.disc();
         for (let i = 0; i < host.children.length; i++) {
           const el = host.children[i] as HTMLElement;
           const n = top[i];
@@ -563,7 +566,12 @@ export function NationLabels() {
           const [x, y, vis] = actions.project(n.dir[0], n.dir[1], n.dir[2]);
           const [w, h] = sizes[i] ?? [120, 22];
           const x0 = x - w / 2 - 6, y0 = y - h * 1.3 - 3, x1 = x + w / 2 + 6, y1 = y - h * 0.3 + 3;
-          let free = vis > 0.02;
+          let free = vis > 0.02 && placed.length < 18;
+          // the whole name must lie on the planet: names hung in space beside the limb, pointing at ground seen edge-on
+          if (free && discR < 4000) {
+            const far = Math.max(Math.hypot(x0 - discX, y0 - discY), Math.hypot(x1 - discX, y0 - discY), Math.hypot(x0 - discX, y1 - discY), Math.hypot(x1 - discX, y1 - discY));
+            if (far > discR * 0.98) free = false;
+          }
           if (free) for (const r of placed) if (x0 < r[2] && x1 > r[0] && y0 < r[3] && y1 > r[1]) { free = false; break; }
           if (free) placed.push([x0, y0, x1, y1]);
           el.style.opacity = free ? String(vis) : '0';

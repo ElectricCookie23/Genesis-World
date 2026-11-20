@@ -285,6 +285,9 @@ export class VolumetricClouds {
             const moonUp = smoothstep(-0.1, 0.25, dot(dir, M));
             const moonLit = vec3(uLook.moon).mul(0.05).mul(hN.mul(0.75).add(0.25)).mul(moonUp).mul(float(1).sub(day)).mul(dot(rd, M).mul(0.3).add(1));
             const glow = vec3(0.006, 0.009, 0.012);
+            // Inside a storm a flash fills the cloud; from orbit it is a flicker. At full strength from far away it
+            // bloomed into a hard white ball on the cloud belt (seen on a real GPU on the night side).
+            const flashGain: N = mix(float(5), float(1.1), smoothstep(0.25, 1.6, length(cameraPosition).sub(1)));
             let flash: N = float(0);
             for (const bolt of uBolts) {
               const bb: N = bolt;
@@ -300,7 +303,7 @@ export class VolumetricClouds {
             }
             const sootShare = pl.x.div(max(d, 1e-4));
             const tone: N = mix(vec3(1, 1, 1), mix(vec3(0.4, 0.38, 0.36), vec3(0.11, 0.1, 0.1), pl.y), sootShare);
-            const light = sunLit.add(skyLit).add(moonLit).mul(tone).add(glow).add(city).add(vec3(0.75, 0.83, 1.0).mul(flash).mul(5)).add(vec3(3.2, 0.8, 0.12).mul(pl.z));
+            const light = sunLit.add(skyLit).add(moonLit).mul(tone).add(glow).add(city).add(vec3(0.75, 0.83, 1.0).mul(flash).mul(flashGain)).add(vec3(3.2, 0.8, 0.12).mul(pl.z));
             const a = float(1).sub(exp(d.mul(ds).mul(-SIGMA)));
             C.addAssign(light.mul(a).mul(T));
             T.mulAssign(float(1).sub(a));

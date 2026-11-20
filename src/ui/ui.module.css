@@ -109,9 +109,11 @@
 .goalMeter { display: block; height: 3px; border-radius: 2px; background: #ffffff1c; overflow: hidden; margin: 6px 0 4px; }
 .goalMeter i { display: block; height: 100%; background: #e9e4d8; transition: width 0.6s ease; }
 .goalDone .goalMeter i { background: #cfe6b4; }
-.goalMarker { all: unset; cursor: pointer; display: block; margin-top: 7px; padding-top: 6px; border-top: 1px solid #ffffff14; width: 100%; font-size: 11px; max-width: 230px; }
+.topRow { position: absolute; top: max(14px, env(safe-area-inset-top)); left: 16px; display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; max-width: calc(100vw - 32px); pointer-events: none; }
+.topRow .top { position: static; }
+.goalMarker { cursor: pointer; display: block; padding: 8px 12px 7px; font: inherit; font-size: 11px; color: inherit; text-align: left; width: 210px; box-sizing: border-box; }
 .goalMarker:hover { opacity: 0.85; }
-.notice { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); padding: 7px 14px; font-size: 11px; }
+.notice { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); padding: 7px 14px; font-size: 11px; z-index: 6; background: rgba(10, 12, 18, 0.82); }
 @keyframes rise { from { opacity: 0; transform: translate(-50%, 8px); } }
 @keyframes fade { from { opacity: 0; } }
 @keyframes slideIn { from { opacity: 0; transform: translateX(24px); } }

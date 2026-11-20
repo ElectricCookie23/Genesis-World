@@ -24,13 +24,16 @@ export function App() {
       {!s.opening && s.overlay === 'nations' && <NationLabels />}
       {!s.opening && (
         <div class={`${css.fade} ${hidden ? css.hidden : ''}`}>
+          <div class={css.topRow}>
           <div class={`${css.panel} ${css.top}`}>
             <div class={css.title}>GENESIS</div>
             <div class={css.year}>{st ? formatYear(st.simYear) : ''}</div>
             <div class={css.sub}>{st ? [st.settlements > 0 ? (st.maxTech >= 0.6 ? 'age of cities' : st.maxTech >= 0.3 ? 'age of villages' : 'first fires') : STAGE[st.stage] ?? '', ERA[st.era] ?? ''].filter(Boolean).join(' · ') : ''}</div>
-            <GoalMarker />
           </div>
-          {st && (
+          <GoalMarker />
+          </div>
+          {/* the side panels open over this corner: the box steps aside for them */}
+          {st && s.panel === 'none' && (
             <div class={`${css.panel} ${css.stats}`}>
               <span>mean temp</span><b><Num value={st.meanTemp} format={(n) => `${n.toFixed(1)} °C`} /></b>
               <span>oxygen</span><b><Num value={st.oxygen * 100} format={(n) => `${n.toFixed(1)}%`} /></b>

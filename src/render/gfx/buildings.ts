@@ -229,7 +229,7 @@ export class Towns {
       let color: N = albedo.mul(sunColor.mul(max(dot(nW, L), 0).mul(0.85).add(0.15)).mul(sunVis).mul(1.1).add(sky).add(moon).add(vec3(0.012, 0.016, 0.022))).add(sunColor.mul(glint));
       // lamplight in the nation's colour; fires burn day and night
       const flicker = sin(uTime.mul(9).add(vData.y.mul(60))).mul(0.2).add(0.85);
-      color = color.add(vLight.mul(litPane.mul(is(PART.windows))).mul(night).mul(2.4))
+      color = color.add(vLight.mul(litPane.mul(is(PART.windows))).mul(night).mul(1.8))
         .add(mix(vec3(3.4, 1.3, 0.25), vLight.mul(2.6), smoothstep(0.45, 0.75, tech)).mul(is(PART.flame)).mul(flicker).mul(night.mul(0.8).add(0.35)));
       material.colorNode = color;
       const mesh = new Copies(g, material, slotCap);
@@ -322,7 +322,8 @@ export class Towns {
         const count = Math.min(260, Math.round(5 + 240 * size * size * (0.3 + 0.7 * st.tech)));
         east.set(-c.z, 0, c.x).normalize();
         north.crossVectors(c, east);
-        const lit = st.tech < 0.3 ? 0.15 : 0.25 + 0.5 * st.tech;
+        // about half the windows at most: with four in five lit and bright, every tower wore a wide pink halo at night
+        const lit = st.tech < 0.3 ? 0.15 : Math.min(0.55, 0.22 + 0.3 * st.tech);
         // What gets built follows how many people there are as well as what they know: a few hundred farmers with
         // advanced neighbours do not raise tower blocks and domes. (Seen on a real GPU: a town of 503 drawn as a
         // modern skyline.) Small places stay huts, houses and a hall whatever the age.
@@ -345,7 +346,9 @@ export class Towns {
           else if (era < 0.6) kind = central && h3 < 0.25 ? 'hall' : h3 < 0.2 ? 'hut' : 'house';
           else if (era < 0.85) kind = central ? (h3 < 0.45 ? 'tower' : 'hall') : h3 < 0.12 ? 'tower' : 'house';
           else kind = central ? (h3 < 0.3 ? 'spire' : h3 < 0.75 ? 'tower' : 'dome') : h3 < 0.25 ? 'tower' : h3 < 0.35 ? 'dome' : 'house';
-          const sz = (kind === 'hut' ? 0.00026 : kind === 'house' ? 0.00034 : kind === 'hall' ? 0.00044 : kind === 'dome' ? 0.0006 : 0.00046) * boost * (0.8 + 0.5 * h3);
+          // towers and spires stand above the trees and the largest animals (on a real GPU, animals on the skyline were
+          // as tall as tower blocks, and from low altitude the blocks read as pins)
+          const sz = (kind === 'hut' ? 0.00026 : kind === 'house' ? 0.00034 : kind === 'hall' ? 0.0005 : kind === 'dome' ? 0.00072 : 0.00072) * boost * (0.8 + 0.5 * h3);
           // keep clear of what already stands here: placed purely by chance, buildings grew through one another
           const bx = Math.cos(a) * r, by = Math.sin(a) * r;
           let clash = false;

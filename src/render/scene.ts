@@ -374,6 +374,7 @@ export class GenesisScene {
   onNations?: (nations: Nation[]) => void;
   setSettlements(list: SettlementInfo[], known?: NationInfo[]): void {
     this.civ?.setSettlements(list, known);
+    this.vegetation?.setTowns(list);
   }
   /** A war or plague event at a settlement's cell. */
   civUnrest(cell: number, kind: 'war' | 'plague'): void {
@@ -391,6 +392,16 @@ export class GenesisScene {
     // edge-on and names hung over the rim of the planet for places that could not be made out
     const vis = p.z < 1 && Math.abs(p.x) < 1.05 && Math.abs(p.y) < 1.05 ? Math.max(0, Math.min(1, (facing - 1 / camR - 0.1) * 6)) : 0;
     return [(p.x * 0.5 + 0.5) * w, (-p.y * 0.5 + 0.5) * h, vis];
+  }
+  /** The planet's disc on screen: centre x, y and radius in pixels (larger than the screen from close in). */
+  discOnScreen(): [number, number, number] {
+    const cam = this.cam.camera;
+    const camR = cam.position.length();
+    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    const c = this.projTmp.set(0, 0, 0).project(cam);
+    const half = Math.tan((cam.fov * Math.PI) / 360);
+    const r = camR > 1.0001 ? ((h / 2) * (1 / Math.sqrt(camR * camR - 1))) / half : 1e9;
+    return [(c.x * 0.5 + 0.5) * w, (-c.y * 0.5 + 0.5) * h, r];
   }
   setNightMap(on: boolean): void {
     uNightMap.value = on ? 1 : 0;
