@@ -64,13 +64,20 @@ async function boot(): Promise<void> {
     fatal('Genesis needs WebGPU or WebGL2 to draw its planet. Please open it in a recent version of Chrome, Edge, Firefox or Safari.');
     return;
   }
-  // development switches for slow machines: smaller planet maps and a shorter erosion bake
+  // A phone's screen is small and dense: at a pixel ratio of 1 the planet is drawn at a third of the screen's own
+  // sharpness and looks blurred beside the text (GPU review, phone shapes). A small screen has few pixels to fill, so
+  // it can afford more per pixel: the ratio is raised until the picture is about 0.7 million pixels, never past 2 or
+  // past what the screen has. A tablet is already over that and is left alone. Slow frames still step it back down.
+  function sharpEnough(ratio: number): number {
+    if (!mobile) return ratio;
+    return Math.max(ratio, Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(700_000 / Math.max(1, innerWidth * innerHeight))));
+  }
   // the quality preset decides texture and buffer sizes when the planet is built
   {
     const saved = store.get('genesis:quality') as Preset | null;
     const preset: Preset = saved && PRESETS[saved] ? saved : mobile ? 'low' : 'high';
     scene.presetForBuild(preset);
-    scene.setPixelRatio(PRESETS[preset].ratio);
+    scene.setPixelRatio(sharpEnough(PRESETS[preset].ratio));
   }
   if (params.get('dsize')) scene.dataSize = Number(params.get('dsize'));
   if (params.get('esize')) scene.erosionSize = Number(params.get('esize'));
@@ -180,7 +187,7 @@ async function boot(): Promise<void> {
     const march = adaptive >= 3 ? 0.45 : adaptive >= 1 ? 0.65 : 1;
     const cut = adaptive >= 3 ? 0.5 : 1;
     // start from what the screen can show: a preset that asks for more than the display has must still step down
-    const ratio = Math.min(window.devicePixelRatio || 1, q.ratio);
+    const ratio = Math.min(window.devicePixelRatio || 1, sharpEnough(q.ratio));
     scene.setPixelRatio(Math.max(0.75, ratio - (adaptive >= 2 ? 0.5 : 0) - (adaptive >= 5 ? 0.5 : 0)));
     scene.presetLive(state.quality, cut, false, march);
     // the lens fringe goes with anti-aliasing: on hard, aliased edges it reads as red and blue outlines

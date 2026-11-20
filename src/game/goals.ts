@@ -192,7 +192,7 @@ export interface GoalRecord {
 
 export const emptyRecord = (): GoalRecord => ({ done: {}, memo: {}, tracked: '' });
 
-/** `reached`: on any world, ever. `here`: on this world. */
+/** `reached`: on any world, ever. `here`: on this world, by the year it now stands at. */
 export interface GoalState { goal: Goal; result: GoalResult; reached: boolean; here: boolean }
 
 /**
@@ -211,7 +211,10 @@ export function evaluateGoals(v: GoalView, record: GoalRecord, seed: string): { 
       record.done[goal.id] = { seed, year: v.stats.simYear, eventId: r.eventId };
       fresh.push(goal.id);
     }
-    states.push({ goal, result: { progress: r.progress, done: r.done, note: r.note, eventId: r.eventId }, reached: !!record.done[goal.id], here: record.done[goal.id]?.seed === seed });
+    // "here" is this world as it stands now. A record from an earlier run of the same seed, or from later in a history
+    // that has since been rewound, is not here yet: the world on screen has not reached it (GPU review, phone shapes).
+    const rec = record.done[goal.id];
+    states.push({ goal, result: { progress: r.progress, done: r.done, note: r.note, eventId: r.eventId }, reached: !!rec, here: !!rec && rec.seed === seed && (r.done || v.stats.simYear >= rec.year) });
   }
   return { states, fresh };
 }

@@ -1343,7 +1343,7 @@ export class Simulation {
     }
   }
 
-  private describeSpecies(s: Species): string {
+  describeSpecies(s: Species): string {
     const cr = this.creatures;
     const land = cr.speciesMean(s.id, P.LandUse, true), fly = cr.speciesMean(s.id, P.Fly, true);
     const m = sizeMetres(s.ref[G.Size]!);

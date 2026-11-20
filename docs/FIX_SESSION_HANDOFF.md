@@ -36,6 +36,8 @@ The owner's instruction now: "start creating all the features. go back to the br
 
 **Done 2026-11-20 (F22, F23):** no "god" and no religion on this session's side. Tools are the Experiments panel in five groups; `sim.intervene`, `sim.interventions`, `tool-*` event types; E99 is a message to the stars. Checked in the software renderer (desktop and phone width): the word does not appear anywhere on screen, and a tool use writes the new wording into the chronicle. Not yet seen on a GPU (nothing in it depends on one).
 
+**Done 2026-11-20 (F24):** the Mac's phone findings: portrait toolbar wraps in three rows, figures box under the title, sharper picture on a phone (pixel ratio about 1.46, untested on a real phone), goals from an earlier run no longer ticked. Checked in the software renderer at 390 by 844, density 3. Worth a look in the Mac's device emulation when it next checks.
+
 **Queue, in order**
 1. A GPU check of what the Mac has not seen: hunters and the chase, the reshaped animals, the day-side exposure fix, FXAA on Medium, the new designer sliders, the Shatter button. Ask the owner first (standing rule).
 2. Rest of the audit's partials: 46 temples facing the viewer, 50 ruins drawn, 62 giants from high oxygen, 109 caves, 110 vents, 128, 129, 133, 135; 12 and 144 need individual animals in the simulation (large); 40 needs deterministic stepping in the worker (build session's file).
