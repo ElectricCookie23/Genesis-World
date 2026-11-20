@@ -7,6 +7,7 @@ import { LIFE_STAGES, MAP_H, MAP_W, type CosmosInfo, type Report } from '../sim/
 import css from './ui.module.css';
 
 const KIND = { rock: 'a bare rocky world', giant: 'a gas giant', ice: 'an ice world' } as const;
+const STAGES: Record<string, string> = { barren: 'still lifeless', microbes: 'microbes in its seas', algae: 'green seas, nothing that moves', animals: 'animals' };
 const MAP_COLOURS = ['#1c3f63', '#8a7a55', '#e9eef2', '#5f5446'];
 
 /**
@@ -140,6 +141,7 @@ export function System() {
   const s = useStore();
   const c = s.cosmos;
   const [open, setOpen] = useState(-1);
+  const [code, setCode] = useState('');
   const year = s.stats?.simYear ?? 0;
   if (!c) return null;
   const toComet = c.nextComet - year;
@@ -169,6 +171,30 @@ export function System() {
             {c.bursts > 0 && `${c.bursts === 1 ? 'One dying star has' : `${c.bursts} dying stars have`} burned a side of this world.`}
           </p>
         )}
+        <div class={css.goal}>
+          <div class={css.goalTitle}><b>A linked world</b>{s.link && <span class={css.sub}>{s.link.seed}</span>}</div>
+          {s.link ? (
+            <>
+              <div class={css.sub}>
+                Running beside this one, year for year: {STAGES[s.link.stage] ?? s.link.stage}
+                {s.link.species > 0 && `, ${s.link.species} kinds of animal`}
+                {s.link.towns > 0 && `, ${s.link.towns} towns`}.
+              </div>
+              {s.link.contact.length === 0 && <div class={css.sub} style={{ marginTop: '3px' }}>Neither world knows the other is there yet. A people needs lenses to see lights, and both need radio to talk.</div>}
+              {s.link.contact.map((e) => <div key={e.title} style={{ marginTop: '3px' }}>{e.title} <span class={css.sub}>{formatYear(e.year)}</span></div>)}
+              <div style={{ marginTop: '4px' }}><a class={css.link} href={`?seed=${encodeURIComponent(s.link.seed)}`} target="_blank" rel="noopener">open that world on its own</a></div>
+            </>
+          ) : (
+            <>
+              <div class={css.sub}>Give another planet's seed code and the two run side by side. If both raise a people, they can come to see each other's lights, talk, and send machines across.</div>
+              <div class={css.row}>
+                <input type="text" value={code} placeholder="a seed code, such as basalt-vale-202" style={{ flex: 1, minWidth: 0, font: 'inherit', color: 'inherit', background: '#ffffff12', border: '1px solid #ffffff22', borderRadius: '6px', padding: '5px 8px' }} onInput={(e) => setCode((e.target as HTMLInputElement).value.trim())} />
+                <button class={css.btn} disabled={!code || code === s.seed} onClick={() => { location.href = `${location.pathname}?seed=${encodeURIComponent(s.seed)}&neighbor=${encodeURIComponent(code)}&fresh&skip`; }}>link</button>
+              </div>
+              <div class={css.sub}>Linking starts both worlds from the beginning.</div>
+            </>
+          )}
+        </div>
         <div class={css.goal}>
           <div class={css.goalTitle}><b>The stars nearby</b><span class={css.sub}>{c.fleets.length ? `${c.fleets.length} ships sent` : 'no one has left yet'}</span></div>
           <StarMap c={c} year={year} />

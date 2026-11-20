@@ -146,7 +146,8 @@ async function boot(): Promise<void> {
   actions.trackGoal = (id) => { goalRecord.tracked = id; saveGoals(); judgeGoals(); update({ goalTracked: id }); };
   actions.resetGoals = () => { goalRecord.done = {}; goalRecord.memo = {}; saveGoals(); judgeGoals(); };
   actions.copySeedLink = () => {
-    const url = `${location.origin}${location.pathname}?seed=${encodeURIComponent(seed)}`;
+    const linked = params.get('neighbor');
+    const url = `${location.origin}${location.pathname}?seed=${encodeURIComponent(seed)}${linked ? `&neighbor=${encodeURIComponent(linked)}` : ''}`;
     void navigator.clipboard?.writeText(url).then(() => {
       update({ notice: 'Link copied. Anyone who opens it gets this same world.' });
       window.setTimeout(() => update({ notice: '' }), 3500);
@@ -703,7 +704,7 @@ async function boot(): Promise<void> {
       case 'cosmos': {
         // a message that has just been written is held over the globe for a while (not the ones a loaded world already had)
         const fresh = state.cosmos && msg.messages.length > state.skyMessages.length ? { id: msg.messages.length - 1, until: performance.now() + 60000 } : state.skyMessage;
-        update({ cosmos: msg.cosmos, skyMessages: msg.messages, archives: msg.archives, skyMessage: fresh && fresh.until > performance.now() ? fresh : null });
+        update({ cosmos: msg.cosmos, link: msg.link ?? null, skyMessages: msg.messages, archives: msg.archives, skyMessage: fresh && fresh.until > performance.now() ? fresh : null });
         break;
       }
       case 'settlements':
@@ -753,7 +754,7 @@ async function boot(): Promise<void> {
     worker = new Worker(new URL('./sim/worker.ts', import.meta.url), { type: 'module' });
     worker.onmessage = onMessage;
     worker.onerror = (e) => { console.error('worker error', e.message); recover(); };
-    send({ type: 'init', seed });
+    send({ type: 'init', seed, neighbor: params.get('neighbor') || undefined });
     // each rewind point is a whole copy of the world: keep fewer where memory is short
     send({ type: 'rewindLimit', count: mobile ? 5 : 12 });
   };

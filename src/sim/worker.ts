@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 // Worker entry point: owns all world state and runs the fixed-timestep loop.
 import { Simulation } from './simulation';
+import { linkInfo } from './link';
 import { G, P, PHEN_COUNT, sizeMetres } from './genetics';
 import { nearestCell } from './world';
 import { loadSimulation, saveSimulation, type SaveState } from './snapshot';
@@ -352,7 +353,7 @@ function tick(): void {
     lastCells = now;
   }
   // the rest of the star system changes slowly: told about now and then
-  if (now - lastCosmos > 1500) { lastCosmos = now; post({ type: 'cosmos', cosmos: s.cosmos.info(s), messages: s.legacy.messages, archives: s.legacy.archives }); }
+  if (now - lastCosmos > 1500) { lastCosmos = now; post({ type: 'cosmos', cosmos: s.cosmos.info(s), messages: s.legacy.messages, archives: s.legacy.archives, link: s.neighbor ? linkInfo(s, s.neighbor) : undefined }); }
   if (now - lastStats > 100) {
     post({ type: 'stats', stats: stats(s) });
     lastStats = now;
@@ -387,6 +388,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
     switch (msg.type) {
       case 'init': {
         sim = new Simulation(msg.seed, msg.gridN);
+        if (msg.neighbor) sim.link(msg.neighbor);
         sentExtinct.clear();
         const { cells, transfer } = snapshotCells(sim);
         post({ type: 'ready', seed: msg.seed, gridN: sim.grid.n, tilt: sim.climate.tilt, cells, stats: stats(sim) }, transfer);
