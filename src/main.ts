@@ -1453,6 +1453,20 @@ async function boot(): Promise<void> {
         scene.applyStats(msg.stats);
         update({ stats: msg.stats });
         break;
+      case 'resync': {
+        // the world has gone back to where it was before a closer look: what was recorded during the look did not happen
+        const n = msg.events;
+        state.events.length = Math.min(state.events.length, n);
+        for (const e of state.events) if (e && e.effects.some((x) => x >= n)) e.effects = e.effects.filter((x) => x < n);
+        state.chronicle = state.chronicle.filter((id) => id < n);
+        state.hiddenIds = state.hiddenIds.filter((id) => id < n);
+        state.revealed = state.revealed.filter((id) => id < n);
+        state.species = new Map();
+        state.plants = new Map();
+        for (let i = toasts.length - 1; i >= 0; i--) if (toasts[i]!.id >= n) toasts.splice(i, 1);
+        update({ whyEvent: state.whyEvent >= n ? -1 : state.whyEvent, milestone: null });
+        break;
+      }
       case 'error':
         console.error('sim worker:', msg.message);
         recover();

@@ -61,6 +61,32 @@ let slowTicks = 0;
 // steps, with seasons in them; a visitor who slows down before history has, knowingly, a world of their own.
 const GRID_YEARS = 15000;
 let owed = 0;
+// A closer look. At 1x, 10x and the pace of history the world takes small steps of its own (there are seasons and
+// weather in them), and any step at all sends a chaotic world down another path: twenty-five seconds at 1x moved the
+// dawn of one seed's history by seventeen million years. So a look at a slow speed before history is an excursion:
+// the world as it was when the visitor slowed down is remembered, and when they speed up again (or skip) the world
+// goes back to that and is stepped forward on the boundaries for the time they spent looking. What little happened
+// while they looked is what would have happened anyway, near enough to look at; it is simply not kept. A long look
+// (more than two thousand years), an Experiment, or the beginning of history makes the world they watched the real one.
+const EXCURSION_YEARS = 2000;
+let excursion: { save: SaveState; events: number; years: number } | null = null;
+
+/** End a closer look: the world as it was before it, with the years spent looking still to be stepped. */
+function comeBack(): void {
+  const x = excursion;
+  excursion = null;
+  if (!x || !sim) return;
+  const back = new Simulation(x.save.seed, x.save.gridN);
+  loadSimulation(back, x.save);
+  sim = back;
+  owed += x.years;
+  sim.events.drainFresh();
+  sentExtinct.clear();
+  plantVersion = -1; lastSpecies = 0; pageHas = true; cellsRequested = true;
+  snapshotEra = sim.civ.h.topEra; wasHistory = sim.civ.historyLive;
+  post({ type: 'resync', events: x.events });
+}
+
 /** The length of the next step that ends on a boundary. */
 function toBoundary(s: Simulation): number {
   const left = GRID_YEARS - (s.simYear % GRID_YEARS);
@@ -540,18 +566,26 @@ function keepEra(s: Simulation): void {
 }
 
 function tick(): void {
-  const s = sim;
+  let s = sim;
   if (!s || warp) return;
   const start = performance.now();
   const yps = currentYps();
   if (yps > 0) {
     const fast = SPEEDS[speedIndex]!.yearsPerSecond >= GRID_YEARS * 2 && !historyHeld();
+    // (a closer look that has gone on too long, or in which history has begun, is no longer a look: see `excursion`)
+    if (excursion && (s.civ.historyLive || excursion.years > EXCURSION_YEARS)) { excursion = null; owed = 0; }
     if (fast && !s.civ.historyLive) {
+      if (excursion) { comeBack(); s = sim!; }
       // (a slowed tick, around a great event, earns fewer years; it does not take a step of another length)
       owed += yps / TICK_HZ;
       for (let k = 0; k < 4 && owed >= toBoundary(s) && !s.civ.historyLive; k++) { const d = toBoundary(s); s.step(d); owed -= d; }
       if (s.civ.historyLive) owed = 0;
-    } else { owed = 0; s.step(yps / TICK_HZ); }
+    } else {
+      if (s.civ.historyLive) owed = 0;
+      else if (!excursion) excursion = { save: saveSimulation(s, 'before a closer look'), events: s.events.events.length, years: 0 };
+      s.step(yps / TICK_HZ);
+      if (excursion) excursion.years += yps / TICK_HZ;
+    }
     if (slowTicks > 0) slowTicks--;
   }
   // history has begun (or ended): the hold on time starts afresh each time
@@ -620,6 +654,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
     switch (msg.type) {
       case 'init': {
         owed = 0;
+        excursion = null;
         warp = null;
         sim = new Simulation(msg.seed, msg.gridN);
         if (msg.neighbor) sim.link(msg.neighbor);
@@ -644,6 +679,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         break;
       case 'tool':
         if (sim) {
+          if (excursion) { excursion = null; owed = 0; }
           beforeTool = saveSimulation(sim, 'before');
           if (msg.tool === 'species' && msg.genes) sim.designSpecies(msg.cell, msg.genes);
           else sim.intervene(msg.tool, msg.cell, msg.power ?? 0.8);
@@ -656,6 +692,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         break;
       case 'load': {
         owed = 0;
+        excursion = null;
         warp = null;
         const save = msg.save as SaveState;
         sim = new Simulation(save.seed, save.gridN);
@@ -792,6 +829,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         break;
       case 'rewind': {
         owed = 0;
+        excursion = null;
         const point = rewinds[msg.index];
         if (!point) break;
         warp = null;
@@ -814,6 +852,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         // run through), or at the age asked for: that is the part worth watching
         if (msg.stop) endWarp();
         else if (sim && !warp) {
+          if (excursion && !sim.civ.historyLive) comeBack(); else excursion = null;
           owed = 0;
           warp = { end: sim.simYear + (msg.years ?? 0), through: !!msg.through, had: sim.civ.historyLive, era: msg.untilEra ?? -1, mark: msg.untilMark ?? '' };
           warpSlice();

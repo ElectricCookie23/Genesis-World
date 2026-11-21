@@ -2,12 +2,14 @@
 // number of seconds (as two visitors would), then press Epoch speed in both, and compare everything the chronicle
 // holds up to a little before a given year. Before the worker stepped prehistory on fixed boundaries the two came
 // out different every time.
-// Usage: node sameseed.cjs [seed] [million years to run] [seconds before Epoch in the first run] [in the second]
+// Usage: node sameseed.cjs [seed] [million years to run] [seconds before Epoch in the first run] [in the second] [seconds at 10x in the second, before Epoch]
 const { open } = require('./h.cjs');
-const run = async (seed, until, delay) => {
+const run = async (seed, until, delay, slow = 0) => {
   const h = await open('webgl', '&noadapt&dsize=128&esize=128&eiter=60', [640, 400]);
   const t0 = Date.now();
   await h.page.waitForTimeout(delay * 1000);
+  // (a closer look at 10x first, if asked for: it should change nothing)
+  if (slow > 0) { await h.page.evaluate(() => __genesis.actions.setSpeed(2)); await h.page.waitForTimeout(slow * 1000); }
   await h.page.evaluate(() => __genesis.actions.setSpeed(6));
   for (;;) {
     await h.page.waitForTimeout(3000);
@@ -25,7 +27,7 @@ const run = async (seed, until, delay) => {
 };
 (async () => {
   const seed = process.argv[2] || 'amber-reef-101', until = Number(process.argv[3] || 12);
-  const a = await run(seed, until, Number(process.argv[4] || 4)), b = await run(seed, until, Number(process.argv[5] || 11));
+  const a = await run(seed, until, Number(process.argv[4] || 4)), b = await run(seed, until, Number(process.argv[5] || 11), Number(process.argv[6] || 0));
   console.log('first ', JSON.stringify(a));
   console.log('second', JSON.stringify(b));
   console.log(a.hash === b.hash && a.events === b.events ? 'THE SAME: one seed, one world' : 'DIFFERENT: the same seed gave two worlds');

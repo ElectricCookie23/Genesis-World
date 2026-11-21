@@ -603,4 +603,6 @@ export type FromWorker =
   | { type: 'timeline'; points: TimelinePoint[] }
   | { type: 'cosmos'; cosmos: CosmosInfo; messages: StarMessage[]; archives: Archive[]; link?: LinkInfo; strange: StrangeInfo; future: FutureInfo; industry: IndustryInfo }
   | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }
+  /** The world has gone back to where it was before a closer look (see the worker's `excursion`): events from this id on did not happen. */
+  | { type: 'resync'; events: number }
   | { type: 'error'; message: string };
