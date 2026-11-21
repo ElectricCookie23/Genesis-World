@@ -742,11 +742,15 @@ async function boot(): Promise<void> {
       if (great) {
         const dot = (cell: number, colour: string, r: number): void => { const x = ((grid.lon[cell]! + Math.PI) / (Math.PI * 2)) * W, y = (0.5 - grid.lat[cell]! / Math.PI) * H; ctx.fillStyle = colour; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); };
         great.sides.forEach((side, k) => { for (const c of side.cells) dot(c, k === 0 ? '#e0563a' : '#4f8fe0', 4); });
+        // the map as the peace left it: every town that has a new flag because of this war, squared in white
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+        for (const t of great.taken ?? []) { const x = ((grid.lon[t.cell]! + Math.PI) / (Math.PI * 2)) * W, y = (0.5 - grid.lat[t.cell]! / Math.PI) * H; ctx.strokeRect(x - 6.5, y - 6.5, 13, 13); }
         for (const i of great.institutions.slice(0, 1)) if (i.cell >= 0) { const x = ((grid.lon[i.cell]! + Math.PI) / (Math.PI * 2)) * W, y = (0.5 - grid.lat[i.cell]! / Math.PI) * H; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.stroke(); }
         let kx = 10;
         ctx.font = '11px system-ui, sans-serif';
         for (const [c, label] of [['#e0563a', 'those who began it, and their friends'], ['#4f8fe0', 'those it was begun against, and theirs']] as const) { ctx.fillStyle = c; ctx.fillRect(kx, H - 18, 12, 8); ctx.fillStyle = '#ece7db'; ctx.fillText(label, kx + 16, H - 10); kx += 22 + ctx.measureText(label).width + 10; }
-        if (great.institutions.length) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(kx + 5, H - 14, 5, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = '#ece7db'; ctx.fillText('where the peace was made', kx + 15, H - 10); }
+        if (great.institutions.length) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(kx + 5, H - 14, 5, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = '#ece7db'; ctx.fillText('where the peace was made', kx + 15, H - 10); kx += 22 + ctx.measureText('where the peace was made').width + 10; }
+        if ((great.taken ?? []).length) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4; ctx.strokeRect(kx, H - 19, 10, 10); ctx.fillStyle = '#ece7db'; ctx.fillText('a new flag', kx + 15, H - 10); }
       }
     }
     // ---- a plague, town by town (system E37): the ways trade travels drawn faintly, and over them the way the sickness

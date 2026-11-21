@@ -18,7 +18,7 @@ const { open } = require('./h.cjs');
     const inst = (kind, name, own) => ({ kind, name, own, cell: cells[3], eventId: -1 });
     g.update({ hintStep: 9, panel: 'map', settlements: towns, realms: [], mapOf: -7, greatShown: 1, greatWars: [{ id: 1, name: 'the Great War', own: 'Nakfimi', began: now - 46, ended: now - 43, world: true, eventId: -1, endEvent: -1,
       text: 'Falmale, Falyamaf and Vazmeme against Falkoab, Farpa and Fawafe: 9 wars in 3 years, and 4 towns under a new flag at the end of it. Falkoab, Farpa and Fawafe had the better of it.',
-      sides: [side([0, 1, 2]), side([3, 4, 5])], institutions: [inst('league', 'the League of Nawema', 'Ampa'), inst('court', 'the Court of Nawema', 'Dhimat'), inst('fund', 'the Common Fund of Nawema', 'Nakfimi')], holds: true }] });
+      sides: [side([0, 1, 2]), side([3, 4, 5])], taken: [0, 7, 14].map((i) => ({ cell: cells[i], town: 'T' + i })), institutions: [inst('league', 'the League of Nawema', 'Ampa'), inst('court', 'the Court of Nawema', 'Dhimat'), inst('fund', 'the Common Fund of Nawema', 'Nakfimi')], holds: true }] });
   });
   await h.page.waitForTimeout(2500);
   await h.page.mouse.move(40, 720);

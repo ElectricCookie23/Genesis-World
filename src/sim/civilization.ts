@@ -3064,10 +3064,12 @@ export class Civilization {
       n.flag = (n.flag ?? 0) + 1;
       const e = sim.emit({
         type: 'revolution', year, cellId: cap.cell, title: first ? `The first revolution: ${n.name} comes ${governedAs(wants).replace(/^an? /, 'to be a ')}` : `Revolution in ${n.name}`,
-        description: `For ${Math.max(1, Math.round(year - n.idea.since))} years more and more of ${n.name} has held with ${idea.own}, ${idea.name}. This year the gates of ${cap.name} are opened from inside. ${n.name}, which was ${governedAs(was)}, is ${governedAs(wants)} from today: ${idea.kind === 'levelling' ? 'the great estates are divided' : idea.kind === 'order' ? 'the assemblies are sent home and one voice gives the orders' : idea.kind === 'reason' ? 'offices go to those who can pass the examinations' : idea.kind === 'custom' ? 'the new laws are burned and the old ones read out' : 'the tolls and the courts are in the hands of the guilds'}. The old flag is taken down and another is raised.`,
+        description: `For ${Math.max(1, Math.round(year - n.idea.since))} years more and more of ${n.name} has held with ${idea.own}, ${idea.name}. This year the gates of ${cap.name} are opened from inside. ${n.name}, which was ${governedAs(was)}, is ${governedAs(wants)} from today: ${idea.kind === 'levelling' ? 'the great estates are divided' : idea.kind === 'order' ? 'the assemblies are sent home and one voice gives the orders' : idea.kind === 'reason' ? 'offices go to those who can pass the examinations' : idea.kind === 'custom' ? 'the new laws are burned and the old ones read out' : 'the tolls and the courts are in the hands of the guilds'}. A quarter of the town by the gates burns before it is over. The old flag is taken down and another is raised.`,
         causes: [idea.eventId, woe, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 3), importance: first ? 2 : this.notable(n) ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, idea: idea.id, kind: idea.kind, from: was, to: wants, flag: n.flag },
       });
       if (first && e.id >= 0) h.firstRevolution = e.id;
+      // (the quarter by the gates is burned, and is seen burned and then rebuilt in the town itself: system E20)
+      this.scar(sim, null, n, cap, 'fire', 0.1 + 0.12 * luck(0xe5), e.id, year);
       // what a revolution does: the thing it was for (the estates divided, or one hand on the country)
       if (idea.kind === 'levelling') n.inequality = sat(n.inequality * 0.45);
       if (idea.kind === 'order') n.stability = sat(n.stability + 0.2);

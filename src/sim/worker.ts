@@ -713,6 +713,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
           post({ type: 'greatWars', list: (h.great ?? []).slice().reverse().map((g) => ({
             id: g.id, name: g.name, own: g.own, began: g.began, ended: g.ended, world: g.world, eventId: g.eventId, endEvent: g.endEvent, text: describeGreatWar(g, name, s.simYear),
             sides: g.sides.map((ids) => ({ names: ids.map(name), cells: towns.filter((t) => t.ruined < 0 && ids.includes(t.nation) && h.nations[t.nation]!.ended < 0).map((t) => t.cell) })),
+            taken: g.taken.map((id) => towns[id]).filter((t) => !!t && t.ruined < 0).map((t) => ({ cell: t!.cell, town: t!.name })),
             institutions: (g.order?.institutions ?? []).map((i) => ({ kind: i.kind, name: i.name, own: i.own, cell: towns[i.seat]?.cell ?? -1, eventId: i.eventId })),
             holds: !!g.order && g.order.until < 0,
           })) });

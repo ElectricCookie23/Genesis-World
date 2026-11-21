@@ -183,6 +183,8 @@ export interface GreatWarInfo {
   world: boolean;
   eventId: number; endEvent: number;
   text: string;
+  /** The towns that changed hands in it and were kept: the cell of each, and its name. */
+  taken: { cell: number; town: string }[];
   /** Each side: its countries by name, and the cells of the towns those still living hold. */
   sides: { names: string[]; cells: number[] }[];
   /** What the peace set up, if it was a world war: each with the cell of its seat. And whether that order still holds. */

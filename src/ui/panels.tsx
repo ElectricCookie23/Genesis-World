@@ -516,6 +516,7 @@ export function FlatMap() {
               return (
                 <>
                   <div class={css.when} style={{ color: '#ece7db', margin: '0 0 6px' }}>{g.world && <>{g.own}, {g.name}. </>}{g.text} {g.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="How it began" onClick={() => update({ whyEvent: g.eventId })}>how it began</button>}{g.endEvent >= 0 && <> <button class={css.link} style={{ marginRight: 0 }} title="The peace" onClick={() => update({ whyEvent: g.endEvent })}>the peace</button></>}</div>
+                  {(g.taken ?? []).length > 0 && <div class={css.when} style={{ color: '#ece7db', margin: '0 0 6px' }}>Under a new flag since: {g.taken.slice(0, 8).map((t, i) => <span key={i}>{i > 0 ? ', ' : ''}<button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.flyToCell(t.cell)}>{t.town}</button></span>)}{g.taken.length > 8 ? ` and ${g.taken.length - 8} more` : ''}.</div>}
                   {g.institutions.length > 0 && <div class={css.sub} style={{ margin: '8px 0 4px', letterSpacing: '0.08em' }}>WHAT THE PEACE SET UP{g.holds ? '' : ' (IT HAS SINCE FAILED)'}</div>}
                   {g.institutions.map((i) => (
                     <div key={i.kind} class={css.when} style={{ color: '#ece7db', margin: '0 0 3px' }}>
