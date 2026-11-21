@@ -1,5 +1,14 @@
 # Asset shortlist (first pass, 2026-11-20)
 
+> **Added to the repo on 2026-11-21 (Mac session, at the owner's instruction).** 116 Poly Pizza CC0 models in `public/assets/polypizza/` (20.9 MB), named `<sheet>-<tile>-<name>.glb` with the sheet and tile numbers used below, and 20 ambience loops in `public/assets/audio/` (6.9 MB; mono Ogg Vorbis at 96 kbit/s). Every file, with its source page, author, licence, triangle count and height, is in `public/assets/MANIFEST-MAC.json` (its `skipped` list has the ones left out and why). `public/assets/MANIFEST.json` was not touched. Sources are in `CREDITS.md` under a new heading at the end; **its third line still says "No downloaded art assets", left for the cloud session to change when it merges the Kenney packs, to avoid a conflict.** The Kenney packs were not added (already on `claude/sweet-keller-8gmglc`).
+>
+> **Skipped, 18 of the tiles asked for:**
+> - **Over 2 MB (17):** `pp-trees` 3 Dead_Tree (2.6 MB), `pp-trees` 4 Dead_Tree (2.6 MB), `pp-trees` 6 Dead_Trees (2.7 MB), `pp-trees` 10 Pine (2.2 MB), `pp-trees` 15 Pine (2.2 MB), `pp-trees` 22 Tree (2.4 MB), `pp-trees` 26 Tree (2.4 MB), `pp-trees` 29 Tree (2.5 MB), `pp-trees` 33 Twisted_Tree (3.1 MB), `pp-trees` 34 Twisted_Tree (3.1 MB), `pp-trees` 35 Twisted_Tree (3.0 MB), `pp-trees` 36 Twisted_Tree (3.0 MB), `pp-temples-towers` 30 Modular_Ruins_Pack (8.0 MB), `pp-rocks-bones` 24 Dead_Tree (2.6 MB), `pp-pine-palm` 8 Pine (2.3 MB), `pp-pine-palm` 10 Pine (2.2 MB), `pp-pine-palm` 11 Pine (2.1 MB). This takes out most of the leafy trees and the detailed pines, which were the best of the tree sheets; they are on the Mac and can be added if the limit is raised to about 3.2 MB (the ruins pack is 8 MB).
+> - **Owner's rules:** `pp-temples-towers` 39 `Bell_Tower`, left out to be safe as a possibly religious building.
+> - Worth a look before use: `pp-rocks-bones` 25 `Ribcage` and the bones (1 to 5, 8) were added as asked; they are not human-shaped, but the owner wants nothing that resembles a human, so judge them in the game.
+>
+> **Sound levels:** seventeen loops are at -20 to -21 dB RMS. Three could not be brought there without clipping and are quieter: `cave-drips` (-22.7), `fire-crackle` (-21.6) and `thunder-close` (-24.8, a single loud crack). Nothing was trimmed, so loop points are as generated. Vorbis in Ogg does not add padding, but the loops were not listened to after encoding.
+
 Candidate models for the game's fixed objects, picked by **looking at rendered preview sheets**, not by file name. The sheets are in `docs/asset-previews/`; each tile is numbered and labelled with the file name.
 
 - The assets themselves are **not in this repo**. They are on the review Mac under `~/genesis-review/assets/` (about 20 GB so far), with `MANIFEST.md` there listing source page, author and licence for every item.
