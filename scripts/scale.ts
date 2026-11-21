@@ -44,6 +44,10 @@ for (let y = 0; y < Number(years) && !found; y++) {
   for (const k of Object.keys(d)) parts.push([k, size(d[k])]);
   const civ = (d.civ as { __nested: Record<string, unknown> }).__nested;
   const hh = (civ.h as { __nested?: Record<string, unknown> }).__nested ?? (civ.h as Record<string, unknown>);
+  const settle = (civ.settlements as Record<string, unknown>[]) ?? [];
+  const fields = new Map<string, number>();
+  for (const st of settle) for (const k of Object.keys(st)) fields.set(k, (fields.get(k) ?? 0) + size(st[k]));
+  console.log(`  in the towns (${settle.length}): ${[...fields.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k} ${(v / 1e6).toFixed(2)}`).join(', ')}; people on record ${(hh.people as unknown[]).length}, events ${sim.events.events.length}, rss ${Math.round(process.memoryUsage().rss / 1e6)} MB`);
   console.log(`  one saved copy: ${(size(save) / 1e6).toFixed(1)} MB; largest parts: ${parts.sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k} ${(v / 1e6).toFixed(1)}`).join(', ')}`);
   console.log(`  inside the history engine: ${Object.keys(civ).map((k) => [k, size(civ[k])] as [string, number]).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k} ${(v / 1e6).toFixed(1)}`).join(', ')}; inside h: ${Object.keys(hh).map((k) => [k, size(hh[k])] as [string, number]).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k} ${(v / 1e6).toFixed(2)}`).join(', ')}`);
 }

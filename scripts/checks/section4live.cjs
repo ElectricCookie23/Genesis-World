@@ -3,6 +3,9 @@
 // anything went wrong in the console. Slow on a software renderer (ten minutes or more).
 // Usage: node section4live.cjs <out dir> [seed] [seconds at History speed]
 const { open } = require('./h.cjs');
+// (the largest browser process, in MB: the page's own thread and the simulation's worker live in it)
+const rss = () => { try { return Math.round(Number(require('child_process').execSync("ps -eo rss,args --sort=-rss | grep chrome-headless | grep -v grep | head -1").toString().trim().split(/\s+/)[0]) / 1024); } catch { return -1; } };
+let peak = 0;
 (async () => {
   const out = process.argv[2], seed = process.argv[3] || 'quiet-harbor-7', watch = Number(process.argv[4] || 150);
   const h = await open('webgl', `&seed=${seed}&noadapt&dsize=128&esize=128&eiter=60`, [1000, 760]);
@@ -20,6 +23,8 @@ const { open } = require('./h.cjs');
   // (while it runs: how many countries, towns and events there are, and how much memory the page's own thread holds)
   for (let t = 0; t < watch; t += 30) {
     await h.page.waitForTimeout(30000);
+    peak = Math.max(peak, rss());
+    console.log('  process', rss(), 'MB');
     console.log('  watching', JSON.stringify(await h.page.evaluate(() => { const s = __genesis.state; return { year: Math.round(s.stats.simYear), realms: s.realms.filter((r) => r.ended < 0).length, towns: s.settlements.length, events: s.events.length, chronicle: s.chronicle.length, heapMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : -1 }; })));
   }
   console.log('after watching', JSON.stringify(await stat()));
@@ -74,6 +79,8 @@ const { open } = require('./h.cjs');
   const mine = ['ideology', 'idea-spreads', 'revolution', 'colony', 'independence-declared', 'independence', 'rising-crushed', 'plague', 'plague-ends', 'arms-race', 'arms-race-ends', 'theft', 'assassination', 'secret-treaty', 'craft-learned', 'ruler-death', 'plot-uncovered', 'secret-revealed', 'alliance-war', 'world-war', 'great-peace', 'institution', 'arbitration', 'order-fails', 'battle', 'peace', 'treaty', 'betrayal'];
   console.log('events', mine.filter((t) => types[t]).map((t) => `${t} ${types[t]}`).join(', '), '| hidden on the page', await h.page.evaluate(() => __genesis.state.hiddenIds.length));
   await shot('chronicle-truth');
+  peak = Math.max(peak, rss());
+  console.log('largest browser process: now', rss(), 'MB, peak while sampled', peak, 'MB');
   console.log('console:', [...new Set(h.log)].filter((x) => !x.includes('ReadPixels') && !x.includes('MANIFEST') && !x.includes('404')).slice(0, 12).join('\n') || 'no errors');
   await h.browser.close();
 })().catch((e) => { console.error(String(e).slice(0, 400)); process.exit(1); });
