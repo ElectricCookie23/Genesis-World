@@ -9,7 +9,7 @@ import { G, P, PHEN_COUNT, sizeMetres } from './genetics';
 import { nearestCell } from './world';
 import { loadSimulation, saveSimulation, type SaveState } from './snapshot';
 import {
-  HISTORY_SPEED, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type DynastyDetail, type HouseMember, type SiteDetail, type NationDetail, type PersonInfo, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
+  HISTORY_SPEED, BEFORE_HISTORY, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type DynastyDetail, type HouseMember, type SiteDetail, type NationDetail, type PersonInfo, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
   type WonderInfo, type MemoryAnswer,
 } from '../shared/protocol';
 import { ERAS, earthNote, eraOf } from './history/eras';
@@ -80,7 +80,7 @@ let snapshotEra = 0;
 /** How many rewind points to keep (each is a whole copy of the world). */
 let rewindLimit = 12;
 /** A jump through time under way: run in slices so that it can be stopped, and so the page hears how far it has got. */
-let warp: { end: number; through: boolean; had: boolean; era: number } | null = null;
+let warp: { end: number; through: boolean; had: boolean; era: number; mark: string } | null = null;
 
 function warpSlice(): void {
   const w = warp;
@@ -91,7 +91,7 @@ function warpSlice(): void {
     // toward an age, history is walked in short steps: a whole age can pass in a century
     sim.step(Math.min(w.era >= 0 && sim.civ.historyLive ? 25 : 15000, w.end - sim.simYear));
     keepEra(sim); // the ages passed on the way can be gone back to
-    done = sim.simYear >= w.end
+    done = sim.simYear >= w.end || (!!w.mark && sim.milestones.has(w.mark))
       || (w.era >= 0 ? sim.civ.historyLive && sim.civ.h.topEra >= w.era : !w.through && !w.had && sim.civ.historyLive);
   }
   if (done) endWarp();
@@ -386,7 +386,8 @@ function stats(s: Simulation): WorldStats {
     historyHeld: historyHeld(),
     historyBegan: s.civ.h.began,
     topEra: s.civ.h.topEra,
-    skipTo: warp && warp.era >= 0 ? warp.era : undefined,
+    skipTo: warp?.mark ? warp.mark : warp && warp.era >= 0 ? warp.era : undefined,
+    reached: BEFORE_HISTORY.filter((b) => s.milestones.has(b.key)).map((b) => b.key),
     tickMs,
     stage: s.stage,
     era: s.era.kind,
@@ -701,7 +702,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         // run through), or at the age asked for: that is the part worth watching
         if (msg.stop) endWarp();
         else if (sim && !warp) {
-          warp = { end: sim.simYear + (msg.years ?? 0), through: !!msg.through, had: sim.civ.historyLive, era: msg.untilEra ?? -1 };
+          warp = { end: sim.simYear + (msg.years ?? 0), through: !!msg.through, had: sim.civ.historyLive, era: msg.untilEra ?? -1, mark: msg.untilMark ?? '' };
           warpSlice();
         }
         break;

@@ -314,8 +314,8 @@ export const actions = {
   setOverlay: (_o: Overlay) => {},
   setColorblind: (_on: boolean) => {},
   rewind: (_index: number) => {},
-  /** Skip ahead until some nation reaches this age (0 is the dawn of history); -1 stops a skip under way. */
-  skipTo: (_era: number) => {},
+  /** Skip ahead until some nation reaches this age (0 is the dawn of history), or to a moment before history (a key of BEFORE_HISTORY); -1 stops a skip under way. */
+  skipTo: (_to: number | string) => {},
   drawMap: (_canvas: HTMLCanvasElement) => {},
   mapClick: (_u: number, _v: number) => {},
   /** Where a cell lies on the flat map, as fractions of its width and height. */

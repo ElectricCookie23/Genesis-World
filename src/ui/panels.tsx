@@ -1130,7 +1130,7 @@ export function Settings() {
         <div class={css.row}><span>Fork the timeline here<br /><span class={css.sub}>On a desktop this starts a second future running beside this one; you can compare them and cross over. It is also kept as a rewind point.</span></span><button class={css.btn} onClick={() => actions.fork()}>fork</button></div>
         <div class={css.sub} style={{ margin: '12px 0 2px' }}>SKIP TO AN AGE</div>
         {s.stats?.skipTo != null
-          ? <div class={css.row}><span>Skipping ahead to the {ERAS[s.stats.skipTo]!.name}<br /><span class={css.sub}>now at {formatYear(s.stats.simYear).toLowerCase()}</span></span><button class={css.btn} onClick={() => actions.skipTo(-1)}>stop</button></div>
+          ? <div class={css.row}><span>Skipping ahead to {typeof s.stats.skipTo === 'string' ? s.stats.skipTo.replace(/-/g, ' ') : `the ${ERAS[s.stats.skipTo]!.name}`}<br /><span class={css.sub}>now at {formatYear(s.stats.simYear).toLowerCase()}</span></span><button class={css.btn} onClick={() => actions.skipTo(-1)}>stop</button></div>
           : ERAS.map((e, i) => {
             const here = !!s.stats?.history && (s.stats.topEra ?? 0) >= i;
             const back = s.timeline.find((t) => t.title === `Start of the ${e.name}`);

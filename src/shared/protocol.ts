@@ -79,8 +79,10 @@ export interface WorldStats {
   historyBegan?: number;
   /** Highest era any nation has reached. */
   topEra?: number;
-  /** The age a skip through time is heading for, while one is under way. */
-  skipTo?: number;
+  /** The age (a number) or the moment before history (a key of BEFORE_HISTORY) a skip through time is heading for, while one is under way. */
+  skipTo?: number | string;
+  /** Which of the BEFORE_HISTORY moments this world has already come to. */
+  reached?: string[];
   /** Actual years per second being simulated (may be reduced around big events). */
   yearsPerSecond: number;
   tickMs: number;
@@ -484,6 +486,15 @@ export type MemoryAnswer =
   | { what: 'museum'; data: Museum | null; asked: number }
   | { what: 'battle'; data: Battle | null };
 
+/** Moments before history that time can be skipped to: the simulation's own milestones, in the order they usually come. */
+export const BEFORE_HISTORY: { key: string; name: string }[] = [
+  { key: 'first-life', name: 'First life' },
+  { key: 'first-land-plant', name: 'Plants on land' },
+  { key: 'first-steps', name: 'Animals on land' },
+  { key: 'first-forest', name: 'First forests' },
+  { key: 'first-mind', name: 'A thinking animal' },
+];
+
 export type ToWorker =
   | { type: 'init'; seed: string; gridN?: number; neighbor?: string }
   | { type: 'speed'; index: number }
@@ -512,7 +523,7 @@ export type ToWorker =
   /** Jump ahead by running the sim flat out (used by automated checks). */
   /** Jump ahead. It stops where a history begins, unless `through` is set (for scripts that need to reach a date). */
   /** With `untilEra` it stops when any nation reaches that age (0 is the dawn of history); `stop` ends a jump under way. */
-  | { type: 'warp'; years?: number; through?: boolean; untilEra?: number; stop?: boolean };
+  | { type: 'warp'; years?: number; through?: boolean; untilEra?: number; untilMark?: string; stop?: boolean };
 
 export type FromWorker =
   | { type: 'ready'; seed: string; gridN: number; tilt: number; cells: CellSnapshot; stats: WorldStats }

@@ -1,4 +1,4 @@
-import { SPEEDS } from '../shared/protocol';
+import { BEFORE_HISTORY, SPEEDS } from '../shared/protocol';
 import { ERAS } from '../sim/history/eras';
 import { actions, togglePanel, useStore } from './store';
 import { GoalMarker, Goals } from './goals';
@@ -95,11 +95,12 @@ export function App() {
               </button>
             ))}
             {st?.skipTo != null
-              ? <button class={css.active} onClick={() => actions.skipTo(-1)} title="Stop skipping ahead">■ to the {ERAS[st.skipTo]!.name}</button>
+              ? <button class={css.active} onClick={() => actions.skipTo(-1)} title="Stop skipping ahead">■ to {typeof st.skipTo === 'string' ? BEFORE_HISTORY.find((b) => b.key === st.skipTo)?.name.toLowerCase() : `the ${ERAS[st.skipTo]!.name}`}</button>
               : (
                 <select title="Skip ahead to an age" value="" style={{ background: 'none', color: 'inherit', border: 'none', font: 'inherit', opacity: 0.8, cursor: 'pointer', maxWidth: '92px' }}
-                  onChange={(e) => { const el = e.target as HTMLSelectElement, v = el.value; el.value = ''; if (v !== '') actions.skipTo(+v); }}>
+                  onChange={(e) => { const el = e.target as HTMLSelectElement, v = el.value; el.value = ''; if (v !== '') actions.skipTo(/^\d+$/.test(v) ? +v : v); }}>
                   <option value="">skip to…</option>
+                  {!st?.history && BEFORE_HISTORY.map((b) => !st?.reached?.includes(b.key) && <option value={b.key} style={{ color: '#000' }}>{b.name}</option>)}
                   {ERAS.map((e, i) => !(st?.history && (st.topEra ?? 0) >= i) && <option value={i} style={{ color: '#000' }}>{i === 0 ? 'Dawn of history' : e.name}</option>)}
                 </select>
               )}
