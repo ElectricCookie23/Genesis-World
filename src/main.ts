@@ -663,15 +663,17 @@ async function boot(): Promise<void> {
       ctx.fillStyle = 'rgba(6, 8, 14, 0.45)'; ctx.fillRect(0, 0, W, H);
       const used = new Set<Idea>();
       let ruled = 0, rising = 0;
+      // (in a world of many countries every town of every one is a blur: each country is then marked at its capital alone)
+      const crowded = state.realms.filter((r) => r.ended < 0).length > 40;
       for (const r of state.realms) {
         if (r.ended >= 0 || (!r.idea && !r.creed)) continue;
         if (r.creed) ruled++;
         if (r.idea) rising++;
         for (const st of state.settlements) {
-          if (st.nation !== r.id || st.ruined >= 0) continue;
+          if (st.nation !== r.id || st.ruined >= 0 || (crowded && st.id !== r.capital)) continue;
           const x = ((grid.lon[st.cell]! + Math.PI) / (Math.PI * 2)) * W, y = (0.5 - grid.lat[st.cell]! / Math.PI) * H;
           if (r.creed) { used.add(r.creed.kind as Idea); ctx.globalAlpha = 0.6; ctx.fillStyle = IDEA_COLOUR[r.creed.kind as Idea] ?? '#fff'; ctx.beginPath(); ctx.arc(x, y, st.id === r.capital ? 7 : 5, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
-          if (r.idea) { used.add(r.idea.kind as Idea); ctx.strokeStyle = IDEA_COLOUR[r.idea.kind as Idea] ?? '#fff'; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.arc(x, y, 4 + 9 * r.idea.share, 0, Math.PI * 2); ctx.stroke(); }
+          if (r.idea) { used.add(r.idea.kind as Idea); ctx.strokeStyle = IDEA_COLOUR[r.idea.kind as Idea] ?? '#fff'; ctx.lineWidth = crowded ? 1.3 : 1.8; ctx.beginPath(); ctx.arc(x, y, (crowded ? 3.5 : 4) + (crowded ? 5 : 9) * r.idea.share, 0, Math.PI * 2); ctx.stroke(); }
         }
       }
       let kx = 10;

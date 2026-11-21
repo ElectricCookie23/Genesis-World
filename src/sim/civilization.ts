@@ -123,6 +123,18 @@ export const INTELLIGENCE_THRESHOLD = 0.5;
 export const MIND_YEARS = 15e6;
 /** Level of knowledge at which a camp plants fields and history begins for it. */
 export const FARMING = 0.22;
+
+/**
+ * One step of a town's people toward what its land can feed: the textbook rule, `pop += pop * rate * (1 - pop / room)`,
+ * which grows a town into its room and shrinks one that is over it. The rule overshoots when a town is many
+ * times over its room (the land's yield collapsed in one season): it used to come out with fewer than no
+ * people, which were counted as that for a year (and turned sums into nonsense) before the town was found
+ * empty. Now it comes out with none, and is found empty the same way.
+ */
+export function grown(pop: number, room: number, rate: number): number {
+  const next = pop + pop * rate * (1 - pop / room);
+  return next > 0 ? next : 0;
+}
 /** At most this many history ticks in one call: under a fast-forward each tick covers more years. */
 const MAX_TICKS = 300;
 /** Ticks longer than this many years are a fast-forward: rulers and minor events are summarised, not recorded. */
@@ -235,7 +247,7 @@ export class Civilization {
       const s = cr.species[st.species]!;
       if (this.failed(sim, st, s.extinctYear >= 0)) { this.abandon(sim, st, sim.simYear); continue; }
       const capacity = this.capacity(sim, st);
-      st.pop += st.pop * 0.6 * (1 - st.pop / Math.max(0.5, capacity)) * Math.min(1, tau * 2);
+      st.pop = grown(st.pop, Math.max(0.5, capacity), 0.6 * Math.min(1, tau * 2));
       const neighbours = this.neighbourCount(sim, st);
       st.tech = Math.min(FARMING + 0.001, st.tech + tau * 0.0009 * (0.4 + Math.log10(1 + st.pop)) * (1 + 0.35 * neighbours) * (0.6 + s.ref[G.Intelligence]!));
       if (!st.painted && st.tech > 0.06) {
@@ -330,6 +342,8 @@ export class Civilization {
     }
     if ((h.peace ?? -1) >= 0) { this.peaceTick(sim, rng, members, y, year); return; }
     let most = 1;
+    this.topPop = 0; this.livingNations = 0;
+    for (const x of h.nations) if (x.ended < 0) { this.livingNations++; if (x.pop > this.topPop) this.topPop = x.pop; }
     for (const list of members.values()) if (list.length > most) most = list.length;
     for (const n of h.nations) {
       // (a country founded during this very tick has its first turn in the next one)
@@ -479,7 +493,7 @@ export class Civilization {
     } else {
       // people: a few per cent a year while there is room
       const grow = 1 - Math.exp(-0.03 * y);
-      st.pop += st.pop * grow * (1 - st.pop / Math.max(0.5, capacity));
+      st.pop = grown(st.pop, Math.max(0.5, capacity), grow);
       if (st.pop > capacity * 1.5) st.pop = capacity * 1.5;
     }
     // what the nation knows reaches its towns within a generation or two; the capital first
@@ -1363,7 +1377,7 @@ export class Civilization {
             ? `A voice from ${o.name} is heard in ${cap.name}, carried on nothing but air. Until now neither country knew the other was there.`
             : `Travellers from ${n.name} come over the last hill and find tilled fields that are not theirs. The country is ${o.name}.`)
           + (apart >= 2 ? ` ${ahead.name} is in its ${this.eraName(ahead)}; ${behind.name} is still in its ${this.eraName(behind)}, and has never seen such things.` : ''),
-        causes: [n.eventId, o.eventId].filter((x) => x >= 0), importance: apart >= 2 || way === 1 ? 1 : 0, speciesIds: n.species === o.species ? [n.species] : [n.species, o.species], data: { nation: n.id, other: o.id, way },
+        causes: [n.eventId, o.eventId].filter((x) => x >= 0), importance: (apart >= 2 || way === 1) && this.notable(n) && this.notable(o) ? 1 : 0, speciesIds: n.species === o.species ? [n.species] : [n.species, o.species], data: { nation: n.id, other: o.id, way },
       });
       // a crossing or a meeting of unequal peoples makes a name; a meeting at a border is only dated by who ruled
       const who = way === 0 && apart < 2 ? (this.credit(sim, null, n, ev.id, 'It was in the reign of {name}.'), null)
@@ -1657,6 +1671,34 @@ export class Civilization {
     const last = walls[walls.length - 1];
     if (walls.length >= 4 || (last && st.pop < last.pop * 2.2)) return;
     walls.push({ pop: st.pop, tech: st.tech, year });
+  }
+
+  /** The people of the greatest living country (thousands), as of this tick: what "a notable country" is measured against. */
+  private topPop = 0;
+
+  /**
+   * Is this one of the countries of its day whose doings the chronicle should carry? In a world of a dozen
+   * countries nearly all are; in a world of two hundred, only those within a quarter of the greatest. What
+   * happens in the others is still on record and in the cause graph: it is just not narrated.
+   */
+  private notable(n: Nation | undefined): boolean {
+    return !!n && (this.livingNations <= 12 || n.pop >= 0.25 * this.topPop);
+  }
+
+  /** How many countries there are, as of this tick. */
+  private livingNations = 0;
+
+  /** Is the country with this id one the chronicle should carry (see `notable`)? */
+  isNotable(id: number): boolean {
+    return this.notable(this.h.nations[id]);
+  }
+
+  /** The country that holds the town nearest this cell (the town of its region), or -1. */
+  nationAt(sim: Simulation, cell: number): number {
+    if (cell < 0) return -1;
+    const id = this.occupied.get(sim.regions.regionOf[cell]!);
+    const st = id !== undefined ? this.settlements[id] : undefined;
+    return st && st.ruined < 0 ? st.nation : -1;
   }
 
   /** False switches off arms races (system E38): used to measure what they do. */
@@ -2222,8 +2264,9 @@ export class Civilization {
       for (const t of h.treaties ?? []) if (t.kind === 'alliance' && !t.broken && t.until > year && (t.a === id || t.b === id)) { const o = t.a === id ? t.b : t.a; if (alive(o) && h.nations[o]!.species === h.nations[id]!.species) out.push({ id: o, eventId: t.eventId, secret: !!t.secret }); }
       return out;
     };
-    // (while a world war is being fought, and for a generation after one, no one follows an ally into another war)
-    if ((h.great ?? []).some((x) => x.world && (x.ended < 0 || year - x.ended < 40))) return;
+    // (while a world war is being fought, and for three generations after one, no one follows an ally into another war;
+    // nor does a country already in a war between alliances start a second)
+    if ((h.great ?? []).some((x) => (x.ended < 0 && (x.world || x.sides[0].includes(war.a) || x.sides[1].includes(war.a) || x.sides[0].includes(war.b) || x.sides[1].includes(war.b))) || (x.world && x.ended >= 0 && year - x.ended < 100))) return;
     const { sides, joined } = chain(war.a, war.b, (id) => pacts(id).map((x) => x.id));
     if (!joined.length) return;
     const A = h.nations[war.a]!, B = h.nations[war.b]!;
@@ -2244,7 +2287,7 @@ export class Civilization {
       const e = sim.emit({
         type: 'war', year, cellId: from.cell, title: `${X.name} joins the war against ${E.name}`,
         description: `${X.name} is sworn to ${friend.name}${pact && pact.secret ? ', by a pact that was never read out' : ''}. ${friend.name} is at war with ${E.name}, and ${X.name} follows it in.`,
-        causes: [pact ? pact.eventId : -1, war.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: 1, speciesIds: [X.species],
+        causes: [pact ? pact.eventId : -1, war.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: this.notable(X) ? 1 : 0, speciesIds: [X.species],
         data: { town: from.id, other: at.id, nation: X.id, foe: E.id, joins: war.id },
       });
       if (e.id < 0) continue;
@@ -2275,7 +2318,7 @@ export class Civilization {
         ? `What began as "${ev[war.eventId]?.title ?? 'a war'}" has not stayed between two countries. ${names(sides[0])} stand against ${names(sides[1])}: most of the powers of the world. They call it ${g.own}, ${g.name}. Every forge in every one of them is working for it.`
         : `${names(sides[0])} stand against ${names(sides[1])}. A war between two countries has become a war between their friends.`,
       causes: [war.eventId, ...joined.map((j) => { const pact = pacts(j.nation).find((x) => x.id === j.with); return pact ? pact.eventId : -1; })].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 4),
-      importance: g.world ? 2 : 1, speciesIds: [A.species], data: { great: id, sides: `${sides[0].join(',')}|${sides[1].join(',')}`, world: g.world ? 1 : 0 },
+      importance: g.world ? 2 : this.notable(A) || this.notable(B) ? 1 : 0, speciesIds: [A.species], data: { great: id, sides: `${sides[0].join(',')}|${sides[1].join(',')}`, world: g.world ? 1 : 0 },
     });
     g.eventId = e.id;
     if (first && e.id >= 0) h.firstWorldWar = e.id;
@@ -2339,7 +2382,7 @@ export class Civilization {
     const peace = sim.emit({
       type: 'great-peace', year, cellId: seat.cell, title: `The peace of ${seat.name}`,
       description: `${capital(g.name)} is over. ${describeGreatWar(g, name, year)} ${towns.length ? `${towns.length > 1 ? `${towns.slice(0, 4).slice(0, -1).join(', ')} and ${towns.slice(0, 4).pop()}` : towns[0]} ${towns.length > 1 ? 'have' : 'has'} a new flag${towns.length > 4 ? `, and ${towns.length - 4} more` : ''}.` : 'The borders are where they were.'} The envoys of every country that fought meet at ${seat.name} to settle the rest.`,
-      causes: [...wars.map((w) => w.peaceEvent), g.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 5), importance: g.world ? 2 : 1, speciesIds: [host.species],
+      causes: [...wars.map((w) => w.peaceEvent), g.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 5), importance: g.world ? 2 : this.notable(host) ? 1 : 0, speciesIds: [host.species],
       data: { great: g.id, winner: g.winner, towns: g.taken.length, world: g.world ? 1 : 0 },
     });
     g.endEvent = peace.id;
@@ -2417,7 +2460,7 @@ export class Civilization {
       const e = sim.emit({
         type: 'secret-revealed', year, cellId: cap.cell, title: s.kind === 'pact' ? `The secret pact of ${n.name} and ${victim.name}` : `What ${n.name} did to ${victim.name}`,
         description: `A chest of letters is opened in the archive at ${cap.name}, ${Math.round(year - s.year)} years after they were sealed. They say what was never said aloud: ${hidden.description.charAt(0).toLowerCase()}${hidden.description.slice(1)}`,
-        causes: [s.eventId, s.cover].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: s.kind === 'assassination' ? 1 : 0, speciesIds: [n.species], data: { secret: s.eventId, by: n.id, against: s.against, kind: s.kind },
+        causes: [s.eventId, s.cover].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: s.kind === 'assassination' && this.notable(victim) ? 1 : 0, speciesIds: [n.species], data: { secret: s.eventId, by: n.id, against: s.against, kind: s.kind },
       });
       s.known = year; s.knownEvent = e.id;
       // a killing that comes out is a wrong the victim's country did not know it had: it knows now
@@ -2599,7 +2642,7 @@ export class Civilization {
     const h = this.h, list = (h.plagues ??= []), ev = sim.events.events;
     if (list.some((p) => p.ended < 0)) return;
     const last = list[list.length - 1];
-    if (last && year - last.ended < 150) return;
+    if (last && year - last.ended < 250) return;
     const edge = this.tradeEdges(sim).find((e) => e.a === st.id || e.b === st.id);
     if (!edge) return;
     const id = (h.plagueSeq = (h.plagueSeq ?? 0) + 1);
@@ -2779,7 +2822,7 @@ export class Civilization {
     const e = sim.emit({
       type: 'colony', year, cellId: d.cell, title: first ? `The first colony overseas: ${d.name}` : `${n.name} plants a colony at ${d.name}`,
       description: `Ships from ${port.name} put settlers ashore ${far > 1.2 ? 'on the far side of the world' : far > 0.7 ? 'across the ocean' : 'across the sea'}, on land no one holds. They call the place ${d.name}. It answers to ${cap.name}: its governor is sent out and its taxes are sent back.`,
-      causes: [d.eventId, n.trade ? n.trade.eventId : -1, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 3), importance: first ? 2 : 1, speciesIds: [n.species], data: { nation: n.id, colony: col.id, town: d.id },
+      causes: [d.eventId, n.trade ? n.trade.eventId : -1, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 3), importance: first ? 2 : this.notable(n) ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, colony: col.id, town: d.id },
     });
     col.eventId = e.id;
     list.push(col);
@@ -2810,7 +2853,7 @@ export class Civilization {
     const decl = sim.emit({
       type: 'independence-declared', year, cellId: seat.cell, title: `${seat.name} declares itself free of ${n.name}`,
       description: `It is ${Math.max(1, Math.round(year - col.founded))} years since ships from ${n.name} first put in at ${seat.name}. No one living there has seen ${cap.name}. This year the governor is put on a ship home with a letter: the colony will send no more taxes${stand.fatigue > 0.3 ? ' and no more soldiers for wars that are not its own' : stand.inequality > 0.55 ? ' to houses that own everything already' : ''}, and it will answer to itself.`,
-      causes: [col.eventId, woe, idea].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 3), importance: 1, speciesIds: [n.species], data: { nation: n.id, colony: col.id, town: seat.id },
+      causes: [col.eventId, woe, idea].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 3), importance: this.notable(n) ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, colony: col.id, town: seat.id },
     });
     const rng = new RNG(hash32(this.seedNum, col.id, Math.floor(year), 0xc4));
     const child = this.newNation(sim, rng, seat, year, n, 'colony', decl.id >= 0 ? [decl.id] : []);
@@ -2841,7 +2884,7 @@ export class Civilization {
     const war = sim.emit({
       type: 'war', year, cellId: seat.cell, title: `The war of independence of ${child.name}`,
       description: `${n.name} will not let ${seat.name} go. An army is put on ships at ${port.name} to bring the colony back.`,
-      causes: [decl.id, col.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: 1, speciesIds: [n.species],
+      causes: [decl.id, col.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: this.notable(n) ? 1 : 0, speciesIds: [n.species],
       data: { town: port.id, other: seat.id, nation: n.id, foe: child.id, independence: col.id },
     });
     col.warEvent = war.id;
@@ -2888,7 +2931,7 @@ export class Civilization {
       const e = sim.emit({
         type: 'independence', year, cellId: seat.cell, title: first ? `The first colony to become a country: ${child.name}` : `${child.name} is a country`,
         description: `${n.ended < 0 ? `${n.name} has given up trying to take ${seat.name} back` : `${n.name} is no more, and no one else claims ${seat.name}`}. ${child.name}, which was a colony for ${Math.max(1, Math.round(col.declared - col.founded))} years, is a country, with its own flag over ${seat.name} and its own name for its people: the ${h.cultures[child.culture]!.name}.`,
-        causes, importance: first ? 2 : 1, speciesIds: [child.species], data: { nation: child.id, from: n.id, colony: col.id },
+        causes, importance: first ? 2 : this.notable(n) || this.notable(child) ? 1 : 0, speciesIds: [child.species], data: { nation: child.id, from: n.id, colony: col.id },
       });
       if (first && e.id >= 0) h.firstFree = e.id;
       if (e.id >= 0) this.credit(sim, null, child, e.id, '{name} led them through it.');
@@ -2936,14 +2979,16 @@ export class Civilization {
     const cap = this.settlements[n.capital]!;
     if (!n.idea) {
       // (a country that has just had a revolution has had enough of ideas for a few generations)
-      if (n.revolved !== undefined && year - n.revolved < 120) return;
+      if (n.revolved !== undefined && year - n.revolved < 200) return;
       // ---- heard from a neighbour whose people hold an idea, or are governed by one, that fits here too
       const adopt = (idea: Ideology, from: Nation | undefined): void => {
         n.idea = { id: idea.id, share: 0.08, since: year };
         sim.emit({ type: 'idea-spreads', year, cellId: cap.cell, title: `${idea.name} reaches ${n.name}`, description: `${from ? `Travellers from ${from.name} bring` : 'Printed sheets from abroad carry'} ${idea.own}, ${idea.name}: the teaching ${IDEA_SAYS[idea.kind]}. In ${cap.name} it finds people who had been thinking the same.`, causes: [idea.eventId, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: 0, speciesIds: [n.species], data: { nation: n.id, idea: idea.id, from: from ? from.id : -1 } });
       };
       const heldBy = (o: Nation | undefined): Ideology | undefined => (!o || o.ended >= 0 ? undefined : o.idea && o.idea.share > 0.3 ? list[o.idea.id] : o.creed !== undefined ? list[o.creed] : undefined);
-      let from: Nation | undefined, fit = 0.45;
+      // (and a country governed by an idea its conditions still call for is not looking for another)
+      const own = n.creed !== undefined && list[n.creed] ? pressure(list[n.creed]!.kind, c) : 0;
+      let from: Nation | undefined, fit = Math.max(0.45, own + 0.15);
       for (const id of n.contacts) {
         const theirs = heldBy(h.nations[id]);
         if (theirs && IDEA_GOVERNMENT[theirs.kind] !== n.government && pressure(theirs.kind, c) > fit) { fit = pressure(theirs.kind, c); from = h.nations[id]; }
@@ -2951,6 +2996,7 @@ export class Civilization {
       if (from) { if (luck(0xe1) < 1 - Math.exp(-y / 30)) adopt(heldBy(from)!, from); return; }
       // ---- or begun here, when conditions call loudly enough
       const kind = ripest(c, n.government);
+      if (kind && pressure(kind, c) < own + 0.15) return;
       if (!kind || luck(0xe2) >= 1 - Math.exp((-y * pressure(kind, c)) / 70)) return;
       // (where there is print, an idea of the same kind that is alive anywhere in the world is read here before one is thought of)
       if (c.press) {
@@ -2996,7 +3042,7 @@ export class Civilization {
       const e = sim.emit({
         type: 'revolution', year, cellId: cap.cell, title: first ? `The first revolution: ${n.name} comes ${governedAs(wants).replace(/^an? /, 'to be a ')}` : `Revolution in ${n.name}`,
         description: `For ${Math.max(1, Math.round(year - n.idea.since))} years more and more of ${n.name} has held with ${idea.own}, ${idea.name}. This year the gates of ${cap.name} are opened from inside. ${n.name}, which was ${governedAs(was)}, is ${governedAs(wants)} from today: ${idea.kind === 'levelling' ? 'the great estates are divided' : idea.kind === 'order' ? 'the assemblies are sent home and one voice gives the orders' : idea.kind === 'reason' ? 'offices go to those who can pass the examinations' : idea.kind === 'custom' ? 'the new laws are burned and the old ones read out' : 'the tolls and the courts are in the hands of the guilds'}. The old flag is taken down and another is raised.`,
-        causes: [idea.eventId, woe, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 3), importance: first ? 2 : 1, speciesIds: [n.species], data: { nation: n.id, idea: idea.id, kind: idea.kind, from: was, to: wants, flag: n.flag },
+        causes: [idea.eventId, woe, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 3), importance: first ? 2 : this.notable(n) ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, idea: idea.id, kind: idea.kind, from: was, to: wants, flag: n.flag },
       });
       if (first && e.id >= 0) h.firstRevolution = e.id;
       // what a revolution does: the thing it was for (the estates divided, or one hand on the country)
@@ -3080,13 +3126,15 @@ export class Civilization {
     const luck = (k: number): number => (hash32(this.seedNum, n.id, Math.floor(year), k) % 100000) / 100000;
     // ---- a pact of trade with a buyer of thirty years' standing
     if (n.trade && year - n.trade.since >= 30 && luck(0xd1) < 1 / 40) { const o = h.nations[n.trade.to]; if (o && o.ended < 0) this.treaty(sim, n, o, 'trade', year, n.trade.eventId, 50); }
+    // (no country keeps more than two alliances at once: a friend of everyone is a friend of no one)
+    const bound = (id: number): number => { let k = 0; for (const t of h.treaties ?? []) if (t.kind === 'alliance' && !t.broken && t.until > year && (t.a === id || t.b === id)) k++; return k; };
     // ---- an alliance with a neighbour that has fought the same enemy
-    if (luck(0xd2) < 1 / 50) {
+    if (luck(0xd2) < 1 / 50 && bound(n.id) < 2) {
       const fought = (x: number): Set<number> => { const s = new Set<number>(); for (const w of h.wars ?? []) if (year - w.year < 80) { if (w.a === x) s.add(w.b); if (w.b === x) s.add(w.a); } return s; };
       const mine = fought(n.id);
       if (mine.size) for (const id of n.contacts) {
         const o = h.nations[id];
-        if (!o || o.ended >= 0 || mine.has(id)) continue;
+        if (!o || o.ended >= 0 || mine.has(id) || bound(id) >= 2) continue;
         const theirs = fought(id);
         const enemy = [...mine].find((e) => theirs.has(e) && h.nations[e] && h.nations[e]!.ended < 0);
         if (enemy === undefined) continue;
@@ -3096,12 +3144,12 @@ export class Civilization {
     }
     // ---- blocs (system E40): in the ages of engines a country in an arms race looks for a friend against its rival,
     // among those it is in touch with that are not that rival's friends already
-    if (n.era >= 6 && n.rival !== undefined && (n.pressed ?? 0) >= 0.3 && luck(0xd4) < 1 / 25) {
+    if (n.era >= 6 && n.rival !== undefined && (n.pressed ?? 0) >= 0.3 && this.notable(n) && bound(n.id) < 2 && luck(0xd4) < 1 / 40) {
       const rival = n.rival;
       const race = (h.races ?? []).find((r) => r.ended < 0 && ((r.a === n.id && r.b === rival) || (r.a === rival && r.b === n.id)));
       for (const id of n.contacts) {
         const o = h.nations[id];
-        if (!o || o.ended >= 0 || id === rival || o.species !== n.species) continue;
+        if (!o || o.ended >= 0 || id === rival || o.species !== n.species || !this.notable(o) || bound(id) >= 2) continue;
         const theirs = pactBetween(h, id, rival, year);
         if (theirs && theirs.kind === 'alliance') continue;
         if (this.treaty(sim, n, o, 'alliance', year, race ? race.eventId : n.foes?.[rival]?.eventId ?? -1, 60)) break;

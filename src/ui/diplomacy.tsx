@@ -15,6 +15,8 @@ export function DiplomacyPanel() {
   const W = 660, H = 330;
   const at = new Map((d ? d.nations : []).map((n) => [n.id, { x: 14 + n.u * (W - 28), y: 12 + n.v * (H - 24), n }]));
   const shown = d ? d.ties.filter((t) => t.kind !== 'contact') : [];
+  // (where there are many countries only the thirty greatest are named on the picture; the rest are named when pointed at)
+  const named = new Set(d ? d.nations.slice().sort((a, b) => b.pop - a.pop).slice(0, 30).map((n) => n.id) : []);
   const used = new Set(d ? d.ties.map((t) => t.kind) : []);
   return (
     <div class={`${css.panel} ${css.side}`} style={{ width: 'min(720px, 96vw)' }}>
@@ -41,8 +43,9 @@ export function DiplomacyPanel() {
               })}
               {[...at.values()].map(({ x, y, n }) => (
                 <g key={n.id} style={{ cursor: 'pointer' }} onClick={() => actions.openNation(n.id)}>
-                  <circle cx={x} cy={y} r={3 + Math.min(5, Math.sqrt(n.pop) / 12)} fill={`hsl(${Math.round(n.hue * 360)} 70% 60%)`} stroke="#0c1018" stroke-width={1.2} />
-                  <text x={x + 8} y={y + 3.5} fill="#ece7db" font-size="10" font-family="system-ui, sans-serif">{n.name}</text>
+                  <circle cx={x} cy={y} r={(named.has(n.id) ? 3 : 2) + Math.min(5, Math.sqrt(Math.max(0, n.pop) || 0) / 12)} fill={`hsl(${Math.round(n.hue * 360)} 70% 60%)`} stroke="#0c1018" stroke-width={1.2} />
+                  <title>{n.name}</title>
+                  {named.has(n.id) && <text x={x + 8} y={y + 3.5} fill="#ece7db" font-size="10" font-family="system-ui, sans-serif">{n.name}</text>}
                 </g>
               ))}
             </svg>

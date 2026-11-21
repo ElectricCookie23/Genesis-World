@@ -672,7 +672,8 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
           const living = h.nations.filter((n) => n.ended < 0);
           post({ type: 'diplomacy', web: {
             nations: living.map((n) => { const c = s.civ.settlements[n.capital]?.cell ?? 0; return { id: n.id, name: n.name, hue: n.hue, u: (g.lon[c]! + Math.PI) / (Math.PI * 2), v: 0.5 - g.lat[c]! / Math.PI, pop: n.pop }; }),
-            ties: web(h, s.simYear),
+            // (in a world of many countries, who is merely in touch with whom is thousands of lines: only what is stronger is sent)
+            ties: living.length > 40 ? web(h, s.simYear).filter((t) => t.kind !== 'contact') : web(h, s.simYear),
             secret: secretTies(h, s.simYear),
             betrayals: living.flatMap((n) => (n.grudges ?? []).filter((x) => s.simYear - x.year < GRUDGE_YEARS).map((x) => ({ by: h.nations[x.against]?.name ?? '', against: n.name, year: x.year, eventId: x.eventId, avenged: x.avenged ?? -1 }))).sort((a, b) => b.year - a.year).slice(0, 30),
           } });

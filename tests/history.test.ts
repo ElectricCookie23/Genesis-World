@@ -6,6 +6,7 @@ import { applyChange, compound, makeLanguage, personName, placeMeanings, soundCh
 import { count, listing, ordinal, write } from '../src/sim/history/grammar';
 import { IDEAS, IDEA_COLOUR, IDEA_GOVERNMENT, IDEA_SAYS, drift as driftIdea, governedAs, ideaName, pressure, ripest, type Conditions } from '../src/sim/history/ideology';
 import { emblemOf } from '../src/render/gfx/nations';
+import { grown } from '../src/sim/civilization';
 import { INSTITUTION_KINDS, LEAGUE_HOLDS, chain, describeGreatWar, institutionName, isWorld, powers, purposeOf, victor, weight } from '../src/sim/history/greatwar';
 import { HIDDEN_TYPES, chooses, comesOut, coverStory, dares, strikes } from '../src/sim/history/secrets';
 import { records } from '../src/sim/memory';
@@ -2887,6 +2888,31 @@ describe('spies and secrets (E39)', () => {
     expect(secrets).toBeGreaterThan(0);
     // the done-when
     expect(changed).toBeGreaterThan(0);
+  });
+});
+
+describe('numbers that stay numbers', () => {
+  it('a town over what its land can feed shrinks, and never to fewer than no people', () => {
+    // growing into its room, and settling at it
+    expect(grown(10, 100, 0.03)).toBeGreaterThan(10);
+    expect(grown(100, 100, 0.03)).toBeCloseTo(100, 9);
+    // a little over: it shrinks, and stays above nothing
+    expect(grown(150, 100, 0.03)).toBeLessThan(150);
+    expect(grown(150, 100, 0.03)).toBeGreaterThan(100);
+    // the land's yield has collapsed and the town is fifty times over it: none are left, not fewer than none
+    expect(grown(900, 18, 0.03)).toBe(0);
+    expect(grown(900, 18, 0.95)).toBe(0);
+    for (const pop of [0, 1, 50, 1e4]) for (const room of [0.5, 5, 500]) for (const rate of [0.01, 0.3, 0.6, 1]) { const v = grown(pop, room, rate); expect(Number.isFinite(v)).toBe(true); expect(v).toBeGreaterThanOrEqual(0); }
+  });
+
+  it('after six thousand years no living town or country has a count that is negative or not a number', () => {
+    for (const { sim } of fiveHistories()) {
+      const h = sim.civ.h;
+      for (const st of sim.civ.settlements) if (st.ruined < 0) { expect(Number.isFinite(st.pop)).toBe(true); expect(st.pop).toBeGreaterThanOrEqual(0); expect(Number.isFinite(st.tech)).toBe(true); }
+      for (const n of h.nations) if (n.ended < 0) for (const k of ['pop', 'tech', 'stability', 'inequality', 'fatigue'] as const) { expect(Number.isFinite(n[k])).toBe(true); expect(n[k]).toBeGreaterThanOrEqual(0); }
+      for (const list of h.market?.prices ?? []) for (const v of list) expect(Number.isFinite(v)).toBe(true);
+      for (const w of h.wars ?? []) for (const a of w.army) { expect(Number.isFinite(a.size)).toBe(true); expect(Number.isFinite(a.morale)).toBe(true); }
+    }
   });
 });
 
