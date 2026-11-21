@@ -911,6 +911,7 @@ export function Peoples() {
                   <span>{Math.round(j.progress * 100)}%</span>
                 </div>
               ))}
+              {(st.means || st.names) && <div class={css.when} style={{ color: '#cfc9bd' }}>{st.means ? `Its name means "${st.means}". ` : ''}{nameLine(st, s.stats?.simYear ?? 0)}</div>}
               {scarLines(st, s.stats?.simYear ?? 0).map((line, i) => <div key={`scar${i}`} class={css.when} style={{ color: '#e8b49a' }}>{line}</div>)}
               <WonderLines st={st} year={s.stats?.simYear ?? 0} />
               {(st.monuments ?? 0) > 0 && <div class={css.when} style={{ color: '#ffd76a' }}>{st.monuments} great {st.monuments === 1 ? 'work stands' : 'works stand'} here from a golden age.</div>}
@@ -937,6 +938,15 @@ export function Peoples() {
       </div>
     </div>
   );
+}
+
+/** The names a town has had (system E22), in a sentence: "Velhassa when it was founded; Velass from 900 years ago (why); Vass for the last 200 (why)." */
+export function nameLine(st: SettlementInfo, year: number): string {
+  const names = st.names ?? [];
+  if (names.length < 2) return '';
+  const ago = (y: number) => Math.max(1, Math.round(year - y)).toLocaleString('en-US');
+  const parts = names.map((n, i) => i === 0 ? `${n.name} when it was founded` : i === names.length - 1 ? `${n.name} for the last ${ago(n.year)} years (${n.why})` : `${n.name} from ${ago(n.year)} years ago (${n.why})`);
+  return `It has been called ${parts.join('; ')}.`;
 }
 
 /** What calamities have left on a town (system E20): the last two, newest first, each in a sentence. */

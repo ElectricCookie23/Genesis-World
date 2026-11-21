@@ -24,6 +24,9 @@ import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type His
 import { SLOT_INDEX, WEB, borrowable, chooseNext, copyKnowledge, forget, levelOf, newKnowledge, shed, wayFor, type Land, type Leaning } from './history/tech';
 
 /** One layer in the ground of a town site (system E17). */
+/** One of the names a place has had (system E22). */
+export interface PlaceName { name: string; year: number; why: string; eventId?: number }
+
 export interface Stratum {
   year: number;
   /** A building phase ('camp', 'village', 'town', 'city', 'great city'), a destruction ('burnt', 'flood', 'ash', 'shaken'), a falling back ('decay') or the end ('abandoned'). */
@@ -59,6 +62,10 @@ export interface Settlement {
   lore: number;
   /** What calamities have left on it (system E20): the last few, oldest first. */
   scars?: Scar[];
+  /** The language its name is spoken in (system E22): the name wears as that language does. */
+  tongue?: number;
+  /** Every name it has had, oldest first, once it has had more than one: the name, the year it came into use, and why. */
+  names?: PlaceName[];
   eventId: number;
   ruined: number; // year it was abandoned, or -1
   painted: boolean;
@@ -484,6 +491,12 @@ export class Civilization {
             sim.cellLog.note(o.cell, year, Log.Owner, n.id);
             const taken = sim.emit({ type: 'conquest', year, cellId: o.cell, title: `${n.name} takes ${o.name}`, description: `${o.name} has a new flag over its gate. It belonged to ${foe.name} until this year.`, causes: [warEvent, n.eventId].filter((x) => x >= 0), importance: foe.capital === o.id ? 1 : 0, speciesIds: [st.species], data: { nation: n.id, from: foe.id } });
             if (general && taken.id >= 0) { taken.description += ` ${general.name} rode in first.`; taken.data = { ...taken.data, person: general.id }; general.events.push(taken.id); }
+            // conquerors rename what they take (system E22): the same meaning said in their own tongue, more often the more warlike they are
+            // (the luck in it comes from the town and the year, not from the stream that decides wars)
+            if (taken.id >= 0 && (hash32(this.seedNum, o.id, Math.floor(year), 0x4e3a) % 1000) / 1000 < 0.3 + 0.5 * warlike) {
+              const was = o.name;
+              if (this.rename(o, this.languageOf(n), year, `renamed by ${n.name}, who took it from ${foe.name}`, taken.id, true)) taken.description += ` Its new masters call it ${o.name}, which means in their tongue what ${was} meant in the old one.`;
+            }
           }
         }
         // with the atom in hand, a war can end the age
@@ -616,6 +629,7 @@ export class Civilization {
     lang.name = c.name;
     h.cultures.push(c);
     host.culture = c.id;
+    this.respeak(c.language, year, `the speech of ${host.name} had become ${c.name}`);
     const cap = this.settlements[host.capital]!;
     sim.emit({
       type: 'culture', year, cellId: cap.cell, title: `A new people: the ${c.name}`,
@@ -2033,7 +2047,10 @@ export class Civilization {
       const lang = h.languages[id]!;
       if (lang.changes.length >= 64) continue;
       const luck = new RNG(hash32(this.seedNum, id, Math.floor(year), 0xd41f7));
-      if (luck.chance(1 - Math.exp(-y / driftSpan(lang.changes.length, w)))) soundChange(lang, luck, year);
+      if (!luck.chance(1 - Math.exp(-y / driftSpan(lang.changes.length, w)))) continue;
+      const change = soundChange(lang, luck, year);
+      // the names of places wear with the speech of those who live in them (system E22)
+      if (change) this.respeak(id, year, `in ${lang.name}, ${change.note}`);
     }
   }
 
@@ -2070,6 +2087,7 @@ export class Civilization {
         const c = this.daughterCulture(new RNG(hash32(this.seedNum, n.id, 0x701a)), old, year, this.settlements[n.capital]);
         n.culture = c.id;
         const now = h.languages[c.language]!;
+        this.respeak(c.language, year, `the speech of ${n.name} had become ${c.name}`);
         // two words that show it: the ones that have moved furthest apart
         const shown = ['water', 'sun', 'people', 'fire', 'star', 'river', 'stone', 'child'].map((m) => [m, word(was, m), word(now, m)] as const).filter((x) => x[1] !== x[2]).slice(0, 2);
         const first = !h.firstTongue;
@@ -2082,6 +2100,54 @@ export class Civilization {
         if (first && ev.id >= 0) h.firstTongue = ev.id;
       }
     }
+  }
+
+  /** Does language `id` come down from language `ancestor` (or is it the same)? */
+  private descends(id: number, ancestor: number): boolean {
+    for (let l = this.h.languages[id]; l; l = this.h.languages[l.parent]) if (l.id === ancestor) return true;
+    return false;
+  }
+
+  /**
+   * Place name drift (system E22). When the speech of a people changes, the names of the places they live in are
+   * said the new way: every living town whose people now speak language `id`, and whose name is in that
+   * language or one it came down from, is re-spoken. A town held by people of a sister tongue is re-spoken
+   * their way too; one held by people of another family keeps its name as a fossil until someone renames it.
+   */
+  private respeak(id: number, year: number, why: string): void {
+    const h = this.h, lang = h.languages[id]!;
+    const speaks = new Set<number>();
+    for (const n of h.nations) if (n.ended < 0 && h.cultures[n.culture]!.language === id) speaks.add(n.id);
+    for (const st of this.settlements) {
+      if (st.ruined >= 0) continue;
+      if (st.nation >= 0 ? !speaks.has(st.nation) : st.tongue !== id) continue;
+      const from = st.tongue ?? id;
+      if (this.descends(id, from)) this.rename(st, lang, year, why, -1, false);
+      else if (h.languages[from] && h.languages[from]!.family === lang.family) this.rename(st, lang, year, `said the way of its new people, who speak ${lang.name}`, -1, false);
+    }
+  }
+
+  /**
+   * Give a town the name its meanings make in a language in a given year, and keep the old one in its record.
+   * Returns false if nothing changed (the name comes out the same, or another living town already bears it).
+   */
+  private rename(st: Settlement, lang: Language, year: number, why: string, eventId: number, renamed: boolean): boolean {
+    const next = compound(lang, st.head, st.modifier || undefined, year);
+    const old = st.tongue;
+    st.tongue = lang.id;
+    if (next === st.name) return false;
+    if (this.settlements.some((x) => x.ruined < 0 && x.id !== st.id && x.name === next)) { st.tongue = old; return false; }
+    const names = (st.names ??= [{ name: st.name, year: st.founded, why: 'founded' }]);
+    const entry: PlaceName = { name: next, year, why };
+    if (eventId >= 0) entry.eventId = eventId;
+    // (two changes in one lifetime are remembered as one, unless a conqueror made the second)
+    const last = names[names.length - 1]!;
+    if (!renamed && names.length > 1 && year - last.year < 25 && last.eventId === undefined) names[names.length - 1] = entry;
+    else names.push(entry);
+    // a long record keeps its first name and its latest
+    if (names.length > 8) names.splice(1, names.length - 8);
+    st.name = next;
+    return true;
   }
 
   /** The sky on a human clock: a small comet that comes back within living memory, and now and then an eclipse. */
@@ -2412,6 +2478,8 @@ export class Civilization {
     if (branch >= 0) house.branchOf = branch;
     n.ruler = first.id; n.dynasty = house.id;
     st.nation = n.id;
+    // (a people that has just become its own says the name of its town its own way: system E22)
+    if (apart && from) this.rename(st, lang, year, `the speech of ${n.name} had become ${culture.name}`, -1, false);
     const dawn = h.began < 0;
     if (dawn) h.began = year;
     const sp = sim.creatures.species[st.species]!;
@@ -2610,6 +2678,7 @@ export class Civilization {
       const o = st as unknown as Old;
       if (st.lore === undefined) st.lore = typeof o.belief === 'number' ? o.belief : -1;
       delete o.belief; delete o.temple;
+      if (st.tongue === undefined) { const n = st.nation >= 0 ? this.h.nations[st.nation] : undefined; const c = n ? this.h.cultures[n.culture] : this.h.cultures.find((x) => x.species === st.species); if (c) st.tongue = c.language; }
     }
     for (const p of this.h.people) {
       const o = p as unknown as Old;
@@ -2663,13 +2732,16 @@ export class Civilization {
     if (under) cell = under.cell;
     // named in the people's own language, from what the name means
     const id = this.settlements.length;
-    const lang = this.h.languages[this.cultureFor(sim, species, year).language]!;
+    // (the tongue of those who founded it: the country its mother town belongs to, or the first people of its kind)
+    const mother = parent >= 0 ? this.settlements[parent] : undefined;
+    const founders = mother && mother.nation >= 0 ? this.h.nations[mother.nation] : undefined;
+    const lang = founders ? this.languageOf(founders) : this.h.languages[mother?.tongue ?? this.cultureFor(sim, species, year).language]!;
     let meanings = placeMeanings(hash32(this.seedNum, id));
     let name = compound(lang, meanings.head, meanings.modifier, year);
     for (let salt = 1; salt < 6 && this.settlements.some((x) => x.name === name); salt++) { meanings = placeMeanings(hash32(this.seedNum, id, salt)); name = compound(lang, meanings.head, meanings.modifier, year); }
     const st: Settlement = {
       id, name, cell, region, species, pop: 0.2, tech: 0.03, founded: year, lore: -1, eventId: -1, ruined: -1, painted: false, farms: false, stars: false,
-      nation: -1, head: meanings.head, modifier: meanings.modifier ?? '', relic: -1, homeTemp: reg.landTemp[region]!,
+      nation: -1, head: meanings.head, modifier: meanings.modifier ?? '', relic: -1, homeTemp: reg.landTemp[region]!, tongue: lang.id,
       strata: [{ year, kind: 'camp', tech: 0.03, eventId: -1 }], over: under ? under.id : undefined,
     };
     this.settlements.push(st);

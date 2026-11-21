@@ -189,6 +189,9 @@ export interface SettlementInfo {
   monuments?: number;
   /** The wonders that stand here, or are being built (system E19). */
   wonders?: WonderInfo[];
+  /** What its name means, in plain words ("old ford"), and every name it has had, oldest first, if it has had more than one (system E22). */
+  means?: string;
+  names?: { name: string; year: number; why: string; eventId?: number }[];
   /**
    * What calamities have left on it (system E20), oldest first, five numbers each: the year, the kind (an index into
    * CALAMITIES: fire, quake, flood, ash), the share of the town lost, how it built again (an index into REBUILDS:

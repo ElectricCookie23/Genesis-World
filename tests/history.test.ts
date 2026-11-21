@@ -1071,7 +1071,8 @@ describe('infrastructure networks (E15)', () => {
         expect(e!.importance).toBe(2);
         expect(Number(e!.data!.kind)).toBe(k);
         expect(e!.description).not.toMatch(/\{[abn]\}/);
-        const names = [r.sim.civ.settlements[Number(e!.data!.a)]!.name, r.sim.civ.settlements[Number(e!.data!.b)]!.name];
+        // (by the name it bore then: names wear, system E22)
+        const names = [Number(e!.data!.a), Number(e!.data!.b)].flatMap((id) => { const st = r.sim.civ.settlements[id]!; return st.names ? st.names.map((x) => x.name) : [st.name]; });
         expect(names.some((name) => e!.description.includes(name))).toBe(true);
         expect(links.filter((l) => l.kind === k).every((l) => l.year >= e!.simYear - 1)).toBe(true);
       }
@@ -1610,5 +1611,72 @@ describe('generated languages (E21)', () => {
     }
     expect(pairs).toBeGreaterThan(3);
     expect(partings).toBeGreaterThan(0);
+  });
+});
+
+describe('place name drift (E22)', () => {
+  it('an old city has had at least three names, each with its year and its reason', () => {
+    const runs = fiveHistories();
+    let three = 0, worn = 0, plain = 0, renamed = 0, parted = 0;
+    for (const { sim } of runs) {
+      const ev = sim.events.events, h = sim.civ.h;
+      for (const st of sim.civ.settlements) {
+        // every town's name is in some language of the world
+        expect(st.tongue).toBeDefined();
+        expect(h.languages[st.tongue!]).toBeTruthy();
+        const names = st.names;
+        if (!names) continue;
+        // the record begins with the name it was founded under and ends with the name it bears
+        expect(names.length).toBeGreaterThanOrEqual(2);
+        expect(names.length).toBeLessThanOrEqual(8);
+        expect(names[0]!.why).toBe('founded');
+        expect(names[0]!.year).toBe(st.founded);
+        expect(names[names.length - 1]!.name).toBe(st.name);
+        for (let i = 1; i < names.length; i++) {
+          const was = names[i - 1]!, now = names[i]!;
+          expect(now.year).toBeGreaterThanOrEqual(was.year);
+          expect(now.name).not.toBe(was.name);
+          expect(now.why.length).toBeGreaterThan(8);
+          if (now.why.startsWith('in ')) {
+            // worn by one change of sound: still plainly the same name
+            worn++;
+            if (wordDistance(was.name.toLowerCase(), now.name.toLowerCase()) <= 0.5) plain++;
+          } else if (now.why.startsWith('renamed by')) {
+            // a conqueror's name: the event of the conquest says so
+            renamed++;
+            const taken = ev[now.eventId!]!;
+            expect(taken.type).toBe('conquest');
+            expect(taken.description).toContain(now.name);
+            expect(taken.simYear).toBe(now.year);
+          } else parted++;
+        }
+        if (names.length >= 3 && st.ruined < 0 && sim.simYear - st.founded > 1500) three++;
+      }
+      // a name is what its meanings make in its language: said in the founding year it is the founding name
+      const old = sim.civ.settlements.filter((s) => s.names && s.names.length >= 3)[0];
+      if (old) expect(old.names![0]!.name.length).toBeGreaterThan(1);
+    }
+    expect(three).toBeGreaterThan(5);
+    expect(worn).toBeGreaterThan(20);
+    // (now and then one lost sound shifts where a long name is cut short, and it changes more; nine times in ten it is a small step)
+    expect(plain / worn).toBeGreaterThan(0.9);
+    expect(parted).toBeGreaterThan(0);
+    expect(renamed).toBeGreaterThanOrEqual(0);
+  });
+
+  it('a name wears exactly as its language does, and a conqueror says the same meaning in another tongue', () => {
+    const lang = makeLanguage(0, 31337, big, 0);
+    const m = placeMeanings(42);
+    const rng = new RNG(3);
+    const seen = [compound(lang, m.head, m.modifier, 0)];
+    for (let y = 100; y <= 3000; y += 100) { soundChange(lang, rng, y); const now = compound(lang, m.head, m.modifier, y); if (now !== seen[seen.length - 1]) seen.push(now); }
+    // over three thousand years it has been said at least three ways, each a small step from the last
+    expect(seen.length).toBeGreaterThanOrEqual(3);
+    for (let i = 1; i < seen.length; i++) expect(wordDistance(seen[i - 1]!.toLowerCase(), seen[i]!.toLowerCase())).toBeLessThanOrEqual(0.67);
+    // and the old forms can always be said again: the name in the founding year is the founding name
+    expect(compound(lang, m.head, m.modifier, 0)).toBe(seen[0]);
+    // the same meaning in a stranger's tongue is another word altogether
+    const other = makeLanguage(1, 90210, small, 0);
+    expect(wordDistance(compound(other, m.head, m.modifier).toLowerCase(), seen[seen.length - 1]!.toLowerCase())).toBeGreaterThan(0.6);
   });
 });
