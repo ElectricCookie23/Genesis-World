@@ -1,4 +1,5 @@
 import { SPEEDS } from '../shared/protocol';
+import { ERAS } from '../sim/history/eras';
 import { actions, togglePanel, useStore } from './store';
 import { GoalMarker, Goals } from './goals';
 import { SkyMessage, System } from './system';
@@ -89,6 +90,15 @@ export function App() {
                 {i === 0 ? '❚❚' : sp.label}
               </button>
             ))}
+            {st?.skipTo != null
+              ? <button class={css.active} onClick={() => actions.skipTo(-1)} title="Stop skipping ahead">■ to the {ERAS[st.skipTo]!.name}</button>
+              : (
+                <select title="Skip ahead to an age" value="" style={{ background: 'none', color: 'inherit', border: 'none', font: 'inherit', opacity: 0.8, cursor: 'pointer', maxWidth: '92px' }}
+                  onChange={(e) => { const el = e.target as HTMLSelectElement, v = el.value; el.value = ''; if (v !== '') actions.skipTo(+v); }}>
+                  <option value="">skip to…</option>
+                  {ERAS.map((e, i) => !(st?.history && (st.topEra ?? 0) >= i) && <option value={i} style={{ color: '#000' }}>{i === 0 ? 'Dawn of history' : e.name}</option>)}
+                </select>
+              )}
             <i class={css.sep} />
             <button class={s.panel === 'chronicle' ? css.active : ''} onClick={() => togglePanel('chronicle')} title="Chronicle (C)">Chronicle</button>
             <button class={s.panel === 'tree' ? css.active : ''} onClick={() => togglePanel('tree')} title="Tree of life (T)">Tree</button>
