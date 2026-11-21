@@ -1372,8 +1372,9 @@ export class Civilization {
       // (in a world of many countries, two lesser neighbours of the same age finding each other across a hill is no one's
       // news and would be thousands of events: they are in touch from now on, and that is all)
       if (way === 0 && apart < 2 && !this.notable(n) && !this.notable(o)) { n.know.saved += 0.002; continue; }
-      // (nor, by any way, where the world is crowded and neither is a country of note)
-      if (this.crowded && !this.notable(n) && !this.notable(o)) { n.know.saved += 0.002; continue; }
+      // (nor, by any way, where the world is crowded, unless both are countries of note: measured on a full-size world of
+      // 190 countries, first meetings were nine events in ten, since every new country meets every great one)
+      if (this.crowded && !(this.notable(n) && this.notable(o))) { n.know.saved += 0.002; continue; }
       const ev = sim.emit({
         type: 'contact', year, cellId: far.cell, title: `${n.name} meets ${o.name}`,
         description: (way === 1
