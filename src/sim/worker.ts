@@ -15,7 +15,8 @@ import {
 import { ERAS, earthNote, eraOf } from './history/eras';
 import { CALAMITIES, REBUILDS } from './history/calamity';
 import { LEXICON, SAYINGS } from './history/syntax';
-import { languageList } from './history/tongues';
+import { languageList, scriptInfo } from './history/tongues';
+import { bodyFrom, type Body } from './history/script';
 import { compound } from './history/language';
 import { WEB, wayFor } from './history/tech';
 
@@ -240,6 +241,11 @@ function shownSettlements(s: Simulation): Simulation['civ']['settlements'] {
   return all.filter((t) => t.ruined < 0 || skip-- <= 0 || kept.has(t.id));
 }
 
+/** What a species looks like in its own pictures (system E23). */
+function bodyOf(s: Simulation): (species: number) => Body {
+  return (species) => { const g = s.creatures.species[species]?.ref; return g ? bodyFrom(g[G.LimbPairs]!, g[G.LimbType]!, g[G.Neck]!, g[G.Horn]!, g[G.Tail]!) : { legs: 2, neck: 0.4, horn: 0, wings: 0, tail: 0.4 }; };
+}
+
 /** The years a country's building laws were made (system E20): fire, earthquake, flood; undefined if it has none. */
 function codeYears(s: Simulation, nation: number): number[] | undefined {
   const c = nation >= 0 ? s.civ.h.nations[nation]?.codes : undefined;
@@ -299,7 +305,7 @@ function nationList(s: Simulation): NationInfo[] {
     return {
       id: n.id, name: n.name, species: n.species, capital: n.capital, founded: n.founded, ended: n.ended, parent: n.parent, government: n.government,
       stability: n.stability, tech: n.tech, era: n.era, eraName: s.civ.eraName(n), eraOwn: s.civ.eraOwnName(n), earth: earthNote(n.era), hue: n.hue, pop: n.pop, towns: n.towns,
-      culture: culture.name, language: h.languages[culture.language]!.name, ruler: ruler && ruler.died < 0 ? ruler.name : '', rulerSince: ruler && ruler.died < 0 ? ruler.reignFrom : -1,
+      culture: culture.name, language: h.languages[culture.language]!.name, script: scriptInfo(h, n.script, n.species, s.simYear, bodyOf(s)), signs: n.signs ?? (s.civ.settlements[n.capital] ? ['land', s.civ.settlements[n.capital]!.modifier || s.civ.settlements[n.capital]!.head] : undefined), ruler: ruler && ruler.died < 0 ? ruler.name : '', rulerSince: ruler && ruler.died < 0 ? ruler.reignFrom : -1,
       house: house ? house.name : '', houseReigns: house ? house.reigns : 0, houseId: house ? house.id : -1, eventId: n.eventId, ...fashionSource(s, n), networks: networksOf(s, n.id), golden: n.golden ? n.golden.own : '', goldenSince: n.golden ? n.golden.since : -1, goldenWorks: n.golden ? n.golden.works : 0,
       calendar: cal ? cal.name : '', calendarOwn: cal ? cal.own : '', calendarEpoch: cal ? cal.epoch : 0, calendarEvent: cal ? cal.eventId : -1,
     };
@@ -445,7 +451,7 @@ function tick(): void {
     if (s.civ.settlements.length) {
       const joins = linksByTown(s);
       const great = wondersByTown(s);
-      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, lore: t.lore, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, farms: t.farms, monuments: t.monuments ?? 0, wonders: great.get(t.id), scars: t.scars && t.scars.length ? t.scars.flatMap((x) => [x.year, CALAMITIES.indexOf(x.kind), x.share, REBUILDS.indexOf(x.rebuilt), x.toward ?? -1]) : undefined, codes: codeYears(s, t.nation), walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas, links: joins.get(t.id), dam: t.dam !== undefined, mine: t.mine !== undefined, layers: (t.strata ? t.strata.length : 1) + (t.over !== undefined ? 1 : 0), peak: t.peak, feral: t.feral !== undefined ? s.creatures.species[t.feral]?.name ?? '' : '', nesting: t.nesting !== undefined ? s.creatures.species[t.nesting]?.name ?? '' : '' })) , nations: nationList(s) });
+      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, lore: t.lore, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, farms: t.farms, monuments: t.monuments ?? 0, wonders: great.get(t.id), means: t.modifier ? `${t.modifier} ${t.head}` : t.head, names: t.names && t.names.length > 1 ? t.names : undefined, scars: t.scars && t.scars.length ? t.scars.flatMap((x) => [x.year, CALAMITIES.indexOf(x.kind), x.share, REBUILDS.indexOf(x.rebuilt), x.toward ?? -1]) : undefined, codes: codeYears(s, t.nation), walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas, links: joins.get(t.id), dam: t.dam !== undefined, mine: t.mine !== undefined, layers: (t.strata ? t.strata.length : 1) + (t.over !== undefined ? 1 : 0), peak: t.peak, feral: t.feral !== undefined ? s.creatures.species[t.feral]?.name ?? '' : '', nesting: t.nesting !== undefined ? s.creatures.species[t.nesting]?.name ?? '' : '' })) , nations: nationList(s) });
     }
     speciesVersion = s.creatures.version;
     if (s.plants.version !== plantVersion) {
@@ -564,7 +570,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         }
         break;
       case 'requestLanguages':
-        if (sim) post({ type: 'languages', lexicon: [...LEXICON], sayings: SAYINGS.map((x) => x.english), list: languageList(sim.civ.h) });
+        if (sim) post({ type: 'languages', lexicon: [...LEXICON], sayings: SAYINGS.map((x) => x.english), list: languageList(sim.civ.h, sim.simYear, bodyOf(sim)) });
         break;
       case 'requestDynasty':
         if (sim) { const detail = dynastyDetail(sim, msg.id); if (detail) post({ type: 'dynasty', detail }); }

@@ -5,6 +5,8 @@ import { Simulation } from '../src/sim/simulation';
 import { word, wordDistance } from '../src/sim/history/language';
 import { LEXICON, SAYINGS, describeGrammar, say } from '../src/sim/history/syntax';
 import { languageList } from '../src/sim/history/tongues';
+import { bodyFrom } from '../src/sim/history/script';
+import { G } from '../src/sim/genetics';
 import * as fs from 'fs';
 const [seed = 'amber-reef-101', years = '4000', n = '17', json = ''] = process.argv.slice(2);
 const sim = new Simulation(seed, Number(n));
@@ -27,4 +29,5 @@ let sum = 0, pairs = 0;
 for (const a of alive) for (const b of alive) if (a.id < b.id) { let d = 0; for (const m of LEXICON) d += wordDistance(word(a, m), word(b, m)); sum += d / LEXICON.length; pairs++; }
 console.log(`  mean distance between spoken languages: ${pairs ? (sum / pairs).toFixed(3) : 'n/a'} over ${pairs} pairs`);
 
-if (json) fs.writeFileSync(json, JSON.stringify({ year: sim.simYear, lexicon: [...LEXICON], sayings: SAYINGS.map((x) => x.english), list: languageList(h) }));
+if (json) fs.writeFileSync(json, JSON.stringify({ year: sim.simYear, lexicon: [...LEXICON], sayings: SAYINGS.map((x) => x.english), list: languageList(h, sim.simYear, (sp) => { const g = sim.creatures.species[sp]!.ref; return bodyFrom(g[G.LimbPairs]!, g[G.LimbType]!, g[G.Neck]!, g[G.Horn]!, g[G.Tail]!); }) }));
+console.log(`  scripts: ${(h.scripts ?? []).map((x) => `${x.name} [+${Math.round(x.born - began)}${x.parent >= 0 ? `, from ${h.scripts![x.parent]!.name}` : ''}]`).join('; ')}`);

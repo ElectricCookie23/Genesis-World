@@ -1,4 +1,5 @@
 import type { Codes } from './calamity';
+import type { Script } from './script';
 // The entities of history. All of them are plain data, so the whole of history saves, loads and
 // rewinds with the rest of the simulation.
 import type { Calendar } from './calendar';
@@ -163,6 +164,10 @@ export interface Nation {
   woes: { kind: string; eventId: number; year: number }[];
   /** Its building laws, each made after a calamity in one of its towns (system E20). */
   codes?: Codes;
+  /** The script it writes in (system E23), once it writes. */
+  script?: number;
+  /** The two meanings its name is built from (system E23: a name is written with the signs for what it means). */
+  signs?: string[];
   /** Its golden age, while it lasts (system E10): when it began, the event that announced it, what its people call it, and the great works raised in it. */
   golden?: { since: number; eventId: number; own: string; works: number };
   /** The year its last golden age ended. */
@@ -203,6 +208,8 @@ export interface HistoryState {
   peacePop?: number;
   /** The year the leading nation reached the top of knowledge, or -1. */
   topSince?: number;
+  /** The scripts of the world (system E23). */
+  scripts?: Script[];
   /** The event of the first time a people was found to speak a language of its own (system E21), if it has happened. */
   firstTongue?: number;
   /** The first building law of each kind anywhere (system E20): the events that recorded them. */
@@ -242,7 +249,7 @@ export function emptyHistory(): HistoryState {
 }
 
 /** What a wonder is (system E19). Each kind answers one kind of event. */
-export const WONDER_KINDS = ['observatory', 'sungate', 'crater-stair', 'fire-watch', 'first-tower', 'tomb', 'victory', 'lighthouse', 'memorial', 'colossus', 'peace-hall'] as const;
+export const WONDER_KINDS = ['observatory', 'sungate', 'crater-stair', 'fire-watch', 'first-tower', 'tomb', 'victory', 'lighthouse', 'memorial', 'great-bell', 'peace-hall'] as const;
 export type WonderKind = (typeof WONDER_KINDS)[number];
 
 /**

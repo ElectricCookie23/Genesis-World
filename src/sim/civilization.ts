@@ -18,12 +18,16 @@ import { hash32 } from './history/hash';
 import { capital, compound, makeLanguage, personName, placeMeanings, soundChange, splitLanguage, word, type Language } from './history/language';
 import { clearedCover } from './plants';
 import { driftSpan } from './history/syntax';
+import { wearOf, type Script } from './history/script';
 import { stillCleared } from './history/decay';
 import { answer, damage, hazards, type CalamityKind, type Ground, type Rebuild, type Scar } from './history/calamity';
 import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role, type Wonder, type WonderKind } from './history/model';
 import { SLOT_INDEX, WEB, borrowable, chooseNext, copyKnowledge, forget, levelOf, newKnowledge, shed, wayFor, type Land, type Leaning } from './history/tech';
 
 /** One layer in the ground of a town site (system E17). */
+/** One of the names a place has had (system E22). */
+export interface PlaceName { name: string; year: number; why: string; eventId?: number }
+
 export interface Stratum {
   year: number;
   /** A building phase ('camp', 'village', 'town', 'city', 'great city'), a destruction ('burnt', 'flood', 'ash', 'shaken'), a falling back ('decay') or the end ('abandoned'). */
@@ -59,6 +63,10 @@ export interface Settlement {
   lore: number;
   /** What calamities have left on it (system E20): the last few, oldest first. */
   scars?: Scar[];
+  /** The language its name is spoken in (system E22): the name wears as that language does. */
+  tongue?: number;
+  /** Every name it has had, oldest first, once it has had more than one: the name, the year it came into use, and why. */
+  names?: PlaceName[];
   eventId: number;
   ruined: number; // year it was abandoned, or -1
   painted: boolean;
@@ -334,6 +342,8 @@ export class Civilization {
       this.network(sim, rng, n, towns, y, year);
       // ---- golden ages begin, raise their monuments and end (system E10)
       this.flourish(sim, rng, n, towns, y, year);
+      // ---- once it can write, it writes in some script: its own, or one it learned (system E23)
+      if (n.script === undefined) this.writing(sim, n, year);
       // ---- now and then it raises a wonder, because of something that happened (system E19)
       this.wonder(sim, rng, n, towns, y, year);
       // ---- a people that charts the stars fixes its count of years (system E8)
@@ -484,6 +494,12 @@ export class Civilization {
             sim.cellLog.note(o.cell, year, Log.Owner, n.id);
             const taken = sim.emit({ type: 'conquest', year, cellId: o.cell, title: `${n.name} takes ${o.name}`, description: `${o.name} has a new flag over its gate. It belonged to ${foe.name} until this year.`, causes: [warEvent, n.eventId].filter((x) => x >= 0), importance: foe.capital === o.id ? 1 : 0, speciesIds: [st.species], data: { nation: n.id, from: foe.id } });
             if (general && taken.id >= 0) { taken.description += ` ${general.name} rode in first.`; taken.data = { ...taken.data, person: general.id }; general.events.push(taken.id); }
+            // conquerors rename what they take (system E22): the same meaning said in their own tongue, more often the more warlike they are
+            // (the luck in it comes from the town and the year, not from the stream that decides wars)
+            if (taken.id >= 0 && (hash32(this.seedNum, o.id, Math.floor(year), 0x4e3a) % 1000) / 1000 < 0.3 + 0.5 * warlike) {
+              const was = o.name;
+              if (this.rename(o, this.languageOf(n), year, `renamed by ${n.name}, who took it from ${foe.name}`, taken.id, true)) taken.description += ` Its new masters call it ${o.name}, which means in their tongue what ${was} meant in the old one.`;
+            }
           }
         }
         // with the atom in hand, a war can end the age
@@ -616,6 +632,7 @@ export class Civilization {
     lang.name = c.name;
     h.cultures.push(c);
     host.culture = c.id;
+    this.respeak(c.language, year, `the speech of ${host.name} had become ${c.name}`);
     const cap = this.settlements[host.capital]!;
     sim.emit({
       type: 'culture', year, cellId: cap.cell, title: `A new people: the ${c.name}`,
@@ -1953,9 +1970,9 @@ export class Civilization {
     }
     // ---- a golden age
     const g = n.golden;
-    if (g && real(g.eventId) && year - g.since > 30 && !has('colossus', g.eventId)) plans.push({ kind: 'colossus', cause: g.eventId, at: cap, name: `${called('great', 'king', 'sun', 'red')}, the colossus of ${cap.name}`, what: 'a pillar of bronze as tall as a hill, with a fire kept at its top',
+    if (g && real(g.eventId) && year - g.since > 30 && !has('great-bell', g.eventId)) plans.push({ kind: 'great-bell', cause: g.eventId, at: cap, name: `${called('great', 'sun', 'red', 'bright')}, the great bell of ${cap.name}`, what: 'a bell of bronze as tall as a hill',
       why: `It was cast in ${g.own}, the golden age of ${n.name}, to show what its makers could do.`,
-      say: `In ${g.own} there is nothing ${n.name} thinks beyond it. At ${cap.name} its founders cast a figure in bronze as tall as a hill, with one arm raised, and no one can say afterwards whom it was meant to be.` });
+      say: `In ${g.own} there is nothing ${n.name} thinks beyond it. At ${cap.name} its founders cast a bell in bronze as tall as a hill, in a single pour that takes a year to cool, and hang it between two piers of stone. It is rung once in a generation and heard for a day's walk.` });
     // ---- the place where the first city stood
     const firstCity = sim.milestones.get('first-city');
     if (real(firstCity) && n.era >= 3 && !all.some((w) => w.kind === 'first-tower')) {
@@ -1976,7 +1993,7 @@ export class Civilization {
     // Which of its reasons it acts on: the rarest reasons weigh most (a crater or the first city before another
     // column), and a kind the world already has many of weighs less each time, so that no two wonders in sight of
     // each other are likely to be alike.
-    const rare: Record<WonderKind, number> = { 'crater-stair': 9, 'first-tower': 9, 'fire-watch': 6, sungate: 3, observatory: 2, lighthouse: 2, colossus: 2, tomb: 1.5, victory: 1, memorial: 1, 'peace-hall': 1 };
+    const rare: Record<WonderKind, number> = { 'crater-stair': 9, 'first-tower': 9, 'fire-watch': 6, sungate: 3, observatory: 2, lighthouse: 2, 'great-bell': 2, tomb: 1.5, victory: 1, memorial: 1, 'peace-hall': 1 };
     let sum = 0;
     const weights = plans.map((p) => { const w = rare[p.kind] / (1 + count(p.kind)) ** 2; sum += w; return w; });
     let pick = rng.next() * sum, k = 0;
@@ -2010,7 +2027,7 @@ export class Civilization {
       for (let i = 0; i < all.length - 1; i++) { const r = this.settlements[all[i]!.settlement]!.ruined; if (r >= 0 && r < since) { since = r; worst = i; } }
       all.splice(worst >= 0 ? worst : 0, 1);
     }
-    this.credit(sim, rng, n, ev.id, kind === 'tomb' || kind === 'victory' || kind === 'colossus' ? 'It was ordered by {name}.' : 'It was begun in the reign of {name}.');
+    this.credit(sim, rng, n, ev.id, kind === 'tomb' || kind === 'victory' || kind === 'great-bell' ? 'It was ordered by {name}.' : 'It was begun in the reign of {name}.');
     return w;
   }
 
@@ -2033,7 +2050,10 @@ export class Civilization {
       const lang = h.languages[id]!;
       if (lang.changes.length >= 64) continue;
       const luck = new RNG(hash32(this.seedNum, id, Math.floor(year), 0xd41f7));
-      if (luck.chance(1 - Math.exp(-y / driftSpan(lang.changes.length, w)))) soundChange(lang, luck, year);
+      if (!luck.chance(1 - Math.exp(-y / driftSpan(lang.changes.length, w)))) continue;
+      const change = soundChange(lang, luck, year);
+      // the names of places wear with the speech of those who live in them (system E22)
+      if (change) this.respeak(id, year, `in ${lang.name}, ${change.note}`);
     }
   }
 
@@ -2070,6 +2090,7 @@ export class Civilization {
         const c = this.daughterCulture(new RNG(hash32(this.seedNum, n.id, 0x701a)), old, year, this.settlements[n.capital]);
         n.culture = c.id;
         const now = h.languages[c.language]!;
+        this.respeak(c.language, year, `the speech of ${n.name} had become ${c.name}`);
         // two words that show it: the ones that have moved furthest apart
         const shown = ['water', 'sun', 'people', 'fire', 'star', 'river', 'stone', 'child'].map((m) => [m, word(was, m), word(now, m)] as const).filter((x) => x[1] !== x[2]).slice(0, 2);
         const first = !h.firstTongue;
@@ -2082,6 +2103,92 @@ export class Civilization {
         if (first && ev.id >= 0) h.firstTongue = ev.id;
       }
     }
+  }
+
+  /**
+   * Writing systems (system E23). A country that has learned to write writes in some script. If a country it is
+   * in touch with already writes, it takes that script and bends it to its own tongue: a daughter script, which
+   * starts as worn as its teacher's is and then wears its own way. Otherwise it begins its own, from pictures.
+   * A country that comes out of one that writes keeps its script.
+   */
+  private writing(sim: Simulation, n: Nation, year: number): void {
+    const h = this.h;
+    if (n.know.way[SLOT_INDEX.get('write')!]! < 0) return;
+    const scripts = (h.scripts ??= []);
+    let teacher: Nation | undefined;
+    for (const id of n.contacts) {
+      const o = h.nations[id];
+      if (o && o.script !== undefined && (!teacher || scripts[o.script]!.born < scripts[teacher.script!]!.born)) teacher = o;
+    }
+    const from = teacher ? scripts[teacher.script!]! : undefined;
+    const people = h.cultures[n.culture]!;
+    const first = !scripts.length;
+    const cap = this.settlements[n.capital]!;
+    const paper = n.know.way[SLOT_INDEX.get('paper')!]! >= 0;
+    const sc: Script = {
+      id: scripts.length, parent: from ? from.id : -1, nation: n.id, born: year, from: from ? wearOf(from, year) : 0, eventId: -1,
+      hand: paper || hash32(this.seedNum, scripts.length, 0x5c2) % 3 === 0 ? 1 : 0, name: `${people.name} script`,
+    };
+    const ev = sim.emit({
+      type: 'script', year, cellId: cap.cell, title: first ? `The first writing: the ${sc.name}` : from ? `${n.name} takes up writing` : `${n.name} begins to write`,
+      description: from
+        ? `${n.name} has taken the writing of ${teacher!.name} and bent it to its own tongue. The signs are those of the ${from.name}, ${sc.hand ? 'drawn now with a brush' : 'cut now with a blade'}; within a few lifetimes no one from ${teacher!.name} will read them easily.`
+        : `In ${n.name} the tallies kept at ${cap.name} have become pictures, and the pictures have begun to stand for words: three waves for water, a ring with rays for the sun, the outline of one of themselves for "people". ${sc.hand ? 'They are drawn with a brush.' : 'They are cut and pressed, in straight strokes.'} Anything that can be said can now be kept.`,
+      causes: [from ? from.eventId : -1, n.eventId].filter((x, i, a) => x >= 0 && sim.events.events[x] && a.indexOf(x) === i), importance: first ? 2 : 0, speciesIds: [n.species],
+      data: { nation: n.id, script: sc.id, parent: sc.parent },
+    });
+    sc.eventId = ev.id;
+    scripts.push(sc);
+    n.script = sc.id;
+    this.credit(sim, null, n, ev.id, 'It was the reign of {name}.');
+  }
+
+  /** Does language `id` come down from language `ancestor` (or is it the same)? */
+  private descends(id: number, ancestor: number): boolean {
+    for (let l = this.h.languages[id]; l; l = this.h.languages[l.parent]) if (l.id === ancestor) return true;
+    return false;
+  }
+
+  /**
+   * Place name drift (system E22). When the speech of a people changes, the names of the places they live in are
+   * said the new way: every living town whose people now speak language `id`, and whose name is in that
+   * language or one it came down from, is re-spoken. A town held by people of a sister tongue is re-spoken
+   * their way too; one held by people of another family keeps its name as a fossil until someone renames it.
+   */
+  private respeak(id: number, year: number, why: string): void {
+    const h = this.h, lang = h.languages[id]!;
+    const speaks = new Set<number>();
+    for (const n of h.nations) if (n.ended < 0 && h.cultures[n.culture]!.language === id) speaks.add(n.id);
+    for (const st of this.settlements) {
+      if (st.ruined >= 0) continue;
+      if (st.nation >= 0 ? !speaks.has(st.nation) : st.tongue !== id) continue;
+      const from = st.tongue ?? id;
+      if (this.descends(id, from)) this.rename(st, lang, year, why, -1, false);
+      else if (h.languages[from] && h.languages[from]!.family === lang.family) this.rename(st, lang, year, `said the way of its new people, who speak ${lang.name}`, -1, false);
+    }
+  }
+
+  /**
+   * Give a town the name its meanings make in a language in a given year, and keep the old one in its record.
+   * Returns false if nothing changed (the name comes out the same, or another living town already bears it).
+   */
+  private rename(st: Settlement, lang: Language, year: number, why: string, eventId: number, renamed: boolean): boolean {
+    const next = compound(lang, st.head, st.modifier || undefined, year);
+    const old = st.tongue;
+    st.tongue = lang.id;
+    if (next === st.name) return false;
+    if (this.settlements.some((x) => x.ruined < 0 && x.id !== st.id && x.name === next)) { st.tongue = old; return false; }
+    const names = (st.names ??= [{ name: st.name, year: st.founded, why: 'founded' }]);
+    const entry: PlaceName = { name: next, year, why };
+    if (eventId >= 0) entry.eventId = eventId;
+    // (two changes in one lifetime are remembered as one, unless a conqueror made the second)
+    const last = names[names.length - 1]!;
+    if (!renamed && names.length > 1 && year - last.year < 25 && last.eventId === undefined) names[names.length - 1] = entry;
+    else names.push(entry);
+    // a long record keeps its first name and its latest
+    if (names.length > 8) names.splice(1, names.length - 8);
+    st.name = next;
+    return true;
   }
 
   /** The sky on a human clock: a small comet that comes back within living memory, and now and then an eclipse. */
@@ -2393,6 +2500,9 @@ export class Civilization {
       ruler: -1, dynasty: -1, stability: 0.7, tech: st.tech, era: eraOf(st.tech), hue: (culture.hue + ((hash32(this.seedNum, h.nations.length, 7) % 1000) / 1000) * 0.3 + 0.85) % 1, eventId: -1, pop: st.pop, towns: 1,
       know: newKnowledge(), land: [], surveyed: -1e9, contacts: [], inequality: from ? from.inequality * 0.5 : 0.05, fatigue: 0, woes: [], peakYear: year, peakTowns: 1,
     };
+    // (a country that comes out of one that writes keeps its script; its name is written with the signs for what it means)
+    if (from && from.script !== undefined) n.script = from.script;
+    n.signs = ['land', st.modifier || st.head];
     // settlers carry what the old country knew; what their new land cannot support they will have to relearn another way
     if (from) {
       copyKnowledge(from.know, n.know); n.land = from.land.slice();
@@ -2412,6 +2522,8 @@ export class Civilization {
     if (branch >= 0) house.branchOf = branch;
     n.ruler = first.id; n.dynasty = house.id;
     st.nation = n.id;
+    // (a people that has just become its own says the name of its town its own way: system E22)
+    if (apart && from) this.rename(st, lang, year, `the speech of ${n.name} had become ${culture.name}`, -1, false);
     const dawn = h.began < 0;
     if (dawn) h.began = year;
     const sp = sim.creatures.species[st.species]!;
@@ -2610,6 +2722,7 @@ export class Civilization {
       const o = st as unknown as Old;
       if (st.lore === undefined) st.lore = typeof o.belief === 'number' ? o.belief : -1;
       delete o.belief; delete o.temple;
+      if (st.tongue === undefined) { const n = st.nation >= 0 ? this.h.nations[st.nation] : undefined; const c = n ? this.h.cultures[n.culture] : this.h.cultures.find((x) => x.species === st.species); if (c) st.tongue = c.language; }
     }
     for (const p of this.h.people) {
       const o = p as unknown as Old;
@@ -2623,7 +2736,7 @@ export class Civilization {
       delete o.faith;
     }
     for (const c of this.h.calendars ?? []) if ((c.kind as string) === 'prophet') c.kind = 'teaching';
-    for (const w of this.h.wonders ?? []) { if ((w.kind as string) === 'crater-temple') w.kind = 'crater-stair'; if ((w.kind as string) === 'fire-temple') w.kind = 'fire-watch'; }
+    for (const w of this.h.wonders ?? []) { if ((w.kind as string) === 'crater-temple') w.kind = 'crater-stair'; if ((w.kind as string) === 'fire-temple') w.kind = 'fire-watch'; if ((w.kind as string) === 'colossus') { w.kind = 'great-bell'; w.what = 'a bell of bronze as tall as a hill'; } }
   }
 
   /** A sight in the sky that every young culture sees: in some towns it becomes the story they tell of themselves. */
@@ -2663,13 +2776,16 @@ export class Civilization {
     if (under) cell = under.cell;
     // named in the people's own language, from what the name means
     const id = this.settlements.length;
-    const lang = this.h.languages[this.cultureFor(sim, species, year).language]!;
+    // (the tongue of those who founded it: the country its mother town belongs to, or the first people of its kind)
+    const mother = parent >= 0 ? this.settlements[parent] : undefined;
+    const founders = mother && mother.nation >= 0 ? this.h.nations[mother.nation] : undefined;
+    const lang = founders ? this.languageOf(founders) : this.h.languages[mother?.tongue ?? this.cultureFor(sim, species, year).language]!;
     let meanings = placeMeanings(hash32(this.seedNum, id));
     let name = compound(lang, meanings.head, meanings.modifier, year);
     for (let salt = 1; salt < 6 && this.settlements.some((x) => x.name === name); salt++) { meanings = placeMeanings(hash32(this.seedNum, id, salt)); name = compound(lang, meanings.head, meanings.modifier, year); }
     const st: Settlement = {
       id, name, cell, region, species, pop: 0.2, tech: 0.03, founded: year, lore: -1, eventId: -1, ruined: -1, painted: false, farms: false, stars: false,
-      nation: -1, head: meanings.head, modifier: meanings.modifier ?? '', relic: -1, homeTemp: reg.landTemp[region]!,
+      nation: -1, head: meanings.head, modifier: meanings.modifier ?? '', relic: -1, homeTemp: reg.landTemp[region]!, tongue: lang.id,
       strata: [{ year, kind: 'camp', tech: 0.03, eventId: -1 }], over: under ? under.id : undefined,
     };
     this.settlements.push(st);

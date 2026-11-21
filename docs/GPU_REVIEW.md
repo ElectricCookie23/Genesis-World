@@ -28,6 +28,17 @@ Seen along the way:
 6. No human-looking figure appeared in these views, but none was close enough to a building site to show the builders.
 7. Console: `Max polyphony exceeded. Note dropped.` six times (the music), and two 404s.
 
+### Second run the same night (`retest12-*`, sheet `retest12-webgpu-sheet.jpg`)
+
+Same build, seed and settings, a fresh load. Aim: the other senses, and whether any drawn figure looks human.
+
+1. **The same seed reached the dawn of history at a different time.** The first run stopped at 120.6 My, this one at 83.5 My, both by `warp` of 300 My from a fresh load with `&fresh`. Either the warp is not deterministic or the milestone it stops at is not the same one; worth a check, since "same seed, same world" is a promise of the game.
+2. **Senses: this world has only two kinds.** Of all living species, every one is either eyeless or has poor sight (best acuity 0.13); none uses echoes, warmth or the electric sense, and none sees sharply, including the species that builds the towns. So those filters still have not been seen on a GPU. The poor-sight filter works: grey, coarse blocks, finer than the eyeless one (bottom right of the sheet).
+3. **Human-looking figures: none seen, but not settled.** The town had three building sites under way (a hall at "walls", a house at "foundation", a hall in the workshops). At height 0.006 one scaffold frame is plain (top left, right edge); no builders could be made out at 1x speed at either height. The wonders in this world were a peace hall, two tombs and two memorials, no colossus. So the two figure models in `buildings.ts` have still not been looked at close.
+4. **The town's ground is rough again.** Hummocks of bare ground as tall as the houses stand between and through the buildings (top left); earlier checks had the town's ground cleared and level.
+5. **The view went inside a roof** at height 0.0025 over the town centre (top right: a roof gable fills the screen).
+6. **Houses by the peace hall stand at odd angles**, tilted and touching, along the shore; a conifer grows against the hall's dome (bottom left).
+
 This is the second version. The first was cut short by a flat battery; this one adds frame rates on mains power, a clean WebGL2 pass, a proper look at creatures, and corrects the first version's account of the black ground (C3).
 
 **Read this first: limits**
