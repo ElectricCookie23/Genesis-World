@@ -102,6 +102,8 @@ async function boot(): Promise<void> {
   let pendingLoad: unknown = null;
   /** The name of a language the panel was asked to open before the list of languages had arrived. */
   let pendingTongue = '';
+  /** Until when (page clock) a people's music asked for from a panel keeps playing whatever is in view. */
+  let listening = 0;
   try {
     const slot = params.get('slot');
     const saved = params.has('fresh') ? null : slot ? await get(`genesis:slot:${slot}`) : await get(autoKey);
@@ -277,6 +279,7 @@ async function boot(): Promise<void> {
   actions.cellDir = (cell) => { const p = grid.pos; return [p[cell * 3]!, p[cell * 3 + 1]!, p[cell * 3 + 2]!]; };
   actions.timelapse = (id, cell) => { actions.flyToCell(cell, 0.045); update({ panel: 'none' }); window.setTimeout(() => scene.timelapse(id), 1800); };
   actions.openSite = (id) => { update({ panel: 'site', siteDetail: state.siteDetail?.id === id ? state.siteDetail : null }); send({ type: 'requestSite', id }); };
+  actions.listen = (id) => { const r = state.realms.find((x) => x.id === id); if (!r || !r.music) return; void music.start().then(() => { music.setTownMusic(r.music!.tradition, r.era, 1); listening = performance.now() + 30000; }); };
   actions.openGallery = () => { update({ panel: 'gallery' }); send({ type: 'requestGallery' }); };
   actions.openLanguages = (name) => {
     const known = name ? state.languages?.list.find((l) => l.name === name) : undefined;
@@ -951,6 +954,21 @@ async function boot(): Promise<void> {
         }
         music.setCivMusic(msg.stats.civMusic && msg.stats.settlements > 0, seed.length * 7919 + seed.charCodeAt(0));
         music.civEra = msg.stats.topEra ?? 0;
+        // the music of whoever's town is in view (system E27): louder the closer the view
+        {
+          let heard: (typeof state.realms)[number] | undefined, level = 0;
+          if (scene.cam.dist < 0.3 && state.settlements.length) {
+            scene.cam.focusDir(focusVec);
+            let best = 0.9992, town: (typeof state.settlements)[number] | undefined;
+            for (const st of state.settlements) {
+              if (st.ruined >= 0 || (st.nation ?? -1) < 0) continue;
+              const d = grid.pos[st.cell * 3]! * focusVec.x + grid.pos[st.cell * 3 + 1]! * focusVec.y + grid.pos[st.cell * 3 + 2]! * focusVec.z;
+              if (d > best) { best = d; town = st; }
+            }
+            if (town) { heard = state.realms.find((r) => r.id === town!.nation); level = Math.min(1, (0.3 - scene.cam.dist) / 0.22) * Math.min(1, (best - 0.9992) / 0.0005); }
+          }
+          if (performance.now() > listening) music.setTownMusic(heard && heard.music ? heard.music.tradition : null, heard ? heard.era : 0, level);
+        }
         music.setMood({ stage: msg.stats.stage, era: msg.stats.era, life: Math.min(1, msg.stats.livingSpecies / 30), hush: performance.now() < hushUntil });
         break;
       case 'events':

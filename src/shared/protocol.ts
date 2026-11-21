@@ -1,3 +1,4 @@
+import type { Tradition } from '../sim/history/music';
 // Message protocol between the simulation worker and the main thread.
 import type { SimEvent } from '../sim/events';
 import type { CosmosInfo } from '../sim/cosmos';
@@ -279,6 +280,8 @@ export interface NationInfo {
   ruler: string; rulerSince: number; house: string; houseReigns: number;
   /** Id of the ruling house, or -1. */
   houseId: number;
+  /** Its people's music in its present age (system E27): everything needed to play it, and the music in a sentence. Absent before a people makes music. */
+  music?: { tradition: Tradition; about: string };
   /** The script it writes in, if it writes, and the meanings its name is written with (system E23). */
   script?: ScriptInfo; signs?: string[];
   /** The kinds of network its towns are joined by (system E15), as a list of kind numbers in the order it first built them. */

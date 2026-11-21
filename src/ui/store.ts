@@ -343,6 +343,8 @@ export const actions = {
   drawCellBytes: (_canvas: HTMLCanvasElement, _bytes: Uint8Array, _over?: Uint8Array) => {},
   /** The flat map of the present with no towns marked, for drawing the past over. */
   drawBareMap: (_canvas: HTMLCanvasElement) => {},
+  /** Play a nation's music for half a minute (by the simulation's nation id). */
+  listen: (_id: number) => {},
   /** Open the gallery of paintings. */
   openGallery: () => {},
   /** Open the languages of the world, at one of them if its name is given. */

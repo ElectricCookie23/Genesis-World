@@ -1,6 +1,8 @@
 // Generative ambient music that shifts with the state of the planet.
 // Tone.js is loaded on the first user gesture (browsers block audio before that).
 
+import { phrase, type Timbre, type Tradition } from '../sim/history/music';
+
 export interface Mood {
   stage: string; // barren, microbes, algae, animals
   era: string; // none, ice, warm, winter
@@ -125,7 +127,7 @@ export class Music {
       const era = this.civEra;
       const wait = [19, 19, 18, 17, 15, 14, 13, 12, 11, 11][era] ?? 11;
       const now = performance.now();
-      if (this.mood.hush || now - last < wait * 1000) return;
+      if (this.mood.hush || this.townPlaying || now - last < wait * 1000) return;
       last = now;
       const t = this.tone.now();
       const step = [0.5, 0.48, 0.44, 0.4, 0.34, 0.3, 0.26, 0.22, 0.18, 0.16][era] ?? 0.16;
@@ -141,6 +143,83 @@ export class Music {
       }
     }, 1000);
   }
+
+  // ---- the music of one people, heard near their towns (system E27)
+  private townGain: any = null;
+  private townSynths = new Map<string, any>();
+  private townTimer = 0;
+  private town: { t: Tradition; era: number; key: string } | null = null;
+  private townLevel = 0;
+  private bar = 0;
+
+  /** The instrument for a way of making sound, made the first time it is needed. */
+  private synthFor(timbre: Timbre): any {
+    const Tone = this.tone;
+    let s = this.townSynths.get(timbre);
+    if (s || !Tone) return s;
+    const out = this.townGain;
+    const env = (attack: number, decay: number, sustain: number, release: number) => ({ attack, decay, sustain, release });
+    const voice = (type: string, e: object, cut?: number): any => { const v = new Tone.PolySynth(Tone.Synth, { oscillator: { type }, envelope: e }); return cut ? v.connect(new Tone.Filter(cut, 'lowpass').connect(out)) : v.connect(out); };
+    if (timbre === 'flute') s = voice('sine', env(0.06, 0.1, 0.75, 0.3));
+    else if (timbre === 'reed') s = voice('square', env(0.03, 0.1, 0.6, 0.2), 1800);
+    else if (timbre === 'horn') s = voice('sawtooth', env(0.14, 0.2, 0.7, 0.5), 900);
+    else if (timbre === 'bow') s = voice('sawtooth', env(0.22, 0.2, 0.8, 0.6), 1500);
+    else if (timbre === 'glass') s = voice('sine', env(0.3, 0.4, 0.6, 2.4));
+    else if (timbre === 'hum') s = voice('triangle', env(0.4, 0.3, 0.8, 1.2), 700);
+    else if (timbre === 'pluck') s = voice('triangle', env(0.004, 0.5, 0.0, 0.5), 2600);
+    else if (timbre === 'bell') s = new Tone.PolySynth(Tone.FMSynth, { harmonicity: 3.01, modulationIndex: 8, envelope: env(0.002, 1.4, 0, 1.2), modulationEnvelope: env(0.002, 0.6, 0, 0.6) }).connect(out);
+    else if (timbre === 'gong') s = new Tone.PolySynth(Tone.FMSynth, { harmonicity: 1.41, modulationIndex: 14, envelope: env(0.004, 3.2, 0, 2.5), modulationEnvelope: env(0.004, 2.0, 0, 2.0) }).connect(out);
+    else if (timbre === 'drum') s = new Tone.MembraneSynth({ pitchDecay: 0.04, octaves: 4, envelope: env(0.002, 0.4, 0, 0.3) }).connect(out);
+    else s = new Tone.MembraneSynth({ pitchDecay: 0.006, octaves: 1.2, envelope: env(0.001, 0.14, 0, 0.1) }).connect(out);
+    this.townSynths.set(timbre, s);
+    return s;
+  }
+
+  /** Play one phrase of the town's music now; returns how long it lasts, in seconds. */
+  private townPhrase(): number {
+    const town = this.town;
+    if (!town || !this.tone) return 2;
+    const beat = 60 / town.t.tempo;
+    const t0 = this.tone.now() + 0.08;
+    const drums = new Set<number>();
+    for (const n of phrase(town.t, this.bar++, town.era)) {
+      const ins = town.t.instruments[n.instrument]!;
+      const synth = this.synthFor(ins.timbre);
+      if (!synth) continue;
+      try {
+        // (a drum is one skin: it cannot be struck twice in the same instant)
+        if (ins.timbre === 'drum' || ins.timbre === 'log') { const k = Math.round(n.at * 8) * 16 + n.instrument; if (drums.has(k)) continue; drums.add(k); synth.triggerAttackRelease(Math.min(400, Math.max(40, n.hz)), n.beats * beat, t0 + n.at * beat + n.instrument * 0.004, n.hard * 0.8); }
+        else synth.triggerAttackRelease(Math.min(4000, Math.max(40, n.hz)), n.beats * beat, t0 + n.at * beat, n.hard * 0.5);
+      } catch { /* a dropped note is not worth interrupting anything for */ }
+    }
+    return town.t.meter * 2 * beat;
+  }
+
+  /**
+   * The music of the people whose town is in view (system E27), at a loudness (0 none, 1 full) that follows how
+   * close the view is; null when no town is near. It is their own scale, count and instruments, in their present age.
+   */
+  setTownMusic(t: Tradition | null, era = 0, level = 0): void {
+    const key = t ? `${t.scale.join(',')}|${t.meter}|${t.tempo}|${t.instruments.map((i) => i.name).join(',')}` : '';
+    this.townLevel = t ? Math.max(0, Math.min(1, level)) : 0;
+    if (this.townGain) this.townGain.volume.rampTo(this.townLevel > 0.01 ? -22 + 14 * this.townLevel : -70, 1.2);
+    if (!t) { this.town = null; return; }
+    if (this.town && this.town.key === key) { this.town.era = era; return; }
+    this.town = { t, era, key };
+    if (!this.tone || !this.master) return;
+    if (!this.townGain) this.townGain = new this.tone.Volume(-70).connect(this.master);
+    this.townGain.volume.rampTo(this.townLevel > 0.01 ? -22 + 14 * this.townLevel : -70, 1.2);
+    window.clearTimeout(this.townTimer);
+    const loop = (): void => {
+      if (!this.town) return;
+      const wait = this.mood.hush || this.townLevel < 0.01 ? 2 : this.townPhrase() * (1 + (this.bar % 4 === 0 ? 0.5 : 0));
+      this.townTimer = window.setTimeout(loop, wait * 1000);
+    };
+    loop();
+  }
+
+  /** Is a town's own music sounding? (Then the world's one borrowed melody keeps quiet.) */
+  get townPlaying(): boolean { return !!this.town && this.townLevel > 0.05; }
 
   /** The highest age any nation has reached: it sets the pace and fullness of the people's music. */
   civEra = 0;

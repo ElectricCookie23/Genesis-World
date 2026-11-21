@@ -17,6 +17,7 @@ import { CALAMITIES, REBUILDS } from './history/calamity';
 import { LEXICON, SAYINGS } from './history/syntax';
 import { languageList, scriptInfo } from './history/tongues';
 import { galleryList } from './history/gallery';
+import { describeMusic, lineOf, tradition } from './history/music';
 import { bodyFrom, type Body } from './history/script';
 import { compound } from './history/language';
 import { WEB, wayFor } from './history/tech';
@@ -267,6 +268,16 @@ function shownSettlements(s: Simulation): Simulation['civ']['settlements'] {
   return all.filter((t) => t.ruined < 0 || skip-- <= 0 || kept.has(t.id));
 }
 
+/** The music of a nation's people in its present age (system E27), once any of its kind has made music. */
+function musicOf(s: Simulation, n: Simulation['civ']['h']['nations'][number]): { tradition: ReturnType<typeof tradition>; about: string } | undefined {
+  const h = s.civ.h, g = s.creatures.species[n.species]?.ref, c = h.cultures[n.culture];
+  if (!g || !c || n.tech < 0.3) return undefined;
+  const t = tradition(lineOf(h.cultures, h.languages[c.language]!.family, c.id), {
+    size: g[G.Size]!, water: g[G.Water]!, flight: Math.max(0, Math.min(1, (g[G.LimbType]! - 0.7) * 4)), hearing: Math.max(g[G.Hearing]!, g[G.Echo]!), harsh: g[G.Aggression]!, quick: g[G.Metabolism]!, limbs: g[G.LimbPairs]!, land: n.land,
+  }, n.era);
+  return { tradition: t, about: describeMusic(t) };
+}
+
 /** What a species looks like in its own pictures (system E23). */
 function bodyOf(s: Simulation): (species: number) => Body {
   return (species) => { const g = s.creatures.species[species]?.ref; return g ? bodyFrom(g[G.LimbPairs]!, g[G.LimbType]!, g[G.Neck]!, g[G.Horn]!, g[G.Tail]!) : { legs: 2, neck: 0.4, horn: 0, wings: 0, tail: 0.4 }; };
@@ -331,7 +342,7 @@ function nationList(s: Simulation): NationInfo[] {
     return {
       id: n.id, name: n.name, species: n.species, capital: n.capital, founded: n.founded, ended: n.ended, parent: n.parent, government: n.government,
       stability: n.stability, tech: n.tech, era: n.era, eraName: s.civ.eraName(n), eraOwn: s.civ.eraOwnName(n), earth: earthNote(n.era), hue: n.hue, pop: n.pop, towns: n.towns,
-      culture: culture.name, language: h.languages[culture.language]!.name, script: scriptInfo(h, n.script, n.species, s.simYear, bodyOf(s)), signs: n.signs ?? (s.civ.settlements[n.capital] ? ['land', s.civ.settlements[n.capital]!.modifier || s.civ.settlements[n.capital]!.head] : undefined), ruler: ruler && ruler.died < 0 ? ruler.name : '', rulerSince: ruler && ruler.died < 0 ? ruler.reignFrom : -1,
+      culture: culture.name, language: h.languages[culture.language]!.name, music: musicOf(s, n), script: scriptInfo(h, n.script, n.species, s.simYear, bodyOf(s)), signs: n.signs ?? (s.civ.settlements[n.capital] ? ['land', s.civ.settlements[n.capital]!.modifier || s.civ.settlements[n.capital]!.head] : undefined), ruler: ruler && ruler.died < 0 ? ruler.name : '', rulerSince: ruler && ruler.died < 0 ? ruler.reignFrom : -1,
       house: house ? house.name : '', houseReigns: house ? house.reigns : 0, houseId: house ? house.id : -1, eventId: n.eventId, ...fashionSource(s, n), networks: networksOf(s, n.id), golden: n.golden ? n.golden.own : '', goldenSince: n.golden ? n.golden.since : -1, goldenWorks: n.golden ? n.golden.works : 0,
       calendar: cal ? cal.name : '', calendarOwn: cal ? cal.own : '', calendarEpoch: cal ? cal.epoch : 0, calendarEvent: cal ? cal.eventId : -1,
     };

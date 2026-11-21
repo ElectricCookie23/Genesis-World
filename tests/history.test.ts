@@ -533,7 +533,7 @@ describe('dark ages (E5)', () => {
 });
 
 import { ART_NAMES, Portrait, artStyle } from '../src/ui/portrait';
-import { GENE_COUNT } from '../src/sim/genetics';
+import { G, GENE_COUNT } from '../src/sim/genetics';
 
 /** Everything a drawn portrait is made of, as one string, so two portraits can be compared. */
 function drawn(node: unknown): string {
@@ -1038,6 +1038,7 @@ describe('golden ages (E10)', () => {
 import { NETWORKS, WONDER_KINDS } from '../src/sim/history/model';
 import { ART_STYLES, SUBJECTS, against, compose, describePainting, styleOfEra, subjectOf, type Movement } from '../src/sim/history/art';
 import { galleryList } from '../src/sim/history/gallery';
+import { describeMusic, lineOf, musicDistance, phrase, tradition, type Players, type Tradition } from '../src/sim/history/music';
 import { describeScript, glyphDistance, glyphOf, glyphPath, picture, wearOf, type Body, type Glyph, type Script } from '../src/sim/history/script';
 import { LEXICON, SAYINGS, describeGrammar, describeSounds, driftSpan, grammarOf, say } from '../src/sim/history/syntax';
 import { CALAMITIES, REBUILDS, answer, brittle, damage, describeScar, hazards, plotFate, rebuildYears, woodShare, type Ground, type Scar } from '../src/sim/history/calamity';
@@ -1865,5 +1866,90 @@ describe('art movements (E26)', () => {
     expect(schools).toBeGreaterThan(5);
     expect(reactions).toBeGreaterThan(2);
     expect(spread).toBeGreaterThan(0);
+  });
+});
+
+describe('music of the world (E27)', () => {
+  const walkers: Players = { size: 0.75, water: 0.05, flight: 0, hearing: 0.4, harsh: 0.6, quick: 0.3, limbs: 0.5, land: ['beasts', 'forest', 'ore'] };
+  const fliers: Players = { size: 0.2, water: 0.1, flight: 0.9, hearing: 0.8, harsh: 0.2, quick: 0.8, limbs: 0.25, land: ['coast', 'river', 'sand'] };
+
+  it('two cultures sound clearly different', () => {
+    const a = tradition([1111], walkers, 3), b = tradition([2222], fliers, 3);
+    // different scales, different homes, different paces, different things to play
+    expect(musicDistance(a, b)).toBeGreaterThan(0.45);
+    expect(b.home).toBeGreaterThan(a.home * 2);
+    expect(b.tempo).toBeGreaterThan(a.tempo * 1.3);
+    expect(a.instruments.map((i) => i.name)).not.toEqual(b.instruments.map((i) => i.name));
+    expect(describeMusic(a)).not.toBe(describeMusic(b));
+    // heard, not only described: the notes of a phrase of one share almost no pitches with a phrase of the other
+    const tones = (t: Tradition) => new Set(phrase(t, 0, 3).filter((n) => !t.instruments[n.instrument]!.beat).map((n) => Math.round(1200 * Math.log2(n.hz / 55) / 25)));
+    const ta = tones(a), tb = tones(b);
+    let shared = 0;
+    for (const x of ta) if (tb.has(x)) shared++;
+    expect(shared).toBeLessThanOrEqual(1);
+    // across many peoples of the same body and land, the music is still each one's own
+    const many = Array.from({ length: 12 }, (_, k) => tradition([1000 + k * 77], walkers, 3));
+    let sum = 0, pairs = 0;
+    for (let i = 0; i < many.length; i++) for (let j = i + 1; j < many.length; j++) { sum += musicDistance(many[i]!, many[j]!); pairs++; }
+    expect(sum / pairs).toBeGreaterThan(0.2);
+    expect(new Set(many.map((t) => t.scale.join(','))).size).toBeGreaterThan(5);
+    expect(new Set(many.map((t) => t.meter)).size).toBeGreaterThan(2);
+  });
+
+  it('a daughter people keeps its mother\'s music with one thing changed, and a people\'s music changes with its ages', () => {
+    const mother = tradition([1111], walkers, 3);
+    let near = 0, total = 0, changed = 0;
+    for (let k = 1; k <= 20; k++) {
+      const daughter = tradition([1111, k * 13], walkers, 3), stranger = tradition([1111 + k * 999], walkers, 3);
+      total++;
+      if (musicDistance(mother, daughter) < musicDistance(mother, stranger)) near++;
+      if (JSON.stringify(daughter.scale) !== JSON.stringify(mother.scale)) changed++;
+      expect(musicDistance(mother, daughter)).toBeLessThan(0.3);
+    }
+    expect(near / total).toBeGreaterThan(0.8);
+    // (every daughter's scale has drifted from her mother's)
+    expect(changed).toBe(20);
+    // through the ages: the same scale and the same count of time, but quicker, with more voices and new instruments
+    const early = tradition([1111], walkers, 1), late = tradition([1111], walkers, 8);
+    expect(late.scale).toEqual(early.scale);
+    expect(late.meter).toBe(early.meter);
+    expect(late.tempo).toBeGreaterThan(early.tempo);
+    expect(late.instruments.length).toBeGreaterThan(early.instruments.length);
+    expect(phrase(late, 0, 8).length).toBeGreaterThan(phrase(early, 0, 1).length);
+    expect(musicDistance(early, late)).toBeLessThan(musicDistance(early, tradition([2222], fliers, 1)));
+    // a phrase is the same every time it is asked for, every note can be heard, and it fits its two bars
+    for (const t of [mother, early, late, tradition([2222], fliers, 6)]) {
+      expect(t.scale[0]).toBe(0);
+      for (let i = 1; i < t.scale.length; i++) expect(t.scale[i]!).toBeGreaterThan(t.scale[i - 1]!);
+      expect(t.accents[0]).toBe(true);
+      expect(t.instruments.some((i) => i.beat)).toBe(true);
+      expect(t.instruments.some((i) => !i.beat)).toBe(true);
+      const notes = phrase(t, 2, 4);
+      expect(notes).toEqual(phrase(t, 2, 4));
+      expect(notes.length).toBeGreaterThan(t.meter);
+      for (const n of notes) { expect(n.hz).toBeGreaterThan(30); expect(n.hz).toBeLessThan(6000); expect(n.at).toBeGreaterThanOrEqual(0); expect(n.at).toBeLessThan(t.meter * 2); expect(t.instruments[n.instrument]).toBeTruthy(); }
+    }
+    expect(lineOf([{ id: 0, parent: -1 }, { id: 1, parent: 0 }, { id: 2, parent: 1 }], 99, 2)).toEqual([99, 2, 3]);
+    expect(lineOf([{ id: 0, parent: -1 }], 99, 0)).toEqual([99]);
+  });
+
+  it('in five histories the peoples of one world do not all sound alike, and kin sound more alike than strangers would', () => {
+    const runs = fiveHistories();
+    let worlds = 0;
+    for (const { sim } of runs) {
+      const h = sim.civ.h;
+      const living = h.nations.filter((n) => n.ended < 0 && n.tech >= 0.3);
+      const by = new Map<number, Tradition>();
+      for (const n of living) {
+        const g = sim.creatures.species[n.species]!.ref, c = h.cultures[n.culture]!;
+        by.set(c.id, tradition(lineOf(h.cultures, h.languages[c.language]!.family, c.id), { size: g[G.Size]!, water: g[G.Water]!, flight: 0, hearing: g[G.Hearing]!, harsh: g[G.Aggression]!, quick: g[G.Metabolism]!, limbs: g[G.LimbPairs]!, land: n.land }, n.era));
+      }
+      const list = [...by.values()];
+      if (list.length < 2) continue;
+      worlds++;
+      expect(new Set(list.map((t) => JSON.stringify([t.scale, t.meter, t.tempo, t.instruments.map((i) => i.name)]))).size).toBeGreaterThan(1);
+      for (const t of list) expect(describeMusic(t).length).toBeGreaterThan(40);
+    }
+    expect(worlds).toBeGreaterThan(1);
   });
 });
