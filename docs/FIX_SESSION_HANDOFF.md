@@ -1,5 +1,19 @@
 # Fix session handoff (GPU review follow-up)
 
+## PAUSED 2026-11-21 (usage limit). Read this first.
+
+**Branch `claude/sweet-keller-8gmglc` is one commit ahead of `main` and must not be merged until step 1 below is done.** That commit adds the five Kenney packs (636 GLB files, 9.3 MB, CC0, fetched from OpenGameArt because kenney.nl refuses this container) under `public/assets/kenney/` with `public/assets/MANIFEST.json`. With a manifest present the game starts drawing six plant forms from the Kenney models named in `render/gfx/assetroles.ts`, and **that has not been looked at with the real files** (only with a stand-in tree). `main` is at `f6b4856` plus the build session's work and is fine.
+
+**Queue, in order**
+1. Look at each real model in the software renderer (`&plantmodel=broadleaf:kenney/nature-kit/tree_oak.glb`, and so on; `scratchpad/assetcheck2.js` shows how: fast-forward 70 My, follow a land animal, screenshot). Check the wood and foliage split (`plantFromModel` decides by colour: nature-kit models carry material colours, no texture; the other four packs use `Textures/colormap.png`). Fix `assetroles.ts`, then run the full suite, then merge to `main`.
+2. CREDITS.md: add the five packs (Kenney, CC0, pages in the manifest). It still says no downloaded assets.
+3. Rest of the asset pass: boats for harbours (watercraft-kit), tents and campfire for camps (survival-kit), crop rows for `farms: true` (nature-kit `crops_*`), rocks. Buildings are the build session's `buildings.ts`: agree the hook in HANDOFF first. Left out by the owner's rules: `character-archer`, weapons, anything human-looking or religious.
+4. Poly Pizza models and the generated ambience are still only on the Mac (`~/genesis-review/assets/`); the Mac session was sent the list. Nothing from the Mac is shared with this session.
+5. Review (owner's request): where the game breaks, where it is slow, whether every feature works. Started: `scripts/checks/soak.ts` found no problems on five worlds. Known already: the same seed reaches history at different times depending on how it got there (Mac's finding: 83.5, 120.6, 128 My), because the worker's step size follows the speed (`s.step(yps / TICK_HZ)`); saves are 17 to 26 MB as text at grid 21. Write findings in `docs/REVIEW_2026-11.md`.
+6. Compare against BRIEF.md and docs/EXPANSION_BRIEF.md; list what is not covered.
+
+A scheduled task ("Genesis fix session: continue") sends "continue" to this session every hour.
+
 ## Now (2026-11-21): the asset pass, then two reviews
 
 The owner's order from here: **(1) asset pass**, **(2) review where the game breaks, where it is slow (assets or anything else) and whether every feature works**, **(3) compare against the briefs and list anything not covered**. A scheduled task ("Genesis fix session: continue", every two hours) wakes this session with "continue": if you are reading this after one, carry on from the first item below that is not done.
