@@ -56,8 +56,6 @@ Date: 2026-11-21, written by the Mac session at the owner's request. Either sess
 
 ## Fixed in code, not yet confirmed on a GPU
 
-35. One seed after time at 1x. Note 6 found a different history after 25 seconds at 1x; the build session says this gap is now closed (a slow look before history is undone when the player speeds up), checked only by scripts on the built page. Coming back from a look costs a pause of about a second and drops what happened during it from the chronicle. [GPU_REVIEW.md note 6; HANDOFF.md "one seed is one world until its history begins"]
-36. About four hitches a second with time at 1x. The planet is now sent to the page every 1.5 s at 1x instead of every 0.25 s; it has not been measured again. [GPU_REVIEW.md note 7; PERFORMANCE.md "Stutter"; HANDOFF.md "Done, on the GPU review's frame rates"]
 37. Phone and panels: the portrait toolbar ran off the screen, the stats box was missing, the picture was soft, and goals showed as reached in a new world. All were changed and seen only in the software renderer; the nation panel's long block of grey text is now labelled lines, also unseen. [GPU_REVIEW.md "Phone and tablet screen shapes" items 1, 2, 4 and 5 and note 4; FIX_SESSION_HANDOFF.md "Done 2026-11-20 (F24)"; HANDOFF.md "Build session, 2026-11-21"]
 38. A page that grew to 7 GB and stopped answering in a crowded late world (235 countries). Kept copies of the world are now limited and the worker waits for the page; not rechecked on the Mac. [HANDOFF.md "Done, after running section 4 on the real page"]
 39. Shoreline and waders: the hard straight foam rim is now broken along its length, and water now clouds the legs of a wading animal that read as standing on the sea. Neither has been judged at a real beach. [GPU_REVIEW.md "Check of commit 4424753" item 6 and "Follow-up on WebGL2", `retest7-webgl-wader-close.jpg`; HANDOFF.md "Check of 4424753 on the GPU"]
@@ -67,6 +65,11 @@ Date: 2026-11-21, written by the Mac session at the owner's request. Either sess
 43. Film: the first four shots were all the whole planet from the same distance with the sun's glare in the middle, and captions faded too early to read. Changed, not seen again. [GPU_REVIEW.md "First GPU look at Sections 5 and 6" items 2 and 3]
 44. Nothing human, nothing "god": builders became handcarts and the colossus a great bell, but neither has been seen on a GPU, and the last capture of the tools panel still had the title "God tools" (renamed "Experiments" in code since). [GPU_REVIEW.md note 4 and "Motion pass 2"; HANDOFF.md "Owner's decision, 2026-11-21"]
 45. Hunters: the behaviour is in the data, but a chase has never been seen by eye. Nest mounds are the right size by the numbers only. [GPU_REVIEW.md "Check of commit 841782b" item 4 and "Check of commit f958025" item 3]
+
+## Confirmed fixed since this list was written
+
+- **One seed after time at 1x** (was 35). 2026-11-22, live site, WebGPU: history began at 121.230 My with 2 towns and 41 species in all four ways of getting there, including 25 seconds at 1x first. Item 2 (differences after history begins) stays open.
+- **Hitches with time at 1x** (was 36). 2026-11-22: in the largest town over 20 s, 15 frames over 33 ms where there were 87, 99th percentile 58 ms where it was 84, worst 67 ms where it was 117, none over 100 ms. Running time now costs 0 to 3 fps where it cost 3 to 7. The frame rates themselves (item 18) are unchanged.
 
 ## Status unclear
 

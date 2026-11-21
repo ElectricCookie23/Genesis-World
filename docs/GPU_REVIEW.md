@@ -65,6 +65,11 @@
 >
 > **Every view below orbit is under the target at High, and time running costs another 3 to 7 fps.** In the town at 1x over 20 s: median frame 21.8 ms, 99th percentile 84.3 ms, worst 117 ms, 87 frames over 33 ms (about four hitches a second, as before) and one over 100 ms. The worker's tick is 1.7 ms, so the hitches are not the simulation's own step; page memory 323 MB. With step-downs on (the normal page) the same machine shows 92 to 98 fps in orbit, so the watchdog is covering this by lowering quality. The orbit figures near 58 look pinned to half the screen's 120 Hz.
 
+> **8. Re-checks, 2026-11-22** (live site, WebGPU, High; on battery at 70%, which does not cap the frame rate).
+> - **One seed, one world before history: confirmed.** `amber-reef-101` reached the dawn of history at 121.230 My with 2 towns and 41 species all four ways: skip at once; 25 s at 1x first (this gave 104.475 My before the fix); 20 s at Epoch speed first; the old plain warp.
+> - **Hitches: much reduced.** Largest town, time at 1x, 20 s: 925 frames, median 24.9 ms, 99th percentile 58.3 ms (was 84.3), worst 66.7 ms (was 117), 15 frames over 33 ms (was 87), none over 100 ms. Time at 1x now costs little: orbit 55.5 fps (paused 55.2), over the land 43.6 (43.9), town 46.7 (47.8), forest floor 38.7 (41.5).
+> - **Frame rates with step-downs off are as they were:** 39 to 48 fps below orbit in the Age of Engines world (620 towns), against a target of 50.
+
 Observations only. Nothing under `src/` was changed. Screenshots are in `docs/screenshots/gpu/`.
 
 ## First GPU look at Sections 5 and 6 (2026-11-21, bundle `index-DLm2M6p6.js`)
