@@ -6,6 +6,7 @@ import {
 import type { Grid } from '../sim/world';
 import { Biome, BIOME_COUNT } from '../sim/world';
 import type { CellSnapshot } from '../shared/protocol';
+import { uLook } from './gfx/look';
 import { EXAG, uHazeAmount, uHazeTint, uMolten, uRing, uSun2, uSun2Dir, uSunDir, uTime } from './common';
 import { cloudShadowAt } from './clouds';
 
@@ -95,9 +96,9 @@ export class PlanetMesh {
     const nightAmbient = vec3(0.02, 0.03, 0.058).mul(dot(N, up).mul(0.5).add(0.5));
     // the shadow of a ring falls as a dark band along the equator
     const ringShade = float(1).sub(uRing.mul(smoothstep(0.085, 0.02, up.y.abs())).mul(0.55));
-    // a second, smaller sun adds its own cooler light from another direction
+    // a second sun adds light of its own colour from another direction
     const second = max(dot(N, uSun2Dir).mul(0.8).add(0.2), 0).mul(smoothstep(-0.1, 0.25, dot(up, uSun2Dir))).mul(uSun2).mul(0.45);
-    let lit = albedo.mul(sunColor.mul(diffuse).mul(shadow).mul(ringShade).mul(1.2).add(vec3(0.7, 0.8, 1.0).mul(second)).add(skyAmbient).add(nightAmbient));
+    let lit = albedo.mul(sunColor.mul(diffuse).mul(shadow).mul(ringShade).mul(1.2).add(vec3(uLook.star2).mul(second)).add(skyAmbient).add(nightAmbient));
     // Molten surface for the opening sequence: glowing cracks between dark crust plates.
     // only two octaves once the crust has cooled: the detail is invisible then and costs every pixel
     const crust = mx_fractal_noise_float(P.mul(7).add(vec3(0, uTime.mul(0.02), 0)), 2, 2.1, 0.55);
