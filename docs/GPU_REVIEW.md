@@ -31,6 +31,21 @@
 
 > **4. A look for human-looking figures on the live site** (bundle `index-BtgWr0gA.js`, WebGPU, High, `amber-reef-101` skipped to the Age of Presses; `docs/screenshots/gpu/retest18-no-figures-look.jpg`). In a harbour town seen from 0.005 and 0.0035 with time at 1x, and beside an observatory: **nothing human-looking is drawn.** One building site shows as an empty scaffold frame on the shore. No handcarts could be made out, so the carts that replaced the builders have still not been seen on a GPU. **The portraits, seen afterwards** (`docs/screenshots/gpu/retest19-portraits.png`, twelve from one nation in the Age of Sails, enlarged): each is a coin with a dark side-on silhouette of a long-snouted, lizard-like head, so the head is plainly not human. What is human in them is the convention: the head sits on a pair of shoulders, with a collar or necklace, and some wear a crown or a headband. Shown to the owner to judge. Separately, all twelve heads are nearly the same outline; only the brow line, the crown and the necklace differ. Also seen: the town sits well on its slope here, with streets as pale slabs and no hummocks through the houses; the sun's glint on the sea is a field of hard white speckles at this height (top right), which may shimmer in motion; the nation panel is a long block of small grey text.
 
+> **5. The sense filters cannot be reached in a real world** (measured in node, no browser; `vision()` from `src/sim/senses.ts` applied to every living named species of `new Simulation(seed, 21)`).
+>
+> | Seed | at 60 My | at 100 My (or the dawn of history) |
+> |---|---|---|
+> | `amber-reef-101` | 20 species, all sight | 27, all sight |
+> | `quiet-harbor-7` | 13, all sight | 14, all sight |
+> | `iron-lotus-42` | 20, all sight | 14, all sight |
+> | `glass-meadow-9` | 11, all sight | 20, all sight |
+> | `ember-tide-314` | 8, all sight | 16 sight, **1 warmth** (`Helinus carnifex`, id 112) |
+> | `pale-comet-58` | 16, all sight | 14, all sight |
+>
+> No species on any of the six finds its way by echoes or by the electric sense, one senses warmth, and **not one has sight sharper than 0.5**: "sight" here means eyeless or poor sight, which is what both GPU looks showed (grey blocks). The genes behind it, over the 27 living species of `amber-reef-101` at 96.8 My (minimum, median, maximum): `EyeCount` 0.02, 0.05, 0.35 (eyes need more than 0.1, so the median animal has none); `EyeSize` 0.06, 0.22, 0.44; `Sight` 0.00, 0.10, 0.40; `Echo` 0.05, 0.20, 0.25 (the echo sense needs more than 0.5); `Electric` 0.07, 0.32, 0.44 (needs more than 0.5); `WarmBlood` 0.00, 0.03, 0.09; `Nocturnal` 0.10, 0.28, 0.70; `Intelligence` 0.28, 0.42, 0.61. So after a hundred million years most animals are eyeless and cold-blooded, the thinking species that builds towns sees poorly or not at all, and three of the four sense modes are out of reach. Either selection does not reward these genes (seeing prey, seeing hunters, hunting at night, murky water) or they start too low and drift too slowly. To see the echo and electric filters on a GPU meanwhile, a species has to be made with the designer; `ember-tide-314` at 100 My has the one warmth-sensing animal.
+>
+> **The filters themselves do work on WebGPU** (`docs/screenshots/gpu/retest20-sense-filters.jpg`; set directly with `scene.post.setVision(...)` on the live site, in a conifer wood with 169 animals in range; top row: plain, echo, warmth; bottom row: electric, sharp sight with full colour, plain). Echo: pale edge-lit shapes on black, near things bright. Warmth: coarse blocks from purple to orange. Electric: coarse pale-blue blocks with a diagonal stripe pattern across the whole picture. Sharp sight with full colour: the plain view with stronger, pinker colour. No shader errors. **Open:** in the warmth and electric pictures the one animal in the plain view (a striped, cone-shaped animal among the fronds) cannot be picked out, although those two senses are meant to make living, warm bodies stand out from the ground; here the plants and ground fill the picture at the same brightness. The diagonal stripes in the electric picture look like an artefact.
+
 Observations only. Nothing under `src/` was changed. Screenshots are in `docs/screenshots/gpu/`.
 
 ## First GPU look at Sections 5 and 6 (2026-11-21, bundle `index-DLm2M6p6.js`)
