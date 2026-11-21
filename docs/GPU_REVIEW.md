@@ -51,6 +51,18 @@
 > - **The Age of Fields: confirmed** in node: history now opens in era 1, then 2 at +1,150 years, 3 at +2,350, 4 at +3,350, 5 at +4,200, 6 at +4,850.
 > - **One seed, one world: holds at speed, not at 1x.** `amber-reef-101`, the year history begins: skip to the dawn straight after loading, 121.230 My; twenty seconds at the Epoch speed first (to 0.458 My) and then the skip, 121.230 My; the old plain `warp`, 121.230 My, each with 2 towns and 41 living species. But **25 seconds at 1x first and then the skip gave 104.475 My**, with 6 towns and 40 species. So a player who watches the young world at 1x or 10x for a while before speeding up still gets a different history from the same seed. This matches what the fix says it covers (100x and faster); the slow speeds are the gap.
 
+> **7. Frame rates on the live build, 2026-11-21 late** (M3 Pro, mains power, WebGPU, High, `&noadapt` so no step-downs, pixel ratio 1.5, 1600 by 913 window; `amber-reef-101`). The target is 50.
+>
+> | View | Paused | Time at 1x |
+> |---|---|---|
+> | Young world, orbit | 58.6 fps (17.1 ms) | |
+> | Age of Engines (620 towns, 168 countries, 41 species), orbit | 57.6 (17.4) | 54.7 (18.3) |
+> | over the land, height 0.3 | 43.6 (22.9) | 38.8 (25.8) |
+> | largest town, height 0.02 | 46.5 (21.5) | 41.6 (24.0) |
+> | forest floor, height 0.02 | 44.6 (22.4) | 37.6 (26.6) |
+>
+> **Every view below orbit is under the target at High, and time running costs another 3 to 7 fps.** In the town at 1x over 20 s: median frame 21.8 ms, 99th percentile 84.3 ms, worst 117 ms, 87 frames over 33 ms (about four hitches a second, as before) and one over 100 ms. The worker's tick is 1.7 ms, so the hitches are not the simulation's own step; page memory 323 MB. With step-downs on (the normal page) the same machine shows 92 to 98 fps in orbit, so the watchdog is covering this by lowering quality. The orbit figures near 58 look pinned to half the screen's 120 Hz.
+
 Observations only. Nothing under `src/` was changed. Screenshots are in `docs/screenshots/gpu/`.
 
 ## First GPU look at Sections 5 and 6 (2026-11-21, bundle `index-DLm2M6p6.js`)
