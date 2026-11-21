@@ -1953,7 +1953,7 @@ export class Civilization {
     }
     // ---- a golden age
     const g = n.golden;
-    if (g && real(g.eventId) && year - g.since > 30 && !has('colossus', g.eventId)) plans.push({ kind: 'colossus', cause: g.eventId, at: cap, name: `${called('great', 'king', 'sun', 'red')}, the colossus of ${cap.name}`, what: 'a figure of bronze as tall as a hill',
+    if (g && real(g.eventId) && year - g.since > 30 && !has('colossus', g.eventId)) plans.push({ kind: 'colossus', cause: g.eventId, at: cap, name: `${called('great', 'king', 'sun', 'red')}, the colossus of ${cap.name}`, what: 'a pillar of bronze as tall as a hill, with a fire kept at its top',
       why: `It was cast in ${g.own}, the golden age of ${n.name}, to show what its makers could do.`,
       say: `In ${g.own} there is nothing ${n.name} thinks beyond it. At ${cap.name} its founders cast a figure in bronze as tall as a hill, with one arm raised, and no one can say afterwards whom it was meant to be.` });
     // ---- the place where the first city stood

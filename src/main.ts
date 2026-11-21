@@ -559,10 +559,12 @@ async function boot(): Promise<void> {
       const e = state.events[shot.eventId];
       // near for what peoples did in one place, wide for what happened to the land and its life, the whole planet for the rest
       const lon = shot.cell >= 0 ? grid.lon[shot.cell]! : scene.cam.lon + 0.9;
-      if (shot.cell >= 0) scene.cam.flyTo(lon, grid.lat[shot.cell]!, e && e.data && typeof e.data.nation === 'number' ? 0.3 : 1.0);
-      else scene.cam.flyTo(lon, 0.25 * Math.sin(i * 1.7), 2.3);
-      // a film is shot in daylight: the place is turned to mid-morning, and the day goes on from there
-      scene.dayAngle = lon - 0.5;
+      // (no two shots in a row from the same height: on a GPU the first four were all the whole planet from one distance)
+      const wide = [1.0, 0.55, 1.4, 0.75][i % 4]!, whole = [2.3, 1.7, 2.9][i % 3]!;
+      if (shot.cell >= 0) scene.cam.flyTo(lon, grid.lat[shot.cell]!, e && e.data && typeof e.data.nation === 'number' ? 0.3 : wide);
+      else scene.cam.flyTo(lon, 0.25 * Math.sin(i * 1.7), whole);
+      // a film is shot in daylight, with the sun well to one side: straight on, its glare sat in the middle of the picture
+      scene.dayAngle = lon - 0.95;
       update({ film: state.film ? { ...state.film, index: i } : null });
     }
     scene.cam.idle = 100;
@@ -575,11 +577,13 @@ async function boot(): Promise<void> {
     const k = Math.max(W / canvas.width, H / canvas.height), w = canvas.width * k, h = canvas.height * k;
     ctx.drawImage(canvas, (W - w) / 2, (H - h) / 2, w, h);
     const shade = ctx.createLinearGradient(0, H * 0.52, 0, H);
-    shade.addColorStop(0, 'rgba(0,0,0,0)'); shade.addColorStop(1, 'rgba(0,0,0,0.82)');
+    shade.addColorStop(0, 'rgba(0,0,0,0)'); shade.addColorStop(0.45, 'rgba(0,0,0,0.6)'); shade.addColorStop(1, 'rgba(0,0,0,0.9)');
     ctx.fillStyle = shade; ctx.fillRect(0, H * 0.52, W, H * 0.48);
     // the words fade in at the start of a shot and out at its end
     const into = seconds - shot.at, left = shot.at + shot.seconds - seconds;
-    ctx.globalAlpha = Math.max(0, Math.min(1, into / 0.8, left / 0.6));
+    ctx.globalAlpha = Math.max(0, Math.min(1, into / 0.6, left / 0.3));
+    // (a dark edge round the letters: over bright cloud, half faded, they could not be read)
+    ctx.shadowColor = 'rgba(0,0,0,0.95)'; ctx.shadowBlur = 10;
     ctx.textAlign = 'center'; ctx.fillStyle = '#fff6dc';
     ctx.font = "500 15px ui-monospace, monospace";
     ctx.fillText(formatYear(shot.year).toUpperCase().split('').join('\u200a'), W / 2, H - 196);
@@ -587,7 +591,7 @@ async function boot(): Promise<void> {
     ctx.fillText(shot.title, W / 2, H - 150);
     ctx.font = "italic 500 23px 'Cormorant Garamond', serif"; ctx.fillStyle = '#ece7db';
     wrap(ctx, shot.text, W * 0.78).slice(0, 4).forEach((line, n) => ctx.fillText(line, W / 2, H - 110 + n * 29));
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
   };
   // ---- on the ground (expansion Section 5)
   const underView = (): number => { const hit = scene.pick(innerWidth / 2, innerHeight / 2); return hit ? scene.cellAt(hit.x, hit.y, hit.z) : -1; };

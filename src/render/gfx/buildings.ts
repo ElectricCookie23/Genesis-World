@@ -259,9 +259,11 @@ export function buildBuilding(kind: Building): BufferGeometry {
       for (const z of [-0.23, 0.23]) s.box(0, 1.5, z, 2.2, 0.01, 0.01, PART.hull, PART.hull);
       break;
     case 'worker':
-      // one of the builders, seen from far above: a body and a head
-      s.box(0, 0, 0, 0.3, 0.62, 0.22, PART.roof, PART.roof);
-      s.box(0, 0.62, 0, 0.2, 0.2, 0.2, PART.sail, PART.sail);
+      // the work going to and fro at a building site: a load on a low sled. (It was a body and a head. The owner
+      // wants nothing drawn that looks like a person, 2026-11-21: the builders are understood, not shown.)
+      s.box(0, 0, 0, 0.5, 0.06, 0.3, PART.hull, PART.hull);
+      s.box(-0.04, 0.06, 0, 0.3, 0.2, 0.24, PART.wall, PART.wall);
+      s.box(0.06, 0.26, 0.02, 0.18, 0.12, 0.16, PART.wall, PART.wall);
       break;
     // ---- the wonders (system E19). Each faces along +x.
     case 'observatory': {
@@ -336,14 +338,15 @@ export function buildBuilding(kind: Building): BufferGeometry {
       s.ring(0, 0, 3.8, 0.2, 4.2, 0, 4, PART.wall, Math.PI / 4);
       break;
     case 'colossus':
-      // a figure on a plinth, facing +x, with one arm raised and a fire in its hand
-      s.box(0, 0, 0, 1.3, 0.42, 1.3, PART.wall, PART.wall);
-      for (const z of [-0.2, 0.2]) s.box(0, 0.42, z, 0.3, 1.3, 0.28, PART.roof, PART.roof);
-      s.box(0, 1.72, 0, 0.42, 1.2, 0.78, PART.roof, PART.roof);
-      s.box(0, 2.92, 0, 0.32, 0.4, 0.34, PART.roof, PART.roof);
-      s.box(0, 1.8, -0.5, 0.24, 1.0, 0.22, PART.roof, PART.roof);
-      s.box(0.12, 2.72, 0.5, 0.24, 1.06, 0.22, PART.roof, PART.roof);
-      s.ring(0.12, 0.5, 3.78, 0.13, 4.1, 0, 5, PART.flame);
+      // a great pillar on a stepped plinth, tapering, banded twice, with a fire in a bowl at its top. (It was a figure
+      // with an arm raised. The owner wants nothing drawn that looks like a person, 2026-11-21.)
+      s.box(0, 0, 0, 1.5, 0.22, 1.5, PART.wall, PART.wall);
+      s.box(0, 0.22, 0, 1.1, 0.2, 1.1, PART.wall, PART.wall);
+      s.ring(0, 0, 0.42, 0.42, 3.3, 0.24, 8, PART.roof);
+      s.ring(0, 0, 1.3, 0.44, 1.42, 0.42, 8, PART.wall);
+      s.ring(0, 0, 2.4, 0.36, 2.52, 0.34, 8, PART.wall);
+      s.ring(0, 0, 3.3, 0.24, 3.5, 0.46, 8, PART.roof);
+      s.ring(0, 0, 3.5, 0.3, 4.1, 0, 5, PART.flame);
       break;
     case 'greatdome':
       // a round hall with a door on every side, a ring of columns about it, and one dome over all with an eye open to the sky
