@@ -242,7 +242,7 @@ export function emptyHistory(): HistoryState {
 }
 
 /** What a wonder is (system E19). Each kind answers one kind of event. */
-export const WONDER_KINDS = ['observatory', 'sungate', 'crater-stair', 'fire-watch', 'first-tower', 'tomb', 'victory', 'lighthouse', 'memorial', 'colossus', 'peace-hall'] as const;
+export const WONDER_KINDS = ['observatory', 'sungate', 'crater-stair', 'fire-watch', 'first-tower', 'tomb', 'victory', 'lighthouse', 'memorial', 'great-bell', 'peace-hall'] as const;
 export type WonderKind = (typeof WONDER_KINDS)[number];
 
 /**

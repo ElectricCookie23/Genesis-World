@@ -152,7 +152,7 @@ describe('watch it being built (E12)', () => {
   });
 
   it('there is scaffolding, a crane for each age and builders to draw, and a height for everything that rises', () => {
-    for (const kind of ['scaffold', 'hoist', 'crane', 'worker'] as const) {
+    for (const kind of ['scaffold', 'hoist', 'crane', 'cart'] as const) {
       expect(BUILDINGS).toContain(kind);
       const g = buildBuilding(kind);
       expect(g.getAttribute('position').count).toBeGreaterThan(20);

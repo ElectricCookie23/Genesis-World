@@ -1967,9 +1967,9 @@ export class Civilization {
     }
     // ---- a golden age
     const g = n.golden;
-    if (g && real(g.eventId) && year - g.since > 30 && !has('colossus', g.eventId)) plans.push({ kind: 'colossus', cause: g.eventId, at: cap, name: `${called('great', 'king', 'sun', 'red')}, the colossus of ${cap.name}`, what: 'a figure of bronze as tall as a hill',
+    if (g && real(g.eventId) && year - g.since > 30 && !has('great-bell', g.eventId)) plans.push({ kind: 'great-bell', cause: g.eventId, at: cap, name: `${called('great', 'sun', 'red', 'bright')}, the great bell of ${cap.name}`, what: 'a bell of bronze as tall as a hill',
       why: `It was cast in ${g.own}, the golden age of ${n.name}, to show what its makers could do.`,
-      say: `In ${g.own} there is nothing ${n.name} thinks beyond it. At ${cap.name} its founders cast a figure in bronze as tall as a hill, with one arm raised, and no one can say afterwards whom it was meant to be.` });
+      say: `In ${g.own} there is nothing ${n.name} thinks beyond it. At ${cap.name} its founders cast a bell in bronze as tall as a hill, in a single pour that takes a year to cool, and hang it between two piers of stone. It is rung once in a generation and heard for a day's walk.` });
     // ---- the place where the first city stood
     const firstCity = sim.milestones.get('first-city');
     if (real(firstCity) && n.era >= 3 && !all.some((w) => w.kind === 'first-tower')) {
@@ -1990,7 +1990,7 @@ export class Civilization {
     // Which of its reasons it acts on: the rarest reasons weigh most (a crater or the first city before another
     // column), and a kind the world already has many of weighs less each time, so that no two wonders in sight of
     // each other are likely to be alike.
-    const rare: Record<WonderKind, number> = { 'crater-stair': 9, 'first-tower': 9, 'fire-watch': 6, sungate: 3, observatory: 2, lighthouse: 2, colossus: 2, tomb: 1.5, victory: 1, memorial: 1, 'peace-hall': 1 };
+    const rare: Record<WonderKind, number> = { 'crater-stair': 9, 'first-tower': 9, 'fire-watch': 6, sungate: 3, observatory: 2, lighthouse: 2, 'great-bell': 2, tomb: 1.5, victory: 1, memorial: 1, 'peace-hall': 1 };
     let sum = 0;
     const weights = plans.map((p) => { const w = rare[p.kind] / (1 + count(p.kind)) ** 2; sum += w; return w; });
     let pick = rng.next() * sum, k = 0;
@@ -2024,7 +2024,7 @@ export class Civilization {
       for (let i = 0; i < all.length - 1; i++) { const r = this.settlements[all[i]!.settlement]!.ruined; if (r >= 0 && r < since) { since = r; worst = i; } }
       all.splice(worst >= 0 ? worst : 0, 1);
     }
-    this.credit(sim, rng, n, ev.id, kind === 'tomb' || kind === 'victory' || kind === 'colossus' ? 'It was ordered by {name}.' : 'It was begun in the reign of {name}.');
+    this.credit(sim, rng, n, ev.id, kind === 'tomb' || kind === 'victory' || kind === 'great-bell' ? 'It was ordered by {name}.' : 'It was begun in the reign of {name}.');
     return w;
   }
 
@@ -2692,7 +2692,7 @@ export class Civilization {
       delete o.faith;
     }
     for (const c of this.h.calendars ?? []) if ((c.kind as string) === 'prophet') c.kind = 'teaching';
-    for (const w of this.h.wonders ?? []) { if ((w.kind as string) === 'crater-temple') w.kind = 'crater-stair'; if ((w.kind as string) === 'fire-temple') w.kind = 'fire-watch'; }
+    for (const w of this.h.wonders ?? []) { if ((w.kind as string) === 'crater-temple') w.kind = 'crater-stair'; if ((w.kind as string) === 'fire-temple') w.kind = 'fire-watch'; if ((w.kind as string) === 'colossus') { w.kind = 'great-bell'; w.what = 'a bell of bronze as tall as a hill'; } }
   }
 
   /** A sight in the sky that every young culture sees: in some towns it becomes the story they tell of themselves. */

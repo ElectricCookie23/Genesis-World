@@ -1359,7 +1359,7 @@ describe('wonders (E19)', () => {
         expect(w.done).toBeGreaterThan(w.year + 5);
         expect(w.why.length).toBeGreaterThan(20);
         // the kind answers the kind of event
-        const fits: Record<string, RegExp> = { observatory: /comet/, sungate: /eclipse/, 'crater-stair': /impact/, 'fire-watch': /erupt|volcan/, 'first-tower': /milestone/, tomb: /./, victory: /war/, lighthouse: /settlement/, memorial: /./, colossus: /golden-age/, 'peace-hall': /long-peace/ };
+        const fits: Record<string, RegExp> = { observatory: /comet/, sungate: /eclipse/, 'crater-stair': /impact/, 'fire-watch': /erupt|volcan/, 'first-tower': /milestone/, tomb: /./, victory: /war/, lighthouse: /settlement/, memorial: /./, 'great-bell': /golden-age/, 'peace-hall': /long-peace/ };
         expect(cause!.type).toMatch(fits[w.kind]!);
         if (w.kind === 'crater-stair' || w.kind === 'fire-watch') expect(w.toward).toBe(cause!.cellId);
         if (w.kind === 'observatory') expect(Number.isFinite(w.bearing)).toBe(true);

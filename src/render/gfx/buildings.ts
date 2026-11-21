@@ -30,9 +30,9 @@ import { eclipseLight } from './eclipse';
 type N = any;
 
 const PART = { wall: 0, roof: 1, windows: 2, flame: 3, sail: 4, hull: 5, road: 6, water: 7 } as const;
-export const BUILDINGS = ['hut', 'house', 'hall', 'tower', 'dome', 'spire', 'boat', 'road', 'wall', 'gate', 'scaffold', 'hoist', 'crane', 'worker', 'rail', 'canal', 'arch', 'pole', 'pipe', 'pylon',
+export const BUILDINGS = ['hut', 'house', 'hall', 'tower', 'dome', 'spire', 'boat', 'road', 'wall', 'gate', 'scaffold', 'hoist', 'crane', 'cart', 'rail', 'canal', 'arch', 'pole', 'pipe', 'pylon',
   // the wonders (system E19)
-  'observatory', 'sungate', 'stepmound', 'greatspire', 'pyramid', 'column', 'beacon', 'obelisk', 'colossus', 'greatdome'] as const;
+  'observatory', 'sungate', 'stepmound', 'greatspire', 'pyramid', 'column', 'beacon', 'obelisk', 'greatbell', 'greatdome'] as const;
 /** The models that lie along the ground corner by corner (streets, walls and everything built between towns). */
 const DRAPED = new Set<string>(['road', 'wall', 'rail', 'canal', 'arch', 'pole', 'pipe', 'pylon']);
 /** What is drawn for each kind of network between towns (system E15), and how far to the side of the road it runs, in plan units. */
@@ -44,7 +44,7 @@ const NETWORK_MODEL: { model: (typeof BUILDINGS)[number]; aside: number; every: 
 const EAVES: Partial<Record<(typeof BUILDINGS)[number], number>> = { hut: 0.42, house: 0.5, hall: 0.75, tower: 2.3, dome: 0.5, spire: 1.6 };
 /** How tall each kind of building stands, in the units its model is drawn in: what scaffolding has to reach. */
 export const HEIGHT: Partial<Record<(typeof BUILDINGS)[number], number>> = { hut: 1.0, house: 0.92, hall: 1.25, tower: 2.55, dome: 1.2, spire: 4.3,
-  observatory: 1.85, sungate: 2.32, stepmound: 2.3, greatspire: 6.2, pyramid: 2.3, column: 4.5, beacon: 4.5, obelisk: 4.2, colossus: 4.1, greatdome: 2.35 };
+  observatory: 1.85, sungate: 2.32, stepmound: 2.3, greatspire: 6.2, pyramid: 2.3, column: 4.5, beacon: 4.5, obelisk: 4.2, greatbell: 4.0, greatdome: 2.35 };
 /**
  * The wonders (system E19): which model stands for each kind, how much ground it covers (the radius plots keep
  * clear of, in model units), how far from the middle of town it likes to stand (0 at the square, 1 at the edge),
@@ -60,7 +60,7 @@ export const WONDER_MODEL: Record<string, { model: (typeof BUILDINGS)[number]; f
   victory: { model: 'column', foot: 0.6, out: 0.3, lit: 0 },
   lighthouse: { model: 'beacon', foot: 0.8, out: 1.3, lit: 0.3 },
   memorial: { model: 'obelisk', foot: 0.75, out: 0.35, lit: 0 },
-  colossus: { model: 'colossus', foot: 0.7, out: 0.55, lit: 0 },
+  'great-bell': { model: 'greatbell', foot: 1.2, out: 0.55, lit: 0 },
   'peace-hall': { model: 'greatdome', foot: 1.65, out: 0.5, lit: 0.45 },
 };
 const WONDER_MODELS = new Set<string>(Object.values(WONDER_MODEL).map((w) => w.model));
@@ -258,10 +258,12 @@ export function buildBuilding(kind: Building): BufferGeometry {
       for (const z of [-0.33, 0.33]) s.box(0, 1.2, z, 2.2, 0.01, 0.01, PART.hull, PART.hull);
       for (const z of [-0.23, 0.23]) s.box(0, 1.5, z, 2.2, 0.01, 0.01, PART.hull, PART.hull);
       break;
-    case 'worker':
-      // one of the builders, seen from far above: a body and a head
-      s.box(0, 0, 0, 0.3, 0.62, 0.22, PART.roof, PART.roof);
-      s.box(0, 0.62, 0, 0.2, 0.2, 0.2, PART.sail, PART.sail);
+    case 'cart':
+      // a builders' handcart, seen from far above: a loaded bed on two wheels, and its shafts
+      // (no figures are drawn anywhere in the game: the owner's direction. The carts stand for the people at work.)
+      s.box(0, 0.16, 0, 0.5, 0.2, 0.3, PART.hull, PART.sail);
+      for (const z of [-0.19, 0.19]) s.box(0, 0, z, 0.3, 0.3, 0.05, PART.hull, PART.hull);
+      for (const z of [-0.1, 0.1]) s.box(0.4, 0.2, z, 0.34, 0.03, 0.03, PART.hull, PART.hull);
       break;
     // ---- the wonders (system E19). Each faces along +x.
     case 'observatory': {
@@ -311,13 +313,13 @@ export function buildBuilding(kind: Building): BufferGeometry {
       s.box(1.62, 0.08, 0, 0.5, 0.32, 0.7, PART.wall, PART.roof);
       break;
     case 'column':
-      // a stepped base, a shaft carved in bands from foot to head, and the victor standing on top
+      // a stepped base, a shaft carved in bands from foot to head, and a bronze flame at its head
       s.box(0, 0, 0, 1.2, 0.3, 1.2, PART.wall, PART.wall);
       s.box(0, 0.3, 0, 0.8, 0.26, 0.8, PART.wall, PART.wall);
       s.ring(0, 0, 0.56, 0.3, 3.6, 0.25, 12, PART.wall);
       s.box(0, 3.6, 0, 0.72, 0.14, 0.72, PART.wall, PART.wall);
-      s.box(0, 3.74, 0, 0.22, 0.56, 0.2, PART.roof, PART.roof);
-      s.box(0, 4.3, 0, 0.16, 0.18, 0.16, PART.roof, PART.roof);
+      s.ring(0, 0, 3.74, 0.2, 4.0, 0.26, 8, PART.roof);
+      s.ring(0, 0, 4.0, 0.26, 4.5, 0, 8, PART.roof);
       break;
     case 'beacon':
       // a square keep, a round tower on it, a gallery, and the lamp
@@ -335,15 +337,18 @@ export function buildBuilding(kind: Building): BufferGeometry {
       s.ring(0, 0, 0.34, 0.36, 3.8, 0.2, 4, PART.wall, Math.PI / 4);
       s.ring(0, 0, 3.8, 0.2, 4.2, 0, 4, PART.wall, Math.PI / 4);
       break;
-    case 'colossus':
-      // a figure on a plinth, facing +x, with one arm raised and a fire in its hand
-      s.box(0, 0, 0, 1.3, 0.42, 1.3, PART.wall, PART.wall);
-      for (const z of [-0.2, 0.2]) s.box(0, 0.42, z, 0.3, 1.3, 0.28, PART.roof, PART.roof);
-      s.box(0, 1.72, 0, 0.42, 1.2, 0.78, PART.roof, PART.roof);
-      s.box(0, 2.92, 0, 0.32, 0.4, 0.34, PART.roof, PART.roof);
-      s.box(0, 1.8, -0.5, 0.24, 1.0, 0.22, PART.roof, PART.roof);
-      s.box(0.12, 2.72, 0.5, 0.24, 1.06, 0.22, PART.roof, PART.roof);
-      s.ring(0.12, 0.5, 3.78, 0.13, 4.1, 0, 5, PART.flame);
+    case 'greatbell':
+      // a bell as tall as a hill, hung in a frame of two stone piers and a beam; it swings along x
+      s.box(0, 0, 0, 2.2, 0.3, 1.5, PART.wall, PART.road);
+      for (const z of [-0.95, 0.95]) s.box(0, 0.3, z, 0.5, 3.3, 0.36, PART.wall, PART.wall);
+      s.box(0, 3.6, 0, 0.6, 0.4, 2.5, PART.wall, PART.wall);
+      // the bell: a crown, shoulders, a long waist and a flaring lip
+      s.ring(0, 0, 3.3, 0.16, 3.6, 0.16, 8, PART.hull);
+      s.ring(0, 0, 3.3, 0.5, 3.3, 0, 12, PART.roof);
+      s.ring(0, 0, 3.0, 0.62, 3.3, 0.5, 12, PART.roof);
+      s.ring(0, 0, 1.5, 0.74, 3.0, 0.62, 12, PART.roof);
+      s.ring(0, 0, 1.0, 0.98, 1.5, 0.74, 12, PART.roof);
+      s.ring(0, 0, 0.6, 0.1, 1.2, 0.1, 6, PART.hull);
       break;
     case 'greatdome':
       // a round hall with a door on every side, a ring of columns about it, and one dome over all with an eye open to the sky
@@ -436,7 +441,7 @@ export class Towns {
     const rotate = (v: N, q: N): N => v.add(cross(q.xyz, cross(q.xyz, v).add(v.mul(q.w))).mul(2));
     for (const kind of BUILDINGS) {
       const boat = kind === 'boat';
-      const slotCap = boat ? 96 : kind === 'house' || kind === 'road' ? cap : kind === 'hut' || kind === 'wall' ? Math.ceil(cap / 2) : kind === 'rail' || kind === 'canal' || kind === 'arch' || kind === 'pole' || kind === 'pipe' || kind === 'pylon' ? Math.ceil(cap / 8) : WONDER_MODELS.has(kind) ? 24 : kind === 'gate' ? 64 : kind === 'scaffold' || kind === 'hoist' || kind === 'crane' ? 48 : kind === 'worker' ? 160 : Math.ceil(cap / 4);
+      const slotCap = boat ? 96 : kind === 'house' || kind === 'road' ? cap : kind === 'hut' || kind === 'wall' ? Math.ceil(cap / 2) : kind === 'rail' || kind === 'canal' || kind === 'arch' || kind === 'pole' || kind === 'pipe' || kind === 'pylon' ? Math.ceil(cap / 8) : WONDER_MODELS.has(kind) ? 24 : kind === 'gate' ? 64 : kind === 'scaffold' || kind === 'hoist' || kind === 'crane' ? 48 : kind === 'cart' ? 160 : Math.ceil(cap / 4);
       const g = buildBuilding(kind);
       // per-building data in one shared buffer (WebGPU allows 8 vertex buffers per draw; separately these made 9)
       const { iDir, iQuat, iData, iTint, iLight, iForm, iWall, iStyle } = packAttributes(g, [
@@ -504,8 +509,8 @@ export class Towns {
           // the jib swings slowly back and forth over the work
           const a: N = sin(uTime.mul(0.4).add(aData.y.mul(40))).mul(0.9);
           geo = (vec3 as any)(geo.x.mul(cos(a)).add(geo.z.mul(sin(a))), geo.y, geo.z.mul(cos(a)).sub(geo.x.mul(sin(a))));
-        } else if (kind === 'worker') {
-          // builders going to and fro along the front of the site
+        } else if (kind === 'cart') {
+          // carts going to and fro along the front of the site
           geo = geo.add((vec3 as any)(sin(uTime.mul(1.1).add(aData.y.mul(50))).mul(2.6), 0, sin(uTime.mul(0.7).add(aData.y.mul(31))).mul(0.9)));
         }
         // (standing in the shallows, a building's floor is at the surface less a part of its height, not on the bottom)
@@ -733,7 +738,7 @@ export class Towns {
           const worn = left ? 1 - left.share : 0;
           this.wallColour = [0.66 * (1 - 0.5 * worn) + 0.1 * worn, 0.61 * (1 - 0.5 * worn) + 0.14 * worn, 0.52 * (1 - 0.5 * worn) + 0.08 * worn];
           this.style = [1, 1, w.kind === 'memorial' ? 0 : w.kind === 'tomb' || w.kind === 'sungate' ? 0.25 : 1];
-          const colour = w.kind === 'colossus' ? [1.0, 0.66, 0.26] : tint;
+          const colour = w.kind === 'great-bell' ? [1.0, 0.66, 0.26] : tint;
           const shade = left ? [colour[0]! * (1 - 0.6 * worn) + 0.2 * worn, colour[1]! * (1 - 0.6 * worn) + 0.3 * worn, colour[2]! * (1 - 0.6 * worn) + 0.17 * worn] : colour;
           this.put(g.how.model, up, 0, WONDER_SIZE * far, hash(w.id * 17.3), tall < 0.995 ? -tall : left ? 0 : g.how.lit, 0.5, shade, light, fwd);
         }
@@ -1067,7 +1072,7 @@ export class Towns {
           this.put('scaffold', up, 0, sz * (kind === 'dome' || kind === 'hall' ? 1.45 : 1), seed, 0, tall * Math.min(1, progress + 0.2), tint, light, toward(heading));
           if (kind !== 'hut' && kind !== 'house' && progress < 0.96) { at(x + Math.cos(heading + 2.2) * 0.62, y + Math.sin(heading + 2.2) * 0.62); this.put(era >= 0.85 ? 'crane' : 'hoist', up, 0, sz * (era >= 0.85 ? 1 : 0.8) * Math.max(0.8, tall / (era >= 0.85 ? 3 : 1.7)), seed, 0, era, tint, light, toward(heading)); }
           this.form = plain;
-          for (let w = 0; w < (kind === 'hut' ? 2 : 4); w++) { at(x + Math.cos(heading) * 0.5 + Math.cos(heading + 1.57) * (w - 1.5) * 0.22, y + Math.sin(heading) * 0.5 + Math.sin(heading + 1.57) * (w - 1.5) * 0.22); this.put('worker', up, 0, 0.00006 * boost, hash(seed * 977 + w * 31 + st.id), 0, era, tint, light, toward(heading + 1.57)); }
+          for (let w = 0; w < (kind === 'hut' ? 2 : 4); w++) { at(x + Math.cos(heading) * 0.5 + Math.cos(heading + 1.57) * (w - 1.5) * 0.22, y + Math.sin(heading) * 0.5 + Math.sin(heading + 1.57) * (w - 1.5) * 0.22); this.put('cart', up, 0, 0.00006 * boost, hash(seed * 977 + w * 31 + st.id), 0, era, tint, light, toward(heading + 1.57)); }
         };
         // great works (system E10): each one built stands on its place near the square; in a golden age the next is going up
         const works = Math.min(plan.monuments.length, st.monuments ?? 0);
