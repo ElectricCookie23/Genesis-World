@@ -37,6 +37,10 @@ const { open } = require('./h.cjs');
     ['greatwars', 'openGreatWars', () => ({ great: (__genesis.state.greatWars ?? []).length, world: (__genesis.state.greatWars ?? []).filter((g) => g.world).length })],
     ['diplomacy', 'openDiplomacy', () => ({ ties: __genesis.state.diplomacy ? __genesis.state.diplomacy.ties.length : -1, secret: __genesis.state.diplomacy ? __genesis.state.diplomacy.secret.length : -1 })],
     ['market', 'openMarket', () => ({ years: __genesis.state.market ? __genesis.state.market.years.length : -1 })],
+    // (and the views of sections 1 to 3, which were also only ever seen in small worlds)
+    ['languages', 'openLanguages', () => ({ languages: (__genesis.state.languages ?? []).length })],
+    ['gallery', 'openGallery', () => ({ paintings: __genesis.state.gallery ? __genesis.state.gallery.paintings.length : -1 })],
+    ['legends', 'openLegends', () => ({ legends: (__genesis.state.legends ?? []).length })],
   ];
   for (const [name, action, read] of views) {
     await h.page.evaluate((a) => __genesis.actions[a](), action);
@@ -50,6 +54,14 @@ const { open } = require('./h.cjs');
     console.log(name, await h.page.evaluate(() => __genesis.state.mapNote));
     await shot(name);
   }
+  // the list of peoples, and the Night Map on the globe
+  await h.page.evaluate(() => __genesis.update({ panel: 'peoples', whyEvent: -1 }));
+  await h.page.waitForTimeout(2500);
+  await shot('peoples');
+  await h.page.evaluate(() => { __genesis.update({ panel: 'none' }); __genesis.actions.setOverlay('nations'); });
+  await h.page.waitForTimeout(6000);
+  await shot('nightmap');
+  await h.page.evaluate(() => __genesis.actions.setOverlay('none'));
   // one country's page: the largest living one
   const realm = await h.page.evaluate(() => { const r = __genesis.state.realms.filter((x) => x.ended < 0).sort((a, b) => b.pop - a.pop)[0]; if (r) __genesis.actions.openNation(r.id); return r ? { name: r.name, government: r.government, era: r.eraName, idea: r.idea ? r.idea.name : null, race: r.race ? r.race.withName : null, colonies: (r.colonies ?? []).length, league: r.league ? r.league.name : null } : null; });
   await h.page.waitForTimeout(3000);

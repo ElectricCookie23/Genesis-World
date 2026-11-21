@@ -500,9 +500,10 @@ function keepEra(s: Simulation): void {
     rewinds.push({ simYear: s.simYear, title, save: saveSimulation(s, title), era: true });
     // A kept copy of the world is as large as its record. Where the record is long (a watched history of many
     // countries), a dozen copies ran to gigabytes and the page stopped answering; so the copies together may hold
-    // only so many events' worth, and the heaviest that is not the newest goes first.
+    // only so many events' worth (a hundred thousand: three or four copies of a late, crowded world, or all the copies
+    // of an early one), and the heaviest that is not the newest goes first.
     const weigh = (r: { save: { data: unknown } }): number => { const e = (r.save.data as { events?: { __nested?: { events?: unknown[] } } }).events; return e && e.__nested && Array.isArray(e.__nested.events) ? e.__nested.events.length : 0; };
-    for (let guard = 0; guard < 40 && rewinds.reduce((a, r) => a + weigh(r), 0) > 250000; guard++) {
+    for (let guard = 0; guard < 40 && rewinds.reduce((a, r) => a + weigh(r), 0) > 100000; guard++) {
       let drop = -1, top = -1;
       for (let i = 0; i < rewinds.length - 1; i++) { const w = weigh(rewinds[i]!); if (rewinds[i]!.title !== 'Fork point' && w > top) { top = w; drop = i; } }
       if (drop < 0) break;
