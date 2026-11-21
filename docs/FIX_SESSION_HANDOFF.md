@@ -1,18 +1,22 @@
 # Fix session handoff (GPU review follow-up)
 
-## PAUSED 2026-11-21 (usage limit). Read this first.
+## Where things stand (2026-11-21, evening): asset pass done, review under way
 
-**Branch `claude/sweet-keller-8gmglc` is one commit ahead of `main` and must not be merged until step 1 below is done.** That commit adds the five Kenney packs (636 GLB files, 9.3 MB, CC0, fetched from OpenGameArt because kenney.nl refuses this container) under `public/assets/kenney/` with `public/assets/MANIFEST.json`. With a manifest present the game starts drawing six plant forms from the Kenney models named in `render/gfx/assetroles.ts`, and **that has not been looked at with the real files** (only with a stand-in tree). `main` is at `f6b4856` plus the build session's work and is fine.
+**The asset pass is on `main`** (decisions F37, F38; pictures `docs/asset-previews/assetpass-*.jpg`).
+- Plants: nine forms drawn from made models (`render/gfx/assetroles.ts` `PLANT_MODELS`), chosen by eye on a sheet (`__genesis.plantPreview(file, form, how)` gives the converted model; `scratchpad/plantsheet.js` drew the sheet) and seen in the game. A form from a model is limited to 600,000 triangles on screen (`MODEL_TRIANGLES` in `flora.ts`).
+- Props: `render/gfx/props.ts` (camp fire and tents, crops and mill, boats by tech, wreck, rocks, desert pillars, bones), roles in `PROP_MODELS`; fetched the first time the camera comes within `uShow`. Seen in the game with made-up towns on a fresh world (`scratchpad/propcheck.js`: `sc.setSettlements(list, [])` with `species: 0`, then hold `sc.props.setTowns(list)` on a timer).
+- Sound: `audio/music.ts` `LOOPS` and `SHOTS`; `music.living(day, night, marsh, river)` from the half-second tick in `main.ts`. **Levels were reckoned, not heard: ask the owner for a listen on the Mac.**
+- `&noassets` turns all of it off. `tests/assets.test.ts` checks every named file is in the manifest and on disk and that none is of a kind the owner ruled out.
+- Offered to the build session in HANDOFF.md, not done: houses, towers and city blocks through `buildings.ts`.
+- Not used: spacecraft, the long bones and ribcage, skulls and the like (ruled out), eight of the sound loops (listed in `music.ts`).
+
+**Needs a GPU look and a listen** (ask the owner first): a forest from the ground at about `dist` 0.012 with and without `&noassets` (do the model trees read better than the generated ones, and what does the frame time do); a camp at night, a farming town, a port with ships; the sound loops for level and for anything harsh.
 
 **Queue, in order**
-1. Look at each real model in the software renderer (`&plantmodel=broadleaf:kenney/nature-kit/tree_oak.glb`, and so on; `scratchpad/assetcheck2.js` shows how: fast-forward 70 My, follow a land animal, screenshot). Check the wood and foliage split (`plantFromModel` decides by colour: nature-kit models carry material colours, no texture; the other four packs use `Textures/colormap.png`). Fix `assetroles.ts`, then run the full suite, then merge to `main`.
-2. CREDITS.md: add the five packs (Kenney, CC0, pages in the manifest). It still says no downloaded assets.
-3. Rest of the asset pass: boats for harbours (watercraft-kit), tents and campfire for camps (survival-kit), crop rows for `farms: true` (nature-kit `crops_*`), rocks. Buildings are the build session's `buildings.ts`: agree the hook in HANDOFF first. Left out by the owner's rules: `character-archer`, weapons, anything human-looking or religious.
-4. Poly Pizza models and the generated ambience are still only on the Mac (`~/genesis-review/assets/`); the Mac session was sent the list. Nothing from the Mac is shared with this session.
-5. Review (owner's request): where the game breaks, where it is slow, whether every feature works. Started: `scripts/checks/soak.ts` found no problems on five worlds. Known already: the same seed reaches history at different times depending on how it got there (Mac's finding: 83.5, 120.6, 128 My), because the worker's step size follows the speed (`s.step(yps / TICK_HZ)`); saves are 17 to 26 MB as text at grid 21. Write findings in `docs/REVIEW_2026-11.md`.
-6. Compare against BRIEF.md and docs/EXPANSION_BRIEF.md; list what is not covered.
+1. Review (owner's request): where the game breaks, where it is slow, whether every feature works. `scratchpad/reviewsweep.js` opens every panel and uses every tool at three stages (barren, animals, history) and lists console and page errors by stage; `scripts/checks/soak.ts` runs five whole worlds headless. Write findings in `docs/REVIEW_2026-11.md`, fix what is mine, hand the rest on in HANDOFF.md.
+2. Compare against BRIEF.md and docs/EXPANSION_BRIEF.md; list what is not covered (in the same review file).
 
-A scheduled task ("Genesis fix session: continue") sends "continue" to this session every hour.
+A scheduled task ("Genesis fix session: continue") sends "continue" to this session every hour at ten past (Qatar time).
 
 ## Now (2026-11-21): the asset pass, then two reviews
 
