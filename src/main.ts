@@ -29,6 +29,8 @@ import type { SlotInfo, UIState } from './ui/store';
 import { GOALS, emptyRecord, evaluateGoals, type GoalRecord } from './game/goals';
 import { planFilm, shotAt, type Shot } from './game/film';
 import { vision } from './sim/senses';
+import { loadModel } from './render/gfx/models';
+import { plantFromModel, type Form } from './render/gfx/plantmesh';
 import { actions, state, togglePanel, update } from './ui/store';
 
 const bootBar = document.getElementById('boot-bar') as HTMLElement;
@@ -99,6 +101,7 @@ async function boot(): Promise<void> {
   let worker: Worker;
   const send = (m: ToWorker) => worker.postMessage(m);
   const music = new Music();
+  if (params.has('noassets')) music.useLoops = false;
   let hushUntil = 0;
   let lastRecovery = -Infinity;
   const autoKey = `genesis:auto:${seed}`;
@@ -1608,7 +1611,16 @@ async function boot(): Promise<void> {
         music.place(snd.surfPan, snd.rainPan, snd.lava, snd.lavaPan);
         // the living overlays follow the world as it changes
         if ((state.overlay === 'diversity' || state.overlay === 'oxygen') && now - lastLayer > 4000) { lastLayer = now; send({ type: 'requestLayer', kind: state.overlay }); }
-        if (rain > 0.2 && near > 0.2 && Math.random() < 0.12) music.thunder();
+        if (rain > 0.2 && near > 0.2 && Math.random() < 0.12) music.thunder(rain > 0.7 && near > 0.7);
+        // living land close by: calls by day, insects by night, a marsh croaking, a river running
+        if (cellsNow) {
+          const close = near * near, green = wet ? 0 : Math.min(1, cellsNow.vegetation[here]! * 1.5);
+          const animals = state.stats?.stage === 'animals' ? 1 : 0;
+          const sunUp = focusVec.dot(scene.sunDirection());
+          const dayness = Math.max(0, Math.min(1, sunUp * 4 + 0.3));
+          const river = wet ? 0 : Math.max(0, Math.min(1, (cellsNow.flow[here]! - 2) / 4));
+          music.living(close * green * animals * dayness, close * green * animals * (1 - dayness), cellsNow.biome[here] === 13 ? 1 : 0, close * river);
+        }
       }
       // adaptive quality: two seconds under target takes the next step down (the order is in applyQuality)
       // With room to spare for a good while it tries one step back up; if that fails it waits much longer before
@@ -1655,7 +1667,17 @@ async function boot(): Promise<void> {
   // hooks for automated visual checks
   // grab the 3D canvas straight after a render (cheap way to capture frames in automated checks)
   const grab = () => { scene.frame(0); return canvas.toDataURL('image/jpeg', 0.9); };
-  (window as unknown as { __genesis: unknown }).__genesis = { scene, state, setSpeed, update, actions, send, grab, music, diagnose: () => scene.diagnose(), skip: () => opening?.skip(), opening: () => opening };
+  // for checks: a made model as the game would turn it into a plant (positions, colours, parts, triangles)
+  const plantPreview = async (file: string, form: string, how?: { wood?: 'brown' | 'purple' | 'dark' | 'none'; foliage?: 'mass' | 'bulb' }) => {
+    const m = await loadModel(file);
+    if (!m) return null;
+    const g = plantFromModel(m, form as Form, 1.2, how);
+    const p = g.getAttribute('position'), c = g.getAttribute('color'), card = g.getAttribute('card'), n = g.getAttribute('normal');
+    const out = { pos: [] as number[], nrm: [] as number[], col: [] as number[], part: [] as number[], idx: Array.from(g.getIndex()!.array as ArrayLike<number>), triangles: m.triangles };
+    for (let i = 0; i < p.count; i++) { out.pos.push(p.getX(i), p.getY(i), p.getZ(i)); out.nrm.push(n.getX(i), n.getY(i), n.getZ(i)); out.col.push(c.getX(i), c.getY(i), c.getZ(i)); out.part.push(card.getZ(i)); }
+    return out;
+  };
+  (window as unknown as { __genesis: unknown }).__genesis = { plantPreview, scene, state, setSpeed, update, actions, send, grab, music, diagnose: () => scene.diagnose(), skip: () => opening?.skip(), opening: () => opening };
 }
 
 boot().catch((err) => {

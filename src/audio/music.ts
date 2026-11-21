@@ -2,6 +2,21 @@
 // Tone.js is loaded on the first user gesture (browsers block audio before that).
 
 import { phrase, type Timbre, type Tradition } from '../sim/history/music';
+import { ASSET_BASE, assetList } from '../render/gfx/models';
+
+/**
+ * Sound loops made for the game (the asset pass). Each takes the place of a plain noise layer, or adds a layer the
+ * game did not have, once its file has been added; without the file the game sounds as it did before.
+ * Not used yet: cave-drips, earthquake, fire-crackle, music-calm-pad, ocean-deep, underwater, waterfall, wind-gale.
+ */
+const LOOPS = {
+  wind: 'audio/wind-light.ogg', gale: 'audio/wind-strong.ogg', surf: 'audio/waves-shore.ogg', rain: 'audio/rain-light.ogg',
+  downpour: 'audio/rain-heavy.ogg', lava: 'audio/lava-bubbling.ogg', day: 'audio/forest-birdsong.ogg', night: 'audio/night-crickets.ogg',
+  marsh: 'audio/swamp-croaks.ogg', river: 'audio/river-stream.ogg',
+} as const;
+const SHOTS = { thunderFar: 'audio/thunder-distant.ogg', thunderNear: 'audio/thunder-close.ogg' } as const;
+/** How loud a loop plays beside the noise layer it replaces (the loops are quieter recordings than raw noise is). */
+const LOOP_GAIN = 2.2;
 
 export interface Mood {
   stage: string; // barren, microbes, algae, animals
@@ -35,6 +50,11 @@ export class Music {
   private rumble: any = null;
   private lavaGain: any = null;
   private pans: Record<string, any> = {};
+  /** The gain of each sound loop that has loaded, by name; and the one-shot sounds. */
+  private loops: Partial<Record<keyof typeof LOOPS, any>> = {};
+  private shots: Partial<Record<keyof typeof SHOTS, any>> = {};
+  /** Set false (`&noassets`) to keep to the generated noise. */
+  useLoops = true;
   private civMusic = false;
   private civTimer = 0;
   private timer = 0;
@@ -88,11 +108,35 @@ export class Music {
       this.lavaGain = layer('brown', 90, 'lowpass', 'lava');
       this.rumble = new Tone.NoiseSynth({ noise: { type: 'brown' }, envelope: { attack: 0.05, decay: 1.4, sustain: 0, release: 1.2 }, volume: -8 }).connect(new Tone.Filter(160, 'lowpass').connect(reverb));
       this.applyVolume();
+      void this.loadLoops(Tone);
       this.seed = (Date.now() & 0xffff) | 1;
       this.schedule(600);
     } catch (err) {
       console.warn('music unavailable', err);
       this.started = false;
+    }
+  }
+
+  /** Fetch the sound loops that have been added and start each, silent, behind its own gain. */
+  private async loadLoops(Tone: any): Promise<void> {
+    if (!this.useLoops) return;
+    const have = await assetList();
+    if (!have) return;
+    for (const name of Object.keys(LOOPS) as (keyof typeof LOOPS)[]) {
+      if (!have.has(LOOPS[name])) continue;
+      try {
+        // surf, rain and lava come from where they are; the rest is all around
+        const pan = name === 'surf' ? this.pans.surf : name === 'rain' || name === 'downpour' ? this.pans.rain : name === 'lava' ? this.pans.lava : null;
+        const gain = new Tone.Gain(0).connect(pan ?? this.master);
+        const player = new Tone.Player({ url: ASSET_BASE + LOOPS[name], loop: true, fadeIn: 0.4, onload: () => { try { player.start(); this.loops[name] = gain; } catch { /* ignore */ } }, onerror: () => { /* the noise layer stays */ } }).connect(gain);
+      } catch { /* ignore */ }
+    }
+    for (const name of Object.keys(SHOTS) as (keyof typeof SHOTS)[]) {
+      if (!have.has(SHOTS[name])) continue;
+      try {
+        const gain = new Tone.Gain(0.5).connect(this.master);
+        const player = new Tone.Player({ url: ASSET_BASE + SHOTS[name], onload: () => { this.shots[name] = { player, gain }; }, onerror: () => { /* the synth stays */ } }).connect(gain);
+      } catch { /* ignore */ }
     }
   }
 
@@ -241,9 +285,17 @@ export class Music {
   /** Ambient bed: wind up high, surf near the sea, rain under storms. Each 0..1. */
   ambience(wind: number, surf: number, rain: number): void {
     if (!this.windGain) return;
-    this.windGain.gain.rampTo(wind * 0.16 * this.sfx, 1.2);
-    this.surfGain.gain.rampTo(surf * 0.2 * this.sfx, 1.2);
-    this.rainGain.gain.rampTo(rain * 0.24 * this.sfx, 1.2);
+    const L = this.loops, k = LOOP_GAIN * this.sfx, blend = (x: number, a: number, b: number) => Math.max(0, Math.min(1, (x - a) / (b - a)));
+    // a loop that has loaded plays in place of its noise layer; a light and a heavy loop share wind and rain between them
+    const hard = blend(wind, 0.35, 0.6), pour = blend(rain, 0.45, 0.9);
+    this.windGain.gain.rampTo(L.wind ? 0 : wind * 0.16 * this.sfx, 1.2);
+    L.wind?.gain.rampTo(wind * 0.16 * k * (L.gale ? 1 - hard : 1), 1.2);
+    L.gale?.gain.rampTo(wind * 0.16 * k * hard, 1.2);
+    this.surfGain.gain.rampTo(L.surf ? 0 : surf * 0.2 * this.sfx, 1.2);
+    L.surf?.gain.rampTo(surf * 0.2 * k, 1.2);
+    this.rainGain.gain.rampTo(L.rain ? 0 : rain * 0.24 * this.sfx, 1.2);
+    L.rain?.gain.rampTo(rain * 0.24 * k * (L.downpour ? 1 - pour : 1), 1.2);
+    L.downpour?.gain.rampTo(rain * 0.24 * k * pour, 1.2);
     if (this.voice) this.voice.volume.value = this.sfx <= 0.01 ? -80 : -12 + 20 * Math.log10(this.sfx);
     if (this.rumble) this.rumble.volume.value = this.sfx <= 0.01 ? -80 : -8 + 20 * Math.log10(this.sfx);
   }
@@ -258,7 +310,8 @@ export class Music {
       this.pans.surf?.pan.rampTo(Math.max(-1, Math.min(1, surfPan)), 0.8);
       this.pans.rain?.pan.rampTo(Math.max(-1, Math.min(1, rainPan)), 0.8);
       this.pans.lava?.pan.rampTo(Math.max(-1, Math.min(1, lavaPan)), 0.8);
-      this.lavaGain.gain.rampTo(lava * 0.5 * this.sfx, 1.2);
+      this.lavaGain.gain.rampTo(this.loops.lava ? 0 : lava * 0.5 * this.sfx, 1.2);
+      this.loops.lava?.gain.rampTo(lava * 0.5 * LOOP_GAIN * this.sfx, 1.2);
     } catch { /* ignore */ }
   }
 
@@ -272,8 +325,26 @@ export class Music {
     } catch { /* ignore */ }
   }
 
-  /** Distant thunder. */
-  thunder(): void {
+  /**
+   * The sounds of living land close by, each 0..1: calls by day, insects by night (or the croaking of a marsh),
+   * and running water where a river is. Silent unless the loops have been added.
+   */
+  living(day: number, night: number, marsh: number, river: number): void {
+    const L = this.loops, k = LOOP_GAIN * this.sfx;
+    try {
+      L.day?.gain.rampTo(day * 0.14 * k, 2);
+      L.night?.gain.rampTo(night * (L.marsh ? 1 - marsh : 1) * 0.12 * k, 2);
+      L.marsh?.gain.rampTo(night * marsh * 0.14 * k, 2);
+      L.river?.gain.rampTo(river * 0.16 * k, 1.5);
+    } catch { /* ignore */ }
+  }
+
+  /** Thunder: far off, or close when `near` is set. */
+  thunder(near = false): void {
+    const shot = this.shots[near ? 'thunderNear' : 'thunderFar'] ?? this.shots.thunderFar;
+    if (shot && this.sfx > 0.01) {
+      try { shot.gain.gain.value = (0.35 + 0.3 * this.rand()) * this.sfx; shot.player.start(); return; } catch { /* fall through to the synth */ }
+    }
     if (!this.tone || !this.rumble) return;
     try { this.rumble.triggerAttackRelease(1.6 + this.rand()); } catch { /* ignore */ }
   }

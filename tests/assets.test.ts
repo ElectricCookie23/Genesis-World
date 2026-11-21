@@ -2,6 +2,9 @@
 import { describe, expect, it } from 'vitest';
 import { PART, buildPlant, plantFromModel } from '../src/render/gfx/plantmesh';
 import type { Model } from '../src/render/gfx/models';
+import { existsSync, readFileSync } from 'node:fs';
+import { PLANT_MODELS, PROP_MODELS } from '../src/render/gfx/assetroles';
+import { PROPS, propGeometry, type Prop } from '../src/render/gfx/props';
 
 /** A stand-in tree: a brown post 1 wide and 4 tall under a green block from 3 to 9, twice as tall as the game wants. */
 function tree(): Model {
@@ -59,5 +62,40 @@ describe('the asset pass', () => {
     expect(parts.has(PART.bark)).toBe(false);
     expect(parts.has(PART.cap)).toBe(true);
     expect(parts.has(PART.flesh)).toBe(true);
+  });
+
+  it('names only files that are there, and none of what the owner ruled out', () => {
+    const listed = JSON.parse(readFileSync('public/assets/MANIFEST.json', 'utf8')) as { files?: { path: string }[] } | { path: string }[];
+    const paths = new Set((Array.isArray(listed) ? listed : listed.files ?? []).map((f) => f.path));
+    const named = [...Object.values(PLANT_MODELS).flat().map((m) => m.file), ...Object.values(PROP_MODELS).flat()];
+    expect(named.length).toBeGreaterThan(30);
+    for (const file of named) {
+      expect(paths.has(file), file + ' is in the manifest').toBe(true);
+      expect(existsSync('public/assets/' + file), file + ' is on disk').toBe(true);
+      // nothing that looks like a person, nothing religious, no statue of an Earth animal
+      expect(/skull|skeleton|ribcage|coffin|grave|statue|temple|shrine|church|archer|character/i.test(file), file).toBe(false);
+    }
+    // every kind of prop has a model named for it, and every listed file exists
+    for (const kind of Object.keys(PROPS)) expect(PROP_MODELS[kind as Prop]?.length, kind).toBeGreaterThan(0);
+    for (const file of paths) expect(existsSync('public/assets/' + file), file).toBe(true);
+  });
+
+  it('makes a prop of a model: longest side one unit, standing on its base, colours as painted', () => {
+    const g = propGeometry(tree(), 'rockA');
+    const p = g.getAttribute('position'), c = g.getAttribute('color');
+    let minY = 1e9, maxY = -1e9, minX = 1e9, maxX = -1e9;
+    for (let i = 0; i < p.count; i++) { minY = Math.min(minY, p.getY(i)); maxY = Math.max(maxY, p.getY(i)); minX = Math.min(minX, p.getX(i)); maxX = Math.max(maxX, p.getX(i)); }
+    expect(minY).toBeCloseTo(0, 5);
+    expect(maxY).toBeCloseTo(1, 5); // the stand-in is 9 tall and 6 wide
+    expect(minX).toBeCloseTo(-maxX, 5);
+    expect(c.getX(0)).toBeCloseTo(0.35, 5);
+    // a boat sits into the water; only the wood of a fire glows
+    const boat = propGeometry(tree(), 'rowboat').getAttribute('position');
+    let low = 1e9;
+    for (let i = 0; i < boat.count; i++) low = Math.min(low, boat.getY(i));
+    expect(low).toBeLessThan(-0.1);
+    const glow = propGeometry(tree(), 'fire').getAttribute('glow');
+    expect(glow.getX(0)).toBe(1);
+    expect(propGeometry(tree(), 'tent').getAttribute('glow').getX(0)).toBe(0);
   });
 });

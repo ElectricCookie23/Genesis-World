@@ -11,7 +11,8 @@ import type { CellSnapshot, NationInfo, WorldStats, SettlementInfo } from '../sh
 import { hashSeed } from '../sim/rng';
 import { PlanetMesh } from './planet';
 import { loadFirst } from './gfx/models';
-import { PLANT_MODELS } from './gfx/assetroles';
+import { PLANT_MODELS, PROP_MODELS } from './gfx/assetroles';
+import { Props, type Prop } from './gfx/props';
 import type { Form } from './gfx/plantmesh';
 
 const tmpA = new Vector3(), tmpB = new Vector3(), tmpC = new Vector3();
@@ -96,6 +97,8 @@ export class GenesisScene {
   cloudNoiseSize = 64;
   cloudLightSteps = 4;
   vegetation?: Flora;
+  /** Camps, fields, boats at anchor, rocks: made models standing about the world (the asset pass). */
+  props?: Props;
   creatures?: CreatureLayer;
   rivers?: Rivers;
   data?: PlanetData;
@@ -214,8 +217,20 @@ export class GenesisScene {
     const forms = new Set<string>([...Object.keys(PLANT_MODELS), ...Object.keys(this.plantModelOverride)]);
     for (const form of forms) {
       const over = this.plantModelOverride[form];
-      const model = await loadFirst(over ? [over] : PLANT_MODELS[form as Form] ?? [], !!over);
-      if (model) this.vegetation.useModel(form as Form, model);
+      // the first candidate that is there, with what it says about its own colours
+      for (const spec of over ? [{ file: over }] : PLANT_MODELS[form as Form] ?? []) {
+        const model = await loadFirst([spec.file], !!over);
+        if (model) { this.vegetation.useModel(form as Form, model, spec); break; }
+      }
+    }
+  }
+
+  /** Fetch the made models for the things that stand about (camps, fields, boats, rocks); each is drawn once its model is here. */
+  private async loadPropModels(): Promise<void> {
+    if (!this.useAssets || !this.props) return;
+    for (const kind of Object.keys(PROP_MODELS) as Prop[]) {
+      const model = await loadFirst(PROP_MODELS[kind]);
+      if (model) this.props.add(kind, model);
     }
   }
 
@@ -321,6 +336,9 @@ export class GenesisScene {
     this.vegetation.pigmentB = this.look.pigmentB;
     for (const m of this.vegetation.meshes) this.scene.add(m);
     void this.loadPlantModels();
+    this.props = new Props(grid, this.data, this.erosion.texture, this.clouds.shadow);
+    this.props.onMesh = (m) => this.scene.add(m);
+    void this.loadPropModels();
     this.particles = new ParticleSystem(grid);
     this.scene.add(this.particles.sprite);
     // a captured second moon, hidden until the sim says it exists
@@ -426,6 +444,7 @@ export class GenesisScene {
     this.planet.update(cells, first);
     if (this.overlayOn) this.data?.setOverlay(this.planet.cellColors);
     this.vegetation?.setCells(cells);
+    this.props?.setCells(cells);
     this.creatures?.setCells(cells);
     this.rivers?.update(cells, performance.now(), first || cells.terrainChanged);
     this.lastElevation = cells.elevation;
@@ -463,6 +482,7 @@ export class GenesisScene {
   setSettlements(list: SettlementInfo[], known?: NationInfo[]): void {
     this.civ?.setSettlements(list, known);
     this.vegetation?.setTowns(list);
+    this.props?.setTowns(list);
   }
   /** Replay one town's growth from its first huts to what it is now (system E11). */
   timelapse(id: number, seconds = 16): void {
@@ -652,6 +672,9 @@ export class GenesisScene {
    * What can be heard around the camera and from which side: the nearest sea, the heaviest cloud and any molten rock,
    * each as a loudness 0..1 and a place from -1 (left of the view) to 1 (right).
    */
+  /** Which way the star lies, from the planet's centre. */
+  sunDirection(): Vector3 { return uSunDir.value as Vector3; }
+
   soundscape(): { surf: number; surfPan: number; rain: number; rainPan: number; lava: number; lavaPan: number } {
     const out = { surf: 0, surfPan: 0, rain: 0, rainPan: 0, lava: 0, lavaPan: 0 };
     const cells = this.lastCells, grid = this.grid;
@@ -1064,6 +1087,7 @@ export class GenesisScene {
     this.terrain?.update(this.cam.camera.position);
     this.ocean?.update(this.renderer, this.cam.camera.position, this.time, this.keepSeaPatch);
     this.vegetation?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist, this.cam.camera.position, this.renderer);
+    this.props?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist);
     const c = this.cam.camera;
     const far = c.position.length() + this.moonDistance + 4;
     c.far = far;

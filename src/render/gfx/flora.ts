@@ -63,7 +63,7 @@ function cutout(card: N): N {
 }
 
 /** Light on a plant surface: star, sky, moon, plus light shining through thin leaves from behind. */
-function plantLight(albedo: N, Nrm: N, P: N, thin: N, ao: N, shadow: N): N {
+export function plantLight(albedo: N, Nrm: N, P: N, thin: N, ao: N, shadow: N): N {
   const up = normalize(P);
   const L: N = uSunDir, M: N = uMoonDir;
   const sunH = dot(up, L);
@@ -85,7 +85,10 @@ function plantLight(albedo: N, Nrm: N, P: N, thin: N, ao: N, shadow: N): N {
 
 const ign = (): N => { const sc: N = screenCoordinate; return sc.x.add(uDitherFrame).mul(0.06711056).add(sc.y.add(uDitherFrame).mul(0.00583715)).fract().mul(52.9829189).fract(); };
 
-interface FullSlot { mesh: Copies; iDir: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; iTint2: InterleavedBufferAttribute; cap: number; n: number; }
+interface FullSlot { mesh: Copies; iDir: InterleavedBufferAttribute; iQuat: InterleavedBufferAttribute; iData: InterleavedBufferAttribute; iTint: InterleavedBufferAttribute; iTint2: InterleavedBufferAttribute; cap: number; n: number; /** how many may stand at once: fewer than `cap` for a model with many triangles */ limit: number; }
+
+/** The most triangles one form's standing plants may add up to when the form is drawn from a made model. */
+const MODEL_TRIANGLES = 600_000;
 
 export class Flora {
   readonly meshes: (Copies | Mesh)[] = [];
@@ -200,7 +203,7 @@ export class Flora {
       mesh.count = 0;
       mesh.frustumCulled = false;
       this.meshes.push(mesh);
-      this.full.set(form, { mesh, iDir, iQuat, iData, iTint, iTint2, cap, n: 0 });
+      this.full.set(form, { mesh, iDir, iQuat, iData, iTint, iTint2, cap, n: 0, limit: cap });
     }
 
     // ---------------- imposters: one draw call for every far plant
@@ -425,7 +428,7 @@ export class Flora {
    * it replaces and kept inside the frame the far-plant pictures are taken in; the plants already standing are
    * replanted with it, and the far-plant pictures are taken again.
    */
-  useModel(form: Form, model: Model): void {
+  useModel(form: Form, model: Model, how: { wood?: 'brown' | 'purple' | 'dark' | 'none'; foliage?: 'mass' | 'bulb' } = {}): void {
     const slot = this.full.get(form), old = this.geos.get(form);
     if (!slot || !old) return;
     const p = old.getAttribute('position');
@@ -434,7 +437,7 @@ export class Flora {
     // no wider than the picture frame: a spreading model is made lower, not cut off at the sides
     const wide = Math.max(model.max[0] - model.min[0], model.max[2] - model.min[2]) / Math.max(1e-6, model.max[1] - model.min[1]);
     const height = Math.min(top, (BAKE_HALF * 1.9) / Math.max(1e-6, wide));
-    const geo = plantFromModel(model, form, Math.max(0.2, height));
+    const geo = plantFromModel(model, form, Math.max(0.2, height), how);
     this.geos.set(form, geo);
     const g = geo.clone();
     const inst = addPlantInstanceData(g, slot.cap);
@@ -443,6 +446,9 @@ export class Flora {
     Object.assign(slot, inst);
     slot.n = 0;
     slot.mesh.count = 0;
+    // a made model can have several times the triangles of the generated plant: fewer of them stand at once,
+    // so a forest costs no more to draw than before, and the rest are drawn as their far pictures
+    slot.limit = Math.min(slot.cap, Math.max(48, Math.floor(MODEL_TRIANGLES / Math.max(1, model.triangles))));
     this.fromModels.add(form);
     if (this.baking) this.rebake = true;
     this.baked = false;
@@ -652,9 +658,11 @@ export class Flora {
         }
         const rr = 1 + e * EXAG;
         const dCam = Math.hypot(up.x * rr - camera.x, up.y * rr - camera.y, up.z * rr - camera.z);
+        let stands = false;
         if (dCam < lod * 1.15 && fullN < fullBudget) {
           const slot = this.full.get(form)!;
-          if (slot.n < slot.cap) {
+          if (slot.n < slot.limit) {
+            stands = true;
             const n = slot.n++;
             fullN++;
             q.setFromUnitVectors(Y, up);
@@ -667,7 +675,8 @@ export class Flora {
             slot.iTint2.setXYZ(n, r2, g2, b2);
           }
         }
-        if (dCam > lod * 0.85 && farN < farCap && this.baked) {
+        // (a near plant that found no room among the real ones is drawn as its picture, not left out)
+        if ((dCam > lod * 0.85 || !stands) && farN < farCap && this.baked) {
           far.iDir.setXYZ(farN, up.x, up.y, up.z);
           far.iData.setXYZW(farN, size, FORMS.indexOf(form), glow, h0);
           far.iTint.setXYZ(farN, r, g, b);

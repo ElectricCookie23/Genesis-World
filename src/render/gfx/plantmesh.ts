@@ -443,7 +443,9 @@ export function buildPlant(form: Form, seed = 1): BufferGeometry {
  * foliage gives up its colour and becomes a `mass` that each species tints with its own pigment and the wind moves.
  * So a violet world's trees are violet whatever colour the model was painted.
  */
-export function plantFromModel(m: Model, form: Form, height: number): BufferGeometry {
+export function plantFromModel(m: Model, form: Form, height: number, how: { wood?: 'brown' | 'purple' | 'dark' | 'none'; foliage?: 'mass' | 'bulb' } = {}): BufferGeometry {
+  const woodRule = how.wood ?? (form === 'mushroom' || form === 'column' || form === 'fern' ? 'none' : 'brown');
+  const foliage = how.foliage === 'bulb' ? PART.bulb : PART.mass;
   const b = new Builder(1);
   const h = Math.max(1e-6, m.max[1] - m.min[1]), k = height / h;
   const cx = (m.min[0] + m.max[0]) / 2, cz = (m.min[2] + m.max[2]) / 2;
@@ -455,7 +457,8 @@ export function plantFromModel(m: Model, form: Form, height: number): BufferGeom
     const r = m.col[i * 3]!, g = m.col[i * 3 + 1]!, bl = m.col[i * 3 + 2]!;
     const top = Math.max(r, g, bl), low = Math.min(r, g, bl), y = (m.pos[i * 3 + 1]! - m.min[1]) / h;
     const grey = top - low < 0.06 * (top + 0.05);
-    const isWood = form === 'mushroom' ? false : form === 'column' ? false : (r >= g * 1.02 && g >= bl) || (grey && y < 0.5);
+    // (which colours are wood is said for each model where the usual rule would be wrong: a purple stem, a black trunk)
+    const isWood = woodRule === 'none' ? false : woodRule === 'purple' ? bl > g * 1.1 && r > g : woodRule === 'dark' ? top < 0.12 || (r >= g * 1.02 && g >= bl) : (r >= g * 1.02 && g >= bl) || (grey && y < 0.5);
     wood[i] = isWood ? 1 : 0;
     if (!isWood) { lum += 0.2126 * r + 0.7152 * g + 0.0722 * bl; leaves++; crown = [crown[0] + (m.pos[i * 3]! - cx) * k, crown[1] + y * height, crown[2] + (m.pos[i * 3 + 2]! - cz) * k]; }
   }
@@ -472,7 +475,7 @@ export function plantFromModel(m: Model, form: Form, height: number): BufferGeom
     if (wood[i]) { b.vertex(p, nr, [r, g, bl], 0.5, y, PART.bark, 0.75 + 0.25 * y, sway, phase, 0); continue; }
     // foliage keeps only how light or dark the model painted it, so the facets of the crown still read
     const tone = Math.max(0.7, Math.min(1.3, (0.2126 * r + 0.7152 * g + 0.0722 * bl) / Math.max(1e-4, mean)));
-    const part = form === 'mushroom' ? (Math.max(r, g, bl) - Math.min(r, g, bl) > 0.18 && y > 0.35 ? PART.cap : PART.flesh) : PART.mass;
+    const part = form === 'mushroom' ? (Math.max(r, g, bl) - Math.min(r, g, bl) > 0.18 && y > 0.35 ? PART.cap : PART.flesh) : foliage;
     b.vertex(p, nr, [tone, tone, tone], 0.5, Math.max(0, Math.min(1, (p[1] - (crown[1] - reach)) / (2 * reach))), part, b.ao(p), sway, phase, part === PART.mass ? 0.25 : 0);
   }
   for (let i = 0; i < m.idx.length; i++) b.idx.push(m.idx[i]!);

@@ -9,6 +9,16 @@ Read this first when resuming. Then PROGRESS.md, DECISIONS.md and `git log`.
 - Stop and show the owner only at points that are worth showing.
 - Graphics rules (owner): full techniques on WebGL2 (FFT ocean, GPU erosion, TAA with a history buffer), quadtree LOD terrain, WebGPU optional, screenshots here check correctness only, push every step.
 
+## The asset pass (fix session, 2026-11-21): what is drawn from made models, and what is left for the buildings layer
+
+The owner asked for the collected assets to be used. They are in `public/assets/` (Kenney packs, Poly Pizza models, sound loops from the Mac; all CC0; `MANIFEST.json` lists every file and nothing is fetched that it does not list). `&noassets` in the address turns all of it off. Decisions F37 and F38 in `docs/DECISIONS_FIX.md`.
+
+- **Plants** (`render/gfx/assetroles.ts` `PLANT_MODELS`, `Flora.useModel`): nine forms take their shape from a model; the species still gives the colour.
+- **Props** (`render/gfx/props.ts`, my file; `PROP_MODELS`): a camp's fire and tents, crop rows and a mill by a town with `farms`, boats lying off a coastal town (by its `tech`), a wreck off a ruined port, rocks, desert pillars, old bones. They are placed from the town list and the cells only; they do not read the city plan, so they stand at or outside the town's edge.
+- **Sound** (`audio/music.ts` `LOOPS`): loops replace the wind, surf, rain and lava noise, and add calls by day, insects by night, a marsh, a river, thunder.
+
+**To the build session: the houses are yours.** 29 houses and huts, 22 modern blocks and 16 towers and domes are in `public/assets/polypizza/` (`pp-huts-houses-*`, `pp-modern-*`, `pp-temples-towers-*`: no temples among them), with the Kenney fantasy-town walls and roofs. I have not put any into `buildings.ts`: a fixed Earth house would override what E13 and E14 work out for each people (proportions, roof, wall material, fashion). If you want them, the loader is ready: `loadFirst(paths)` in `render/gfx/models.ts` gives positions, normals and a baked colour per vertex; `propGeometry` in `props.ts` shows the few lines it takes to make a geometry of one. A way that would keep E13: use a model only as one more `Building` kind for an era and tint its walls from `iWall`. Say in this file if you would rather I did it.
+
 ## Owner's decision, 2026-11-21: educational, no religion, no "god" (read this before building Section 3)
 
 Full text in `docs/DIRECTION_DRAFT.md`. In short: **the game has no religion and the player is not a god.** No gods, faiths, temples, priests, prophets, worship, omens as signs, holy things, or peoples speaking to a watcher. Creatures are new and plausible, not Earth animals and not realistic. The "God tools" are to be renamed and grouped by kind (environmental, ecological, genetic, astronomical).
