@@ -21,6 +21,7 @@ import { formatYear, bigNumber } from './ui/format';
 import { Vector3 } from 'three/webgpu';
 import { del, get, set } from 'idb-keyval';
 import { Music } from './audio/music';
+import { believedSpot, describeMap, knownAt } from './sim/history/worldmap';
 import type { SlotInfo, UIState } from './ui/store';
 import { GOALS, emptyRecord, evaluateGoals, type GoalRecord } from './game/goals';
 import { planFilm, shotAt, type Shot } from './game/film';
@@ -445,7 +446,103 @@ async function boot(): Promise<void> {
 
   // flat map: an equirectangular picture of the planet as it is painted right now
   let mapCells: Int32Array | null = null;
+  // ---- their map of the world (system E29): what one country knows of the world, and how wrongly it draws it
+  let believed: { key: string; known: Float32Array; share: number; shift: number } | null = null;
+  const drawBelievedOn = (cv: HTMLCanvasElement, realm: (typeof state.realms)[number]): void => {
+    const colors = scene.planet?.cellColors, ctx = cv.getContext('2d'), chart = realm.charting;
+    if (!colors || !ctx || !chart) return;
+    const W = cv.width, H = cv.height;
+    const cells = lookupFor(W, H);
+    const elev = scene.planet!.elevation, sea = state.stats?.seaLevel ?? 0, pos = grid.pos;
+    const capital = state.settlements.find((t) => t.id === realm.capital);
+    // their own country is in the middle of their map
+    const shift = capital ? grid.lon[capital.cell]! : 0;
+    const mine = state.settlements.filter((t) => t.ruined < 0 && t.nation === realm.id).slice(0, 160);
+    const touch = new Set(realm.contacts ?? []);
+    const theirs = state.settlements.filter((t) => t.ruined < 0 && t.nation !== undefined && touch.has(t.nation)).slice(0, 160);
+    const ports = mine.filter((t) => { for (let j = 0; j < grid.ncount[t.cell]!; j++) if (elev[grid.neighbors[t.cell * 6 + j]!]! <= sea) return true; return false; });
+    // what they know of each place: worked out on a coarser grid, and only when their towns or their knowledge change
+    const w = W >> 1, h = H >> 1;
+    const key = `${realm.id}|${mine.length}|${theirs.length}|${ports.length}|${chart.reach.toFixed(2)}|${chart.sea.toFixed(2)}|${chart.skill.toFixed(2)}|${w}`;
+    if (!believed || believed.key !== key) {
+      const known = new Float32Array(w * h);
+      const nearest = (list: typeof mine, x: number, y: number, z: number): number => { let best = -2; for (const t of list) { const d = pos[t.cell * 3]! * x + pos[t.cell * 3 + 1]! * y + pos[t.cell * 3 + 2]! * z; if (d > best) best = d; } return best < -1 ? Infinity : Math.acos(Math.min(1, best)); };
+      let sum = 0, weight = 0;
+      for (let y = 0; y < h; y++) {
+        const lat = (0.5 - (y + 0.5) / h) * Math.PI, cl = Math.cos(lat), sl = Math.sin(lat);
+        for (let x = 0; x < w; x++) {
+          const lon = ((x + 0.5) / w) * Math.PI * 2 - Math.PI + shift;
+          const px = cl * Math.cos(lon), pz = cl * Math.sin(lon);
+          const k = chart.skill >= 1 ? 1 : knownAt(nearest(mine, px, sl, pz), nearest(ports, px, sl, pz), nearest(theirs, px, sl, pz), chart);
+          known[y * w + x] = k;
+          sum += (k > 0.12 ? 1 : 0) * cl; weight += cl;
+        }
+      }
+      believed = { key, known, share: weight ? sum / weight : 0, shift };
+    }
+    const known = believed.known;
+    const img = ctx.createImageData(W, H);
+    const paper = [217, 201, 163], spot: [number, number, number] = [0, 0, 0];
+    const wetAt = new Uint8Array(W * H), seen = new Uint8Array(W * H);
+    // how they colour what they know: ink and a wash early, the true colours once they can print them
+    const wash = Math.min(1, chart.skill * 1.3);
+    for (let y = 0; y < H; y++) {
+      const lat = (0.5 - (y + 0.5) / H) * Math.PI, cl = Math.cos(lat), sl = Math.sin(lat);
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x, k = known[Math.min(h - 1, y >> 1) * w + Math.min(w - 1, x >> 1)]!;
+        let r = paper[0]!, g = paper[1]!, b = paper[2]!;
+        if (k > 0.12) {
+          const lon = ((x + 0.5) / W) * Math.PI * 2 - Math.PI + shift;
+          believedSpot(cl * Math.cos(lon), sl, cl * Math.sin(lon), k, chart, realm.id * 7919 + 13, spot);
+          // (which cell of the true world their map shows here)
+          const tl = Math.atan2(spot[2], spot[0]), tb = Math.asin(Math.max(-1, Math.min(1, spot[1])));
+          const tx = Math.min(W - 1, Math.max(0, Math.floor(((tl + Math.PI) / (Math.PI * 2)) * W))), ty = Math.min(H - 1, Math.max(0, Math.floor((0.5 - tb / Math.PI) * H)));
+          const c = cells[ty * W + tx]!;
+          const wet = elev[c]! <= sea;
+          wetAt[i] = wet ? 1 : 2; seen[i] = 1;
+          const strength = Math.min(1, (k - 0.12) / 0.4);
+          const tr = wet ? 150 : Math.pow(Math.min(1, colors[c * 3]!), 0.45) * 255, tg = wet ? 176 : Math.pow(Math.min(1, colors[c * 3 + 1]!), 0.45) * 255, tb2 = wet ? 186 : Math.pow(Math.min(1, colors[c * 3 + 2]!), 0.45) * 255;
+          // (an early map is one ochre for land and a pale wash for water)
+          const lr = wet ? 176 : 172 + (tr - 172) * wash, lg = wet ? 190 : 150 + (tg - 150) * wash, lb = wet ? 184 : 104 + (tb2 - 104) * wash;
+          r += (lr - r) * strength; g += (lg - g) * strength; b += (lb - b) * strength;
+        }
+        img.data[i * 4] = r; img.data[i * 4 + 1] = g; img.data[i * 4 + 2] = b; img.data[i * 4 + 3] = 255;
+      }
+    }
+    // coasts in ink, and the edge of what is known as a dotted line
+    for (let y = 0; y < H - 1; y++) for (let x = 0; x < W - 1; x++) {
+      const i = y * W + x;
+      if (seen[i] && ((seen[i + 1] && wetAt[i] !== wetAt[i + 1]) || (seen[i + W] && wetAt[i] !== wetAt[i + W]))) { img.data[i * 4] = 74; img.data[i * 4 + 1] = 52; img.data[i * 4 + 2] = 34; }
+      else if ((seen[i] !== seen[i + 1] || seen[i] !== seen[i + W]) && (x + y) % 3 === 0) { img.data[i * 4] = 128; img.data[i * 4 + 1] = 104; img.data[i * 4 + 2] = 78; }
+    }
+    ctx.putImageData(img, 0, 0);
+    const place = (cell: number): [number, number] => { let u = (grid.lon[cell]! - shift + Math.PI) / (Math.PI * 2); u -= Math.floor(u); return [u * W, (0.5 - grid.lat[cell]! / Math.PI) * H]; };
+    // towns: their own filled, those they have heard of hollow
+    ctx.lineWidth = 1;
+    for (const t of theirs) { const [x, y] = place(t.cell); ctx.strokeStyle = '#4a3422'; ctx.strokeRect(x - 1.5, y - 1.5, 3, 3); }
+    for (const t of mine) { const [x, y] = place(t.cell); ctx.fillStyle = t.id === realm.capital ? '#8a1c10' : '#4a3422'; ctx.fillRect(x - 1.5, y - 1.5, t.id === realm.capital ? 4 : 3, t.id === realm.capital ? 4 : 3); }
+    // the great animals of the sea their sailors have met, drawn where they were met (or as near as the map allows)
+    ctx.strokeStyle = '#4a3422'; ctx.fillStyle = '#4a3422'; ctx.font = 'italic 10px Georgia, serif';
+    for (const m of realm.monsters ?? []) {
+      const [x, y] = place(m.cell);
+      const s = 7 + 9 * m.size;
+      ctx.beginPath();
+      // a long back out of the water in three humps, a head at one end and a fluke at the other
+      for (let k = 0; k < 3; k++) ctx.arc(x - s + k * s, y, s * 0.5, Math.PI, 0);
+      ctx.moveTo(x + s * 1.5, y); ctx.quadraticCurveTo(x + s * 2.1, y - s * 0.9, x + s * 2.5, y - s * 0.5);
+      ctx.moveTo(x - s * 1.5, y); ctx.lineTo(x - s * 2.1, y - s * 0.6); ctx.moveTo(x - s * 1.5, y); ctx.lineTo(x - s * 2.2, y + s * 0.1);
+      ctx.stroke();
+      ctx.fillText(m.name, Math.min(W - 90, Math.max(4, x - s)), Math.min(H - 4, y + s * 0.9 + 9));
+    }
+    // the title, in a box in the corner
+    ctx.fillStyle = 'rgba(217, 201, 163, 0.88)'; ctx.fillRect(8, 8, 190, 30); ctx.strokeStyle = '#4a3422'; ctx.strokeRect(8.5, 8.5, 190, 30);
+    ctx.fillStyle = '#3a2a1c'; ctx.font = '600 12px Georgia, serif'; ctx.fillText(`The world, by ${realm.name}`, 14, 22);
+    ctx.font = '10px Georgia, serif'; ctx.fillText(`${Math.round(believed.share * 100)}% of it known to them`, 14, 34);
+    update({ mapNote: describeMap(believed.share, chart) });
+  };
   const drawMapOn = (cv: HTMLCanvasElement, bare: boolean): void => {
+    const mapRealm = !bare && state.mapOf >= 0 ? state.realms.find((r) => r.id === state.mapOf && r.ended < 0 && r.charting) : undefined;
+    if (mapRealm) { drawBelievedOn(cv, mapRealm); return; }
     const colors = scene.planet?.cellColors;
     const ctx = cv.getContext('2d');
     if (!colors || !ctx) return;
@@ -690,7 +787,9 @@ async function boot(): Promise<void> {
   actions.drawBareMap = (cv) => drawMapOn(cv, true);
   actions.mapPoint = (cell) => [(grid.lon[cell]! + Math.PI) / (Math.PI * 2), 0.5 - grid.lat[cell]! / Math.PI];
   actions.mapClick = (u, v) => {
-    scene.cam.flyTo(u * Math.PI * 2 - Math.PI, (0.5 - v) * Math.PI, Math.min(scene.cam.dist, 1.4));
+    // (on a country's own map its capital is in the middle)
+    const turn = state.mapOf >= 0 && believed ? believed.shift : 0;
+    scene.cam.flyTo(u * Math.PI * 2 - Math.PI + turn, (0.5 - v) * Math.PI, Math.min(scene.cam.dist, 1.4));
     scene.cam.idle = 0;
   };
 

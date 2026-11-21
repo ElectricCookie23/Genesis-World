@@ -18,9 +18,10 @@ import { LEXICON, SAYINGS } from './history/syntax';
 import { languageList, scriptInfo } from './history/tongues';
 import { galleryList } from './history/gallery';
 import { describeMusic, lineOf, tradition } from './history/music';
+import { chartingOf } from './history/worldmap';
 import { bodyFrom, type Body } from './history/script';
 import { compound } from './history/language';
-import { WEB, wayFor } from './history/tech';
+import { SLOT_INDEX, WEB, wayFor } from './history/tech';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 const TICK_HZ = 20;
@@ -268,6 +269,17 @@ function shownSettlements(s: Simulation): Simulation['civ']['settlements'] {
   return all.filter((t) => t.ruined < 0 || skip-- <= 0 || kept.has(t.id));
 }
 
+/**
+ * The great sea animals a nation's sailors have met (system E29): the largest swimmers alive whose home waters
+ * lie within reach of its ships. They are what its mapmakers draw in the empty sea.
+ */
+function monstersOf(s: Simulation, n: Simulation['civ']['h']['nations'][number], sea: number, giants: { id: number; name: string; cell: number; size: number }[]): { species: number; name: string; cell: number; size: number }[] {
+  const cap = s.civ.settlements[n.capital];
+  if (!cap || sea <= 0) return [];
+  const p = s.grid.pos, c = cap.cell, far = Math.cos(Math.min(3.1, sea * 1.4 + 0.1));
+  return giants.filter((g) => p[c * 3]! * p[g.cell * 3]! + p[c * 3 + 1]! * p[g.cell * 3 + 1]! + p[c * 3 + 2]! * p[g.cell * 3 + 2]! >= far).slice(0, 3).map((g) => ({ species: g.id, name: g.name, cell: g.cell, size: g.size }));
+}
+
 /** The music of a nation's people in its present age (system E27), once any of its kind has made music. */
 function musicOf(s: Simulation, n: Simulation['civ']['h']['nations'][number]): { tradition: ReturnType<typeof tradition>; about: string } | undefined {
   const h = s.civ.h, g = s.creatures.species[n.species]?.ref, c = h.cultures[n.culture];
@@ -337,12 +349,16 @@ function nationList(s: Simulation): NationInfo[] {
   // the living, and the forty most lately ended: a long history leaves thousands behind
   const ended = h.nations.filter((n) => n.ended >= 0);
   const keep = new Set(ended.slice(-40).map((n) => n.id));
+  // the dozen largest swimmers alive, and where each lives: what sailors meet (system E29)
+  const giants = s.creatures.species.filter((x) => x.extinctYear < 0 && x.name && (x.ref[G.Water]! > 0.6 || (x.ref[G.LimbType]! >= 0.25 && x.ref[G.LimbType]! < 0.5)) && x.ref[G.Size]! > 0.55 && s.regions.centre[x.home] !== undefined)
+    .sort((a, b) => b.ref[G.Size]! - a.ref[G.Size]!).slice(0, 12).map((x) => ({ id: x.id, name: x.name, cell: s.regions.centre[x.home]!, size: x.ref[G.Size]! }));
+  const knows = (n: (typeof h.nations)[number]) => (slot: string): boolean => { const i = SLOT_INDEX.get(slot); return i !== undefined && n.know.way[i]! >= 0; };
   return h.nations.filter((n) => n.ended < 0 || keep.has(n.id)).map((n) => {
     const ruler = h.people[n.ruler], house = h.dynasties[n.dynasty], culture = h.cultures[n.culture]!, cal = s.civ.calendarOf(n);
     return {
       id: n.id, name: n.name, species: n.species, capital: n.capital, founded: n.founded, ended: n.ended, parent: n.parent, government: n.government,
       stability: n.stability, tech: n.tech, era: n.era, eraName: s.civ.eraName(n), eraOwn: s.civ.eraOwnName(n), earth: earthNote(n.era), hue: n.hue, pop: n.pop, towns: n.towns,
-      culture: culture.name, language: h.languages[culture.language]!.name, music: musicOf(s, n), script: scriptInfo(h, n.script, n.species, s.simYear, bodyOf(s)), signs: n.signs ?? (s.civ.settlements[n.capital] ? ['land', s.civ.settlements[n.capital]!.modifier || s.civ.settlements[n.capital]!.head] : undefined), ruler: ruler && ruler.died < 0 ? ruler.name : '', rulerSince: ruler && ruler.died < 0 ? ruler.reignFrom : -1,
+      culture: culture.name, language: h.languages[culture.language]!.name, music: musicOf(s, n), charting: chartingOf(knows(n), n.tech), contacts: n.contacts.filter((id) => h.nations[id] && h.nations[id]!.ended < 0), monsters: monstersOf(s, n, chartingOf(knows(n), n.tech).sea, giants), script: scriptInfo(h, n.script, n.species, s.simYear, bodyOf(s)), signs: n.signs ?? (s.civ.settlements[n.capital] ? ['land', s.civ.settlements[n.capital]!.modifier || s.civ.settlements[n.capital]!.head] : undefined), ruler: ruler && ruler.died < 0 ? ruler.name : '', rulerSince: ruler && ruler.died < 0 ? ruler.reignFrom : -1,
       house: house ? house.name : '', houseReigns: house ? house.reigns : 0, houseId: house ? house.id : -1, eventId: n.eventId, ...fashionSource(s, n), networks: networksOf(s, n.id), golden: n.golden ? n.golden.own : '', goldenSince: n.golden ? n.golden.since : -1, goldenWorks: n.golden ? n.golden.works : 0,
       calendar: cal ? cal.name : '', calendarOwn: cal ? cal.own : '', calendarEpoch: cal ? cal.epoch : 0, calendarEvent: cal ? cal.eventId : -1,
     };

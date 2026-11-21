@@ -456,16 +456,29 @@ export function FlatMap() {
     draw();
     const t = window.setInterval(draw, 1500);
     return () => window.clearInterval(t);
-  }, [s.overlay]);
+  }, [s.overlay, s.mapOf]);
+  // the countries whose own map can be shown: the living ones that have begun to farm, largest first
+  const makers = s.realms.filter((r) => r.ended < 0 && r.charting).sort((a, b) => b.pop - a.pop).slice(0, 40);
+  const whose = makers.find((r) => r.id === s.mapOf);
   return (
     <div class={`${css.panel} ${css.side} ${css.wide}`} style={{ bottom: 'auto' }}>
-      <div class={css.head}><h2>Map of the world</h2><span class={css.sub}>click to fly there</span><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
+      <div class={css.head}><h2>{whose ? `The world as ${whose.name} believes it to be` : 'Map of the world'}</h2><span class={css.sub}>click to fly there</span><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
       <div style={{ padding: '0 14px 14px' }}>
+        {makers.length > 0 && (
+          <div class={css.sub} style={{ margin: '0 0 8px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>Show</span>
+            <select value={String(whose ? whose.id : -1)} onChange={(e) => update({ mapOf: Number((e.target as HTMLSelectElement).value), mapNote: '' })} style={{ background: '#1b1f2a', color: '#ece7db', border: '1px solid #ffffff2a', borderRadius: '5px', padding: '3px 6px', font: '400 12.5px system-ui, sans-serif' }}>
+              <option value="-1">the true world</option>
+              {makers.map((r) => <option key={r.id} value={String(r.id)}>the world as {r.name} believes it to be ({r.eraName})</option>)}
+            </select>
+          </div>
+        )}
         <div style={{ position: 'relative' }}>
           <canvas ref={ref} width={720} height={360} style={{ width: '100%', borderRadius: '8px', cursor: 'crosshair', display: 'block' }}
             onClick={(e) => { const r = (e.target as HTMLCanvasElement).getBoundingClientRect(); actions.mapClick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); }} />
-          <MigrationArrows />
+          {!whose && <MigrationArrows />}
         </div>
+        {whose && <div class={css.when} style={{ color: '#ece7db', margin: '8px 0 0' }}>{s.mapNote} Their own country is in the middle. Filled marks are their towns, hollow ones towns they have heard of; blank paper is what they have never seen{(whose.monsters ?? []).length ? `; in the sea are the great animals their sailors have met (${(whose.monsters ?? []).map((m) => m.name).join(', ')})` : ''}.</div>}
         {recentMigrations(s.events).length > 0 && <div class={css.sub} style={{ margin: '6px 0 0' }}>Arrows: peoples on the move (<span style={{ color: MOVE_COLOUR.ice }}>driven by ice</span>, <span style={{ color: MOVE_COLOUR.sea }}>by the sea</span>, <span style={{ color: MOVE_COLOUR.famine }}>by hunger</span>). Click one to see why.</div>}
       </div>
     </div>

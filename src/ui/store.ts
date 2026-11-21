@@ -116,6 +116,9 @@ export interface UIState {
   painting: number;
   /** The stories told about old bones, when they have arrived (system E28). */
   legends: LegendInfo[] | null;
+  /** Whose map of the world the map panel shows (system E29): a nation's id, or -1 for the true world; and that map in a sentence. */
+  mapOf: number;
+  mapNote: string;
   /** The Rosetta (system E23): when on, writing in the peoples' own scripts is shown with what each sign means. */
   rosetta: boolean;
   timeline: TimelinePoint[];
@@ -200,6 +203,8 @@ export const state: UIState = {
   languages: null,
   tongue: -1,
   rosetta: true,
+  mapOf: -1,
+  mapNote: '',
   legends: null,
   gallery: null,
   painting: -1,

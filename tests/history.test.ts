@@ -1038,6 +1038,7 @@ describe('golden ages (E10)', () => {
 import { NETWORKS, WONDER_KINDS } from '../src/sim/history/model';
 import { ART_STYLES, SUBJECTS, against, compose, describePainting, styleOfEra, subjectOf, type Movement } from '../src/sim/history/art';
 import { galleryList } from '../src/sim/history/gallery';
+import { believedSpot, chartingOf, describeMap, knownAt, mapError, type Charting } from '../src/sim/history/worldmap';
 import { LEGEND_KINDS, legendKind, legendName, tale, trueAnimal } from '../src/sim/history/legend';
 import { describeMusic, lineOf, musicDistance, phrase, tradition, type Players, type Tradition } from '../src/sim/history/music';
 import { describeScript, glyphDistance, glyphOf, glyphPath, picture, wearOf, type Body, type Glyph, type Script } from '../src/sim/history/script';
@@ -2021,5 +2022,89 @@ describe('stories told about old bones (E28)', () => {
     }
     expect(stories).toBeGreaterThan(6);
     expect(solved).toBeGreaterThan(0);
+  });
+});
+
+describe('their map of the world (E29)', () => {
+  const knowing = (...slots: string[]) => (slot: string): boolean => slots.includes(slot);
+  const camps = chartingOf(knowing('boat'), 0.26);
+  const sails = chartingOf(knowing('boat', 'sail', 'road1', 'measure', 'sky2', 'math', 'ship1', 'compass'), 0.6);
+  const presses = chartingOf(knowing('boat', 'sail', 'road1', 'measure', 'sky2', 'math', 'ship1', 'compass', 'ship2', 'clock', 'map', 'cav', 'telescope'), 0.75);
+  const orbit = chartingOf(knowing(), 1.12);
+
+  it('early maps are visibly wrong and improve over eras', () => {
+    // each age walks further, sails further and measures better than the last
+    for (const [a, b] of [[camps, sails], [sails, presses], [presses, orbit]] as const) {
+      expect(b.reach).toBeGreaterThan(a.reach);
+      expect(b.sea).toBeGreaterThan(a.sea);
+      expect(b.skill).toBeGreaterThan(a.skill);
+    }
+    expect(orbit.skill).toBe(1);
+    // a world of sample places at every distance from a single town at (1, 0, 0), with a harbour
+    const places: [number, number, number][] = [];
+    for (let i = 0; i < 400; i++) { const z = 1 - (2 * (i + 0.5)) / 400, r = Math.sqrt(1 - z * z), a = i * 2.39996; places.push([r * Math.cos(a), z, r * Math.sin(a)]); }
+    const survey = (c: Charting) => {
+      let seen = 0, wrong = 0;
+      const out: [number, number, number] = [0, 0, 0];
+      for (const p of places) {
+        const d = Math.acos(Math.max(-1, Math.min(1, p[0])));
+        const k = knownAt(d, d, Infinity, c);
+        if (k > 0.12) {
+          seen++;
+          believedSpot(p[0], p[1], p[2], k, c, 4242, out);
+          expect(Math.hypot(...out)).toBeCloseTo(1, 6);
+          wrong += Math.acos(Math.max(-1, Math.min(1, out[0] * p[0] + out[1] * p[1] + out[2] * p[2])));
+        }
+      }
+      return { share: seen / places.length, error: seen ? wrong / seen : 0 };
+    };
+    const a = survey(camps), b = survey(sails), c = survey(presses), d = survey(orbit);
+    // more of the world is on each later map
+    expect(a.share).toBeLessThan(0.02);
+    expect(b.share).toBeGreaterThan(a.share * 3);
+    expect(c.share).toBeGreaterThan(b.share * 1.5);
+    expect(d.share).toBe(1);
+    // and what is on it is put in a truer place: degrees wrong at first, nothing wrong at last
+    expect(a.error).toBeGreaterThan(0.02);
+    expect(b.error).toBeLessThan(a.error);
+    expect(c.error).toBeLessThan(b.error * 0.7);
+    expect(d.error).toBeLessThan(1e-6);
+    // on one map, what is only heard of is drawn worse than what has been walked over
+    expect(mapError(0.3, sails)).toBeGreaterThan(mapError(1, sails) * 2);
+    expect(mapError(0.3, orbit)).toBe(0);
+    // the warp is smooth: two places close together are moved nearly alike, so coasts bend rather than scatter
+    const p1 = believedSpot(0.6, 0.64, 0.48, 0.5, camps, 7), p2 = believedSpot(0.6002, 0.6398, 0.48, 0.5, camps, 7);
+    expect(Math.hypot(p1[0] - p2[0], p1[1] - p2[1], p1[2] - p2[2])).toBeLessThan(0.002);
+    // and it is the country's own: another country's map is wrong differently
+    expect(believedSpot(0.6, 0.64, 0.48, 0.5, camps, 7)).not.toEqual(believedSpot(0.6, 0.64, 0.48, 0.5, camps, 8));
+  });
+
+  it('a country knows its own ground, the coasts its ships reach, and what it has heard of its neighbours', () => {
+    expect(knownAt(0, Infinity, Infinity, camps)).toBe(1);
+    expect(knownAt(camps.reach * 3, Infinity, Infinity, camps)).toBe(0);
+    // seen from the water: known, but less well than walked over
+    const coast = knownAt(Infinity, sails.sea * 0.9, Infinity, sails);
+    expect(coast).toBeGreaterThan(0.5);
+    expect(coast).toBeLessThan(1);
+    expect(knownAt(Infinity, sails.sea * 2, Infinity, sails)).toBe(0);
+    // heard described: known least well
+    const heard = knownAt(Infinity, Infinity, sails.reach * 0.5, sails);
+    expect(heard).toBeGreaterThan(0.3);
+    expect(heard).toBeLessThan(coast);
+    expect(new Set([describeMap(0.05, camps), describeMap(0.35, sails), describeMap(0.7, presses), describeMap(1, orbit)]).size).toBe(4);
+    expect(describeMap(1, orbit)).toMatch(/whole world.*it is right/);
+  });
+
+  it('in five histories the mapmakers of every living country have something to go on, and the most learned the most', () => {
+    const runs = fiveHistories();
+    for (const { sim } of runs) {
+      const h = sim.civ.h;
+      const living = h.nations.filter((n) => n.ended < 0);
+      const charts = living.map((n) => ({ n, c: chartingOf((slot) => { const i = SLOT_INDEX.get(slot); return i !== undefined && n.know.way[i]! >= 0; }, n.tech) }));
+      for (const { c } of charts) { expect(c.reach).toBeGreaterThan(0); expect(c.skill).toBeGreaterThanOrEqual(0); expect(c.skill).toBeLessThanOrEqual(1); }
+      if (charts.length < 2) continue;
+      const top = charts.reduce((a, b) => (b.n.tech > a.n.tech ? b : a)), low = charts.reduce((a, b) => (b.n.tech < a.n.tech ? b : a));
+      if (top.n.tech - low.n.tech > 0.15) expect(top.c.skill).toBeGreaterThanOrEqual(low.c.skill);
+    }
   });
 });

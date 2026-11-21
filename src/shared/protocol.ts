@@ -1,4 +1,5 @@
 import type { Tradition } from '../sim/history/music';
+import type { Charting } from '../sim/history/worldmap';
 // Message protocol between the simulation worker and the main thread.
 import type { SimEvent } from '../sim/events';
 import type { CosmosInfo } from '../sim/cosmos';
@@ -292,6 +293,8 @@ export interface NationInfo {
   ruler: string; rulerSince: number; house: string; houseReigns: number;
   /** Id of the ruling house, or -1. */
   houseId: number;
+  /** What its mapmakers have to go on (system E29), the countries it is in touch with (their ids), and the great sea animals its sailors have met (a species id, its name, where it lives and its size gene). */
+  charting?: Charting; contacts?: number[]; monsters?: { species: number; name: string; cell: number; size: number }[];
   /** Its people's music in its present age (system E27): everything needed to play it, and the music in a sentence. Absent before a people makes music. */
   music?: { tradition: Tradition; about: string };
   /** The script it writes in, if it writes, and the meanings its name is written with (system E23). */
