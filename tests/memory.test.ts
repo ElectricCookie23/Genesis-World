@@ -233,4 +233,25 @@ describe('the record', () => {
     const info = sim.forecast.info();
     expect(info.reckoned[0] + info.reckoned[1] + info.guessed[0] + info.guessed[1]).toBe(all.filter((f) => f.outcome !== 'open').length);
   });
+
+  // (last in this file: it adds a vault to the shared world)
+  it('E100 with E54: a vault sealed in a country that kept its own history holds that history, in its historian\'s hand', () => {
+    const h = sim.civ.h;
+    let done = 0;
+    for (const n of h.nations.filter((x) => x.ended < 0)) {
+      const kept = records(sim, n.id);
+      const told = kept ? kept.entries.filter((x) => x.record) : [];
+      if (!kept || told.length < 3) continue;
+      const cap = sim.civ.settlements[n.capital]!;
+      const a = sim.legacy.seal(sim, cap.species, cap.id, cap.eventId, 'vault');
+      expect(a.historian).toBe(kept.historian);
+      expect(a.lines.length).toBeGreaterThanOrEqual(3);
+      expect(a.lines.length).toBeLessThanOrEqual(9);
+      // every line is an entry of their own record, word for word, and they are in order of time
+      for (const line of a.lines) expect(told.some((x) => line.endsWith(`${x.record!.title}. ${x.record!.text}`)), line.slice(0, 80)).toBe(true);
+      expect(sim.events.events[a.eventId]!.type).toBe('archive');
+      if (++done >= 2) break;
+    }
+    expect(done).toBeGreaterThan(0);
+  });
 });

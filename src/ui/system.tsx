@@ -294,6 +294,7 @@ export function System() {
                 <div class={css.sub}>sealed {formatYear(a.year)}{a.foundBy >= 0 ? `; opened ${formatYear(a.foundYear)} by a later people` : '; no one has found it'}</div>
                 <button class={css.link} onClick={() => setOpen(open === a.id ? -1 : a.id)}>{open === a.id ? 'close it' : 'open it'}</button>
                 {a.foundEvent >= 0 && <button class={css.link} onClick={() => update({ whyEvent: a.foundEvent, panel: 'none' })}>who found it?</button>}
+                {open === a.id && a.historian && <p class={css.sub} style={{ margin: '5px 0 0', fontStyle: 'italic' }}>As {a.historian} set it down. This is their own account, not the plain truth: what they won is enlarged and what shamed them is left out.</p>}
                 {open === a.id && a.lines.map((line, i) => <p key={i} class={css.sub} style={{ margin: '5px 0 0' }}>{line}</p>)}
               </div>
             ))}

@@ -12,6 +12,7 @@ import type { RNG } from './rng';
 import type { Simulation } from './simulation';
 import type { SimEvent } from './events';
 import { G } from './genetics';
+import { records } from './memory';
 
 /** A message sent to the stars. `glyphs` are numbers a picture of each sign is drawn from; `text` is what it says. */
 export interface StarMessage {
@@ -40,6 +41,8 @@ export interface Archive {
   people: string;
   /** Their history as they told it. */
   lines: string[];
+  /** Whose hand it is in, where a country of theirs kept a record of its own (system E54): its historian's name. */
+  historian?: string;
   eventId: number;
   /** The later people who found it, and when; -1 until then. */
   foundBy: number;
@@ -122,6 +125,22 @@ export class Legacy {
       const when = ago < 2 ? 'At the end' : ago < 2000 ? `${ago.toLocaleString('en-US')} years before the end` : `${(Math.round(ago / 100) / 10).toLocaleString('en-US')} thousand years before the end`;
       return `${when}: ${e.title}. ${e.description}`;
     });
+    // Where a country of theirs kept its own history (system E54), that is what goes into the ground: its historians'
+    // account, with everything they enlarged, slanted or left out, and not the plain truth of the world's record.
+    let historian: string | undefined;
+    const kept = st.nation >= 0 ? records(sim, st.nation) : null;
+    const told = kept ? kept.entries.filter((x) => x.record) : [];
+    if (kept && told.length >= 3) {
+      const weight = (id: number) => sim.events.events[id]?.importance ?? 1;
+      const few = [...told].sort((a, b) => weight(b.eventId) - weight(a.eventId) || a.year - b.year).slice(0, 9).sort((a, b) => a.year - b.year);
+      lines.length = 0;
+      for (const x of few) {
+        const ago = Math.round(sim.simYear - x.year);
+        const when = ago < 2 ? 'At the end' : ago < 2000 ? `${ago.toLocaleString('en-US')} years before the end` : `${(Math.round(ago / 100) / 10).toLocaleString('en-US')} thousand years before the end`;
+        lines.push(`${when}: ${x.record!.title}. ${x.record!.text}`);
+      }
+      historian = kept.historian;
+    }
     if (!lines.length) lines.push('We were here. We built, and we kept count of the years. That is all there was time to write.');
     const where = kind === 'orbital monument' ? `above ${st.name}` : kind === 'vault' ? `under ${st.name}` : `in the hills near ${st.name}`;
     const ev = sim.emit({
@@ -134,6 +153,7 @@ export class Legacy {
       causes: [cause, st.eventId].filter((x) => x >= 0), importance: 2, speciesIds: [species], data: { archive: this.archives.length },
     });
     const archive: Archive = { id: this.archives.length, year: sim.simYear, kind, place: st.name, cell: st.cell, species, people, lines, eventId: ev.id, foundBy: -1, foundYear: -1, foundEvent: -1 };
+    if (historian) archive.historian = historian;
     this.archives.push(archive);
     return archive;
   }
