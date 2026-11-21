@@ -195,6 +195,8 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 
 100 systems on top of the 150 features. Values: not started, in progress, done, simplified (with a note). Every system writes to the cause graph, is deterministic from the seed, has a cheaper path on phones and at least one headless test (`tests/history.test.ts` unless noted).
 
+**Checked at the size of the real page (2026-11-21).** The figures in the rows below were measured on small test worlds (5 to 20 countries). The page's world has ten times as many, and running sections 3 and 4 there (`scripts/checks/section4live.cjs` on the built page, `scripts/scale.ts` in node) changed several rules: only notable countries' doings reach the chronicle; in a world of more than forty countries the lesser ones keep only their turning points; revolutions, alliances, world wars and plagues are rarer; a side in a war between alliances has at most six countries; a town's people can no longer be counted as fewer than none; and the copies of the world kept for going back are budgeted. See HANDOFF.md ("section 4 is complete; where to pick up") and DECISIONS 190 to 194. In a 100-country world watched for 3,000 years: about 10,000 events, 80 of them a century for the chronicle, 2 world wars.
+
 ### Architecture additions (built first)
 
 | Part | Status | Notes |

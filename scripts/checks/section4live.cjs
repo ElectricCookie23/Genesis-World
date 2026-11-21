@@ -24,6 +24,12 @@ const { open } = require('./h.cjs');
   }
   console.log('after watching', JSON.stringify(await stat()));
   await h.page.evaluate(() => __genesis.actions.setSpeed(0));
+  // how long the page's own thread takes over one list of towns and countries, and how large that list is
+  console.log('page work', JSON.stringify(await h.page.evaluate(() => {
+    const g = __genesis, s = g.state;
+    const t0 = performance.now(); g.scene.setSettlements(s.settlements, s.realms); const t1 = performance.now(); g.update({ settlements: s.settlements.slice() }); const t2 = performance.now();
+    return { setSettlementsMs: Math.round(t1 - t0), updateMs: Math.round(t2 - t1), settlementsKB: Math.round(JSON.stringify(s.settlements).length / 1000), realmsKB: Math.round(JSON.stringify(s.realms).length / 1000) };
+  })));
   const shot = async (name) => { await h.page.mouse.move(40, 720); await h.page.waitForTimeout(400); await h.page.screenshot({ path: `${out}/live-${name}.png`, timeout: 120000 }).catch((e) => console.log('shot failed', name, String(e).slice(0, 60))); };
   const views = [
     ['wars', 'openWars', () => ({ wars: (__genesis.state.wars ?? []).length, battles: (__genesis.state.wars ?? []).reduce((a, w) => a + w.battles.length, 0) })],

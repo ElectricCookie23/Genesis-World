@@ -559,6 +559,8 @@ export type ToWorker =
   | { type: 'requestLegends' }
   | { type: 'requestMarket' }
   | { type: 'requestWars' }
+  /** The page has taken in the last list of towns and countries, and is ready for another. */
+  | { type: 'got' }
   | { type: 'requestGreatWars' }
   | { type: 'requestPlagues' }
   | { type: 'requestDiplomacy' }

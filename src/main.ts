@@ -1302,6 +1302,8 @@ async function boot(): Promise<void> {
         // (armies in the field show as camp fires on the night side: system E33)
         scene.civ?.setCamps(msg.armies ?? []);
         update({ settlements: msg.settlements, realms: msg.nations ?? state.realms });
+        // (tell the worker this list is in: it sends the next only then, so lists cannot pile up behind a busy page)
+        send({ type: 'got' });
         break;
       case 'timeline':
         update({ timeline: msg.points });

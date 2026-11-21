@@ -37,6 +37,10 @@ let speedIndex = 0;
 let lastCells = 0;
 let lastStats = 0;
 let lastSpecies = 0;
+// The lists of species, towns and countries are large in a late world (a thousand towns, two hundred countries). If
+// the page takes longer to take one in than the worker takes to make the next, they queue without limit (it reached
+// gigabytes). So the next is not sent until the page says it has the last (or eight seconds have gone by).
+let pageHas = true, sentLists = 0;
 let lastCosmos = 0;
 let tickMs = 0;
 let cellsRequested = false;
@@ -550,10 +554,11 @@ function tick(): void {
     post({ type: 'stats', stats: stats(s) });
     lastStats = now;
   }
-  if (now - lastSpecies > 700 && s.stage === 'animals') {
+  if (now - lastSpecies > 700 && s.stage === 'animals' && (pageHas || now - sentLists > 8000)) {
     lastSpecies = now;
     post({ type: 'species', species: speciesList(s) });
     if (s.civ.settlements.length) {
+      pageHas = false; sentLists = now;
       const joins = linksByTown(s);
       const great = wondersByTown(s);
       post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, lore: t.lore, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, farms: t.farms, monuments: t.monuments ?? 0, wonders: great.get(t.id), means: t.modifier ? `${t.modifier} ${t.head}` : t.head, names: t.names && t.names.length > 1 ? t.names : undefined, scars: t.scars && t.scars.length ? t.scars.flatMap((x) => [x.year, CALAMITIES.indexOf(x.kind), x.share, REBUILDS.indexOf(x.rebuilt), x.toward ?? -1]) : undefined, codes: codeYears(s, t.nation), cordon: t.cordon ? { year: t.cordon.year, name: (s.civ.h.plagues ?? []).find((p) => p.id === t.cordon!.plague)?.name ?? 'a sickness' } : undefined, walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas, links: joins.get(t.id), dam: t.dam !== undefined, mine: t.mine !== undefined, layers: (t.strata ? t.strata.length : 1) + (t.over !== undefined ? 1 : 0), peak: t.peak, feral: t.feral !== undefined ? s.creatures.species[t.feral]?.name ?? '' : '', nesting: t.nesting !== undefined ? s.creatures.species[t.nesting]?.name ?? '' : '' })) , nations: nationList(s), armies: (s.civ.h.wars ?? []).filter((w) => w.ended < 0).map((w) => { const t = s.civ.settlements[w.route[Math.min(w.at, w.route.length - 1)]!]; return { cell: t ? t.cell : -1, size: w.army[0].size }; }).filter((a) => a.cell >= 0) });
@@ -710,6 +715,9 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
             holds: !!g.order && g.order.until < 0,
           })) });
         }
+        break;
+      case 'got':
+        pageHas = true;
         break;
       case 'requestWars':
         if (sim) { const s = sim, h = s.civ.h; post({ type: 'wars', list: (h.wars ?? []).slice(-30).reverse().map((w) => ({ id: w.id, attacker: h.nations[w.a]?.name ?? '', defender: h.nations[w.b]?.name ?? '', year: w.year, ended: w.ended, outcome: w.outcome, eventId: w.eventId, peaceEvent: w.peaceEvent, battles: w.battles.map((b) => { const t = s.civ.settlements[b.settlement]; return { year: b.year, cell: t ? t.cell : -1, town: t ? t.name : '', kind: b.kind, winner: b.winner, sizes: b.sizes, decided: b.decided, taken: b.taken, eventId: b.eventId, text: s.events.events[b.eventId]?.description ?? '' }; }) })) }); }
