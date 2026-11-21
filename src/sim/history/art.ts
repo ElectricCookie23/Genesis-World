@@ -20,8 +20,8 @@ export type Subject = (typeof SUBJECTS)[number];
 
 /** What kind of picture an event makes, or null if no one would paint it. */
 export function subjectOf(type: string): Subject | null {
-  if (/^(war|conquest|civil-war|nuclear-war)$/.test(type)) return 'battle';
-  if (/^(dynasty|marriage|nation|union)$/.test(type)) return 'ruler';
+  if (/^(war|conquest|civil-war|nuclear-war|revolution)$/.test(type)) return 'battle';
+  if (/^(dynasty|marriage|nation|union|independence)$/.test(type)) return 'ruler';
   if (/^(comet|eclipse|impact|supernova|aurora)$/.test(type)) return 'sky';
   if (/city-fire|wildfire/.test(type)) return 'fire';
   if (/city-flood|tsunami|hurricane|flood/.test(type)) return 'flood';
@@ -29,7 +29,7 @@ export function subjectOf(type: string): Subject | null {
   if (/erupt|volcan/.test(type)) return 'ash';
   if (/^(wonder|monument)$/.test(type)) return 'wonder';
   if (/^(settlement|era|network|building-law|script|calendar|language)$/.test(type)) return 'town';
-  if (/^(migration|trade|contact)$/.test(type)) return 'voyage';
+  if (/^(migration|trade|contact|colony)$/.test(type)) return 'voyage';
   if (/plague/.test(type)) return 'plague';
   if (/^(golden-age|landscape|invention|tamed)$/.test(type)) return 'harvest';
   if (/^(story|music|painting)$/.test(type)) return 'hunt';

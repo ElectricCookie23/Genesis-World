@@ -58,6 +58,8 @@ export interface War {
   outcome: '' | 'attacker' | 'defender' | 'stalemate';
   /** Towns that changed hands in it. */
   taken: number[];
+  /** For a war a mother country fights to keep a colony (system E36): the colony's id. */
+  independence?: number;
 }
 
 /** The ground a clash is fought on, as far as it matters: how much it favours whoever holds it (0 open plain, 1 a hill town behind a river), and the walls the town has (0 none). */

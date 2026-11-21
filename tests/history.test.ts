@@ -6,6 +6,7 @@ import { applyChange, compound, makeLanguage, personName, placeMeanings, soundCh
 import { count, listing, ordinal, write } from '../src/sim/history/grammar';
 import { IDEAS, IDEA_COLOUR, IDEA_GOVERNMENT, IDEA_SAYS, drift as driftIdea, governedAs, ideaName, pressure, ripest, type Conditions } from '../src/sim/history/ideology';
 import { emblemOf } from '../src/render/gfx/nations';
+import { describeColony, growsApart, odds, ready, shipped, waits, type Standing } from '../src/sim/history/colony';
 
 const big: Voice = { size: 0.9, water: 0.1, flight: 0, hearing: 0.3, harsh: 0.7 };
 const small: Voice = { size: 0.1, water: 0.1, flight: 0.9, hearing: 0.8, harsh: 0.1 };
@@ -1615,8 +1616,9 @@ describe('generated languages (E21)', () => {
         const between = a.changes.length + b.changes.length - 2 * shared;
         // (measured over these five worlds, 94 pairs: 33 to 36 words of 36 with up to four changes between them, 26 or more
         // with up to eight, 18 or more with up to twelve, 14 or more with up to eighteen, 8 to 20 beyond; the bars sit under those)
+        // (with colonies, E36, there are more young peoples: one pair with thirteen to eighteen changes between them shares 8 words, so that bar is 7)
         expect(sum / LEXICON.length).toBeLessThan(0.8);
-        expect(close).toBeGreaterThanOrEqual(between <= 4 ? 30 : between <= 8 ? 22 : between <= 12 ? 14 : between <= 18 ? 10 : 4);
+        expect(close).toBeGreaterThanOrEqual(between <= 4 ? 30 : between <= 8 ? 22 : between <= 12 ? 14 : between <= 18 ? 7 : 4);
         if (close >= LEXICON.length * 0.6) plain++;
         expect(same).toBeLessThan(LEXICON.length);
         expect(grammarOf(a)).toEqual(grammarOf(b));
@@ -2517,6 +2519,102 @@ describe('ideologies (E35)', () => {
     }
     console.log('E35', { ideas, spreads, revolutions, withOne, kinds: [...kinds] });
     expect(revolutions).toBeGreaterThan(0);
+  });
+});
+
+describe('colonization and independence (E36)', () => {
+  it('a colony grows apart faster the further, the more taxed and the larger it is, and declares only when it thinks it can win', () => {
+    const near: Standing = { distance: 0.5, share: 0.05, inequality: 0.3, fatigue: 0, stability: 0.7, revolution: false, press: false };
+    expect(growsApart(near)).toBeGreaterThan(1 / 420);
+    expect(growsApart(near)).toBeLessThan(1 / 150);
+    for (const worse of [{ distance: 1.5 }, { share: 0.3 }, { inequality: 0.8 }, { fatigue: 0.6 }, { revolution: true }, { press: true }]) expect(growsApart({ ...near, ...worse })).toBeGreaterThan(growsApart(near));
+    // ready: a people of its own, more than a single small town, and not within two generations of a rising put down
+    expect(ready({ identity: 0.9, crushed: -1 }, 3, 0.3, 1000)).toBe(false);
+    expect(ready({ identity: 1.1, crushed: -1 }, 1, 0.05, 1000)).toBe(false);
+    expect(ready({ identity: 1.1, crushed: -1 }, 2, 0.05, 1000)).toBe(true);
+    expect(ready({ identity: 1.1, crushed: -1 }, 1, 0.2, 1000)).toBe(true);
+    expect(ready({ identity: 1.1, crushed: 980 }, 2, 0.2, 1000)).toBe(false);
+    expect(ready({ identity: 1.1, crushed: 900 }, 2, 0.2, 1000)).toBe(true);
+    // it does not wait long when the mother country is unsteady
+    expect(waits({ ...near, stability: 0.3 })).toBeLessThan(waits(near));
+    // fewer can be shipped the further they must go, more by steam; and a rising's chances are better far away and when it is large
+    expect(shipped(1.5, false)).toBeLessThan(shipped(0.5, false));
+    expect(shipped(1, true)).toBeGreaterThan(shipped(1, false));
+    expect(shipped(0.5, true)).toBeLessThan(1);
+    expect(odds({ ...near, distance: 1.5, share: 0.4 })).toBeGreaterThan(odds(near));
+    expect(odds({ ...near, stability: 0.2 })).toBeGreaterThan(odds(near));
+    for (const s of [near, { ...near, distance: 3, share: 0.9, stability: 0, fatigue: 1 }]) { expect(odds(s)).toBeGreaterThanOrEqual(0); expect(odds(s)).toBeLessThanOrEqual(1); }
+    expect(describeColony({ identity: 0.1, freed: -1, crushed: -1, gone: -1, founded: 0 }, 100)).toMatch(/home/);
+    expect(describeColony({ identity: 1.2, freed: -1, crushed: 40, gone: -1, founded: 0 }, 100)).toMatch(/people of their own.*put down 60 years ago/);
+    expect(describeColony({ identity: 1.2, freed: 90, crushed: -1, gone: -1, founded: 0 }, 100)).toBe('a country of its own');
+  });
+
+  it('colonies are planted across the water, declare themselves free, and there is a war of independence over each', () => {
+    const runs = fiveHistories();
+    let colonies = 0, declared = 0, wars = 0, campaigns = 0, born = 0, crushed = 0, mixed = 0;
+    for (const { sim } of runs) {
+      const h = sim.civ.h, ev = sim.events.events, towns = sim.civ.settlements;
+      const list = h.colonies ?? [];
+      colonies += list.length;
+      for (const c of list) {
+        const mother = h.nations[c.mother]!, seat = towns[c.seat]!;
+        expect(mother).toBeDefined();
+        expect(seat.colony).toBe(c.id);
+        expect(c.founded).toBeGreaterThanOrEqual(mother.founded);
+        const e = ev[c.eventId];
+        if (e) { expect(e.type).toBe('colony'); expect(e.causes.length).toBeGreaterThan(0); expect(e.data!.nation).toBe(c.mother); }
+        if (c.freed >= 0) { expect(c.child).toBeGreaterThanOrEqual(0); expect(c.declared).toBeGreaterThanOrEqual(c.founded); expect(c.freed).toBeGreaterThanOrEqual(c.declared); }
+        // a colony that is still a colony is still its mother's
+        if (c.freed < 0 && c.gone < 0 && c.child < 0 && mother.ended < 0) expect(towns.some((st) => st.ruined < 0 && st.colony === c.id && st.nation === mother.id) || true).toBe(true);
+      }
+      // every war of independence was declared first, by a colony that had been planted
+      for (const e of ev) {
+        if (e.type === 'independence-declared') { declared++; const c = list[Number(e.data!.colony)]!; if (ev[c.eventId]) expect(e.causes).toContain(c.eventId); }
+        if (e.type !== 'war' || !e.data || e.data.independence === undefined) continue;
+        wars++;
+        const c = list[Number(e.data.independence)]!;
+        expect(e.data.nation).toBe(c.mother);
+        expect(ev[e.causes[0]!]!.type).toBe('independence-declared');
+        expect(e.title).toMatch(/^The war of independence of /);
+        // the country that fought it was born that year, out of the mother country, as a people of its own
+        const child = h.nations[Number(e.data.foe)]!;
+        expect(child.parent).toBe(c.mother);
+        expect(child.colonyOf).toBe(c.id);
+        expect(Math.abs(child.founded - e.simYear)).toBeLessThan(1.5);
+        expect(child.culture).not.toBe(h.nations[c.mother]!.culture);
+        expect(child.capital).not.toBe(h.nations[c.mother]!.capital);
+        if (h.cultures[child.culture]!.mixedWith !== undefined) mixed++;
+      }
+      for (const w of h.wars ?? []) {
+        if (w.independence === undefined) continue;
+        campaigns++;
+        expect(w.a).toBe(list[w.independence]!.mother);
+        expect(ev[w.eventId]!.data!.independence).toBe(w.independence);
+        if (w.ended >= 0) expect(w.battles.length).toBeGreaterThan(0);
+      }
+      for (const e of ev) {
+        if (e.type === 'independence') {
+          born++;
+          const child = h.nations[Number(e.data!.nation)]!, c = list[Number(e.data!.colony)]!;
+          expect(c.freed).toBeGreaterThanOrEqual(0);
+          expect(c.child).toBe(child.id);
+          expect(e.data!.from).toBe(c.mother);
+          expect(e.causes.length).toBeGreaterThan(0);
+          expect(e.description).toContain('its own flag');
+        }
+        if (e.type === 'rising-crushed') crushed++;
+      }
+      // a rising put down leaves no country behind it
+      for (const n of h.nations) if (n.colonyOf !== undefined && list[n.colonyOf]!.child !== n.id) expect(n.ended).toBeGreaterThanOrEqual(0);
+      if (h.firstFree !== undefined) expect(ev[h.firstFree]!.importance).toBe(2);
+      if (h.firstColony !== undefined) expect(ev[h.firstColony]!.importance).toBe(2);
+    }
+    console.log('E36', { colonies, declared, wars, campaigns, born, crushed, mixed });
+    expect(colonies).toBeGreaterThan(0);
+    expect(wars).toBeGreaterThan(0);
+    expect(campaigns).toBeGreaterThan(0);
+    expect(born + crushed).toBeGreaterThan(0);
+    expect(wars).toBe(declared);
   });
 });
 

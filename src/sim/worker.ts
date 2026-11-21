@@ -18,6 +18,7 @@ import { LEXICON, SAYINGS } from './history/syntax';
 import { languageList, scriptInfo } from './history/tongues';
 import { galleryList } from './history/gallery';
 import { describeMusic, lineOf, tradition } from './history/music';
+import { describeColony } from './history/colony';
 import { chartingOf } from './history/worldmap';
 import { GOODS, describeMarket } from './history/trade';
 import { GRUDGE_YEARS, web } from './history/diplomacy';
@@ -283,6 +284,20 @@ function monstersOf(s: Simulation, n: Simulation['civ']['h']['nations'][number],
   return giants.filter((g) => p[c * 3]! * p[g.cell * 3]! + p[c * 3 + 1]! * p[g.cell * 3 + 1]! + p[c * 3 + 2]! * p[g.cell * 3 + 2]! >= far).slice(0, 3).map((g) => ({ species: g.id, name: g.name, cell: g.cell, size: g.size }));
 }
 
+/** A nation's colonies overseas (system E36): those it still holds. */
+function coloniesOf(s: Simulation, n: Simulation['civ']['h']['nations'][number]): NonNullable<NationInfo['colonies']> | undefined {
+  const out: NonNullable<NationInfo['colonies']> = [];
+  for (const c of s.civ.h.colonies ?? []) {
+    if (c.mother !== n.id || c.freed >= 0 || c.gone >= 0 || c.child >= 0) continue;
+    const seat = s.civ.settlements[c.seat];
+    if (!seat) continue;
+    let towns = 0;
+    for (const st of s.civ.settlements) if (st.ruined < 0 && st.nation === n.id && st.colony === c.id) towns++;
+    if (towns) out.push({ id: c.id, seat: seat.id, name: seat.name, founded: c.founded, towns, identity: c.identity, note: describeColony(c, s.simYear), eventId: c.eventId });
+  }
+  return out.length ? out : undefined;
+}
+
 /** The music of a nation's people in its present age (system E27), once any of its kind has made music. */
 function musicOf(s: Simulation, n: Simulation['civ']['h']['nations'][number]): { tradition: ReturnType<typeof tradition>; about: string } | undefined {
   const h = s.civ.h, g = s.creatures.species[n.species]?.ref, c = h.cultures[n.culture];
@@ -361,7 +376,7 @@ function nationList(s: Simulation): NationInfo[] {
     return {
       id: n.id, name: n.name, species: n.species, capital: n.capital, founded: n.founded, ended: n.ended, parent: n.parent, government: n.government,
       stability: n.stability, tech: n.tech, era: n.era, eraName: s.civ.eraName(n), eraOwn: s.civ.eraOwnName(n), earth: earthNote(n.era), hue: n.hue, pop: n.pop, towns: n.towns,
-      culture: culture.name, language: h.languages[culture.language]!.name, music: musicOf(s, n), idea: n.idea && h.ideologies?.[n.idea.id] ? { name: h.ideologies[n.idea.id]!.name, own: h.ideologies[n.idea.id]!.own, kind: h.ideologies[n.idea.id]!.kind, share: n.idea.share, eventId: h.ideologies[n.idea.id]!.eventId } : undefined, flag: n.flag, creed: n.creed !== undefined && h.ideologies?.[n.creed] ? { name: h.ideologies[n.creed]!.name, own: h.ideologies[n.creed]!.own, kind: h.ideologies[n.creed]!.kind, since: n.revolved ?? 0 } : undefined, trade: n.trade && h.nations[n.trade.to] && h.nations[n.trade.to]!.ended < 0 ? { good: GOODS[n.trade.good]!, to: n.trade.to, toName: h.nations[n.trade.to]!.name, since: n.trade.since, eventId: n.trade.eventId } : undefined, market: n.ended < 0 && n.era >= 1 ? describeMarket({ land: n.land, tech: n.tech, pop: n.pop, towns: Math.max(1, n.towns), mines: n.mines ?? 0, felled: n.felled !== undefined ? 0.7 : 0, knows: knows(n) }) : undefined, festivals: n.festivals && n.festivals.length ? n.festivals : undefined, charting: chartingOf(knows(n), n.tech), contacts: n.contacts.filter((id) => h.nations[id] && h.nations[id]!.ended < 0), monsters: monstersOf(s, n, chartingOf(knows(n), n.tech).sea, giants), script: scriptInfo(h, n.script, n.species, s.simYear, bodyOf(s)), signs: n.signs ?? (s.civ.settlements[n.capital] ? ['land', s.civ.settlements[n.capital]!.modifier || s.civ.settlements[n.capital]!.head] : undefined), ruler: ruler && ruler.died < 0 ? ruler.name : '', rulerSince: ruler && ruler.died < 0 ? ruler.reignFrom : -1,
+      culture: culture.name, language: h.languages[culture.language]!.name, music: musicOf(s, n), idea: n.idea && h.ideologies?.[n.idea.id] ? { name: h.ideologies[n.idea.id]!.name, own: h.ideologies[n.idea.id]!.own, kind: h.ideologies[n.idea.id]!.kind, share: n.idea.share, eventId: h.ideologies[n.idea.id]!.eventId } : undefined, flag: n.flag, colonies: coloniesOf(s, n), colonyOf: n.colonyOf !== undefined && h.colonies?.[n.colonyOf] ? { mother: h.colonies[n.colonyOf]!.mother, motherName: h.nations[h.colonies[n.colonyOf]!.mother]?.name ?? '', founded: h.colonies[n.colonyOf]!.founded, declared: h.colonies[n.colonyOf]!.declared, freed: h.colonies[n.colonyOf]!.freed, warEvent: h.colonies[n.colonyOf]!.warEvent } : undefined, creed: n.creed !== undefined && h.ideologies?.[n.creed] ? { name: h.ideologies[n.creed]!.name, own: h.ideologies[n.creed]!.own, kind: h.ideologies[n.creed]!.kind, since: n.revolved ?? 0 } : undefined, trade: n.trade && h.nations[n.trade.to] && h.nations[n.trade.to]!.ended < 0 ? { good: GOODS[n.trade.good]!, to: n.trade.to, toName: h.nations[n.trade.to]!.name, since: n.trade.since, eventId: n.trade.eventId } : undefined, market: n.ended < 0 && n.era >= 1 ? describeMarket({ land: n.land, tech: n.tech, pop: n.pop, towns: Math.max(1, n.towns), mines: n.mines ?? 0, felled: n.felled !== undefined ? 0.7 : 0, knows: knows(n) }) : undefined, festivals: n.festivals && n.festivals.length ? n.festivals : undefined, charting: chartingOf(knows(n), n.tech), contacts: n.contacts.filter((id) => h.nations[id] && h.nations[id]!.ended < 0), monsters: monstersOf(s, n, chartingOf(knows(n), n.tech).sea, giants), script: scriptInfo(h, n.script, n.species, s.simYear, bodyOf(s)), signs: n.signs ?? (s.civ.settlements[n.capital] ? ['land', s.civ.settlements[n.capital]!.modifier || s.civ.settlements[n.capital]!.head] : undefined), ruler: ruler && ruler.died < 0 ? ruler.name : '', rulerSince: ruler && ruler.died < 0 ? ruler.reignFrom : -1,
       house: house ? house.name : '', houseReigns: house ? house.reigns : 0, houseId: house ? house.id : -1, eventId: n.eventId, ...fashionSource(s, n), networks: networksOf(s, n.id), golden: n.golden ? n.golden.own : '', goldenSince: n.golden ? n.golden.since : -1, goldenWorks: n.golden ? n.golden.works : 0,
       calendar: cal ? cal.name : '', calendarOwn: cal ? cal.own : '', calendarEpoch: cal ? cal.epoch : 0, calendarEvent: cal ? cal.eventId : -1,
     };

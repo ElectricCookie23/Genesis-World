@@ -328,6 +328,10 @@ export interface NationInfo {
   houseId: number;
   /** The days it keeps (system E30). */
   festivals?: Festival[];
+  /** Its colonies overseas (system E36): each one's chief town, when it was planted, how many towns it has, how far its people think of themselves as their own (0..1 and over) and how it stands in a few words. */
+  colonies?: { id: number; seat: number; name: string; founded: number; towns: number; identity: number; note: string; eventId: number }[];
+  /** The colony it was born from: its mother country, when it was planted, when it declared itself free, when it was recognised (-1 while it fights for that), and the event of its war of independence. */
+  colonyOf?: { mother: number; motherName: string; founded: number; declared: number; freed: number; warEvent: number };
   /** The idea gaining ground in it (system E35): its name, its name in their tongue, its kind, the share of the people who hold it; and how many times its flag has changed. */
   idea?: { name: string; own: string; kind: string; share: number; eventId: number };
   flag?: number;

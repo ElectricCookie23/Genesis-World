@@ -677,6 +677,44 @@ async function boot(): Promise<void> {
       for (const k of used) { ctx.fillStyle = IDEA_COLOUR[k]; ctx.fillRect(kx, H - 18, 12, 8); ctx.fillStyle = '#ece7db'; ctx.fillText(IDEA_LABEL[k], kx + 16, H - 10); kx += 22 + ctx.measureText(IDEA_LABEL[k]).width + 10; }
       update({ mapNote: ruled + rising ? `${ruled} ${ruled === 1 ? 'country is' : 'countries are'} governed by an idea its people rose for (filled). In ${rising} an idea is gaining ground (a ring, wider as more hold it). The colour is what the idea wants: who should rule.` : 'No one has yet had an idea of how a country should be run, other than the way it is.' });
     }
+    // ---- colonies overseas, and the countries born of them (system E36): a line from the mother country's capital to
+    // each colony's chief town, dashed while it is held, red while it is fought over, solid once it is a country
+    if (state.mapOf === -5) {
+      ctx.fillStyle = 'rgba(6, 8, 14, 0.45)'; ctx.fillRect(0, 0, W, H);
+      const townOf = (id: number) => state.settlements.find((t) => t.id === id);
+      const capOf = (id: number) => { const r = state.realms.find((x) => x.id === id); return r ? townOf(r.capital) : undefined; };
+      const line = (a: number, b: number, colour: string, dash: number[], width: number): void => {
+        const pa = [grid.pos[a * 3]!, grid.pos[a * 3 + 1]!, grid.pos[a * 3 + 2]!], pb = [grid.pos[b * 3]!, grid.pos[b * 3 + 1]!, grid.pos[b * 3 + 2]!];
+        ctx.strokeStyle = colour; ctx.lineWidth = width; ctx.setLineDash(dash); ctx.lineCap = 'round';
+        ctx.beginPath();
+        let last = -1;
+        for (let k = 0; k <= 14; k++) {
+          const t = k / 14, x = pa[0]! + (pb[0]! - pa[0]!) * t, y = pa[1]! + (pb[1]! - pa[1]!) * t, z = pa[2]! + (pb[2]! - pa[2]!) * t, l = Math.hypot(x, y, z) || 1;
+          const u = ((Math.atan2(z / l, x / l) + Math.PI) / (Math.PI * 2)) * W, v = (0.5 - Math.asin(y / l) / Math.PI) * H;
+          if (last < 0 || Math.abs(u - last) > W / 2) ctx.moveTo(u, v); else ctx.lineTo(u, v);
+          last = u;
+        }
+        ctx.stroke(); ctx.setLineDash([]);
+        const ux = ((grid.lon[b]! + Math.PI) / (Math.PI * 2)) * W, uy = (0.5 - grid.lat[b]! / Math.PI) * H;
+        ctx.fillStyle = colour; ctx.beginPath(); ctx.arc(ux, uy, 3.6, 0, Math.PI * 2); ctx.fill();
+      };
+      let held = 0, fighting = 0, free = 0;
+      for (const r of state.realms) {
+        if (r.ended >= 0) continue;
+        const home = townOf(r.capital);
+        if (home) for (const c of r.colonies ?? []) { const seat = townOf(c.seat); if (seat) { line(home.cell, seat.cell, '#f0c060', [5, 4], 1.4 + 1.6 * Math.min(1, c.identity)); held++; } }
+        if (r.colonyOf && home) {
+          const from = capOf(r.colonyOf.mother), alive = state.realms.some((x) => x.id === r.colonyOf!.mother && x.ended < 0);
+          if (r.colonyOf.freed < 0) fighting++; else free++;
+          if (from && alive) line(from.cell, home.cell, r.colonyOf.freed < 0 ? '#e0563a' : '#62c98a', r.colonyOf.freed < 0 ? [2, 4] : [], 2.2);
+          else { const ux = ((grid.lon[home.cell]! + Math.PI) / (Math.PI * 2)) * W, uy = (0.5 - grid.lat[home.cell]! / Math.PI) * H; ctx.fillStyle = '#62c98a'; ctx.beginPath(); ctx.arc(ux, uy, 3.6, 0, Math.PI * 2); ctx.fill(); }
+        }
+      }
+      let kx = 10;
+      ctx.font = '11px system-ui, sans-serif';
+      for (const [colour, label] of [['#f0c060', 'a colony (thicker as its people grow apart)'], ['#e0563a', 'fighting to be free'], ['#62c98a', 'a country born of a colony']] as const) { ctx.fillStyle = colour; ctx.fillRect(kx, H - 18, 12, 8); ctx.fillStyle = '#ece7db'; ctx.fillText(label, kx + 16, H - 10); kx += 22 + ctx.measureText(label).width + 10; }
+      update({ mapNote: held + fighting + free ? `${held} ${held === 1 ? 'colony is' : 'colonies are'} held from across the water. ${fighting ? `${fighting} ${fighting === 1 ? 'is' : 'are'} fighting to be free. ` : ''}${free} living ${free === 1 ? 'country was' : 'countries were'} born of a colony. Each line runs from the mother country's capital.` : 'No country has yet planted a town across an ocean and kept it.' });
+    }
     // settlements as warm dots
     ctx.fillStyle = '#ffd27a';
     for (const st of state.settlements) {

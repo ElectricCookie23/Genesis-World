@@ -25,6 +25,8 @@ import { lightOf, type Festival, type FestivalKind } from './history/festival';
 import { GOODS, bestTrade, prices, type Economy } from './history/trade';
 import { clash, describeBattle, siegeYears, type Army, type Battle, type BattleKind, type War } from './history/war';
 import { GRUDGE_YEARS, pactBetween, type Treaty, type TreatyKind } from './history/diplomacy';
+import { growsApart, odds, ready, shipped, waits, type Colony, type Standing } from './history/colony';
+import { ordinal } from './history/grammar';
 import { IDEA_GOVERNMENT, IDEA_SAYS, drift, governedAs, ideaName, pressure, ripest, type Conditions, type Ideology } from './history/ideology';
 import { stillCleared } from './history/decay';
 import { answer, damage, hazards, type CalamityKind, type Ground, type Rebuild, type Scar } from './history/calamity';
@@ -88,6 +90,8 @@ export interface Settlement {
   relic: number;
   /** Founded by settlers who came across the sea. */
   overseas?: boolean;
+  /** The colony it belongs to or began in (system E36): a colony's id. */
+  colony?: number;
   /** The most people it ever held (thousands): how large its ruin is (system E18). */
   peak?: number;
   /** After it was left: the tame animals that run wild in it, and the animals that nest in its towers (species ids). */
@@ -366,6 +370,8 @@ export class Civilization {
       this.network(sim, rng, n, towns, y, year);
       // ---- golden ages begin, raise their monuments and end (system E10)
       this.flourish(sim, rng, n, towns, y, year);
+      // ---- colonies planted overseas, growing apart, and declaring themselves free (system E36)
+      this.colonies(sim, n, towns, year, y);
       // ---- the ideas its people hold about how it should be run, and now and then a revolution (system E35)
       this.ideas(sim, n, year, y);
       // ---- treaties made, and old wrongs gone to war over (system E34)
@@ -591,7 +597,11 @@ export class Civilization {
           const cap = this.settlements[n.capital]!, gp = sim.grid.pos;
           const cos = gp[cap.cell * 3]! * gp[d.cell * 3]! + gp[cap.cell * 3 + 1]! * gp[d.cell * 3 + 1]! + gp[cap.cell * 3 + 2]! * gp[d.cell * 3 + 2]!;
           const spacing = Math.sqrt((4 * Math.PI) / reg.count);
-          if (Math.acos(Math.max(-1, Math.min(1, cos))) > REACH[n.era]! * spacing) {
+          // (a colony's own daughter towns are part of the colony, however far from the old country: system E36)
+          if (st.colony !== undefined && this.h.colonies?.[st.colony] && this.h.colonies[st.colony]!.freed < 0 && this.h.colonies[st.colony]!.mother === n.id) {
+            d.nation = n.id; d.colony = st.colony; d.overseas = true; sim.cellLog.note(d.cell, year, Log.Owner, n.id);
+            { const born = sim.events.events[d.eventId]; if (born) born.description = `${born.description} Their parents came by sea, with the colony at ${st.name}.`; }
+          } else if (Math.acos(Math.max(-1, Math.min(1, cos))) > REACH[n.era]! * spacing) {
             const far = this.newNation(sim, rng, d, year, n);
             const ev = sim.events.events[d.eventId], first = this.h.people[far.ruler];
             if (ev && first) { ev.description = `${ev.description} The settlers were led by ${first.name}.`; ev.data = { ...(ev.data ?? {}), person: first.id, nation: far.id }; first.events.push(ev.id); }
@@ -1102,6 +1112,8 @@ export class Civilization {
     // ---- secession: the furthest province goes its own way
     if (rng.chance(1 - Math.exp(-y / 60))) {
       const seed = others[0]!;
+      // (a far province that is a colony does not slip away: it declares itself free, and there is a war over it. System E36)
+      { const col = seed.colony !== undefined ? h.colonies?.[seed.colony] : undefined; if (col && col.mother === n.id && col.freed < 0 && col.gone < 0 && col.child < 0) { const part = towns.filter((st) => st.colony === col.id); if (ready({ identity: col.identity + 0.4, crushed: col.crushed }, part.length, this.standingOf(sim, n, col, part, year).share, year)) this.declare(sim, n, col, year); return false; } }
       const ev = sim.emit({
         type: 'secession', year, cellId: seed.cell, title: `${seed.name} breaks away from ${n.name}`,
         description: `The far province around ${seed.name} has stopped sending its taxes and its sons: ${because}.`,
@@ -2167,6 +2179,202 @@ export class Civilization {
     }
   }
 
+  /** How a colony stands with its mother country (system E36). */
+  private standingOf(sim: Simulation, n: Nation, col: Colony, towns: Settlement[], year: number): Standing {
+    const p = sim.grid.pos, cap = this.settlements[n.capital]!, seat = this.settlements[col.seat]!;
+    const cos = p[cap.cell * 3]! * p[seat.cell * 3]! + p[cap.cell * 3 + 1]! * p[seat.cell * 3 + 1]! + p[cap.cell * 3 + 2]! * p[seat.cell * 3 + 2]!;
+    let pop = 0;
+    for (const st of towns) pop += st.pop;
+    const i = SLOT_INDEX.get('press');
+    return { distance: Math.acos(Math.max(-1, Math.min(1, cos))), share: pop / Math.max(1e-6, n.pop), inequality: n.inequality, fatigue: n.fatigue, stability: n.stability, revolution: n.revolved !== undefined && year - n.revolved < 60, press: i !== undefined && n.know.way[i]! >= 0 };
+  }
+
+  /**
+   * Colonization and independence (system E36), for one country over `y` years. A country with ocean-going
+   * ships, towns enough and a steady hand plants a colony on a far shore: a town across open water, governed
+   * from home. Each of its colonies then grows apart, year by year (`growsApart`), and when its people think
+   * of themselves as their own it declares itself free (`declare`).
+   * (The luck in it comes from the country and the year, not from the stream that decides other things.)
+   */
+  private colonies(sim: Simulation, n: Nation, towns: Settlement[], year: number, y: number): void {
+    const h = this.h, ev = sim.events.events, reg = sim.regions, g = reg.grid;
+    const list = (h.colonies ??= []);
+    const luck = (k: number): number => (hash32(this.seedNum, n.id, Math.floor(year), k) % 100000) / 100000;
+    const knows = (slot: string): boolean => { const i = SLOT_INDEX.get(slot); return i !== undefined && n.know.way[i]! >= 0; };
+    // ---- the colonies it has: each grows apart, and in time declares
+    let held = 0;
+    for (const col of list) {
+      if (col.mother !== n.id || col.freed >= 0 || col.gone >= 0 || col.child >= 0) continue;
+      const mine = towns.filter((st) => st.colony === col.id);
+      if (!mine.length) { col.gone = year; continue; }
+      held++;
+      if (!mine.some((st) => st.id === col.seat)) col.seat = mine.reduce((a, b) => (b.pop > a.pop ? b : a)).id;
+      const s = this.standingOf(sim, n, col, mine, year);
+      col.identity = Math.min(1.5, col.identity + growsApart(s) * y);
+      if (ready(col, mine.length, s.share, year) && luck(0xc30 + col.id) < 1 - Math.exp(-y / waits(s)) && !(h.wars ?? []).some((w) => w.ended < 0 && (w.a === n.id || w.b === n.id))) { this.declare(sim, n, col, year); return; }
+    }
+    // ---- a new colony: ships that cross oceans, people to spare, and a far shore no one holds
+    if (!(knows('ship2') || knows('steamship')) || towns.length < 4 || n.stability < 0.45 || held >= 2 || n.colonyOf !== undefined && year - n.founded < 150) return;
+    if (luck(0xc1) >= 1 - Math.exp(-y / 80)) return;
+    const cap = this.settlements[n.capital]!;
+    const spacing = Math.sqrt((4 * Math.PI) / reg.count), range = knows('steamship') ? 4 : 1.7;
+    const rp = g.pos, o = cap.region;
+    const away = (r: number, from: number): number => Math.acos(Math.max(-1, Math.min(1, rp[r * 3]! * rp[from * 3]! + rp[r * 3 + 1]! * rp[from * 3 + 1]! + rp[r * 3 + 2]! * rp[from * 3 + 2]!)));
+    let target = -1, best = -Infinity;
+    for (let r = 0; r < reg.count; r++) {
+      if (reg.land[r]! <= 0.3 || reg.ice[r]! >= 0.5 || this.occupied.has(r)) continue;
+      const d = away(r, o);
+      if (d < Math.max(0.45, 4 * spacing) || d > range) continue;
+      // (far from every town it already has, and across water from home)
+      if (towns.some((st) => away(r, st.region) < 2.5 * spacing)) continue;
+      if (!this.seaBetween(sim, cap.cell, reg.cellList[reg.cellStart[r]!]!)) continue;
+      let room = 0;
+      for (let k = 0; k < g.ncount[r]!; k++) { const nb = g.neighbors[r * 6 + k]!; if (reg.land[nb]! > 0.3 && reg.ice[nb]! < 0.5 && !this.occupied.has(nb)) room++; }
+      const score = room + reg.land[r]! - 0.4 * d + (hash32(this.seedNum, n.id, r, 0xc2) % 1000) / 1000;
+      if (score > best) { best = score; target = r; }
+    }
+    if (target < 0) return;
+    // (it sails from the country's largest town)
+    const port = towns.reduce((a, b) => (b.pop > a.pop ? b : a));
+    const d = this.found(sim, new RNG(hash32(this.seedNum, n.id, Math.floor(year), 0xc3)), n.species, target, port.id, year);
+    if (!d) return;
+    const first = h.firstColony === undefined;
+    const col: Colony = { id: list.length, mother: n.id, seat: d.id, founded: year, eventId: -1, identity: 0, declared: -1, war: -1, warEvent: -1, child: -1, freed: -1, crushed: -1, gone: -1 };
+    d.overseas = true; d.colony = col.id; d.nation = n.id; d.tech = Math.max(FARMING, port.tech * 0.8); d.lore = port.lore; d.farms = true; d.pop = Math.max(d.pop, port.pop * 0.08); port.pop *= 0.96;
+    sim.cellLog.note(d.cell, year, Log.Owner, n.id);
+    { const born = ev[d.eventId]; if (born) born.description = `${born.description} They came by sea from ${port.name}.`; }
+    const far = away(target, o);
+    const e = sim.emit({
+      type: 'colony', year, cellId: d.cell, title: first ? `The first colony overseas: ${d.name}` : `${n.name} plants a colony at ${d.name}`,
+      description: `Ships from ${port.name} put settlers ashore ${far > 1.2 ? 'on the far side of the world' : far > 0.7 ? 'across the ocean' : 'across the sea'}, on land no one holds. They call the place ${d.name}. It answers to ${cap.name}: its governor is sent out and its taxes are sent back.`,
+      causes: [d.eventId, n.trade ? n.trade.eventId : -1, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 3), importance: first ? 2 : 1, speciesIds: [n.species], data: { nation: n.id, colony: col.id, town: d.id },
+    });
+    col.eventId = e.id;
+    list.push(col);
+    if (first && e.id >= 0) h.firstColony = e.id;
+    if (e.id >= 0) this.credit(sim, null, n, e.id, '{name} sent them.');
+  }
+
+  /**
+   * A colony declares itself free (system E36). Its towns become a country of their own, with a people of
+   * their own (mixed, where another people lives beside them), and the mother country goes to war to bring
+   * them back. While time runs slowly enough the war is fought out as a campaign across the water
+   * (`warfare`), and `afterRising` settles it; otherwise it is settled at once by `odds`.
+   */
+  private declare(sim: Simulation, n: Nation, col: Colony, year: number): void {
+    const h = this.h, ev = sim.events.events;
+    const mine = this.settlements.filter((st) => st.ruined < 0 && st.nation === n.id && st.colony === col.id);
+    if (!mine.length) { col.gone = year; return; }
+    let seat = this.settlements[col.seat]!;
+    if (seat.ruined >= 0 || seat.nation !== n.id || seat.id === n.capital) seat = mine.reduce((a, b) => (b.pop > a.pop ? b : a));
+    if (seat.id === n.capital) return;
+    col.seat = seat.id;
+    const stand = this.standingOf(sim, n, col, mine, year);
+    const luck = (k: number): number => (hash32(this.seedNum, col.id, Math.floor(year), k) % 100000) / 100000;
+    const cap = this.settlements[n.capital]!;
+    const woe = n.woes.length ? n.woes[n.woes.length - 1]!.eventId : -1;
+    const idea = n.idea && h.ideologies?.[n.idea.id] ? h.ideologies[n.idea.id]!.eventId : -1;
+    col.declared = year;
+    const decl = sim.emit({
+      type: 'independence-declared', year, cellId: seat.cell, title: `${seat.name} declares itself free of ${n.name}`,
+      description: `It is ${Math.max(1, Math.round(year - col.founded))} years since ships from ${n.name} first put in at ${seat.name}. No one living there has seen ${cap.name}. This year the governor is put on a ship home with a letter: the colony will send no more taxes${stand.fatigue > 0.3 ? ' and no more soldiers for wars that are not its own' : stand.inequality > 0.55 ? ' to houses that own everything already' : ''}, and it will answer to itself.`,
+      causes: [col.eventId, woe, idea].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 3), importance: 1, speciesIds: [n.species], data: { nation: n.id, colony: col.id, town: seat.id },
+    });
+    const rng = new RNG(hash32(this.seedNum, col.id, Math.floor(year), 0xc4));
+    const child = this.newNation(sim, rng, seat, year, n, 'colony', decl.id >= 0 ? [decl.id] : []);
+    child.colonyOf = col.id; col.child = child.id;
+    for (const st of mine) { st.nation = child.id; sim.cellLog.note(st.cell, year, Log.Owner, child.id); }
+    // a people of two: where another people lives beside the colony, its ways are part of the new country's
+    const p = sim.grid.pos;
+    let beside: Settlement | undefined, bd = 0.9;
+    for (const o of this.settlements) {
+      if (o.ruined >= 0 || o.nation < 0 || o.nation === n.id || o.nation === child.id) continue;
+      const on = h.nations[o.nation];
+      if (!on || on.ended >= 0 || on.species !== child.species || on.culture === n.culture) continue;
+      const cos = p[o.cell * 3]! * p[seat.cell * 3]! + p[o.cell * 3 + 1]! * p[seat.cell * 3 + 1]! + p[o.cell * 3 + 2]! * p[seat.cell * 3 + 2]!;
+      if (cos > bd) { bd = cos; beside = o; }
+    }
+    const own = h.cultures[child.culture]!;
+    if (beside && own.id !== n.culture) {
+      const guest = h.cultures[h.nations[beside.nation]!.culture]!;
+      const mix = (a: number, b: number): number => sat(a * 0.7 + b * 0.3);
+      own.war = mix(own.war, guest.war); own.custom = mix(own.custom, guest.custom); own.trade = mix(own.trade, guest.trade); own.craft = mix(own.craft, guest.craft);
+      own.hue = (own.hue + (((guest.hue - own.hue + 1.5) % 1) - 0.5) * 0.3 + 1) % 1;
+      own.mixedWith = guest.id;
+      const born = ev[child.eventId];
+      if (born) born.description += ` They are not only the old country's people any more: the ${guest.name} live beside them and among them.`;
+    }
+    // ---- the mother country will not let it go
+    const port = this.settlements.filter((st) => st.ruined < 0 && st.nation === n.id).reduce((a, b) => (b.pop > a.pop ? b : a), cap);
+    const war = sim.emit({
+      type: 'war', year, cellId: seat.cell, title: `The war of independence of ${child.name}`,
+      description: `${n.name} will not let ${seat.name} go. An army is put on ships at ${port.name} to bring the colony back.`,
+      causes: [decl.id, col.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: 1, speciesIds: [n.species],
+      data: { town: port.id, other: seat.id, nation: n.id, foe: child.id, independence: col.id },
+    });
+    col.warEvent = war.id;
+    if (war.id >= 0) this.credit(sim, null, n, war.id, '{name} gave the order.');
+    n.fatigue = sat(n.fatigue + 0.15);
+    this.woe(n, 'war', war.id, year, 0.04);
+    const fought = this.fine && war.id >= 0 ? this.campaign(sim, n, child, port, seat, war.id, year, '', '', false) : undefined;
+    if (fought) {
+      // what can be shipped is a part of what could be raised, it lands hungry, and it is fighting its own cousins;
+      // the colony fights at home, and everyone who can carry a weapon does
+      const [a, d] = fought.army, i = SLOT_INDEX.get('steamship');
+      a.size = Math.max(0.3, a.size * shipped(stand.distance, i !== undefined && n.know.way[i]! >= 0)); a.raised = a.size; a.supply = 0.75; a.morale = Math.min(a.morale, 0.6);
+      d.size *= 2.4; d.raised = d.size; d.morale = 0.85;
+      fought.independence = col.id; fought.conquest = true; col.war = fought.id;
+      return;
+    }
+    // (time is running too fast to follow a campaign: the rising is settled at once)
+    this.settleRising(sim, n, child, col, luck(0xc5) < odds(stand), year, war.id);
+  }
+
+  /** The end of a war fought over a colony (system E36): brought back if its chief town fell, a country if it held. */
+  private afterRising(sim: Simulation, war: War, year: number, peace: number): void {
+    const h = this.h, col = h.colonies?.[war.independence!];
+    const A = h.nations[war.a], B = h.nations[war.b];
+    if (!col || !A || !B || col.child !== B.id) return;
+    const seat = this.settlements[col.seat]!;
+    const held = B.ended < 0 && seat.ruined < 0 && seat.nation === B.id;
+    this.settleRising(sim, A, B, col, held, year, peace);
+  }
+
+  /** A colony's rising is over (system E36): either it is a country from now on, or it is the old country's again. */
+  private settleRising(sim: Simulation, n: Nation, child: Nation, col: Colony, free: boolean, year: number, cause: number): void {
+    const h = this.h, ev = sim.events.events;
+    const seat = this.settlements[col.seat]!;
+    const causes = [cause, col.warEvent, ev[col.eventId] ? col.eventId : -1].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 2);
+    if (free) {
+      const first = h.firstFree === undefined;
+      col.freed = year;
+      // (towns the old country took in the war and kept are its own now, not the colony's)
+      for (const st of this.settlements) if (st.colony === col.id && st.nation !== child.id) st.colony = undefined;
+      const e = sim.emit({
+        type: 'independence', year, cellId: seat.cell, title: first ? `The first colony to become a country: ${child.name}` : `${child.name} is a country`,
+        description: `${n.ended < 0 ? `${n.name} has given up trying to take ${seat.name} back` : `${n.name} is no more, and no one else claims ${seat.name}`}. ${child.name}, which was a colony for ${Math.max(1, Math.round(col.declared - col.founded))} years, is a country, with its own flag over ${seat.name} and its own name for its people: the ${h.cultures[child.culture]!.name}.`,
+        causes, importance: first ? 2 : 1, speciesIds: [child.species], data: { nation: child.id, from: n.id, colony: col.id },
+      });
+      if (first && e.id >= 0) h.firstFree = e.id;
+      if (e.id >= 0) this.credit(sim, null, child, e.id, '{name} led them through it.');
+      child.stability = sat(child.stability + 0.1);
+      if (n.ended < 0) { n.stability = sat(n.stability - 0.05); this.woe(n, 'war', e.id >= 0 ? e.id : cause, year, 0.03); }
+      return;
+    }
+    // ---- brought back: its towns are the old country's again, and its people remember
+    // (and are called what the old country calls them: a name that lasted a year or two leaves no record)
+    const old = this.languageOf(n);
+    for (const st of this.settlements) if (st.ruined < 0 && st.nation === child.id) { st.nation = n.id; st.colony = col.id; sim.cellLog.note(st.cell, year, Log.Owner, n.id); this.rename(st, old, year, `said the way of ${n.name} again`, -1, false); }
+    if (child.ended < 0) this.closeNation(child, year, 'was brought back under the old country');
+    col.child = -1; col.crushed = year; col.identity = 0.45;
+    if (seat.nation !== n.id || seat.ruined >= 0) { const left = this.settlements.filter((st) => st.ruined < 0 && st.nation === n.id && st.colony === col.id); if (left.length) col.seat = left.reduce((a, b) => (b.pop > a.pop ? b : a)).id; else col.gone = year; }
+    sim.emit({
+      type: 'rising-crushed', year, cellId: seat.cell, title: `${n.name} takes ${seat.name} back`,
+      description: `The country that called itself ${child.name} lasted ${Math.max(1, Math.round(year - col.declared))} ${Math.round(year - col.declared) <= 1 ? 'year' : 'years'}. ${seat.name} has a governor from ${this.settlements[n.capital]!.name} again, and a garrison. No one there has forgotten.`,
+      causes, importance: 0, speciesIds: [n.species], data: { nation: n.id, colony: col.id },
+    });
+  }
+
   /** How a country is, as far as ideas care (system E35). */
   private conditionsOf(n: Nation, year: number): Conditions {
     const knows = (slot: string): boolean => { const i = SLOT_INDEX.get(slot); return i !== undefined && n.know.way[i]! >= 0; };
@@ -2216,7 +2424,11 @@ export class Civilization {
       const lang = this.languageOf(n);
       let head = '', modifier = '', name = '';
       for (let k = 0; k < 6; k++) { [head, modifier, name] = ideaName(kind, hash32(this.seedNum, n.id, list.length, 0xe3) + k); if (!list.some((x) => x.name === name)) break; }
-      if (list.some((x) => x.name === name)) name = `${name} of ${n.name}`;
+      if (list.some((x) => x.name === name)) {
+        const base = name;
+        for (const tried of [`${base} of ${n.name}`, `${base} of ${cap.name}`, `the New ${base.slice(4)}`, `the New ${base.slice(4)} of ${n.name}`]) { name = tried; if (!list.some((x) => x.name === name)) break; }
+        for (let k = 2; list.some((x) => x.name === name); k++) name = `${base} of ${n.name}, the ${ordinal(k)}`;
+      }
       const first = h.firstIdea === undefined;
       const woe = n.woes.length ? n.woes[n.woes.length - 1]!.eventId : -1;
       const idea: Ideology = { id: list.length, kind, name, own: compound(lang, head, modifier, year), born: year, nation: n.id, eventId: -1 };
@@ -2375,9 +2587,9 @@ export class Civilization {
    * raises an army and means to go on: toward the nearest towns of its enemy, and the capital if it is near
    * enough. The defender raises one too. From here `warfare` moves them, a year at a time.
    */
-  private campaign(sim: Simulation, n: Nation, foe: Nation, base: Settlement, first: Settlement, warEvent: number, year: number, general: string, other: string): void {
+  private campaign(sim: Simulation, n: Nation, foe: Nation, base: Settlement, first: Settlement, warEvent: number, year: number, general: string, other: string, opening = true): War | undefined {
     const h = this.h, wars = (h.wars ??= []);
-    if (wars.some((w) => w.ended < 0 && ((w.a === n.id && w.b === foe.id) || (w.a === foe.id && w.b === n.id)))) return;
+    if (wars.some((w) => w.ended < 0 && ((w.a === n.id && w.b === foe.id) || (w.a === foe.id && w.b === n.id)))) return undefined;
     const p = sim.grid.pos, c = base.cell;
     const near = (st: Settlement): number => p[c * 3]! * p[st.cell * 3]! + p[c * 3 + 1]! * p[st.cell * 3 + 1]! + p[c * 3 + 2]! * p[st.cell * 3 + 2]!;
     const theirs = this.settlements.filter((st) => st.ruined < 0 && st.nation === foe.id).sort((x, y) => near(y) - near(x));
@@ -2385,7 +2597,7 @@ export class Civilization {
     const route = theirs.slice(0, 3).map((st) => st.id);
     const seat = theirs.findIndex((st) => st.id === foe.capital);
     if (seat >= 3 && seat < 6) route.push(foe.capital);
-    if (!route.length) return;
+    if (!route.length) return undefined;
     const warlike = h.cultures[n.culture]!.war;
     const lead = (x: Nation): number => { const r = h.people[x.ruler]; return r ? 0.5 * r.bold + 0.5 * r.wise : 0.5; };
     const army = (x: Nation, share: number, morale: number, leader: string): Army => { const size = Math.max(0.5, x.pop * share); return { size, raised: size, tech: x.tech, morale, supply: 1, lead: lead(x), leader: leader || h.people[x.ruler]?.name || `the captains of ${x.name}` }; };
@@ -2393,10 +2605,11 @@ export class Civilization {
     const a = army(n, 0.03 * (0.7 + 0.6 * warlike), 0.65 + 0.2 * lead(n), general), d = army(foe, 0.026, 0.7, other);
     const war: War = { id, a: n.id, b: foe.id, year, ended: -1, eventId: warEvent, peaceEvent: -1, conquest: took || warlike > 0.55, route, at: 0, sieging: 0, army: [a, d], battles: [], outcome: '', taken: took ? [first.id] : [] };
     // the first blow is the first entry in the war's record
-    war.battles.push({ year, settlement: first.id, kind: took ? 'storm' : 'raid', winner: 0, sizes: [a.size, d.size * 0.4], lost: [a.size * 0.05, d.size * 0.1], decided: 'surprise', taken: took, eventId: warEvent });
-    a.size *= 0.95; d.size *= 0.9;
+    if (opening) war.battles.push({ year, settlement: first.id, kind: took ? 'storm' : 'raid', winner: 0, sizes: [a.size, d.size * 0.4], lost: [a.size * 0.05, d.size * 0.1], decided: 'surprise', taken: took, eventId: warEvent });
+    if (opening) { a.size *= 0.95; d.size *= 0.9; }
     wars.push(war);
     if (wars.length > 80) { const k = wars.findIndex((w) => w.ended >= 0); if (k >= 0) wars.splice(k, 1); }
+    return war;
   }
 
   /**
@@ -2435,6 +2648,8 @@ export class Civilization {
         if (loser && loser.ended < 0) this.woe(loser, 'war', e.id >= 0 ? e.id : war.eventId, year, 0.06);
         for (const x of [A, B]) if (x.ended < 0) x.fatigue = sat(x.fatigue + 0.08);
         // the peace is sworn to (system E34): a treaty for a generation or two
+        // a war over a colony ends with the colony brought back or a country recognised (system E36)
+        if (war.independence !== undefined) this.afterRising(sim, war, year, e.id >= 0 ? e.id : war.eventId);
         if (A.ended < 0 && B.ended < 0) this.treaty(sim, A, B, 'peace', year, e.id >= 0 ? e.id : war.eventId, 40);
       };
       if (A.ended >= 0 || B.ended >= 0) { end(A.ended >= 0 ? 'defender' : 'attacker'); continue; }
@@ -2983,10 +3198,16 @@ export class Civilization {
     if (eventId >= 0) entry.eventId = eventId;
     // (two changes in one lifetime are remembered as one, unless a conqueror made the second)
     const last = names[names.length - 1]!;
-    if (!renamed && names.length > 1 && year - last.year < 25 && last.eventId === undefined) names[names.length - 1] = entry;
-    else names.push(entry);
+    if (!renamed && names.length > 1 && year - last.year < 25 && last.eventId === undefined) {
+      // (a name that went back to what it was within a lifetime never changed, as far as the record goes)
+      if (names[names.length - 2]!.name === next) { names.pop(); if (names.length === 1) st.names = undefined; }
+      else names[names.length - 1] = entry;
+    } else names.push(entry);
     // a long record keeps its first name and its latest
     if (names.length > 8) names.splice(1, names.length - 8);
+    // (and never the same name twice running, which dropping the middle of a long record can leave)
+    for (let i = names.length - 1; i > 0; i--) if (names[i]!.name === names[i - 1]!.name) names.splice(i, 1);
+    if (names.length === 1) st.names = undefined;
     st.name = next;
     return true;
   }
@@ -3284,12 +3505,12 @@ export class Civilization {
   }
 
   /** A town becomes the first of a new country: on its own (the first farmers of a land) or by going beyond the reach of the one it came from. */
-  private newNation(sim: Simulation, rng: RNG, st: Settlement, year: number, from: Nation | null, why: 'far' | 'breakaway' | 'successor' = 'far', because: number[] = [], lead?: Person): Nation {
+  private newNation(sim: Simulation, rng: RNG, st: Settlement, year: number, from: Nation | null, why: 'far' | 'breakaway' | 'successor' | 'colony' = 'far', because: number[] = [], lead?: Person): Nation {
     const h = this.h;
     // its people (system E9): a country keeps the culture it came out of, but settlers who crossed the sea to found
     // their own, and farmers who began apart from every other nation, become a people of their own
     const root = from ? h.cultures[from.culture]! : this.cultureFor(sim, st.species, year);
-    const apart = from ? (why === 'far' ? !!st.overseas || rng.chance(0.2) : rng.chance(why === 'successor' ? 0.15 : 0.08)) : h.nations.some((x) => x.species === st.species);
+    const apart = from ? (why === 'colony' ? true : why === 'far' ? !!st.overseas || rng.chance(0.2) : rng.chance(why === 'successor' ? 0.15 : 0.08)) : h.nations.some((x) => x.species === st.species);
     const culture = apart ? this.daughterCulture(rng, root, year, st) : root;
     const lang = h.languages[culture.language]!;
     // named for its first town, in its own tongue
@@ -3331,7 +3552,9 @@ export class Civilization {
       type: 'nation', year, cellId: st.cell, title: dawn ? 'The dawn of history' : `${n.name} is founded`,
       description: dawn
         ? `At ${st.name} the people of ${sp.name} have planted fields and stayed to guard them. They call their country ${n.name} and follow ${first.name}. From here on their years are worth counting one by one.`
-        : from && why === 'breakaway'
+        : from && why === 'colony'
+          ? `The colony at ${st.name} has declared that it is no one's colony. Its people were born there, as their parents were. They follow ${first.name} and call their country ${n.name}.`
+          : from && why === 'breakaway'
           ? `${st.name} and the towns around it will take no more orders from ${this.settlements[from.capital]?.name ?? from.name}. They follow ${first.name} now and call their country ${n.name}.`
           : from && why === 'successor'
             ? `Out of what was ${from.name}, ${first.name} holds ${st.name} and the land around it, and calls it ${n.name}.`

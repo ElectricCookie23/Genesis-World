@@ -6,6 +6,7 @@ import type { Festival } from './festival';
 import type { War } from './war';
 import type { Grudge, Treaty } from './diplomacy';
 import type { Ideology } from './ideology';
+import type { Colony } from './colony';
 // The entities of history. All of them are plain data, so the whole of history saves, loads and
 // rewinds with the rest of the simulation.
 import type { Calendar } from './calendar';
@@ -170,6 +171,8 @@ export interface Nation {
   woes: { kind: string; eventId: number; year: number }[];
   /** Its building laws, each made after a calamity in one of its towns (system E20). */
   codes?: Codes;
+  /** The colony it was born from (system E36): a colony's id. */
+  colonyOf?: number;
   /** The idea gaining ground in it (system E35): which (an ideology's id), the share of its people who hold it, and since when. And how many times its flag has changed. */
   idea?: { id: number; share: number; since: number };
   flag?: number;
@@ -239,6 +242,10 @@ export interface HistoryState {
   movements?: Movement[];
   firstStyles?: number[];
   paintingSeq?: number;
+  /** Colonies planted overseas (system E36), and the events of the first colony and the first independence. */
+  colonies?: Colony[];
+  firstColony?: number;
+  firstFree?: number;
   /** The ideas of the world (system E35), and the events of the first idea and the first revolution. */
   ideologies?: Ideology[];
   firstIdea?: number;

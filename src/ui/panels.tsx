@@ -475,6 +475,7 @@ export function FlatMap() {
               <option value="-2">trade routes, coloured by what they carry</option>
               <option value="-3">the wars, battle by battle</option>
               <option value="-4">ideas of how to rule, and where they hold</option>
+              <option value="-5">colonies overseas, and the countries born of them</option>
               {makers.map((r) => <option key={r.id} value={String(r.id)}>the world as {r.name} believes it to be ({r.eraName})</option>)}
             </select>
           </div>
@@ -484,7 +485,7 @@ export function FlatMap() {
             onClick={(e) => { const r = (e.target as HTMLCanvasElement).getBoundingClientRect(); actions.mapClick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); }} />
           {!whose && s.mapOf >= -1 && <MigrationArrows />}
         </div>
-        {(s.mapOf === -2 || s.mapOf === -4) && <div class={css.when} style={{ color: '#ece7db', margin: '8px 0 0' }}>{s.mapNote}</div>}
+        {(s.mapOf === -2 || s.mapOf === -4 || s.mapOf === -5) && <div class={css.when} style={{ color: '#ece7db', margin: '8px 0 0' }}>{s.mapNote}</div>}
         {s.mapOf === -3 && (
           <div style={{ margin: '8px 0 0', maxHeight: '38vh', overflowY: 'auto' }}>
             {!s.wars && <p class={css.sub}>Asking the chroniclers.</p>}
@@ -826,6 +827,12 @@ export function NationPanel() {
             {' '}Its land offers {d.land.length ? d.land.join(', ') : 'little'}{d.land.includes('ore') ? '' : '; no ore, so no metal'}.
             {' '}Its people are the {realm.culture} and speak <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openLanguages(realm.language)}>{realm.language}</button>.
             {realm.ended < 0 && <>{' '}It is {governedAs(realm.government)}{realm.creed ? <>, and has been since the revolution of {ago(realm.creed.since)} in the name of {realm.creed.own}, {realm.creed.name}</> : ''}.</>}
+            {realm.colonyOf && <>{' '}It began as a colony of <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.colonyOf!.mother)}>{realm.colonyOf.motherName}</button>, planted {ago(realm.colonyOf.founded)}; it declared itself free {ago(realm.colonyOf.declared)}{realm.colonyOf.freed < 0 && realm.ended < 0 ? ' and is fighting for that now' : realm.colonyOf.freed >= 0 ? `, and its mother country gave up the fight ${ago(realm.colonyOf.freed)}` : ''}. {realm.colonyOf.warEvent >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this war" onClick={() => update({ whyEvent: realm.colonyOf!.warEvent })}>why</button>}</>}
+            {realm.ended < 0 && realm.colonies && realm.colonies.map((c) => (
+              <span key={c.id} style={{ display: 'block', margin: '3px 0 0' }}>
+                It holds a colony overseas at {c.name} ({c.towns === 1 ? 'one town' : `${c.towns} towns`}, planted {ago(c.founded)}): {c.note}. {c.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this colony" onClick={() => update({ whyEvent: c.eventId })}>why</button>} <button class={css.link} style={{ marginRight: 0 }} onClick={() => update({ panel: 'map', mapOf: -5, mapNote: '' })}>on the map</button>
+              </span>
+            ))}
             {realm.ended < 0 && realm.idea && <>{' '}About {Math.max(1, Math.round(realm.idea.share * 100))} in a hundred of its people hold with {realm.idea.own}, {realm.idea.name}: {IDEA_SAYS[realm.idea.kind as Idea]}. <button class={css.link} style={{ marginRight: 0 }} title="Why this idea" onClick={() => update({ whyEvent: realm.idea!.eventId })}>why</button> <button class={css.link} style={{ marginRight: 0 }} onClick={() => update({ panel: 'map', mapOf: -4, mapNote: '' })}>on the map</button></>}
             {realm.market && <>{' '}{realm.market}</>}
             {realm.trade && <>{' '}Its merchants carry {realm.trade.good} to <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.trade!.to)}>{realm.trade.toName}</button>, and have for {Math.max(1, Math.round(year - realm.trade.since)).toLocaleString('en-US')} years. <button class={css.link} style={{ marginRight: 0 }} title="Why this trade" onClick={() => update({ whyEvent: realm.trade!.eventId })}>why</button></>}

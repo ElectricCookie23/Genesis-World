@@ -53,9 +53,22 @@ export function growsApart(s: Standing): number {
   return push / 420;
 }
 
-/** Is a colony ready to declare itself free? Its people must think of themselves as their own; then it waits for the mother country to be unsteady, or for long enough. */
-export function ready(identity: number): boolean {
-  return identity >= 1;
+/**
+ * Is a colony ready to declare itself free? Its people must think of themselves as their own, and there must be
+ * enough of them to think they can win: more than one town, or a good share of the mother country's people. A
+ * colony whose last rising was put down waits two generations before it tries again.
+ */
+export function ready(c: Pick<Colony, 'identity' | 'crushed'>, towns: number, share: number, year: number): boolean {
+  if (c.identity < 1 || (c.crushed >= 0 && year - c.crushed < 60)) return false;
+  return towns >= 2 || share >= 0.12;
+}
+
+/**
+ * The army a mother country can put ashore, as a share of the one it could raise at home: ships carry only so
+ * many, and fewer the further they must go.
+ */
+export function shipped(distance: number, steam: boolean): number {
+  return (steam ? 0.6 : 0.4) / (1 + 1.2 * distance);
 }
 
 /** How many years, on average, a colony that is ready waits before it declares: not long when the mother country is unsteady. */
