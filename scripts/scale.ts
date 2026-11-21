@@ -4,6 +4,8 @@
 // history that is not a number, saying where.
 // Usage: npx vite-node scripts/scale.ts <seed> <gridN> <era to skip to> <years to watch>
 import { Simulation } from '../src/sim/simulation';
+import { saveSimulation } from '../src/sim/snapshot';
+import { serialize } from 'node:v8';
 const [seed = 'amber-reef-101', n = '63', era = '4', years = '2000'] = process.argv.slice(2);
 const sim = new Simulation(seed, Number(n));
 const t0 = Date.now();
@@ -28,9 +30,22 @@ let nationYears = 0, found: string | null = bad();
 if (found) console.log('  already not a number before watching:', found);
 for (let y = 0; y < Number(years) && !found; y++) {
   sim.step(1);
+  if (y % 500 === 499) { (globalThis as { gc?: () => void }).gc?.(); console.log(`    +${y + 1} watched: ${living()} countries, ${towns()} towns, ${sim.events.events.length} events, heap ${Math.round(process.memoryUsage().heapUsed / 1e6)} MB, a save ${Math.round(JSON.stringify(h, (_k, v) => (ArrayBuffer.isView(v) ? Array.from(v as unknown as number[]) : v)).length / 1e6)} MB of history`); }
   nationYears += living();
   found = bad();
   if (found) { console.log(`  NOT A NUMBER after ${y + 1} watched years: ${found}`); for (const e of sim.events.events.slice(-8)) console.log(`      [${e.type}] ${e.title}`); }
+}
+{
+  // how big one saved copy of this world is (the page keeps a dozen or two, for going back), and what it is made of
+  const save = saveSimulation(sim, 'measure');
+  const size = (v: unknown): number => { try { return serialize(v).length; } catch { return -1; } };
+  const d = save.data as Record<string, { __nested?: Record<string, unknown> } | unknown>;
+  const parts: [string, number][] = [];
+  for (const k of Object.keys(d)) parts.push([k, size(d[k])]);
+  const civ = (d.civ as { __nested: Record<string, unknown> }).__nested;
+  const hh = (civ.h as { __nested?: Record<string, unknown> }).__nested ?? (civ.h as Record<string, unknown>);
+  console.log(`  one saved copy: ${(size(save) / 1e6).toFixed(1)} MB; largest parts: ${parts.sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k} ${(v / 1e6).toFixed(1)}`).join(', ')}`);
+  console.log(`  inside the history engine: ${Object.keys(civ).map((k) => [k, size(civ[k])] as [string, number]).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k} ${(v / 1e6).toFixed(1)}`).join(', ')}; inside h: ${Object.keys(hh).map((k) => [k, size(hh[k])] as [string, number]).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k} ${(v / 1e6).toFixed(2)}`).join(', ')}`);
 }
 const ev = sim.events.events.slice(from);
 const counts = new Map<string, number>();

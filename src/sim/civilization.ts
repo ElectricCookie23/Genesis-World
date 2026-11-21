@@ -573,7 +573,7 @@ export class Civilization {
             o.nation = n.id; o.pop *= 0.85;
             sim.cellLog.note(o.cell, year, Log.Owner, n.id);
             const taken = sim.emit({ type: 'conquest', year, cellId: o.cell, title: `${n.name} takes ${o.name}`, description: `${o.name} has a new flag over its gate. It belonged to ${foe.name} until this year.`, causes: [warEvent, n.eventId].filter((x) => x >= 0), importance: foe.capital === o.id ? 1 : 0, speciesIds: [st.species], data: { nation: n.id, from: foe.id } });
-            if (general && taken.id >= 0) { taken.description += ` ${general.name} rode in first.`; taken.data = { ...taken.data, person: general.id }; general.events.push(taken.id); }
+            if (general && taken.id >= 0) { taken.description += ` ${general.name} rode in first.`; taken.data = { ...taken.data, person: general.id }; this.note(general, taken.id); }
             // conquerors rename what they take (system E22): the same meaning said in their own tongue, more often the more warlike they are
             // (the luck in it comes from the town and the year, not from the stream that decides wars)
             if (taken.id >= 0 && (hash32(this.seedNum, o.id, Math.floor(year), 0x4e3a) % 1000) / 1000 < 0.3 + 0.5 * warlike) {
@@ -635,7 +635,7 @@ export class Civilization {
           } else if (Math.acos(Math.max(-1, Math.min(1, cos))) > REACH[n.era]! * spacing) {
             const far = this.newNation(sim, rng, d, year, n);
             const ev = sim.events.events[d.eventId], first = this.h.people[far.ruler];
-            if (ev && first) { ev.description = `${ev.description} The settlers were led by ${first.name}.`; ev.data = { ...(ev.data ?? {}), person: first.id, nation: far.id }; first.events.push(ev.id); }
+            if (ev && first) { ev.description = `${ev.description} The settlers were led by ${first.name}.`; ev.data = { ...(ev.data ?? {}), person: first.id, nation: far.id }; this.note(first, ev.id); }
           } else {
             d.nation = n.id; sim.cellLog.note(d.cell, year, Log.Owner, n.id);
             this.credit(sim, rng, n, d.eventId, 'The settlers were led by {name}.', 'explorer', year);
@@ -988,7 +988,7 @@ export class Civilization {
       if (i > ev.id && (e.type !== 'milestone' || !e.causes.includes(ev.id))) continue;
       e.description = `${e.description} ${said}`;
       e.data = { ...(e.data ?? {}), person: who.id, nation: (e.data?.nation as number | undefined) ?? n.id };
-      who.events.push(e.id);
+      this.note(who, e.id);
     }
     return who;
   }
@@ -1127,8 +1127,8 @@ export class Civilization {
         const claimant = h.people[other.ruler]!, crowned = h.people[n.ruler];
         ev.description += ` ${claimant.name} claims the country${crowned ? ` against ${crowned.name}` : ''}.`;
         ev.data = { ...ev.data, person: claimant.id };
-        claimant.events.push(ev.id);
-        if (crowned) { claimant.rival = crowned.id; crowned.rival = claimant.id; crowned.events.push(ev.id); }
+        this.note(claimant, ev.id);
+        if (crowned) { claimant.rival = crowned.id; crowned.rival = claimant.id; this.note(crowned, ev.id); }
       }
       for (const st of others) {
         st.pop *= 0.8;
@@ -1151,7 +1151,7 @@ export class Civilization {
         causes: [n.eventId, ...causes].filter((x) => x >= 0), importance: 1, speciesIds: [n.species], data: { nation: n.id },
       });
       const other = this.newNation(sim, rng, seed, year, n, 'breakaway', [ev.id]);
-      { const leader = h.people[other.ruler]!; ev.description += ` ${leader.name} leads them.`; ev.data = { ...ev.data, person: leader.id }; leader.events.push(ev.id); }
+      { const leader = h.people[other.ruler]!; ev.description += ` ${leader.name} leads them.`; ev.data = { ...ev.data, person: leader.id }; this.note(leader, ev.id); }
       let taken = 1;
       for (const st of others) {
         if (st.id === seed.id || taken >= towns.length / 2) continue;
@@ -1369,6 +1369,11 @@ export class Civilization {
       const cap = this.settlements[n.capital]!, far = this.settlements[o.capital]!;
       const apart = Math.abs(n.era - o.era);
       const ahead = n.era > o.era ? n : o, behind = n.era > o.era ? o : n;
+      // (in a world of many countries, two lesser neighbours of the same age finding each other across a hill is no one's
+      // news and would be thousands of events: they are in touch from now on, and that is all)
+      if (way === 0 && apart < 2 && !this.notable(n) && !this.notable(o)) { n.know.saved += 0.002; continue; }
+      // (nor, by any way, where the world is crowded and neither is a country of note)
+      if (this.crowded && !this.notable(n) && !this.notable(o)) { n.know.saved += 0.002; continue; }
       const ev = sim.emit({
         type: 'contact', year, cellId: far.cell, title: `${n.name} meets ${o.name}`,
         description: (way === 1
@@ -1422,7 +1427,7 @@ export class Civilization {
       description: `${after}, ${who.name} walks from town to town in ${n.name} saying ${says}. ${end}`,
       causes: [woe.eventId, n.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [n.species], data: { nation: n.id, person: who.id },
     });
-    who.events.push(ev.id);
+    this.note(who, ev.id);
     if (ruler && who.died >= 0) who.rival = ruler.id;
   }
 
@@ -1502,14 +1507,14 @@ export class Civilization {
       if (n.know.lost[i]! > 0) {
         const gone = Math.round(year - n.know.lost[i]!);
         const capTown = this.settlements[n.capital]!;
-        sim.emit({
+        const again = sim.emit({
           type: 'knowledge-regained', year, cellId: capTown.cell, title: `${capital(way.name)} found again`,
           description: `${n.name} can make ${way.name} once more, ${gone.toLocaleString('en-US')} years after the knowledge was lost${relicHere ? `. They learned it from what the old builders left standing in ${towns.find((st) => st.relic === i)!.name}` : ''}.`,
           causes: [n.know.lostEvent[i]!, n.eventId].filter((x) => x >= 0), importance: slot.key || gone > 300 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, slot: slot.id, years: gone },
         });
         n.know.lost[i] = 0;
         for (const st of towns) if (st.relic === i) st.relic = -1;
-        if (sim.events.events.length && sim.events.events[sim.events.events.length - 1]!.type === 'knowledge-regained') this.credit(sim, rng, n, sim.events.events.length - 1, 'The one who worked it out was {name}.', 'scholar', year);
+        if (again.id >= 0) this.credit(sim, rng, n, again.id, 'The one who worked it out was {name}.', 'scholar', year);
         continue;
       }
       const first = !h.firsts[i];
@@ -1526,7 +1531,7 @@ export class Civilization {
             : `${n.name} has ${way.name} now. Their word for it is ${own.toLowerCase()}.`,
           causes: [n.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [n.species], data: inventor ? { nation: n.id, slot: slot.id, way: way.id, person: inventor.id } : { nation: n.id, slot: slot.id, way: way.id },
         });
-        if (inventor) inventor.events.push(ev.id);
+        if (inventor) this.note(inventor, ev.id);
       }
     }
     n.tech = Math.min(1.2, levelOf(n.know, land));
@@ -1687,6 +1692,24 @@ export class Civilization {
 
   /** How many countries there are, as of this tick. */
   private livingNations = 0;
+
+  /**
+   * Above this many living countries a world is crowded: its lesser countries then keep only their turning
+   * points on record, as a fast-forwarded history does (see `Simulation.emit`). A world of two hundred
+   * countries that kept every festival and border treaty of every one of them made a hundred thousand events in
+   * three thousand years, and every kept copy of the world (for going back) carried them all.
+   */
+  crowdedAbove = 40;
+
+  /** Is the world crowded (see `crowdedAbove`)? */
+  get crowded(): boolean {
+    return this.livingNations > this.crowdedAbove;
+  }
+
+  /** Put an event on a person's record, if it is an event that was kept (one of a lesser country in a crowded world, or in a fast-forwarded age, is not). */
+  private note(p: Person, eventId: number): void {
+    if (eventId >= 0) p.events.push(eventId);
+  }
 
   /** Is the country with this id one the chronicle should carry (see `notable`)? */
   isNotable(id: number): boolean {
@@ -2000,10 +2023,10 @@ export class Civilization {
     n.calendar = cal.id;
     const cap = this.settlements[n.capital]!;
     const first = !h.calendars!.some((c) => c.id !== cal.id && c.kind !== 'founding');
-    const remembered = sim.events.events[cal.eventId]!;
+    const remembered = sim.events.events[cal.eventId];
     const out = sim.emit({
       type: 'calendar', year, cellId: cap.cell, title: first ? 'The first calendar' : `${n.name} counts its years anew`,
-      description: `The star-watchers of ${cap.name} fix the count of years for ${n.name}. Year 1 is the year of ${cal.name}: "${remembered.title}". In their own tongue the count is ${cal.own}. By it, this is ${dateIn(cal, year)}.`,
+      description: `The star-watchers of ${cap.name} fix the count of years for ${n.name}. Year 1 is the year of ${cal.name}${remembered ? `: "${remembered.title}"` : ''}. In their own tongue the count is ${cal.own}. By it, this is ${dateIn(cal, year)}.`,
       causes: [cal.eventId, n.eventId].filter((x, i, a) => x >= 0 && a.indexOf(x) === i), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, calendar: cal.id },
     });
     this.credit(sim, rng, n, out.id, '{name} worked out the count.', 'scholar', year);
@@ -2514,7 +2537,7 @@ export class Civilization {
         description: `A cook at the court of ${ocap.name} is caught with a paper of white powder, and names a merchant from ${n.name}. ${theirs.name} lives. ${o.name} will not forget who sent it.`,
         causes: [cause].filter((x) => x >= 0), importance: 0, speciesIds: [o.species], data: { by: n.id, against: o.id, person: theirs.id },
       });
-      if (e.id >= 0) { (o.grudges ??= []).push({ against: n.id, eventId: e.id, year }); if (o.grudges.length > 6) o.grudges.shift(); theirs.events.push(e.id); }
+      if (e.id >= 0) { (o.grudges ??= []).push({ against: n.id, eventId: e.id, year }); if (o.grudges.length > 6) o.grudges.shift(); this.note(theirs, e.id); }
       return;
     }
     // ---- it succeeds: the ruler is dead of "a short illness", and what follows a ruler's death follows
@@ -2528,7 +2551,7 @@ export class Civilization {
       description: `${theirs.name}, who ruled ${o.name} for ${Math.max(1, Math.round(year - theirs.reignFrom))} years, has died after a short illness. The court is in mourning.`,
       causes: [hidden.id].filter((x) => x >= 0), importance: 0, speciesIds: [o.species], data: { nation: o.id, person: theirs.id },
     });
-    theirs.events.push(cover.id >= 0 ? cover.id : hidden.id);
+    if (cover.id >= 0 || hidden.id >= 0) theirs.events.push(cover.id >= 0 ? cover.id : hidden.id);
     const from = ev.length;
     this.succession(sim, new RNG(hash32(this.seedNum, o.id, Math.floor(year), 0x54)), o, this.settlements.filter((st) => st.ruined < 0 && st.nation === o.id), year, 'died after a short illness');
     // (whatever the succession brought, a quarrel or a war for the throne, the hidden blow is among its causes)
@@ -3726,7 +3749,13 @@ export class Civilization {
       firsts[style] = e.id;
     }
     // (the gallery is kept to a few rooms: the first to go are the oldest that are not the first of their age)
-    if (paintings.length > 260) { const k = paintings.findIndex((x) => !x.first); paintings.splice(k >= 0 ? k : 0, 1); }
+    if (paintings.length > 260) {
+      // (the gallery is thinned: first whatever is not a country's first of an age; and where there is nothing else left,
+      // in a world of many countries, a first-of-an-age that is not the earliest picture of that age anywhere)
+      let k = paintings.findIndex((x) => !x.first);
+      if (k < 0) { const seen = new Set<number>(); k = paintings.findIndex((x) => (seen.has(x.era) ? true : (seen.add(x.era), false))); }
+      paintings.splice(k >= 0 ? k : paintings.length - 1, 1);
+    }
   }
 
   /**
@@ -3879,7 +3908,7 @@ export class Civilization {
       description: `${ruler.name} of ${n.name} weds ${consort.name} of the ${theirs.name}, which rules ${other.name}. While the match is remembered the two countries will not fight, and a child of it may one day claim both.`,
       causes: [n.eventId, other.eventId].filter((x) => x >= 0), importance: n.towns >= 6 && other.towns >= 6 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, other: other.id, person: consort.id },
     });
-    consort.events.push(ev.id); ruler.events.push(ev.id);
+    this.note(consort, ev.id); this.note(ruler, ev.id);
     (n.allies ??= []).push({ nation: other.id, until, eventId: ev.id });
     (other.allies ??= []).push({ nation: n.id, until, eventId: ev.id });
     for (const x of [n, other]) if (x.allies!.length > 6) x.allies!.shift();
@@ -3925,7 +3954,7 @@ export class Civilization {
           description: `${old.name} ${fate}. The heir was a child of the ${house.name}; the army was ${general.name}'s. ${general.name} holds ${cap.name} now, and the ${house.name} is over after ${house.reigns} ${house.reigns === 1 ? 'reign' : 'reigns'}.`,
           causes: [n.eventId, general.events[0] ?? -1].filter((x) => x >= 0), importance: house.reigns >= 8 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, person: general.id },
         });
-        general.events.push(ev.id); old.events.push(ev.id);
+        this.note(general, ev.id); this.note(old, ev.id);
         this.woe(n, 'succession', ev.id, year, 0.12);
         return;
       }
@@ -3944,12 +3973,11 @@ export class Civilization {
           description: `${old.name} ${fate}, and two children of the ${house.name} both claim ${cap.name}. ${heir.name} is crowned there.`,
           causes: [n.eventId].filter((x) => x >= 0), importance: war ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, person: claimant.id },
         });
-        claimant.events.push(ev.id); heir.events.push(ev.id); old.events.push(ev.id);
+        this.note(claimant, ev.id); this.note(heir, ev.id); this.note(old, ev.id);
         if (war) this.successionWar(sim, rng, n, towns, year, heir, claimant, ev.id);
         else {
           const end = rng.pick(['flees over the border and is not heard of again', 'is shut up in a tower for life', 'dies in the fighting at the gate', 'is bought off with a province to govern']);
-          const ev2 = sim.events.events[ev.id]!;
-          ev2.description += ` ${claimant.name} ${end}.`;
+          ev.description += ` ${claimant.name} ${end}.`;
           if (!end.startsWith('is bought')) { claimant.died = end.startsWith('dies') ? year : -1; if (claimant.died >= 0) { claimant.fate = 'died fighting for the throne'; h.notables.splice(h.notables.indexOf(claimant.id), 1); } }
           this.woe(n, 'succession', ev.id, year, 0.07);
         }
@@ -3984,7 +4012,7 @@ export class Civilization {
             description: `${old.name} ${fate} and left no heir. By an old marriage the claim falls to ${claimer.name} of the ${theirs.name}, and ${n.name} with its ${towns.length} ${towns.length === 1 ? 'town' : 'towns'} becomes part of ${abroad.name}. No battle was fought for it.`,
             causes: [n.eventId, abroad.eventId].filter((x) => x >= 0), importance: towns.length + abroad.towns >= 8 ? 2 : 1, speciesIds: [n.species], data: { nation: abroad.id, other: n.id, person: claimer.id },
           });
-          claimer.events.push(ev.id); old.events.push(ev.id);
+          this.note(claimer, ev.id); this.note(old, ev.id);
           for (const st of towns) { st.nation = abroad.id; sim.cellLog.note(st.cell, year, Log.Owner, abroad.id); }
           abroad.towns += towns.length;
           // what either country knew, the united one knows
@@ -4005,7 +4033,7 @@ export class Civilization {
         causes: [n.eventId, abroad.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [n.species], data: { nation: n.id, other: abroad.id, person: next.id },
       });
       n.allies[n.allies.length - 1]!.eventId = ev.id; abroad.allies[abroad.allies.length - 1]!.eventId = ev.id;
-      next.events.push(ev.id); old.events.push(ev.id); claimer.events.push(ev.id);
+      this.note(next, ev.id); this.note(old, ev.id); this.note(claimer, ev.id);
       this.woe(n, 'succession', ev.id, year, 0.05);
       return;
     }
@@ -4018,7 +4046,7 @@ export class Civilization {
       description: house ? `${old.name} ${fate} and left no heir the great families would follow. ${next.name} takes ${cap.name}, and the ${house.name} is over after ${house.reigns} ${house.reigns === 1 ? 'reign' : 'reigns'}.` : `${next.name} takes ${cap.name}.`,
       causes: [n.eventId].filter((x) => x >= 0), importance: house && house.reigns >= 12 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, person: next.id },
     });
-    next.events.push(ev.id); old.events.push(ev.id);
+    this.note(next, ev.id); this.note(old, ev.id);
     this.woe(n, 'succession', ev.id, year, 0.16);
   }
 
@@ -4031,9 +4059,8 @@ export class Civilization {
     const others = towns.filter((st) => st.id !== cap.id && st.ruined < 0);
     if (!others.length) return;
     const seat = [...others].sort((a, b) => b.pop - a.pop).find((st) => angle(cap, st) > 1.2 * spacing) ?? others[0]!;
-    const ev = sim.events.events[eventId]!;
-    ev.description += ` ${claimant.name} is crowned in ${seat.name}. Towns choose a side, or have one chosen for them.`;
-    ev.cellId = seat.cell;
+    const ev = sim.events.events[eventId];
+    if (ev) { ev.description += ` ${claimant.name} is crowned in ${seat.name}. Towns choose a side, or have one chosen for them.`; ev.cellId = seat.cell; }
     const other = this.newNation(sim, rng, seat, year, n, 'breakaway', [eventId], claimant);
     for (const st of others) {
       st.pop *= 0.8;
@@ -4175,7 +4202,7 @@ export class Civilization {
       causes: [st.eventId, from ? from.eventId : -1, ...because].filter((x) => x >= 0), importance: dawn ? 3 : 1, speciesIds: [st.species], data: { nation: n.id, person: first.id },
     });
     n.eventId = ev.id;
-    first.events.push(ev.id);
+    this.note(first, ev.id);
     if (dawn || (h.dawnEvent ?? -1) < 0) h.dawnEvent = ev.id;
     // its count of years (system E8): settlers and successors keep the count they were born under; a country that
     // broke away in anger, or began on its own, counts from its own beginning

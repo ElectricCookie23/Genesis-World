@@ -493,6 +493,16 @@ function keepEra(s: Simulation): void {
     snapshotEra = s.civ.h.topEra;
     const title = `Start of the ${ERAS[snapshotEra]!.name}`;
     rewinds.push({ simYear: s.simYear, title, save: saveSimulation(s, title), era: true });
+    // A kept copy of the world is as large as its record. Where the record is long (a watched history of many
+    // countries), a dozen copies ran to gigabytes and the page stopped answering; so the copies together may hold
+    // only so many events' worth, and the heaviest that is not the newest goes first.
+    const weigh = (r: { save: { data: unknown } }): number => { const e = (r.save.data as { events?: { __nested?: { events?: unknown[] } } }).events; return e && e.__nested && Array.isArray(e.__nested.events) ? e.__nested.events.length : 0; };
+    for (let guard = 0; guard < 40 && rewinds.reduce((a, r) => a + weigh(r), 0) > 250000; guard++) {
+      let drop = -1, top = -1;
+      for (let i = 0; i < rewinds.length - 1; i++) { const w = weigh(rewinds[i]!); if (rewinds[i]!.title !== 'Fork point' && w > top) { top = w; drop = i; } }
+      if (drop < 0) break;
+      rewinds.splice(drop, 1);
+    }
     // where memory is short only the most recent eras are kept
     const eraLimit = Math.max(3, rewindLimit - 2);
     while (rewinds.filter((r) => r.era).length > eraLimit) rewinds.splice(rewinds.findIndex((r) => r.era), 1);

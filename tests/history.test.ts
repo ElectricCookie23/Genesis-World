@@ -2916,6 +2916,39 @@ describe('numbers that stay numbers', () => {
   });
 });
 
+describe('a crowded world', () => {
+  it('keeps only the turning points of its lesser countries, and goes on working', () => {
+    // (the page's worlds have two hundred countries; here a world is called crowded at three, so the rule can be seen)
+    let done = 0;
+    for (const { sim: base, seed } of fiveHistories()) {
+      if (done) break;
+      if (base.civ.h.nations.filter((n) => n.ended < 0).length < 6) continue;
+      done++;
+      const save = saveSimulation(base, 'before');
+      const run = (crowdedAbove: number): Simulation => { const sim = new Simulation(seed, 17); loadSimulation(sim, save); sim.civ.crowdedAbove = crowdedAbove; for (let y = 0; y < 300; y++) sim.step(1); return sim; };
+      const plain = run(1000), crowded = run(3);
+      const from = base.events.events.length;
+      const added = (sim: Simulation) => sim.events.events.slice(from);
+      // far fewer events, and still some; and what a crowded world keeps of small things belongs to someone of note or to no country
+      expect(added(crowded).length).toBeGreaterThan(0);
+      expect(added(crowded).length).toBeLessThan(added(plain).length * 0.8);
+      expect(crowded.civ.crowded).toBe(true);
+      expect(plain.civ.crowded).toBe(false);
+      // nothing is broken by it: every id an event or a record points at exists, and every number is a number
+      const h = crowded.civ.h, ev = crowded.events.events;
+      for (const e of added(crowded)) { for (const c of e.causes) expect(ev[c]).toBeDefined(); expect(e.id).toBe(ev.indexOf(e)); }
+      for (const st of crowded.civ.settlements) if (st.ruined < 0) { expect(Number.isFinite(st.pop)).toBe(true); expect(st.pop).toBeGreaterThanOrEqual(0); }
+      for (const n of h.nations) if (n.ended < 0) { expect(Number.isFinite(n.pop)).toBe(true); expect(Number.isFinite(n.tech)).toBe(true); expect(Number.isFinite(n.stability)).toBe(true); }
+      for (const w of h.wars ?? []) { if (w.eventId >= 0) expect(ev[w.eventId]).toBeDefined(); for (const b of w.battles) if (b.eventId >= 0) expect(ev[b.eventId]).toBeDefined(); }
+      for (const p of h.people) for (const id of p.events) expect(id).toBeGreaterThanOrEqual(0);
+      for (const s of h.secrets ?? []) expect(ev[s.eventId]).toBeDefined();
+      for (const g of h.great ?? []) if (g.eventId >= 0) expect(ev[g.eventId]).toBeDefined();
+      console.log('crowded', { seed, plain: added(plain).length, crowded: added(crowded).length, nations: h.nations.filter((n) => n.ended < 0).length });
+    }
+    expect(done).toBe(1);
+  }, 900000);
+});
+
 describe('world wars (E40)', () => {
   it('alliances chain, a country sworn to both sides stays out, and it is a world war when enough of the powers are in it', () => {
     // 1 and 2 go to war; 3 is sworn to 1, 4 to 2, 5 to 3 (so it follows), 6 to both 1 and 2 (so it stays out), 7 to no one

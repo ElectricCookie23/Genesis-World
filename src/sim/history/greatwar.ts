@@ -61,9 +61,10 @@ export interface Joined { nation: number; side: 0 | 1; with: number }
 /**
  * Chain the alliances out from the two countries that began a war. Each round, every country sworn to someone
  * already on a side joins that side, unless it is already in or is sworn to both sides at once (it stays out).
+ * No side grows past `most` countries: beyond that, promises are not kept.
  * Returns the two sides and who joined on account of whom, in the order they came in.
  */
-export function chain(a: number, b: number, alliesOf: (id: number) => number[], rounds = 4): { sides: [number[], number[]]; joined: Joined[] } {
+export function chain(a: number, b: number, alliesOf: (id: number) => number[], rounds = 3, most = 6): { sides: [number[], number[]]; joined: Joined[] } {
   const sides: [number[], number[]] = [[a], [b]];
   const joined: Joined[] = [];
   const on = (k: 0 | 1, id: number): boolean => sides[k].includes(id);
@@ -81,7 +82,7 @@ export function chain(a: number, b: number, alliesOf: (id: number) => number[], 
     const torn = new Set(coming.filter((c) => coming.some((d) => d.nation === c.nation && d.side !== c.side)).map((c) => c.nation));
     const come = coming.filter((c) => !torn.has(c.nation));
     if (!come.length) break;
-    for (const c of come) { sides[c.side].push(c.nation); joined.push(c); }
+    for (const c of come) { if (sides[c.side].length >= most) continue; sides[c.side].push(c.nation); joined.push(c); }
   }
   return { sides, joined };
 }
@@ -138,7 +139,8 @@ export function institutionName(kind: InstitutionKind, town: string): string {
 
 /** A great war in a sentence. */
 export function describeGreatWar(g: GreatWar, name: (id: number) => string, year: number): string {
-  const list = (ids: number[]): string => { const n = ids.map(name).filter(Boolean); return n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n[0] ?? 'no one'; };
+  // (the first four of a side by name, and the rest by number)
+  const list = (ids: number[]): string => { const all = ids.map(name).filter(Boolean), n = all.slice(0, 4), more = all.length - n.length; if (more > 0) return `${n.join(', ')} and ${more} ${more === 1 ? 'other' : 'others'}`; return n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n[0] ?? 'no one'; };
   const span = Math.max(1, Math.round((g.ended >= 0 ? g.ended : year) - g.began));
   const how = g.ended < 0 ? 'It is still being fought.' : g.winner < 0 ? 'Neither side had the better of it.' : `${list(g.sides[g.winner as 0 | 1])} had the better of it.`;
   return `${list(g.sides[0])} against ${list(g.sides[1])}: ${g.wars.length} wars in ${span} ${span === 1 ? 'year' : 'years'}${g.taken.length ? `, and ${g.taken.length} ${g.taken.length === 1 ? 'town' : 'towns'} under a new flag at the end of it` : ''}. ${how}`;

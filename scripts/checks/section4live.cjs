@@ -17,7 +17,11 @@ const { open } = require('./h.cjs');
     if (Date.now() - t0 > 20 * 60000) { console.log('gave up waiting for the skip', JSON.stringify(s)); break; }
   }
   await h.page.evaluate(() => { __genesis.update({ hintStep: 9 }); __genesis.actions.setSpeed(3); });
-  await h.page.waitForTimeout(watch * 1000);
+  // (while it runs: how many countries, towns and events there are, and how much memory the page's own thread holds)
+  for (let t = 0; t < watch; t += 30) {
+    await h.page.waitForTimeout(30000);
+    console.log('  watching', JSON.stringify(await h.page.evaluate(() => { const s = __genesis.state; return { year: Math.round(s.stats.simYear), realms: s.realms.filter((r) => r.ended < 0).length, towns: s.settlements.length, events: s.events.length, chronicle: s.chronicle.length, heapMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : -1 }; })));
+  }
   console.log('after watching', JSON.stringify(await stat()));
   await h.page.evaluate(() => __genesis.actions.setSpeed(0));
   const shot = async (name) => { await h.page.mouse.move(40, 720); await h.page.waitForTimeout(400); await h.page.screenshot({ path: `${out}/live-${name}.png`, timeout: 120000 }).catch((e) => console.log('shot failed', name, String(e).slice(0, 60))); };

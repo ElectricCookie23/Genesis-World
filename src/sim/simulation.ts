@@ -240,13 +240,18 @@ export class Simulation {
   emit(e: Parameters<EventLog['add']>[1]): SimEvent {
     // In a world of many countries, what happens in the lesser ones is on record and in the cause graph, but is not
     // for the chronicle: an ordinary event (importance 1) of a country that is not one of the notable ones of its day
-    // is kept at importance 0. (Turning points, importance 2 and up, are told wherever they happen.)
-    if ((e.importance ?? 1) === 1 && this.civ && this.civ.historyActive) {
+    // is kept at importance 0. (Turning points, importance 2 and up, are told wherever they happen.) And where the
+    // world is crowded, a lesser country's ordinary events are not kept at all, as in a fast-forwarded history.
+    let quiet = this.quietEvents;
+    if ((e.importance ?? 1) < 2 && !quiet && this.civ && this.civ.historyActive) {
       const who = typeof e.data?.nation === 'number' ? e.data.nation : this.civ.nationAt(this, e.cellId ?? -1);
-      if (who >= 0 && !this.civ.isNotable(who)) e = { ...e, importance: 0 };
+      if (who >= 0 && !this.civ.isNotable(who)) {
+        if (this.civ.crowded) quiet = true;
+        else if ((e.importance ?? 1) === 1) e = { ...e, importance: 0 };
+      }
     }
     // (a fast-forwarded history keeps only its turning points: firsts of an era and milestones)
-    if (this.quietEvents && (e.importance ?? 1) < 2) return { id: -1, type: e.type, simYear: e.year ?? this.simYear, cellId: e.cellId ?? -1, title: e.title, description: e.description, causes: [], causeWeights: [], effects: [], importance: 0 };
+    if (quiet && (e.importance ?? 1) < 2) return { id: -1, type: e.type, simYear: e.year ?? this.simYear, cellId: e.cellId ?? -1, title: e.title, description: e.description, causes: [], causeWeights: [], effects: [], importance: 0 };
     const ev = this.events.add(this.simYear, e);
     if (ev.importance > this.bigEvent) this.bigEvent = ev.importance;
     // what happens at a place becomes part of that place's record
