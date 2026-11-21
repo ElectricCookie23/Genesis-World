@@ -1,5 +1,14 @@
 # Fix session handoff (GPU review follow-up)
 
+## Now (2026-11-21): the asset pass, then two reviews
+
+The owner's order from here: **(1) asset pass**, **(2) review where the game breaks, where it is slow (assets or anything else) and whether every feature works**, **(3) compare against the briefs and list anything not covered**. A scheduled task ("Genesis fix session: continue", every two hours) wakes this session with "continue": if you are reading this after one, carry on from the first item below that is not done.
+
+**Asset pass, where it stands (F37):**
+- Done: the loader (`render/gfx/models.ts`), the plant converter (`plantFromModel` in `plantmesh.ts`, new part `PART.mass`), swapping a plant form for a model (`Flora.useModel`), the role table (`render/gfx/assetroles.ts`), switches `&noassets` and `&plantmodel=form:file`, `tests/assets.test.ts`. Proved in the built game with a stand-in tree (`scratchpad/maketree.js` makes one).
+- **Waiting on files.** They are on the Mac (`~/genesis-review/assets/`), not in the repo, and kenney.nl and poly.pizza are blocked from this container. The Mac session was sent an exact list (Kenney nature, survival, fantasy-town, watercraft, mini-forest; listed Poly Pizza tiles; the generated ambience as Ogg) to put under `public/assets/` with `MANIFEST.json` (one entry a file, with `path`) and CREDITS.md. Check `git log origin/main -- public/assets` and docs/ASSET_SHORTLIST.md for its answer.
+- When files arrive: (a) correct the file names in `assetroles.ts` against the manifest; (b) look at each plant form with `&plantmodel=` in the software renderer and choose by eye (the owner dislikes low-poly: prefer the Poly Pizza trees with clumped foliage over Kenney's 16-triangle ones); (c) then boats for harbours, hearths, tents, crop rows for `farms: true`, rocks and bones, through the same loader (buildings are the build session's `buildings.ts`: agree the hook in HANDOFF first); (d) ambience loops in `src/audio/music.ts`; (e) CREDITS.md.
+
 ## Latest state (2026-11-20, after the pause)
 
 **Section 6 (E51 to E60) is complete and on `main`.** Chronoscope, archive, atlas, truth and record, counterfactual, butterfly tracker, ancestry, braid, documentary maker, forecasts: all in the Record panel (bar button "Record", key A), each tested, each looked at in the software renderer. PROGRESS.md has the rows; decisions F25 to F29. Files: `src/sim/memory.ts`, `forecast.ts`, `whatif.ts`, `src/game/film.ts`, `src/ui/memory.tsx`; tests `memory`, `forecast`, `whatif`, `film`; checks `scripts/checks/memorysweep.ts`, `memorydump.ts`, `forecastsweep.ts`, `whatifsweep.ts`.

@@ -4,8 +4,10 @@
 // occlusion, and wind weights for trunk bend, branch sway and leaf flutter.
 import { BufferAttribute, BufferGeometry, type InterleavedBufferAttribute } from 'three/webgpu';
 import { packAttributes } from './packed';
+import type { Model } from './models';
 
-export const PART = { bark: 0, leaf: 1, needle: 2, frond: 3, blade: 4, bulb: 5, cap: 6, flesh: 7, petal: 8 } as const;
+/** `mass` is a solid body of foliage from a made model (the asset pass): tinted like leaves, but a volume, not a card. */
+export const PART = { bark: 0, leaf: 1, needle: 2, frond: 3, blade: 4, bulb: 5, cap: 6, flesh: 7, petal: 8, mass: 9 } as const;
 
 export const FORMS = ['broadleaf', 'conifer', 'umbrella', 'palm', 'bottle', 'fan', 'mushroom', 'column', 'shrub', 'fern', 'tuft', 'flower'] as const;
 export type Form = (typeof FORMS)[number];
@@ -431,6 +433,49 @@ export function buildPlant(form: Form, seed = 1): BufferGeometry {
       break;
     }
   }
+  return b.build();
+}
+
+/**
+ * A plant of the game's own kind made from a model someone else shaped (the asset pass). The model gives the form:
+ * a trunk and a crown with real volume. Everything else stays the game's: the model is stood on the ground at the
+ * height of the generated plant it replaces, its wood keeps its own colour and takes the bark shading, and its
+ * foliage gives up its colour and becomes a `mass` that each species tints with its own pigment and the wind moves.
+ * So a violet world's trees are violet whatever colour the model was painted.
+ */
+export function plantFromModel(m: Model, form: Form, height: number): BufferGeometry {
+  const b = new Builder(1);
+  const h = Math.max(1e-6, m.max[1] - m.min[1]), k = height / h;
+  const cx = (m.min[0] + m.max[0]) / 2, cz = (m.min[2] + m.max[2]) / 2;
+  const n = m.pos.length / 3;
+  // wood is brown or grey: red at least as strong as green, or hardly any colour at all. The rest is foliage.
+  const wood = new Uint8Array(n);
+  let lum = 0, leaves = 0, crown: V3 = [0, 0, 0];
+  for (let i = 0; i < n; i++) {
+    const r = m.col[i * 3]!, g = m.col[i * 3 + 1]!, bl = m.col[i * 3 + 2]!;
+    const top = Math.max(r, g, bl), low = Math.min(r, g, bl), y = (m.pos[i * 3 + 1]! - m.min[1]) / h;
+    const grey = top - low < 0.06 * (top + 0.05);
+    const isWood = form === 'mushroom' ? false : form === 'column' ? false : (r >= g * 1.02 && g >= bl) || (grey && y < 0.5);
+    wood[i] = isWood ? 1 : 0;
+    if (!isWood) { lum += 0.2126 * r + 0.7152 * g + 0.0722 * bl; leaves++; crown = [crown[0] + (m.pos[i * 3]! - cx) * k, crown[1] + y * height, crown[2] + (m.pos[i * 3 + 2]! - cz) * k]; }
+  }
+  const mean = leaves ? lum / leaves : 0.2;
+  if (leaves) crown = [crown[0] / leaves, crown[1] / leaves, crown[2] / leaves];
+  let reach = 1e-6;
+  for (let i = 0; i < n; i++) if (!wood[i]) reach = Math.max(reach, Math.hypot((m.pos[i * 3]! - cx) * k - crown[0], (m.pos[i * 3 + 1]! - m.min[1]) * k - crown[1], (m.pos[i * 3 + 2]! - cz) * k - crown[2]));
+  b.crown = crown; b.crownR = reach;
+  for (let i = 0; i < n; i++) {
+    const p: V3 = [(m.pos[i * 3]! - cx) * k, (m.pos[i * 3 + 1]! - m.min[1]) * k, (m.pos[i * 3 + 2]! - cz) * k];
+    const nr: V3 = [m.nrm[i * 3]!, m.nrm[i * 3 + 1]!, m.nrm[i * 3 + 2]!];
+    const r = m.col[i * 3]!, g = m.col[i * 3 + 1]!, bl = m.col[i * 3 + 2]!;
+    const y = p[1] / height, sway = y * y * 0.6, phase = (Math.sin(p[0] * 12.9898 + p[2] * 78.233) * 43758.5453) % 1;
+    if (wood[i]) { b.vertex(p, nr, [r, g, bl], 0.5, y, PART.bark, 0.75 + 0.25 * y, sway, phase, 0); continue; }
+    // foliage keeps only how light or dark the model painted it, so the facets of the crown still read
+    const tone = Math.max(0.7, Math.min(1.3, (0.2126 * r + 0.7152 * g + 0.0722 * bl) / Math.max(1e-4, mean)));
+    const part = form === 'mushroom' ? (Math.max(r, g, bl) - Math.min(r, g, bl) > 0.18 && y > 0.35 ? PART.cap : PART.flesh) : PART.mass;
+    b.vertex(p, nr, [tone, tone, tone], 0.5, Math.max(0, Math.min(1, (p[1] - (crown[1] - reach)) / (2 * reach))), part, b.ao(p), sway, phase, part === PART.mass ? 0.25 : 0);
+  }
+  for (let i = 0; i < m.idx.length; i++) b.idx.push(m.idx[i]!);
   return b.build();
 }
 

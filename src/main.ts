@@ -60,6 +60,9 @@ async function boot(): Promise<void> {
   let scene: GenesisScene;
   try {
     scene = new GenesisScene(canvas, params.has('webgl'));
+    // the asset pass: `&noassets` draws everything from generated shapes; `&plantmodel=form:file` tries one file as one form
+    if (params.has('noassets')) scene.useAssets = false;
+    for (const pair of params.getAll('plantmodel')) { const [form, file] = pair.split(':'); if (form && file) scene.plantModelOverride[form] = pair.slice(form.length + 1); }
     await scene.init();
   } catch (err) {
     console.error(err);

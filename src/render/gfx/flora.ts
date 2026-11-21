@@ -20,7 +20,8 @@ import { Pass, makeTarget } from './gpu';
 import { uLook } from './look';
 import type { PlanetData } from './planetdata';
 import { Copies } from './packed';
-import { FORMS, PART, addPlantInstanceData, buildPlant, type Form } from './plantmesh';
+import { FORMS, PART, addPlantInstanceData, buildPlant, plantFromModel, type Form } from './plantmesh';
+import type { Model } from './models';
 import { groundRadiusNode } from './terrain';
 import { eclipseLight } from './eclipse';
 import { settlementSize } from './nations';
@@ -108,6 +109,10 @@ export class Flora {
   private atlasNode: N;
   private baked = false;
   private baking = false;
+  /** A model arrived while the atlas was being photographed: photograph it again when that is done. */
+  private rebake = false;
+  /** Which forms are drawn from a made model, not from the generated one. */
+  readonly fromModels = new Set<Form>();
   private cells?: CellSnapshot;
   private lastFocus = new Vector3(9, 9, 9);
   private lastCam = new Vector3(9, 9, 9);
@@ -169,7 +174,10 @@ export class Flora {
       const barkCol: N = vColor.mul(grooves.mul(0.17).add(0.87)).mul(sin(vCard.y.mul(60)).mul(0.05).add(0.97));
       const capSpots = smoothstep(0.75, 0.9, sin(vCard.x.mul(38)).mul(sin(vCard.y.mul(23))).mul(0.5).add(0.5));
       const capCol: N = mix(vTint, vec3(0.95, 0.92, 0.85), capSpots.mul(0.7));
+      // foliage from a made model: the species' own colour over the model's light and dark
+      const massCol: N = vTint.mul(vColor).mul(vCard.w.mul(0.5).add(0.6)).mul(mix(float(0.78), float(1.12), smoothstep(0.0, 1.0, vCard.y)));
       const albedo: N = barkCol.mul(is(fp, PART.bark))
+        .add(massCol.mul(is(fp, PART.mass)))
         .add(leafCol.mul(fThin.sub(is(fp, PART.petal))))
         .add(vTint2.mul(is(fp, PART.petal).add(is(fp, PART.bulb))))
         .add(capCol.mul(is(fp, PART.cap)))
@@ -404,12 +412,42 @@ export class Flora {
       tex.needsUpdate = true;
       this.atlasNode.value = tex;
       this.atlasData = atlas;
-      this.baked = true;
+      this.baked = !this.rebake;
+      this.rebake = false;
       this.dirty = true;
     } finally {
       this.baking = false;
     }
   }
+  /**
+   * Draw one form of plant from a made model (the asset pass). The model is stood at the height of the generated plant
+   * it replaces and kept inside the frame the far-plant pictures are taken in; the plants already standing are
+   * replanted with it, and the far-plant pictures are taken again.
+   */
+  useModel(form: Form, model: Model): void {
+    const slot = this.full.get(form), old = this.geos.get(form);
+    if (!slot || !old) return;
+    const p = old.getAttribute('position');
+    let top = 0;
+    for (let i = 0; i < p.count; i++) top = Math.max(top, p.getY(i));
+    // no wider than the picture frame: a spreading model is made lower, not cut off at the sides
+    const wide = Math.max(model.max[0] - model.min[0], model.max[2] - model.min[2]) / Math.max(1e-6, model.max[1] - model.min[1]);
+    const height = Math.min(top, (BAKE_HALF * 1.9) / Math.max(1e-6, wide));
+    const geo = plantFromModel(model, form, Math.max(0.2, height));
+    this.geos.set(form, geo);
+    const g = geo.clone();
+    const inst = addPlantInstanceData(g, slot.cap);
+    slot.mesh.geometry.dispose();
+    slot.mesh.geometry = g;
+    Object.assign(slot, inst);
+    slot.n = 0;
+    slot.mesh.count = 0;
+    this.fromModels.add(form);
+    if (this.baking) this.rebake = true;
+    this.baked = false;
+    this.dirty = true;
+  }
+
   /** The baked atlas pixels, kept for inspection. */
   atlasData?: Uint8Array;
 

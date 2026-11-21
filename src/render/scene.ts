@@ -10,6 +10,9 @@ import { nearestCell } from '../sim/world';
 import type { CellSnapshot, NationInfo, WorldStats, SettlementInfo } from '../shared/protocol';
 import { hashSeed } from '../sim/rng';
 import { PlanetMesh } from './planet';
+import { loadFirst } from './gfx/models';
+import { PLANT_MODELS } from './gfx/assetroles';
+import type { Form } from './gfx/plantmesh';
 
 const tmpA = new Vector3(), tmpB = new Vector3(), tmpC = new Vector3();
 /** How far out the comet hangs: beyond the moon, inside the far edge of what is drawn. */
@@ -200,6 +203,22 @@ export class GenesisScene {
     this.resize();
   }
 
+  /** Set false (`&noassets` in the address) to draw everything from the game's own generated shapes, as before the asset pass. */
+  useAssets = true;
+  /** For checks: draw a form of plant from a given file (`&plantmodel=broadleaf:path/to.glb`). */
+  plantModelOverride: Record<string, string> = {};
+
+  /** Fetch the made models for plants and hand each to the plant layer as it arrives. A form with no file keeps its generated shape. */
+  private async loadPlantModels(): Promise<void> {
+    if (!this.useAssets || !this.vegetation) return;
+    const forms = new Set<string>([...Object.keys(PLANT_MODELS), ...Object.keys(this.plantModelOverride)]);
+    for (const form of forms) {
+      const over = this.plantModelOverride[form];
+      const model = await loadFirst(over ? [over] : PLANT_MODELS[form as Form] ?? [], !!over);
+      if (model) this.vegetation.useModel(form as Form, model);
+    }
+  }
+
   /** Put a comet in the sky for so many seconds. Where it hangs is fixed by the number given (the event that reported it). */
   showComet(seconds: number, seed: number): void {
     const a = ((seed * 0.6180339887) % 1) * Math.PI * 2, b = (((seed * 0.7548776662) % 1) - 0.5) * 0.9;
@@ -301,6 +320,7 @@ export class GenesisScene {
     this.vegetation.pigmentA = this.look.pigmentA;
     this.vegetation.pigmentB = this.look.pigmentB;
     for (const m of this.vegetation.meshes) this.scene.add(m);
+    void this.loadPlantModels();
     this.particles = new ParticleSystem(grid);
     this.scene.add(this.particles.sprite);
     // a captured second moon, hidden until the sim says it exists
