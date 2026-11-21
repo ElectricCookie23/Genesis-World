@@ -26,6 +26,10 @@ export const WATCH_YEARS = 60;
 /** How much research an arms discovery leaves over for the peaceful crafts, when the country is fully pressed. */
 export const SPILL = 0.25;
 
+/** What a war between two countries of like strength puts into the workshops of each at once, in discoveries' worth of research; and how many years must pass before another war does so again. */
+export const BURST = 0.7;
+export const BURST_EVERY = 10;
+
 const sat = (x: number): number => Math.max(0, Math.min(1, x));
 
 /** Are two countries of like strength? Neither more than three times the other in people, nor more than an age or so ahead. */
@@ -44,9 +48,9 @@ export function tension(sinceWar: number | undefined, atWar: boolean, grudge: bo
   return sat(cooled + (grudge ? 0.3 : 0));
 }
 
-/** How much faster a pressed country learns: half as fast again when fully pressed. */
+/** How much faster a pressed country learns: twice as fast when fully pressed. */
 export function drive(pressed: number): number {
-  return 1 + 0.5 * sat(pressed);
+  return 1 + sat(pressed);
 }
 
 /** How much likelier its next discovery is to be arms. */

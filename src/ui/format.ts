@@ -54,7 +54,8 @@ export function eventColor(type: string): string {
     case 'panic': case 'betrayal': case 'revolution': return '#ff8a6a';
     case 'ideology': case 'idea-spreads': case 'colony': return '#ffcf8a';
     case 'independence': return '#ffd76a';
-    case 'independence-declared': case 'rising-crushed': return '#ff8a6a';
+    case 'independence-declared': case 'rising-crushed': case 'arms-race': return '#ff8a6a';
+    case 'arms-race-ends': return '#c9d6e8';
     case 'living-fossil': case 'convergence': return '#8fe3a0';
     case 'orbital-shift': return '#d9c8ff';
     default: return type.startsWith('tool-') ? '#fff1c9' : '#e9e4d8';
@@ -93,6 +94,7 @@ export function eventGlyph(type: string): string {
     case 'revolution': case 'independence': case 'independence-declared': return '⚑';
     case 'colony': return '⚓';
     case 'rising-crushed': return '⚔';
+    case 'arms-race': case 'arms-race-ends': return '⚒';
     case 'artwork': case 'art-movement': return '◩';
     case 'contact': return '⇄';
     case 'migration': return '➳';

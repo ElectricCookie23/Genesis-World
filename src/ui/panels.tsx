@@ -4,13 +4,14 @@ import { CreatureSketch } from './sketch';
 import { ART_NAMES, Portrait, artStyle } from './portrait';
 import { G, GENE_NAMES, HUNTER_DIET } from '../sim/genetics';
 import type { SimEvent } from '../sim/events';
-import type { NationInfo, PersonInfo, SettlementInfo, SpeciesInfo, WonderInfo } from '../shared/protocol';
+import type { NationDetail, NationInfo, PersonInfo, SettlementInfo, SpeciesInfo, WonderInfo } from '../shared/protocol';
 import { dateIn } from '../sim/history/calendar';
 import { describeRuin } from '../sim/history/decay';
 import { CALAMITIES, REBUILDS, describeScar } from '../sim/history/calamity';
 import { Written, wearAt } from './glyphs';
 import { describeFestival } from '../sim/history/festival';
 import { IDEA_SAYS, governedAs, type Idea } from '../sim/history/ideology';
+import { drive } from '../sim/history/arms';
 import { actions, state, update, useStore, type Relative, type UIState } from './store';
 import { ERAS } from '../sim/history/eras';
 import { bigNumber, eventColor, eventGlyph, formatYear, hsl, metres, shortYear } from './format';
@@ -856,6 +857,7 @@ export function NationPanel() {
             {' '}Its land offers {d.land.length ? d.land.join(', ') : 'little'}{d.land.includes('ore') ? '' : '; no ore, so no metal'}.
             {' '}Its people are the {realm.culture} and speak <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openLanguages(realm.language)}>{realm.language}</button>.
             {realm.ended < 0 && <>{' '}It is {governedAs(realm.government)}{realm.creed ? <>, and has been since the revolution of {ago(realm.creed.since)} in the name of {realm.creed.own}, {realm.creed.name}</> : ''}.</>}
+            {realm.ended < 0 && realm.race && <>{' '}It is in an arms race with <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.race!.with)}>{realm.race.withName}</button>, {Math.max(1, Math.round(year - realm.race.since)).toLocaleString('en-US')} years now: pressed as it is, its workshops work about {drive(realm.race.pressed).toFixed(1)} times as fast as in peace, and {realm.race.arms} of the {realm.race.found} things it has learned since were arms. {realm.race.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this race" onClick={() => update({ whyEvent: realm.race!.eventId })}>why</button>}</>}
             {realm.colonyOf && <>{' '}It began as a colony of <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.colonyOf!.mother)}>{realm.colonyOf.motherName}</button>, planted {ago(realm.colonyOf.founded)}; it declared itself free {ago(realm.colonyOf.declared)}{realm.colonyOf.freed < 0 && realm.ended < 0 ? ' and is fighting for that now' : realm.colonyOf.freed >= 0 ? `, and its mother country gave up the fight ${ago(realm.colonyOf.freed)}` : ''}. {realm.colonyOf.warEvent >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this war" onClick={() => update({ whyEvent: realm.colonyOf!.warEvent })}>why</button>}</>}
             {realm.ended < 0 && realm.colonies && realm.colonies.map((c) => (
               <span key={c.id} style={{ display: 'block', margin: '3px 0 0' }}>
@@ -876,6 +878,7 @@ export function NationPanel() {
             {realm.script && realm.signs && <>{' '}In the {realm.script.name} its name is written <Written meanings={realm.signs} script={realm.script} wear={wearAt(realm.script, year)} size={20} rosetta={s.rosetta} />.</>}
           </p>
         )}
+        {d && <Pace d={d} year={year} />}
         {d && ERA_NAMES.map((era, e) => {
           const cells = d.tech.filter((t) => t.era === e);
           if (!cells.length) return null;
@@ -1042,6 +1045,40 @@ export function nameLine(st: SettlementInfo, year: number): string {
   const ago = (y: number) => Math.max(1, Math.round(year - y)).toLocaleString('en-US');
   const parts = names.map((n, i) => i === 0 ? `${n.name} when it was founded` : i === names.length - 1 ? `${n.name} for the last ${ago(n.year)} years (${n.why})` : `${n.name} from ${ago(n.year)} years ago (${n.why})`);
   return `It has been called ${parts.join('; ')}.`;
+}
+
+/**
+ * What a country learned, by quarter-century, over its last six hundred years, with the years it was in an arms
+ * race marked (system E38): the bursts of discovery that rivalry brings can be seen against the quiet between.
+ */
+function Pace({ d, year }: { d: NationDetail; year: number }) {
+  if (!d.races || !d.races.length) return null;
+  const step = 25, n = 24, from = year - step * n;
+  const made: number[] = new Array(n).fill(0), arms: number[] = new Array(n).fill(0);
+  for (const t of d.tech) if (t.state === 1 && t.year >= from) { const k = Math.min(n - 1, Math.floor((t.year - from) / step)); made[k]!++; if (t.field === 'war') arms[k]!++; }
+  if (made.every((x) => !x)) return null;
+  const top = Math.max(3, ...made);
+  const raced = (k: number): boolean => d.races.some((r) => r.began < from + (k + 1) * step && (r.ended < 0 ? year : r.ended) > from + k * step);
+  let inRace = 0, inPeace = 0, raceBins = 0, peaceBins = 0;
+  for (let k = 0; k < n; k++) { if (raced(k)) { inRace += made[k]!; raceBins++; } else { inPeace += made[k]!; peaceBins++; } }
+  return (
+    <div style={{ margin: '0 0 10px' }}>
+      <svg viewBox="0 0 240 44" style={{ width: '100%', height: '54px', display: 'block' }} preserveAspectRatio="none">
+        {made.map((m, k) => (
+          <g key={k}>
+            {raced(k) && <rect x={k * 10} y={0} width={10} height={44} fill="#e0563a" opacity={0.16} />}
+            <rect x={k * 10 + 1.5} y={42 - (m / top) * 38} width={7} height={(m / top) * 38} fill="#c9d6e8" />
+            {arms[k]! > 0 && <rect x={k * 10 + 1.5} y={42 - (arms[k]! / top) * 38} width={7} height={(arms[k]! / top) * 38} fill="#e0563a" />}
+          </g>
+        ))}
+        <line x1={0} y1={42.5} x2={240} y2={42.5} stroke="#ffffff33" stroke-width={0.6} />
+      </svg>
+      <p class={css.sub} style={{ margin: '2px 0 0' }}>
+        What it learned in each quarter-century of its last six hundred years (the red part of a bar is arms); the red bands are its arms races.
+        {raceBins > 0 && peaceBins > 0 && <>{' '}In a quarter-century of rivalry it learned {(inRace / raceBins).toFixed(1)} things on average, against {(inPeace / peaceBins).toFixed(1)} in one of peace.</>}
+      </p>
+    </div>
+  );
 }
 
 /** What calamities have left on a town (system E20): the last two, newest first, each in a sentence. */

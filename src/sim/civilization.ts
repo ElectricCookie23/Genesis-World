@@ -27,6 +27,7 @@ import { clash, describeBattle, siegeYears, type Army, type Battle, type BattleK
 import { GRUDGE_YEARS, pactBetween, type Treaty, type TreatyKind } from './history/diplomacy';
 import { growsApart, odds, ready, shipped, waits, type Colony, type Standing } from './history/colony';
 import { ordinal } from './history/grammar';
+import { BURST, BURST_EVERY, SPILL, WATCH_YEARS, armsLean, describeRace, drive, peers, tension, type Race } from './history/arms';
 import { CATCHING_YEARS, carried, describePandemic, describeVia, plagueName, shuts, toll, type Edge, type Pandemic, type Reach, type Via } from './history/plague';
 import { IDEA_GOVERNMENT, IDEA_SAYS, drift, governedAs, ideaName, pressure, ripest, type Conditions, type Ideology } from './history/ideology';
 import { stillCleared } from './history/decay';
@@ -359,6 +360,8 @@ export class Civilization {
       const quick = 1 + 6 * sat((n.tech - 0.7) / 0.3) ** 2;
       // (learning gathers where the people are: a country much smaller than the greatest of its day works more slowly)
       const rate = 6.5e-5 * (n.golden ? 1.45 : 1) * ((n.slump ?? -1) > year ? 0.6 : 1) * (0.5 + 0.5 * Math.min(1, towns.length / Math.max(1, 0.5 * most))) * (0.45 + Math.log10(1 + pop) / 3) * (0.6 + sp.ref[G.Intelligence]!) * (1 + reach) * quick * (0.6 + 0.4 * n.stability) * (0.9 + 0.2 * (ruler ? ruler.wise : 0.5));
+      // ---- whom it watches, and how hard that presses it (system E38)
+      if (this.armsRaces) this.rivalry(sim, n, year);
       this.research(sim, rng, n, towns, rate * y, year, y);
       // ---- a library burns (system E5): likelier in troubled times, and only once there is writing to burn
       if (n.know.way[SLOT_INDEX.get('write')!]! >= 0 && rng.chance(1 - Math.exp(-y * (0.4 + 1.6 * (1 - n.stability) + n.fatigue) / 2600))) {
@@ -539,6 +542,7 @@ export class Civilization {
         this.woe(n, 'war', warEvent, year, 0.07);
         const general = this.credit(sim, rng, n, warEvent, `{name} led the host of ${n.name}.`, 'general', year);
         if (foe && foe.ended < 0 && foe.id !== n.id) {
+          this.fought(n, foe, year, warEvent);
           foe.fatigue = sat(foe.fatigue + 0.22);
           this.woe(foe, 'war', warEvent, year, 0.09);
           const other = this.fine ? this.credit(sim, rng, foe, warEvent, `{name} stood against them for ${foe.name}.`, 'general', year) : null;
@@ -1413,7 +1417,7 @@ export class Civilization {
   private leaning(n: Nation): Leaning {
     const c = this.h.cultures[n.culture]!, r = this.h.people[n.ruler];
     return {
-      war: 0.55 + 0.9 * c.war + (r ? r.bold * 0.3 : 0), trade: 0.6 + 0.9 * c.trade, craft: 0.7 + 0.6 * c.craft, mind: 0.7 + 0.5 * c.craft + (r ? r.wise * 0.3 : 0),
+      war: (0.55 + 0.9 * c.war + (r ? r.bold * 0.3 : 0)) * (this.armsRaces ? armsLean(n.pressed ?? 0) : 1), trade: 0.6 + 0.9 * c.trade, craft: 0.7 + 0.6 * c.craft, mind: 0.7 + 0.5 * c.craft + (r ? r.wise * 0.3 : 0),
       life: 0.8 + 0.4 * c.custom, sea: 0.7 + 0.6 * c.trade, sky: 0.75 + 0.5 * c.craft, build: 0.8 + 0.4 * c.custom, food: 1, power: 1,
     };
   }
@@ -1424,6 +1428,8 @@ export class Civilization {
    */
   private research(sim: Simulation, rng: RNG, n: Nation, towns: Settlement[], gain: number, year: number, y: number): void {
     const h = this.h;
+    // (a country pressed by a rival learns faster: system E38)
+    if (this.armsRaces) gain *= drive(n.pressed ?? 0);
     if (year - n.surveyed > 60) {
       // (what the surveyors find that the country did not have before changes what it has to sell: system E31)
       const before = n.land;
@@ -1465,6 +1471,12 @@ export class Civilization {
       if (n.know.saved < cost) break;
       n.know.saved -= cost;
       n.know.way[i] = k; n.know.year[i] = year;
+      // (what a pressed country learns is counted in its race, and each new weapon leaves something for the peaceful crafts: system E38)
+      if (this.armsRaces && n.pressed) {
+        const race = (h.races ?? []).find((x) => x.ended < 0 && (x.a === n.id || x.b === n.id));
+        if (race) { const side = race.a === n.id ? 0 : 1; race.found[side]++; if (slot.field === 'war') race.arms[side]++; }
+        if (slot.field === 'war') n.know.saved += SPILL * n.pressed;
+      }
       // (a craft that makes something to sell: system E31)
       if (CRAFT_GOOD[slot.id] !== undefined) n.found = { good: GOODS.indexOf(CRAFT_GOOD[slot.id]!), eventId: -1, year, what: `how to make ${way.name}` };
       if (n.know.lost[i]! > 0) {
@@ -1640,6 +1652,9 @@ export class Civilization {
     if (walls.length >= 4 || (last && st.pop < last.pop * 2.2)) return;
     walls.push({ pop: st.pop, tech: st.tech, year });
   }
+
+  /** False switches off arms races (system E38): used to measure what they do. */
+  armsRaces = true;
 
   /** False switches off every change people make to the land (system E16): used to measure what those changes do. */
   landUse = true;
@@ -2186,6 +2201,70 @@ export class Civilization {
     }
   }
 
+  /** Two countries have fought (system E38): each remembers the year and the war. */
+  private fought(a: Nation, b: Nation, year: number, eventId: number): void {
+    if (a.id === b.id) return;
+    (a.foes ??= {})[b.id] = { year, eventId };
+    (b.foes ??= {})[a.id] = { year, eventId };
+    // a war between peers who both make arms sets the workshops of both to work at once
+    if (!this.armsRaces || a.tech < 0.41 || b.tech < 0.41 || !peers(a.pop, b.pop, a.tech, b.tech)) return;
+    for (const x of [a, b]) if (x.jolted === undefined || year - x.jolted >= BURST_EVERY) { x.jolted = year; x.know.saved += BURST; }
+  }
+
+  /**
+   * Arms races (system E38), for one country in one year. Of the countries it has fought, the one of like
+   * strength that presses it hardest is its rival (`tension`): fully while they are at war, less each year
+   * since, more while an old wrong stands between them. `research` reads the result. When two such countries
+   * that both know how to make arms press each other hard, that is an arms race, on record from that year
+   * until they have had two generations without a war.
+   */
+  private rivalry(sim: Simulation, n: Nation, year: number): void {
+    const h = this.h, ev = sim.events.events;
+    let rival: Nation | undefined, top = 0, cause = -1;
+    for (const key in n.foes ?? {}) {
+      const id = Number(key), o = h.nations[id], f = n.foes![id]!;
+      if (!o || o.ended >= 0) { delete n.foes![id]; continue; }
+      if (year - f.year > WATCH_YEARS * 2) { delete n.foes![id]; continue; }
+      if (!peers(n.pop, o.pop, n.tech, o.tech)) continue;
+      const atWar = (h.wars ?? []).some((w) => w.ended < 0 && ((w.a === n.id && w.b === id) || (w.a === id && w.b === n.id)));
+      const sore = [...(n.grudges ?? []), ...(o.grudges ?? [])].some((g) => (g.against === id || g.against === n.id) && g.avenged === undefined && year - g.year < GRUDGE_YEARS);
+      const t = tension(year - f.year, atWar, sore);
+      if (t > top) { top = t; rival = o; cause = f.eventId; }
+    }
+    n.pressed = top > 0.05 ? top : undefined;
+    n.rival = rival && top > 0.05 ? rival.id : undefined;
+    const list = (h.races ??= []);
+    // ---- a race cools when the two have had two generations without a war, or one of them is gone
+    for (const r of list) {
+      if (r.ended >= 0 || (r.a !== n.id && r.b !== n.id)) continue;
+      const A = h.nations[r.a]!, B = h.nations[r.b]!;
+      const last = A.foes?.[B.id]?.year ?? -1e9;
+      if (A.ended < 0 && B.ended < 0 && year - last <= WATCH_YEARS) continue;
+      r.ended = year;
+      const e = sim.emit({
+        type: 'arms-race-ends', year, cellId: this.settlements[(A.ended < 0 ? A : B).capital]?.cell ?? -1, title: `${A.name} and ${B.name} stand down`,
+        description: `${A.ended >= 0 || B.ended >= 0 ? `${(A.ended >= 0 ? A : B).name} is no more, and there is no one left to arm against.` : `It is two generations since ${A.name} and ${B.name} fought, and the arsenals are let run down.`} ${describeRace(r, A.name, B.name, year)}`,
+        causes: [r.eventId].filter((x) => x >= 0 && ev[x]), importance: 0, speciesIds: [A.species], data: { race: r.id, a: r.a, b: r.b },
+      });
+      r.endEvent = e.id;
+    }
+    // ---- a race begins: two peers who both make arms, pressing each other hard
+    if (!rival || top < 0.5 || n.tech < 0.41 || rival.tech < 0.41) return;
+    if (list.some((r) => r.ended < 0 && (r.a === n.id || r.b === n.id || r.a === rival!.id || r.b === rival!.id))) return;
+    const [A, B] = n.id < rival.id ? [n, rival] : [rival, n];
+    const first = h.firstRace === undefined;
+    const id = (h.raceSeq = (h.raceSeq ?? 0) + 1);
+    const war = ev[cause];
+    const e = sim.emit({
+      type: 'arms-race', year, cellId: this.settlements[n.capital]!.cell, title: first ? `The first arms race: ${A.name} and ${B.name}` : `${A.name} and ${B.name} arm against each other`,
+      description: `${war ? `Since "${war.title}"` : 'Since their last war'} neither ${A.name} nor ${B.name} has stood its soldiers down. Each watches what the other's smiths are making, and orders the same, and better. The workshops of both have never been so busy.`,
+      causes: [cause].filter((x) => x >= 0 && ev[x]), importance: first ? 2 : 0, speciesIds: [n.species], data: { race: id, a: A.id, b: B.id },
+    });
+    list.push({ id, a: A.id, b: B.id, began: year, ended: -1, eventId: e.id, endEvent: -1, found: [0, 0], arms: [0, 0] });
+    if (first && e.id >= 0) h.firstRace = e.id;
+    if (list.length > 40) { const k = list.findIndex((r) => r.ended >= 0); if (k >= 0) list.splice(k, 1); }
+  }
+
   /**
    * The ways trade travels between towns (system E37): the made roads, canals and railways (system E15), and
    * each country's chief trade route, from its capital to its buyer's (system E31), by sea where water lies between.
@@ -2464,6 +2543,7 @@ export class Civilization {
       data: { town: port.id, other: seat.id, nation: n.id, foe: child.id, independence: col.id },
     });
     col.warEvent = war.id;
+    this.fought(n, child, year, war.id);
     if (war.id >= 0) this.credit(sim, null, n, war.id, '{name} gave the order.');
     n.fatigue = sat(n.fatigue + 0.15);
     this.woe(n, 'war', war.id, year, 0.04);
@@ -2474,6 +2554,8 @@ export class Civilization {
       const [a, d] = fought.army, i = SLOT_INDEX.get('steamship');
       a.size = Math.max(0.3, a.size * shipped(stand.distance, i !== undefined && n.know.way[i]! >= 0)); a.raised = a.size; a.supply = 0.75; a.morale = Math.min(a.morale, 0.6);
       d.size *= 2.4; d.raised = d.size; d.morale = 0.85;
+      // (the war's record opens with the garrison driven out of the colony's chief town, the day it declared)
+      fought.battles.push({ year, settlement: seat.id, kind: 'field', winner: 1, sizes: [Math.max(0.2, d.size * 0.15), d.size], lost: [0.05, 0.02], decided: 'numbers', taken: false, eventId: war.id });
       fought.independence = col.id; fought.conquest = true; col.war = fought.id;
       return;
     }
@@ -2509,7 +2591,8 @@ export class Civilization {
       if (first && e.id >= 0) h.firstFree = e.id;
       if (e.id >= 0) this.credit(sim, null, child, e.id, '{name} led them through it.');
       child.stability = sat(child.stability + 0.1);
-      if (n.ended < 0) { n.stability = sat(n.stability - 0.05); this.woe(n, 'war', e.id >= 0 ? e.id : cause, year, 0.03); }
+      // (what the old country remembers is the war it lost, not the country that came of it)
+      if (n.ended < 0) { n.stability = sat(n.stability - 0.05); this.woe(n, 'war', cause >= 0 ? cause : e.id, year, 0.03); }
       return;
     }
     // ---- brought back: its towns are the old country's again, and its people remember
@@ -2726,6 +2809,7 @@ export class Civilization {
       this.fortify(at, year);
       this.woe(n, 'war', warEvent, year, 0.05); this.woe(foe, 'war', warEvent, year, 0.08);
       this.avenge(sim, n, foe, g, warEvent, year);
+      this.fought(n, foe, year, warEvent);
       // (the ruler who gave the order is named, as in every war)
       if (warEvent >= 0) this.credit(sim, null, n, warEvent, '{name} gave the order.');
       if (this.fine && warEvent >= 0) this.campaign(sim, n, foe, from, at, warEvent, year, '', '');

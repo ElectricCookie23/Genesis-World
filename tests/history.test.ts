@@ -6,6 +6,7 @@ import { applyChange, compound, makeLanguage, personName, placeMeanings, soundCh
 import { count, listing, ordinal, write } from '../src/sim/history/grammar';
 import { IDEAS, IDEA_COLOUR, IDEA_GOVERNMENT, IDEA_SAYS, drift as driftIdea, governedAs, ideaName, pressure, ripest, type Conditions } from '../src/sim/history/ideology';
 import { emblemOf } from '../src/render/gfx/nations';
+import { BURST, SPILL, WATCH_YEARS, armsLean, describeRace, drive, peers, tension } from '../src/sim/history/arms';
 import { VIAS, alongTrade, carried, describeVia, plagueName, shuts, toll } from '../src/sim/history/plague';
 import { describeColony, growsApart, odds, ready, shipped, waits, type Standing } from '../src/sim/history/colony';
 
@@ -2700,6 +2701,91 @@ describe('plague years (E37)', () => {
     expect(carriedTo).toBeGreaterThan(10);
     // the done-when: the path matches the trade network
     expect(onTrade / carriedTo).toBeGreaterThanOrEqual(0.75);
+  });
+});
+
+describe('arms races (E38)', () => {
+  it('a country is pressed by a peer it has fought, less each year, and a pressed country learns faster and leans to arms', () => {
+    expect(peers(100, 250, 0.6, 0.65)).toBe(true);
+    expect(peers(100, 400, 0.6, 0.65)).toBe(false);
+    expect(peers(100, 120, 0.5, 0.8)).toBe(false);
+    expect(peers(0, 120, 0.5, 0.5)).toBe(false);
+    expect(tension(undefined, false, false)).toBe(0);
+    expect(tension(40, true, false)).toBe(1);
+    expect(tension(0, false, false)).toBeCloseTo(0.8, 6);
+    expect(tension(30, false, false)).toBeLessThan(tension(10, false, false));
+    expect(tension(WATCH_YEARS, false, false)).toBe(0);
+    expect(tension(30, false, true)).toBeGreaterThan(tension(30, false, false));
+    expect(tension(WATCH_YEARS * 2, false, true)).toBeCloseTo(0.3, 6);
+    expect(drive(0)).toBe(1);
+    expect(drive(1)).toBe(2);
+    expect(drive(0.5)).toBeGreaterThan(1);
+    expect(armsLean(0)).toBe(1);
+    expect(armsLean(1)).toBeGreaterThan(armsLean(0.3));
+    expect(BURST).toBeGreaterThan(0);
+    expect(SPILL).toBeGreaterThan(0);
+    expect(describeRace({ id: 1, a: 0, b: 1, began: 100, ended: 160, eventId: -1, endEvent: -1, found: [3, 1], arms: [2, 0] }, 'Kekaka', 'Farahot', 200)).toBe('Kekaka and Farahot armed against each other for 60 years. Kekaka learned 3 things, 2 of them arms; Farahot learned 1 thing, 0 of them arms.');
+  });
+
+  it('war speeds up what two peers learn: the same world, the same eighty years, with a war between them and without', () => {
+    let tested = 0, withWar = 0, without = 0, armsWith = 0, armsWithout = 0;
+    // (each of the five histories as it stands at its six-thousandth year is the starting point: nothing here changes them)
+    for (const { sim: base, seed } of fiveHistories()) {
+      const save = saveSimulation(base, 'before');
+      // two living countries of like strength that both make arms and still have much to learn
+      const hb = base.civ.h;
+      const living = hb.nations.filter((n) => n.ended < 0 && n.tech >= 0.41 && n.tech < 0.95);
+      let pair: [number, number] | undefined;
+      for (const a of living) for (const b of living) if (!pair && a.id < b.id && peers(a.pop, b.pop, a.tech, b.tech)) pair = [a.id, b.id];
+      if (!pair) continue;
+      tested++;
+      const run = (war: boolean): [number, number] => {
+        const sim = new Simulation(seed, 17);
+        loadSimulation(sim, save);
+        const h = sim.civ.h, a = h.nations[pair![0]]!, b = h.nations[pair![1]]!;
+        const known = (): [number, number] => { let all = 0, arms = 0; for (const n of [a, b]) for (let i = 0; i < WEB.length; i++) if (n.know.way[i]! >= 0) { all++; if (WEB[i]!.field === 'war') arms++; } return [all, arms]; };
+        const before = known();
+        // (no war is fought here, so that nothing but the pressing differs: the two countries are told they have fought)
+        if (war) (sim.civ as unknown as { fought(a: unknown, b: unknown, year: number, eventId: number): void }).fought(a, b, sim.simYear, -1);
+        else sim.civ.armsRaces = false;
+        for (let y = 0; y < 80; y++) sim.step(1);
+        const after = known();
+        return [after[0] - before[0], after[1] - before[1]];
+      };
+      const hot = run(true), cold = run(false);
+      withWar += hot[0]; without += cold[0]; armsWith += hot[1]; armsWithout += cold[1];
+    }
+    console.log('E38', { tested, withWar, without, armsWith, armsWithout });
+    expect(tested).toBeGreaterThan(0);
+    // the done-when: war measurably speeds up tech
+    expect(withWar).toBeGreaterThan(without);
+    expect(withWar).toBeGreaterThanOrEqual(without + tested);
+  }, 900000);
+
+  it('arms races are between peers that have fought, begin from that war, and cool', () => {
+    const runs = fiveHistories();
+    let races = 0, cooled = 0, found = 0, arms = 0;
+    for (const { sim } of runs) {
+      const h = sim.civ.h, ev = sim.events.events;
+      for (const r of h.races ?? []) {
+        races++;
+        expect(r.a).toBeLessThan(r.b);
+        expect(h.nations[r.a]).toBeDefined();
+        expect(h.nations[r.b]).toBeDefined();
+        for (const k of [0, 1] as const) { expect(r.arms[k]).toBeLessThanOrEqual(r.found[k]); found += r.found[k]; arms += r.arms[k]; }
+        const e = ev[r.eventId];
+        if (e) { expect(e.type).toBe('arms-race'); expect(e.data!.a).toBe(r.a); for (const c of e.causes) expect(ev[c]!.type).toBe('war'); }
+        if (r.ended >= 0) { cooled++; expect(r.ended).toBeGreaterThanOrEqual(r.began); const end = ev[r.endEvent]; if (end) { expect(end.type).toBe('arms-race-ends'); if (e) expect(end.causes).toContain(e.id); } }
+      }
+      // no country is in two races at once, and none is pressed by more than everything
+      const live = (h.races ?? []).filter((r) => r.ended < 0).flatMap((r) => [r.a, r.b]);
+      expect(new Set(live).size).toBe(live.length);
+      for (const n of h.nations) { if (n.pressed !== undefined) { expect(n.pressed).toBeGreaterThan(0); expect(n.pressed).toBeLessThanOrEqual(1); expect(h.nations[n.rival!]).toBeDefined(); } }
+      if (h.firstRace !== undefined) { expect(ev[h.firstRace]!.importance).toBe(2); expect(ev[h.firstRace]!.title).toMatch(/^The first arms race/); }
+    }
+    console.log('E38 races', { races, cooled, found, arms });
+    expect(races).toBeGreaterThan(0);
+    expect(cooled).toBeGreaterThan(0);
   });
 });
 

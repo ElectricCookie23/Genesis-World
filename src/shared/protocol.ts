@@ -341,6 +341,8 @@ export interface NationInfo {
   houseId: number;
   /** The days it keeps (system E30). */
   festivals?: Festival[];
+  /** The arms race it is in (system E38): against whom, since when, how hard it is pressed (0..1), and what it has learned while it lasted (and how much of that was arms). */
+  race?: { with: number; withName: string; since: number; pressed: number; found: number; arms: number; eventId: number };
   /** Its colonies overseas (system E36): each one's chief town, when it was planted, how many towns it has, how far its people think of themselves as their own (0..1 and over) and how it stands in a few words. */
   colonies?: { id: number; seat: number; name: string; founded: number; towns: number; identity: number; note: string; eventId: number }[];
   /** The colony it was born from: its mother country, when it was planted, when it declared itself free, when it was recognised (-1 while it fights for that), and the event of its war of independence. */
@@ -462,6 +464,8 @@ export interface NationDetail {
   rulers: { name: string; from: number; to: number; fate: string; house: string; houseId: number }[];
   /** Its ruling houses, latest first. */
   houses: { id: number; name: string; founded: number; ended: number; reigns: number; generations: number }[];
+  /** The arms races it has been in (system E38), oldest first: against whom, from when to when (-1 for still going), and the event of its beginning. */
+  races: { with: string; began: number; ended: number; eventId: number }[];
 }
 
 /** A point in history the user can rewind to. */

@@ -8,6 +8,7 @@ import type { Grudge, Treaty } from './diplomacy';
 import type { Ideology } from './ideology';
 import type { Colony } from './colony';
 import type { Pandemic } from './plague';
+import type { Race } from './arms';
 // The entities of history. All of them are plain data, so the whole of history saves, loads and
 // rewinds with the rest of the simulation.
 import type { Calendar } from './calendar';
@@ -172,6 +173,13 @@ export interface Nation {
   woes: { kind: string; eventId: number; year: number }[];
   /** Its building laws, each made after a calamity in one of its towns (system E20). */
   codes?: Codes;
+  /** Whom it has fought (system E38): for each country (by id), the year of their last war and that war's event. */
+  foes?: Record<number, { year: number; eventId: number }>;
+  /** How hard it is pressed by a rival of like strength, 0..1, and who that is (a nation's id). */
+  pressed?: number;
+  rival?: number;
+  /** The year a war last set its workshops to work. */
+  jolted?: number;
   /** The colony it was born from (system E36): a colony's id. */
   colonyOf?: number;
   /** The idea gaining ground in it (system E35): which (an ideology's id), the share of its people who hold it, and since when. And how many times its flag has changed. */
@@ -243,6 +251,10 @@ export interface HistoryState {
   movements?: Movement[];
   firstStyles?: number[];
   paintingSeq?: number;
+  /** Arms races (system E38): those going on and the last few dozen cooled; and the event of the first. */
+  races?: Race[];
+  raceSeq?: number;
+  firstRace?: number;
   /** The plagues that have travelled the trade routes (system E37): the one abroad now and the last two dozen spent; and the event of the first. */
   plagues?: Pandemic[];
   plagueSeq?: number;
