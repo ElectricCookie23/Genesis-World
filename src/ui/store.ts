@@ -50,6 +50,10 @@ export interface UIState {
   panel: Panel;
   /** Event shown in the "Why did this happen?" panel. */
   whyEvent: number;
+  /** The Truth switch (system E39): show what was kept secret when it happened. And the hidden events on hand, and those that have since come out. */
+  truth: boolean;
+  hiddenIds: number[];
+  revealed: number[];
   selectedSpecies: number;
   /** The individual creature selected or followed. */
   creature: { key: number; species: number; name: string; age: string; action: string; following: boolean } | null;
@@ -193,6 +197,9 @@ export const state: UIState = {
   plants: new Map(),
   panel: 'none',
   whyEvent: -1,
+  truth: false,
+  hiddenIds: [],
+  revealed: [],
   selectedSpecies: -1,
   creature: null,
   milestone: null,

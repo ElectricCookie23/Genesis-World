@@ -27,6 +27,7 @@ import { clash, describeBattle, siegeYears, type Army, type Battle, type BattleK
 import { GRUDGE_YEARS, pactBetween, type Treaty, type TreatyKind } from './history/diplomacy';
 import { growsApart, odds, ready, shipped, waits, type Colony, type Standing } from './history/colony';
 import { ordinal } from './history/grammar';
+import { chooses, comesOut, dares, strikes, type Secret } from './history/secrets';
 import { BURST, BURST_EVERY, SPILL, WATCH_YEARS, armsLean, describeRace, drive, peers, tension, type Race } from './history/arms';
 import { CATCHING_YEARS, carried, describePandemic, describeVia, plagueName, shuts, toll, type Edge, type Pandemic, type Reach, type Via } from './history/plague';
 import { IDEA_GOVERNMENT, IDEA_SAYS, drift, governedAs, ideaName, pressure, ripest, type Conditions, type Ideology } from './history/ideology';
@@ -376,6 +377,8 @@ export class Civilization {
       this.network(sim, rng, n, towns, y, year);
       // ---- golden ages begin, raise their monuments and end (system E10)
       this.flourish(sim, rng, n, towns, y, year);
+      // ---- what is done in secret against a rival, and what comes out generations later (system E39)
+      if (this.fine) this.intrigue(sim, n, year, y);
       // ---- colonies planted overseas, growing apart, and declaring themselves free (system E36)
       this.colonies(sim, n, towns, year, y);
       // ---- the ideas its people hold about how it should be run, and now and then a revolution (system E35)
@@ -2201,6 +2204,105 @@ export class Civilization {
     }
   }
 
+  /**
+   * Spies and secrets (system E39), for one country over `y` years. A country a rival presses may act against
+   * it in secret (`dares`): steal a craft the rival has and it has not, strike at the rival's ruler, or sign
+   * an unread pact with another country the rival has fought (`chooses`). Each is an event marked hidden, and
+   * where the public saw something (a new craft, a ruler dead) there is a second, public event telling the
+   * story that was told, with the hidden one as its cause. A blow at a ruler that fails is public at once, and
+   * is remembered as a wrong. And an old secret may come out, generations on (`comesOut`).
+   * (The luck in it comes from the country and the year, not from the stream that decides other things.)
+   */
+  private intrigue(sim: Simulation, n: Nation, year: number, y: number): void {
+    const h = this.h, ev = sim.events.events;
+    const list = (h.secrets ??= []);
+    const luck = (k: number): number => (hash32(this.seedNum, n.id, Math.floor(year), k) % 100000) / 100000;
+    // ---- an old secret of this country's comes out
+    for (const s of list) {
+      if (s.by !== n.id || s.known >= 0 || luck(0x5e00 + s.id) >= 1 - Math.exp(-y * comesOut(year - s.year))) continue;
+      const hidden = ev[s.eventId], victim = h.nations[s.against];
+      if (!hidden || !victim) continue;
+      const cap = this.settlements[n.capital]!;
+      const e = sim.emit({
+        type: 'secret-revealed', year, cellId: cap.cell, title: s.kind === 'pact' ? `The secret pact of ${n.name} and ${victim.name}` : `What ${n.name} did to ${victim.name}`,
+        description: `A chest of letters is opened in the archive at ${cap.name}, ${Math.round(year - s.year)} years after they were sealed. They say what was never said aloud: ${hidden.description.charAt(0).toLowerCase()}${hidden.description.slice(1)}`,
+        causes: [s.eventId, s.cover].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: s.kind === 'assassination' ? 1 : 0, speciesIds: [n.species], data: { secret: s.eventId, by: n.id, against: s.against, kind: s.kind },
+      });
+      s.known = year; s.knownEvent = e.id;
+      // a killing that comes out is a wrong the victim's country did not know it had: it knows now
+      if (s.kind === 'assassination' && victim.ended < 0 && e.id >= 0) { (victim.grudges ??= []).push({ against: n.id, eventId: e.id, year }); if (victim.grudges.length > 6) victim.grudges.shift(); }
+    }
+    // ---- something new, against the rival that presses it
+    if (n.tech < 0.45 || n.rival === undefined) return;
+    const o = h.nations[n.rival];
+    const ruler = h.people[n.ruler];
+    if (!o || o.ended >= 0 || luck(0x51) >= 1 - Math.exp(-y * dares(n.pressed ?? 0, ruler ? ruler.cruel : 0.5, ruler ? ruler.bold : 0.5))) return;
+    const land = new Set(n.land);
+    const slot = borrowable(n.know, o.know, land);
+    const theirs = h.people[o.ruler];
+    const canStrike = !!theirs && theirs.died < 0 && year - theirs.reignFrom >= 2 && !list.some((s) => s.kind === 'assassination' && s.against === o.id && year - s.year < 40);
+    // (a secret friend: a country in touch that has fought the same rival, and has no pact with this one)
+    let friend: Nation | undefined;
+    for (const id of n.contacts) { const f = h.nations[id]; if (f && f.ended < 0 && f.id !== o.id && f.foes?.[o.id] && !pactBetween(h, n.id, f.id, year)) { friend = f; break; } }
+    const kind = chooses(slot >= 0, canStrike, !!friend, luck(0x52));
+    if (!kind) return;
+    const since = n.foes?.[o.id];
+    const race = (h.races ?? []).find((r) => r.ended < 0 && ((r.a === n.id && r.b === o.id) || (r.a === o.id && r.b === n.id)));
+    const cause = [race ? race.eventId : -1, since ? since.eventId : -1].find((x) => x >= 0 && ev[x]) ?? -1;
+    const cap = this.settlements[n.capital]!, ocap = this.settlements[o.capital]!;
+    const push = (kind: Secret['kind'], eventId: number, cover: number, against: number): void => { list.push({ id: list.length ? list[list.length - 1]!.id + 1 : 1, kind, year, by: n.id, against, eventId, cover, known: -1, knownEvent: -1 }); if (list.length > 120) list.shift(); };
+    if (kind === 'theft') {
+      const k = wayFor(slot, land), way = WEB[slot]!.ways[k]!;
+      n.know.way[slot] = k; n.know.year[slot] = year;
+      const hidden = sim.emit({
+        type: 'theft', hidden: true, year, cellId: ocap.cell, title: `${n.name} steals the secret of ${way.name}`,
+        description: `A clerk in the ${WEB[slot]!.field === 'war' ? 'arsenal' : 'archive'} at ${ocap.name} is paid more by ${n.name} than ${o.name} pays him. What ${o.name} knows of ${way.name} leaves the country in a bale of cloth.`,
+        causes: [cause].filter((x) => x >= 0), importance: 0, speciesIds: [n.species], data: { by: n.id, against: o.id, slot },
+      });
+      const cover = sim.emit({
+        type: 'craft-learned', year, cellId: cap.cell, title: `${capital(way.name)} in ${n.name}`,
+        description: `${capital(way.name)} is known in ${cap.name} now, and practised. In ${n.name} it is said that their own ${WEB[slot]!.field === 'war' ? 'smiths' : 'scholars'} found the way.`,
+        causes: [hidden.id].filter((x) => x >= 0), importance: 0, speciesIds: [n.species], data: { nation: n.id, slot },
+      });
+      if (hidden.id >= 0) push('theft', hidden.id, cover.id, o.id);
+      return;
+    }
+    if (kind === 'pact' && friend) {
+      const t = this.treaty(sim, n, friend, 'alliance', year, cause, 60, true);
+      if (t && t.eventId >= 0) push('pact', t.eventId, -1, friend.id);
+      return;
+    }
+    if (kind !== 'assassination' || !theirs) return;
+    if (luck(0x53) >= strikes(o.stability)) {
+      // ---- it fails, and is known at once: a wrong the rival will remember
+      const e = sim.emit({
+        type: 'plot-uncovered', year, cellId: ocap.cell, title: `A plot against ${theirs.name} of ${o.name}`,
+        description: `A cook at the court of ${ocap.name} is caught with a paper of white powder, and names a merchant from ${n.name}. ${theirs.name} lives. ${o.name} will not forget who sent it.`,
+        causes: [cause].filter((x) => x >= 0), importance: 0, speciesIds: [o.species], data: { by: n.id, against: o.id, person: theirs.id },
+      });
+      if (e.id >= 0) { (o.grudges ??= []).push({ against: n.id, eventId: e.id, year }); if (o.grudges.length > 6) o.grudges.shift(); theirs.events.push(e.id); }
+      return;
+    }
+    // ---- it succeeds: the ruler is dead of "a short illness", and what follows a ruler's death follows
+    const hidden = sim.emit({
+      type: 'assassination', hidden: true, year, cellId: ocap.cell, title: `${theirs.name} of ${o.name} is poisoned`,
+      description: `A cup is carried to ${theirs.name} at the court of ${ocap.name} by a servant who has been in the pay of ${n.name} for a year. By morning ${theirs.name} is dead.`,
+      causes: [cause].filter((x) => x >= 0), importance: 0, speciesIds: [n.species], data: { by: n.id, against: o.id, person: theirs.id },
+    });
+    const cover = sim.emit({
+      type: 'ruler-death', year, cellId: ocap.cell, title: `${theirs.name} of ${o.name} is dead`,
+      description: `${theirs.name}, who ruled ${o.name} for ${Math.max(1, Math.round(year - theirs.reignFrom))} years, has died after a short illness. The court is in mourning.`,
+      causes: [hidden.id].filter((x) => x >= 0), importance: 0, speciesIds: [o.species], data: { nation: o.id, person: theirs.id },
+    });
+    theirs.events.push(cover.id >= 0 ? cover.id : hidden.id);
+    const from = ev.length;
+    this.succession(sim, new RNG(hash32(this.seedNum, o.id, Math.floor(year), 0x54)), o, this.settlements.filter((st) => st.ruined < 0 && st.nation === o.id), year, 'died after a short illness');
+    // (whatever the succession brought, a quarrel or a war for the throne, the hidden blow is among its causes)
+    if (hidden.id >= 0) for (let i = from; i < ev.length; i++) { const e = ev[i]!; if (!e.causes.includes(hidden.id)) { e.causes.push(hidden.id); e.causeWeights.push(1); hidden.effects.push(e.id); } }
+    this.woe(o, 'succession', cover.id >= 0 ? cover.id : hidden.id, year, 0.05);
+    if (hidden.id >= 0) push('assassination', hidden.id, cover.id, o.id);
+  }
+
   /** Two countries have fought (system E38): each remembers the year and the war. */
   private fought(a: Nation, b: Nation, year: number, eventId: number): void {
     if (a.id === b.id) return;
@@ -2710,10 +2812,17 @@ export class Civilization {
   }
 
   /** Make a treaty between two countries (system E34): an event caused by what led to it. */
-  private treaty(sim: Simulation, a: Nation, b: Nation, kind: TreatyKind, year: number, cause: number, years: number): Treaty | null {
+  private treaty(sim: Simulation, a: Nation, b: Nation, kind: TreatyKind, year: number, cause: number, years: number, secret = false): Treaty | null {
     const h = this.h, ev = sim.events.events;
     if (pactBetween(h, a.id, b.id, year)) return null;
     const list = (h.treaties ??= []);
+    if (secret) {
+      // (signed and not read out, system E39: the event is hidden, and it is no one's first treaty)
+      const e = sim.emit({ type: 'secret-treaty', hidden: true, year, cellId: this.settlements[a.capital]!.cell, title: `A secret pact between ${a.name} and ${b.name}`, description: `${a.name} and ${b.name} have the same enemy. Two envoys meet where neither is known and sign one sheet: an attack on either will be answered by both, for ${years} years. It is not read out in either capital.`, causes: [cause].filter((x) => x >= 0 && ev[x]), importance: 0, speciesIds: [a.species], data: { a: a.id, b: b.id, kind, years } });
+      const t: Treaty = { id: (h.treatySeq = (h.treatySeq ?? 0) + 1), a: a.id, b: b.id, kind, year, until: year + years, eventId: e.id, secret: true };
+      list.push(t);
+      return t;
+    }
     const first = h.firstTreaty === undefined;
     const cap = this.settlements[a.capital]!;
     const e = sim.emit({

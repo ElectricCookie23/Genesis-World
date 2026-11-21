@@ -9,6 +9,7 @@ import type { Ideology } from './ideology';
 import type { Colony } from './colony';
 import type { Pandemic } from './plague';
 import type { Race } from './arms';
+import type { Secret } from './secrets';
 // The entities of history. All of them are plain data, so the whole of history saves, loads and
 // rewinds with the rest of the simulation.
 import type { Calendar } from './calendar';
@@ -251,6 +252,8 @@ export interface HistoryState {
   movements?: Movement[];
   firstStyles?: number[];
   paintingSeq?: number;
+  /** What was done in secret (system E39): thefts, killings and unread treaties, each with the story told in its place. */
+  secrets?: Secret[];
   /** Arms races (system E38): those going on and the last few dozen cooled; and the event of the first. */
   races?: Race[];
   raceSeq?: number;

@@ -16,6 +16,8 @@ export interface Treaty {
   /** The year it was made and the year it runs out. */
   year: number; until: number;
   eventId: number;
+  /** Signed and not read out (system E39): not in the web of how countries stand until it comes out. */
+  secret?: boolean;
   /** If it was broken: when, by which of the two, and the event of the betrayal. */
   broken?: { year: number; by: number; eventId: number };
 }
@@ -63,7 +65,19 @@ export function web(h: HistoryState, year: number): Tie[] {
     for (const m of n.allies ?? []) if (m.until > year) put(n.id, m.nation, 'marriage', year, m.eventId, `The ruling houses of ${n.name} and ${name(m.nation)} are joined by marriage.`);
     for (const g of n.grudges ?? []) if (year - g.year < GRUDGE_YEARS && g.avenged === undefined) put(n.id, g.against, 'grudge', g.year, g.eventId, `${n.name} has not forgotten what ${name(g.against)} did.`);
   }
-  for (const t of h.treaties ?? []) if (!t.broken && t.until > year) put(t.a, t.b, t.kind === 'trade' ? 'trade-pact' : t.kind, t.year, t.eventId, t.kind === 'peace' ? `${name(t.a)} and ${name(t.b)} have sworn peace.` : t.kind === 'trade' ? `${name(t.a)} and ${name(t.b)} have a pact of trade.` : `${name(t.a)} and ${name(t.b)} are allies.`);
+  for (const t of h.treaties ?? []) if (!t.broken && t.until > year && !t.secret) put(t.a, t.b, t.kind === 'trade' ? 'trade-pact' : t.kind, t.year, t.eventId, t.kind === 'peace' ? `${name(t.a)} and ${name(t.b)} have sworn peace.` : t.kind === 'trade' ? `${name(t.a)} and ${name(t.b)} have a pact of trade.` : `${name(t.a)} and ${name(t.b)} are allies.`);
   for (const w of h.wars ?? []) if (w.ended < 0) put(w.a, w.b, 'war', w.year, w.eventId, `${name(w.a)} is at war with ${name(w.b)}.`);
   return [...ties.values()].sort((x, y) => rank(x.kind) - rank(y.kind));
+}
+
+/** The pacts in force that were signed in secret (system E39): what the web of how countries stand does not show. */
+export function secretTies(h: HistoryState, year: number): Tie[] {
+  const out: Tie[] = [];
+  for (const t of h.treaties ?? []) {
+    if (!t.secret || t.broken || t.until <= year) continue;
+    const a = h.nations[t.a], b = h.nations[t.b];
+    if (!a || !b || a.ended >= 0 || b.ended >= 0) continue;
+    out.push({ a: Math.min(t.a, t.b), b: Math.max(t.a, t.b), kind: 'alliance', since: t.year, eventId: t.eventId, label: `${a.name} and ${b.name} have a pact that neither has read out.` });
+  }
+  return out;
 }

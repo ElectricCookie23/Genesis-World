@@ -158,6 +158,8 @@ export interface PlantInfo {
 export interface DiplomacyInfo {
   nations: { id: number; name: string; hue: number; u: number; v: number; pop: number }[];
   ties: Tie[];
+  /** Pacts in force that were signed in secret (system E39): shown only by the Truth switch. */
+  secret: Tie[];
   /** Betrayals still remembered: who broke faith with whom, when, and whether it has been gone to war over. */
   betrayals: { by: string; against: string; year: number; eventId: number; avenged: number }[];
 }

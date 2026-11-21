@@ -1134,6 +1134,8 @@ async function boot(): Promise<void> {
   const resetHistory = () => {
     state.events = [];
     state.chronicle = [];
+    state.hiddenIds = [];
+    state.revealed = [];
     state.species = new Map();
     state.plants = new Map();
     toasts.length = 0;
@@ -1152,6 +1154,9 @@ async function boot(): Promise<void> {
         if (cause && !cause.effects.includes(ev.id)) cause.effects.push(ev.id);
       }
       if (ev.importance >= 1 && ev.id > 0) state.chronicle.push(ev.id);
+      // what was kept secret, and what has since come out (system E39)
+      if (ev.hidden) state.hiddenIds.push(ev.id);
+      if (ev.type === 'secret-revealed' && ev.data) state.revealed.push(Number(ev.data.secret));
       if (!live) continue;
       if (ev.importance >= 3) toasts.push(ev);
       // a new age somewhere in the world: a banner, for a few seconds

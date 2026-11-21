@@ -53,10 +53,13 @@ export function Num({ value, format }: { value: number; format: (n: number) => s
 
 export function Chronicle() {
   const s = useStore();
-  const ids = s.chronicle.slice(-160).reverse();
+  // what was kept secret is listed only with the Truth switch on, or once it has come out (system E39)
+  const out = new Set(s.revealed);
+  const secret = s.hiddenIds.filter((id) => s.truth || out.has(id)).slice(-80);
+  const ids = [...s.chronicle.slice(-160), ...secret].sort((a, b) => b - a);
   return (
     <div class={`${css.panel} ${css.side}`}>
-      <div class={css.head}><h2>Chronicle</h2><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
+      <div class={css.head}><h2>Chronicle</h2>{s.hiddenIds.length > 0 && <button class={css.link} style={{ marginRight: 0, color: s.truth ? '#c39bff' : undefined }} title="Show what was kept secret when it happened: thefts, killings and unread treaties" onClick={() => update({ truth: !s.truth })}>◈ Truth: {s.truth ? 'on' : 'off'}</button>}<button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
       <div class={css.scroll}>
         {ids.length === 0 && <p class={css.sub}>Nothing has happened yet. Give it time.</p>}
         {ids.map((id) => {
@@ -65,7 +68,7 @@ export function Chronicle() {
             <button class={css.entry} key={id} onClick={() => update({ whyEvent: id })} style={{ color: eventColor(e.type) }}>
               <i class={css.dot} />
               <div class={css.when} style={{ color: '#ece7db' }}>{formatYear(e.simYear)}{(() => { const own = localDate(s.realms, e); return own ? ` · ${own}` : ''; })()}</div>
-              <div class={`${css.what} ${e.importance >= 3 ? css.big : ''}`} style={{ color: '#ece7db' }}>{e.importance >= 3 ? e.title : e.description}</div>
+              <div class={`${css.what} ${e.importance >= 3 ? css.big : ''}`} style={{ color: e.hidden ? '#d9c4ff' : '#ece7db' }}>{e.hidden && <span style={{ color: '#c39bff' }}>{out.has(e.id) ? 'kept secret, and since come out: ' : 'kept secret: '}</span>}{e.importance >= 3 ? e.title : e.description}</div>
             </button>
           );
         })}
@@ -75,12 +78,13 @@ export function Chronicle() {
 }
 
 /** Walk the cause graph backward from an event: strongest cause first at each level. */
-function causeChain(events: SimEvent[], id: number, max = 14): { e: SimEvent; depth: number }[] {
+function causeChain(events: SimEvent[], id: number, max = 14, known: (e: SimEvent) => boolean = () => true): { e: SimEvent; depth: number }[] {
   const out: { e: SimEvent; depth: number }[] = [];
   const seen = new Set<number>();
   const visit = (eid: number, depth: number) => {
     const e = events[eid];
-    if (!e || seen.has(eid) || out.length >= max) return;
+    // (what was kept secret is no part of the answer, unless it is what was asked about: system E39)
+    if (!e || seen.has(eid) || out.length >= max || (depth > 0 && !known(e))) return;
     seen.add(eid);
     out.push({ e, depth });
     const order = e.causes.map((c, i) => ({ c, w: e.causeWeights[i] ?? 1 })).sort((a, b) => b.w - a.w);
@@ -94,10 +98,13 @@ export function Why() {
   const s = useStore();
   const root = s.events[s.whyEvent];
   if (!root) return null;
-  const chain = causeChain(s.events, root.id);
+  const out = new Set(s.revealed);
+  const chain = causeChain(s.events, root.id, 14, (e) => !e.hidden || s.truth || out.has(e.id));
+  // (is there something behind this that the public record does not have?)
+  const behind = !s.truth && chain.some(({ e }) => e.causes.some((c) => s.events[c]?.hidden && !out.has(c)));
   return (
     <div class={`${css.panel} ${css.side} ${css.sideLeft}`}>
-      <div class={css.head}><h2>Why did this happen?</h2><button class={css.close} onClick={() => update({ whyEvent: -1 })}>✕</button></div>
+      <div class={css.head}><h2>Why did this happen?</h2>{(s.truth || behind) && <button class={css.link} style={{ marginRight: 0, color: s.truth ? '#c39bff' : undefined }} title="Show what was kept secret when it happened" onClick={() => update({ truth: !s.truth })}>◈ Truth: {s.truth ? 'on' : 'off'}</button>}<button class={css.close} onClick={() => update({ whyEvent: -1 })}>✕</button></div>
       <div class={css.scroll}>
         {chain.map(({ e }, i) => (
           <>
@@ -107,7 +114,8 @@ export function Why() {
               <div class={css.thumb}>{eventGlyph(e.type)}</div>
               <div style={{ color: '#ece7db' }}>
                 <div class={css.when}>{formatYear(e.simYear)}{(() => { const own = localDate(s.realms, e); return own ? ` · ${own}` : ''; })()}</div>
-                <h3>{e.title}</h3>
+                <h3 style={e.hidden ? { color: '#d9c4ff' } : undefined}>{e.title}</h3>
+                {e.hidden && <div class={css.when} style={{ color: '#c39bff' }}>{out.has(e.id) ? 'kept secret when it happened; it has since come out' : 'kept secret: the public record does not have this'}</div>}
                 <p>{e.description}</p>
                 {e.cellId >= 0 && <button class={css.link} onClick={() => actions.flyToCell(e.cellId)}>show place</button>}
                 {canUndo(e.type) && <button class={css.link} onClick={() => actions.whatIf(e.id)}>what if this had not happened?</button>}

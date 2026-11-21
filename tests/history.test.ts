@@ -6,6 +6,9 @@ import { applyChange, compound, makeLanguage, personName, placeMeanings, soundCh
 import { count, listing, ordinal, write } from '../src/sim/history/grammar';
 import { IDEAS, IDEA_COLOUR, IDEA_GOVERNMENT, IDEA_SAYS, drift as driftIdea, governedAs, ideaName, pressure, ripest, type Conditions } from '../src/sim/history/ideology';
 import { emblemOf } from '../src/render/gfx/nations';
+import { HIDDEN_TYPES, chooses, comesOut, coverStory, dares, strikes } from '../src/sim/history/secrets';
+import { records } from '../src/sim/memory';
+import { secretTies } from '../src/sim/history/diplomacy';
 import { BURST, SPILL, WATCH_YEARS, armsLean, describeRace, drive, peers, tension } from '../src/sim/history/arms';
 import { VIAS, alongTrade, carried, describeVia, plagueName, shuts, toll } from '../src/sim/history/plague';
 import { describeColony, growsApart, odds, ready, shipped, waits, type Standing } from '../src/sim/history/colony';
@@ -2789,6 +2792,103 @@ describe('arms races (E38)', () => {
   });
 });
 
+describe('spies and secrets (E39)', () => {
+  it('a country dares only when pressed, chooses from what is possible, and old secrets come out', () => {
+    expect(dares(0.1, 1, 1)).toBe(0);
+    expect(dares(0.8, 0.5, 0.5)).toBeGreaterThan(0);
+    expect(dares(1, 0.5, 0.5)).toBeGreaterThan(dares(0.4, 0.5, 0.5));
+    expect(dares(0.8, 1, 0.5)).toBeGreaterThan(dares(0.8, 0, 0.5));
+    expect(dares(1, 1, 1)).toBeLessThan(0.05);
+    expect(chooses(false, false, false, 0.5)).toBeNull();
+    expect(chooses(true, false, false, 0.99)).toBe('theft');
+    expect(chooses(false, true, false, 0.01)).toBe('assassination');
+    expect(chooses(false, false, true, 0.5)).toBe('pact');
+    expect(chooses(true, true, true, 0.01)).toBe('theft');
+    expect(chooses(true, true, true, 0.7)).toBe('assassination');
+    expect(chooses(true, true, true, 0.99)).toBe('pact');
+    expect(strikes(1)).toBeLessThan(strikes(0));
+    expect(strikes(0)).toBeLessThanOrEqual(1);
+    expect(comesOut(59)).toBe(0);
+    expect(comesOut(61)).toBeGreaterThan(0);
+    for (const k of ['theft', 'assassination', 'pact'] as const) expect(coverStory(k).length).toBeGreaterThan(8);
+  });
+
+  it('hidden events are in the cause graph and not in the public record, and at least one changes the course of a history', () => {
+    const runs = fiveHistories();
+    let secrets = 0, thefts = 0, killings = 0, pacts = 0, out = 0, changed = 0, further = 0;
+    for (const { sim } of runs) {
+      const h = sim.civ.h, ev = sim.events.events;
+      // everything hidden is one of the hidden kinds, and never loud
+      const hidden = new Set<number>();
+      for (const e of ev) if (e.hidden) { hidden.add(e.id); expect(HIDDEN_TYPES).toContain(e.type); expect(e.importance).toBe(0); }
+      for (const e of ev) if ((HIDDEN_TYPES as readonly string[]).includes(e.type)) expect(e.hidden).toBe(true);
+      // the public record of every living country has none of it
+      for (const n of h.nations) {
+        if (n.ended >= 0) continue;
+        const r = records(sim, n.id);
+        if (r) for (const x of r.entries) if (x.eventId !== undefined && x.eventId >= 0) expect(hidden.has(x.eventId)).toBe(false);
+      }
+      for (const s of h.secrets ?? []) {
+        secrets++;
+        const e = ev[s.eventId]!;
+        expect(e.hidden).toBe(true);
+        expect(h.nations[s.by]).toBeDefined();
+        expect(h.nations[s.against]).toBeDefined();
+        expect(s.by).not.toBe(s.against);
+        if (s.kind === 'theft') {
+          thefts++;
+          expect(e.type).toBe('theft');
+          // the public story is a craft its own people are said to have found, and the theft is that story's cause
+          const cover = ev[s.cover]!;
+          expect(cover.type).toBe('craft-learned');
+          expect(cover.hidden).toBeUndefined();
+          expect(cover.causes).toContain(e.id);
+          expect(cover.data!.slot).toBe(e.data!.slot);
+          expect(cover.description).toMatch(/found the way/);
+          // and the thief knew it from that year (the course of what it knows was changed)
+          expect(WEB[Number(e.data!.slot)]).toBeDefined();
+          changed++;
+        } else if (s.kind === 'assassination') {
+          killings++;
+          expect(e.type).toBe('assassination');
+          const cover = ev[s.cover]!, dead = h.people[Number(e.data!.person)]!;
+          expect(cover.type).toBe('ruler-death');
+          expect(cover.causes).toContain(e.id);
+          expect(cover.description).toMatch(/short illness/);
+          // the ruler died that year, of "a short illness", and someone else rules
+          expect(dead.died).toBe(s.year);
+          expect(dead.fate).toBe('died after a short illness');
+          expect(dead.reignTo).toBe(s.year);
+          changed++;
+          // and whatever the succession brought has the hidden blow among its causes
+          const more = e.effects.filter((x) => x !== s.cover && ev[x] && !ev[x]!.hidden && ev[x]!.type !== 'secret-revealed');
+          if (more.length) further++;
+          for (const x of more) expect(ev[x]!.causes).toContain(e.id);
+        } else {
+          pacts++;
+          expect(e.type).toBe('secret-treaty');
+          const t = (h.treaties ?? []).find((x) => x.eventId === s.eventId);
+          if (t) { expect(t.secret).toBe(true); if (!t.broken && t.until > sim.simYear && h.nations[t.a]!.ended < 0 && h.nations[t.b]!.ended < 0) expect(secretTies(h, sim.simYear).some((x) => x.eventId === t.eventId)).toBe(true); }
+        }
+        if (s.known >= 0) {
+          out++;
+          const told = ev[s.knownEvent]!;
+          expect(told.type).toBe('secret-revealed');
+          expect(told.causes).toContain(e.id);
+          expect(told.data!.secret).toBe(e.id);
+          expect(s.known - s.year).toBeGreaterThanOrEqual(60);
+        }
+      }
+      // no pact signed in secret is in the public web of how countries stand
+      for (const t of h.treaties ?? []) if (t.secret && !t.broken && t.until > sim.simYear) { const tie = web(h, sim.simYear).find((x) => x.a === Math.min(t.a, t.b) && x.b === Math.max(t.a, t.b)); if (tie) expect(tie.eventId).not.toBe(t.eventId); }
+    }
+    console.log('E39', { secrets, thefts, killings, pacts, out, changed, further });
+    expect(secrets).toBeGreaterThan(0);
+    // the done-when
+    expect(changed).toBeGreaterThan(0);
+  });
+});
+
 describe('diplomacy (E34)', () => {
   it('treaties are made for reasons, and the web shows the strongest thing between each pair', () => {
     const runs = fiveHistories();
@@ -2802,7 +2902,8 @@ describe('diplomacy (E34)', () => {
         expect(t.a).not.toBe(t.b);
         expect(t.until).toBeGreaterThan(t.year);
         const e = ev[t.eventId];
-        if (e) { expect(e.type).toBe('treaty'); expect(e.data!.kind).toBe(t.kind); if (t.kind === 'peace') expect(ev[e.causes[0]!]!.type).toMatch(/peace|war/); if (t.kind === 'trade') expect(ev[e.causes[0]!]!.type).toMatch(/trade/); }
+        // (a pact signed in secret, E39, has a hidden event of its own kind)
+        if (e) { expect(e.type).toBe(t.secret ? 'secret-treaty' : 'treaty'); expect(e.data!.kind).toBe(t.kind); if (t.kind === 'peace') expect(ev[e.causes[0]!]!.type).toMatch(/peace|war/); if (t.kind === 'trade') expect(ev[e.causes[0]!]!.type).toMatch(/trade/); }
         if (t.broken) { expect(ev[t.broken.eventId]!.type).toBe('betrayal'); expect([t.a, t.b]).toContain(t.broken.by); }
       }
       // never two treaties in force between the same two countries

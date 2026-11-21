@@ -17,6 +17,8 @@ export interface SimEvent {
   /** Importance 0..3. 2+ slows time, 3 is a milestone pop-up. */
   importance: number;
   data?: Record<string, number | string>;
+  /** Not known when it happened (system E39): left out of the public record, and shown only by the Truth switch or once it has come out. */
+  hidden?: boolean;
 }
 
 export interface NewEvent {
@@ -31,6 +33,8 @@ export interface NewEvent {
   data?: Record<string, number | string>;
   /** The year it happened, when that is not the simulation's current year. */
   year?: number;
+  /** Not known when it happened (system E39). */
+  hidden?: boolean;
 }
 
 export class EventLog {
@@ -58,6 +62,7 @@ export class EventLog {
       importance: e.importance ?? 1,
       data: e.data,
     };
+    if (e.hidden) ev.hidden = true;
     this.events.push(ev);
     for (const c of causes) this.events[c]!.effects.push(id);
     this.fresh.push(ev);

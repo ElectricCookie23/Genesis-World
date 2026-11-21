@@ -33,6 +33,12 @@ export function DiplomacyPanel() {
                 if (Math.abs(a.x - b.x) > W / 2) return null;
                 return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={TIE_COLOUR[t.kind]} stroke-width={t.kind === 'war' ? 2.6 : t.kind === 'contact' ? 0.8 : 1.8} stroke-dasharray={t.kind === 'grudge' ? '5 4' : undefined}><title>{t.label}</title></line>;
               })}
+              {/* pacts signed and not read out, with the Truth switch on (system E39) */}
+              {s.truth && (d.secret ?? []).map((t, i) => {
+                const a = at.get(t.a), b = at.get(t.b);
+                if (!a || !b || Math.abs(a.x - b.x) > W / 2) return null;
+                return <line key={`s${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#c39bff" stroke-width={2} stroke-dasharray="2 4"><title>{t.label}</title></line>;
+              })}
               {[...at.values()].map(({ x, y, n }) => (
                 <g key={n.id} style={{ cursor: 'pointer' }} onClick={() => actions.openNation(n.id)}>
                   <circle cx={x} cy={y} r={3 + Math.min(5, Math.sqrt(n.pop) / 12)} fill={`hsl(${Math.round(n.hue * 360)} 70% 60%)`} stroke="#0c1018" stroke-width={1.2} />
@@ -50,14 +56,20 @@ export function DiplomacyPanel() {
                 <span style={{ color: TIE_COLOUR[t.kind] }}>●</span> {t.label} {t.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} onClick={() => update({ whyEvent: t.eventId })}>how it came about</button>}
               </div>
             ))}
-            {d.betrayals.length > 0 && <div class={css.sub} style={{ margin: '10px 0 4px', letterSpacing: '0.08em' }}>BETRAYALS REMEMBERED</div>}
+            {(d.secret ?? []).length > 0 && s.truth && <div class={css.sub} style={{ margin: '10px 0 4px', letterSpacing: '0.08em', color: '#c39bff' }}>◈ SIGNED AND NOT READ OUT</div>}
+            {s.truth && (d.secret ?? []).map((t, i) => (
+              <div key={`s${i}`} class={css.when} style={{ color: '#d9c4ff', margin: '0 0 3px' }}>
+                {t.label} {t.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} onClick={() => update({ whyEvent: t.eventId })}>how it came about</button>}
+              </div>
+            ))}
+            {d.betrayals.length > 0 && <div class={css.sub} style={{ margin: '10px 0 4px', letterSpacing: '0.08em' }}>WRONGS REMEMBERED</div>}
             {d.betrayals.map((b, i) => (
               <div key={i} class={css.when} style={{ color: '#ece7db', margin: '0 0 3px' }}>
-                {b.by} broke its word to {b.against} {ago(b.year)}. {b.avenged >= 0 ? `${b.against} went to war over it ${ago(b.avenged)}.` : `${b.against} has not forgotten.`}{' '}
+                {b.by} wronged {b.against} {ago(b.year)}. {b.avenged >= 0 ? `${b.against} went to war over it ${ago(b.avenged)}.` : `${b.against} has not forgotten.`}{' '}
                 {b.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} onClick={() => update({ whyEvent: b.eventId })}>what was done</button>}
               </div>
             ))}
-            <p class={css.sub} style={{ margin: '12px 0 0' }}><button class={css.link} onClick={() => actions.openDiplomacy()}>look again</button></p>
+            <p class={css.sub} style={{ margin: '12px 0 0' }}><button class={css.link} onClick={() => actions.openDiplomacy()}>look again</button><button class={css.link} style={{ color: s.truth ? '#c39bff' : undefined }} title="Show the pacts that were signed and not read out" onClick={() => update({ truth: !s.truth })}>◈ Truth: {s.truth ? 'on' : 'off'}</button></p>
           </>
         )}
       </div>
