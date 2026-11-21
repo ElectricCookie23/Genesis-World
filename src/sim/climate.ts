@@ -43,6 +43,8 @@ export interface ClimateState {
   sinLat: Float32Array;
   rainBand: Float32Array;
   cloudBand: Float32Array;
+  /** What the drawn cloud is multiplied by at each cell: this world's own belts over the plain ones. */
+  cloudShow: Float32Array;
 }
 
 export function createClimate(world: World, rng: RNG): ClimateState {
@@ -82,13 +84,30 @@ export function createClimate(world: World, rng: RNG): ClimateState {
     sinLat: new Float32Array(count),
     rainBand: new Float32Array(count),
     cloudBand: new Float32Array(count),
+    cloudShow: new Float32Array(count),
   };
+  // The belts of weather differ from world to world: how strong the convective belt is, how far off the equator it
+  // sits and how wide, where the dry belts lie, and how cloudy the middle latitudes are. On some worlds the belt at
+  // the equator is hardly there, and the cloud is in the middle latitudes instead.
+  const b = r.fork('bands');
+  const wet = b.range(0, 0.95), off = b.range(-12, 12), wide = b.range(0.6, 1.7);
+  // the belt is not a ruled line: it wanders north and south as it goes round, and is thick in places and broken in others
+  const p1 = b.range(0, 6.28), p2 = b.range(0, 6.28), p3 = b.range(0, 6.28), sway = b.range(4, 14);
+  const dryAt = b.range(20, 33), dry = b.range(0.5, 1.2), midAt = b.range(44, 64), mid = b.range(0.5, 1.6);
+  const bump = (x: number, at: number, w: number): number => Math.exp(-((x - at) * (x - at)) / w);
   for (let i = 0; i < count; i++) {
-    const a = Math.abs(grid.lat[i]!) * (180 / Math.PI);
+    const d = grid.lat[i]! * (180 / Math.PI), a = Math.abs(d);
     state.sinLat[i] = Math.sin(grid.lat[i]!);
-    // convective belt at the equator, dry subtropical highs, wet mid-latitudes
-    state.rainBand[i] = 0.55 + 0.75 * Math.exp(-(a * a) / 220) - 0.38 * Math.exp(-((a - 27) * (a - 27)) / 90) + 0.25 * Math.exp(-((a - 52) * (a - 52)) / 200);
-    state.cloudBand[i] = 0.5 + 0.6 * Math.exp(-(a * a) / 160) - 0.4 * Math.exp(-((a - 26) * (a - 26)) / 110) + 0.45 * Math.exp(-((a - 55) * (a - 55)) / 260);
+    // convective belt near the equator, dry subtropical highs, wet mid-latitudes
+    // (the simulation keeps its plain belts, so the climates and histories of worlds are as they were: only the cloud
+    // that is drawn differs, through cloudShow)
+    state.rainBand[i] = 0.55 + 0.75 * bump(a, 0, 220) - 0.38 * bump(a, 27, 90) + 0.25 * bump(a, 52, 200);
+    state.cloudBand[i] = 0.5 + 0.6 * bump(a, 0, 160) - 0.4 * bump(a, 26, 110) + 0.45 * bump(a, 55, 260);
+    // how much more or less cloud this world shows at this latitude than the plain belts give
+    const lon = grid.lon[i]!;
+    const at = off + sway * Math.sin(2 * lon + p1) + 0.4 * sway * Math.sin(5 * lon + p2);
+    const patch = Math.max(0, 0.5 + 0.6 * Math.sin(3 * lon + p3) * Math.sin(7 * lon + p2 + d * 0.12) + 0.25 * Math.sin(11 * lon + p1));
+    state.cloudShow[i] = (0.5 + 0.6 * wet * patch * bump(d, at, 160 * wide) - 0.4 * dry * bump(a, dryAt, 110) + 0.45 * mid * bump(a, midAt, 260)) / state.cloudBand[i]!;
   }
   computeWind(world, state, r);
   computeCurrents(world, state);

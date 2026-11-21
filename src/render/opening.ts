@@ -45,7 +45,7 @@ export class Opening {
     s.planet?.mesh.scale.setScalar(1);
     s.moonDistance = MOON_DISTANCE;
     s.moon.visible = true;
-    s.moon.scale.setScalar(1);
+    s.moon.scale.setScalar(s.look?.moonSize ?? 1);
     s.cam.enabled = true;
     s.cam.idle = 100;
     s.daySpeed = 1;
@@ -83,7 +83,7 @@ export class Opening {
     s.moon.visible = t > 6.7;
     const out = ease(span(t, 6.7, 11.5));
     s.moonDistance = 1.15 + (MOON_DISTANCE - 1.15) * out;
-    s.moon.scale.setScalar(0.35 + 0.65 * out);
+    s.moon.scale.setScalar((0.35 + 0.65 * out) * (s.look?.moonSize ?? 1));
     // 8-13 s: cooling, steam, air, rain
     uAtmo.value = ease(span(t, 8.6, 12.5));
     uSteam.value = ease(span(t, 8.4, 10.5)) * (1 - ease(span(t, 12.2, 15.5))) * 0.75;

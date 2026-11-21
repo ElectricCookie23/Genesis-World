@@ -10,6 +10,9 @@ import { nearestCell } from '../sim/world';
 import type { CellSnapshot, NationInfo, WorldStats, SettlementInfo } from '../shared/protocol';
 import { hashSeed } from '../sim/rng';
 import { PlanetMesh } from './planet';
+import { loadFirst } from './gfx/models';
+import { PLANT_MODELS } from './gfx/assetroles';
+import type { Form } from './gfx/plantmesh';
 
 const tmpA = new Vector3(), tmpB = new Vector3(), tmpC = new Vector3();
 /** How far out the comet hangs: beyond the moon, inside the far edge of what is drawn. */
@@ -200,6 +203,22 @@ export class GenesisScene {
     this.resize();
   }
 
+  /** Set false (`&noassets` in the address) to draw everything from the game's own generated shapes, as before the asset pass. */
+  useAssets = true;
+  /** For checks: draw a form of plant from a given file (`&plantmodel=broadleaf:path/to.glb`). */
+  plantModelOverride: Record<string, string> = {};
+
+  /** Fetch the made models for plants and hand each to the plant layer as it arrives. A form with no file keeps its generated shape. */
+  private async loadPlantModels(): Promise<void> {
+    if (!this.useAssets || !this.vegetation) return;
+    const forms = new Set<string>([...Object.keys(PLANT_MODELS), ...Object.keys(this.plantModelOverride)]);
+    for (const form of forms) {
+      const over = this.plantModelOverride[form];
+      const model = await loadFirst(over ? [over] : PLANT_MODELS[form as Form] ?? [], !!over);
+      if (model) this.vegetation.useModel(form as Form, model);
+    }
+  }
+
   /** Put a comet in the sky for so many seconds. Where it hangs is fixed by the number given (the event that reported it). */
   showComet(seconds: number, seed: number): void {
     const a = ((seed * 0.6180339887) % 1) * Math.PI * 2, b = (((seed * 0.7548776662) % 1) - 0.5) * 0.9;
@@ -301,11 +320,14 @@ export class GenesisScene {
     this.vegetation.pigmentA = this.look.pigmentA;
     this.vegetation.pigmentB = this.look.pigmentB;
     for (const m of this.vegetation.meshes) this.scene.add(m);
+    void this.loadPlantModels();
     this.particles = new ParticleSystem(grid);
     this.scene.add(this.particles.sprite);
     // a captured second moon, hidden until the sim says it exists
     this.moon2 = createMoon(777);
-    this.moon2.scale.setScalar(0.45);
+    this.moon2.scale.setScalar(this.look.moon2Size);
+    this.moon.scale.setScalar(this.look.moonSize);
+    this.moonAngle = this.look.moonStart;
     this.moon2.visible = false;
     // ring system (after the moon is shattered)
     const ringMat = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: DoubleSide });
@@ -901,7 +923,7 @@ export class GenesisScene {
     this.time += dt;
     uTime.value = this.time;
     this.dayAngle += dt * ((Math.PI * 2) / 80) * this.daySpeed;
-    this.moonAngle += dt * ((Math.PI * 2) / 140) * this.daySpeed;
+    this.moonAngle += dt * ((Math.PI * 2) / 140) * this.daySpeed * (this.look?.moonPace ?? 1);
     const cd = Math.cos(this.declination);
     (uSunDir.value as Vector3).set(cd * Math.cos(this.dayAngle), Math.sin(this.declination), cd * Math.sin(this.dayAngle)).normalize();
     uSkyAngle.value = -this.dayAngle;
@@ -922,7 +944,7 @@ export class GenesisScene {
         this.cometMesh.matrixWorldNeedsUpdate = true;
       }
     }
-    const mi = 0.09;
+    const mi = this.look?.moonTilt ?? 0.09;
     const md = (uMoonDir.value as Vector3).set(Math.cos(this.moonAngle), Math.sin(mi) * Math.sin(this.moonAngle), Math.sin(this.moonAngle)).normalize();
     this.moon.position.copy(md).multiplyScalar(this.moonDistance);
     (uMoonBody.value as Vector4).set(this.moon.position.x, this.moon.position.y, this.moon.position.z, this.moon.visible ? MOON_RADIUS * this.moon.scale.x : 0);
@@ -930,12 +952,13 @@ export class GenesisScene {
     (uMoonBody2.value as Vector4).w = 0;
     this.moon.rotation.y = -this.moonAngle;
     if (this.moon2?.visible) {
-      const a2 = this.moonAngle * 2.3 + 1;
-      this.moon2.position.set(Math.cos(a2) * 3.4, Math.sin(0.4) * Math.sin(a2) * 3.4, Math.sin(a2) * 3.4 * Math.cos(0.4));
-      (uMoonBody2.value as Vector4).set(this.moon2.position.x, this.moon2.position.y, this.moon2.position.z, MOON_RADIUS * 0.45);
+      const a2 = this.moonAngle * (this.look?.moon2Pace ?? 2.3) + 1, t2 = this.look?.moon2Tilt ?? 0.4;
+      this.moon2.position.set(Math.cos(a2) * 3.4, Math.sin(t2) * Math.sin(a2) * 3.4, Math.sin(a2) * 3.4 * Math.cos(t2));
+      (uMoonBody2.value as Vector4).set(this.moon2.position.x, this.moon2.position.y, this.moon2.position.z, MOON_RADIUS * this.moon2.scale.x);
     }
     // the companion sun trails the main one by a wide angle
-    (uSun2Dir.value as Vector3).set(cd * Math.cos(this.dayAngle + 0.9), Math.sin(this.declination) + 0.15, cd * Math.sin(this.dayAngle + 0.9)).normalize();
+    const s2 = this.dayAngle + (this.look?.star2Angle ?? 0.9);
+    (uSun2Dir.value as Vector3).set(cd * Math.cos(s2), Math.sin(this.declination) + (this.look?.star2Lift ?? 0.15), cd * Math.sin(s2)).normalize();
 
     // era colour grade
     const w = this.eraWarmth;
