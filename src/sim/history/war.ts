@@ -58,6 +58,8 @@ export interface War {
   outcome: '' | 'attacker' | 'defender' | 'stalemate';
   /** Towns that changed hands in it. */
   taken: number[];
+  /** The great war it is part of (system E40): a great war's id. */
+  great?: number;
   /** For a war a mother country fights to keep a colony (system E36): the colony's id. */
   independence?: number;
 }

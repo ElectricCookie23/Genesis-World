@@ -306,6 +306,7 @@ async function boot(): Promise<void> {
   actions.showFestival = (nation, festival) => { shownFeast = { nation, festival, until: performance.now() + 20000 }; const r = state.realms.find((x) => x.id === nation); const cap = r ? state.settlements.find((t) => t.id === r.capital) : undefined; if (cap) { update({ panel: 'none' }); scene.cam.flyTo(grid.lon[cap.cell]!, grid.lat[cap.cell]!, 1.1); } };
   actions.openDiplomacy = () => { update({ panel: 'diplomacy' }); send({ type: 'requestDiplomacy' }); };
   actions.openWars = () => { update({ panel: 'map', mapOf: -3 }); send({ type: 'requestWars' }); };
+  actions.openGreatWars = () => { update({ panel: 'map', mapOf: -7 }); send({ type: 'requestGreatWars' }); };
   actions.openPlagues = () => { update({ panel: 'map', mapOf: -6 }); send({ type: 'requestPlagues' }); };
   actions.openMarket = () => { update({ panel: 'market' }); send({ type: 'requestMarket' }); };
   actions.openLegends = () => { update({ panel: 'legends' }); send({ type: 'requestLegends' }); };
@@ -677,6 +678,21 @@ async function boot(): Promise<void> {
       ctx.font = '11px system-ui, sans-serif';
       for (const k of used) { ctx.fillStyle = IDEA_COLOUR[k]; ctx.fillRect(kx, H - 18, 12, 8); ctx.fillStyle = '#ece7db'; ctx.fillText(IDEA_LABEL[k], kx + 16, H - 10); kx += 22 + ctx.measureText(IDEA_LABEL[k]).width + 10; }
       update({ mapNote: ruled + rising ? `${ruled} ${ruled === 1 ? 'country is' : 'countries are'} governed by an idea its people rose for (filled). In ${rising} an idea is gaining ground (a ring, wider as more hold it). The colour is what the idea wants: who should rule.` : 'No one has yet had an idea of how a country should be run, other than the way it is.' });
+    }
+    // ---- a great war (system E40): the towns of one side in red and of the other in blue, as they stand now, and the
+    // seat of what the peace set up ringed in white
+    if (state.mapOf === -7) {
+      ctx.fillStyle = 'rgba(6, 8, 14, 0.5)'; ctx.fillRect(0, 0, W, H);
+      const great = (state.greatWars ?? []).find((g) => g.id === state.greatShown);
+      if (great) {
+        const dot = (cell: number, colour: string, r: number): void => { const x = ((grid.lon[cell]! + Math.PI) / (Math.PI * 2)) * W, y = (0.5 - grid.lat[cell]! / Math.PI) * H; ctx.fillStyle = colour; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); };
+        great.sides.forEach((side, k) => { for (const c of side.cells) dot(c, k === 0 ? '#e0563a' : '#4f8fe0', 4); });
+        for (const i of great.institutions.slice(0, 1)) if (i.cell >= 0) { const x = ((grid.lon[i.cell]! + Math.PI) / (Math.PI * 2)) * W, y = (0.5 - grid.lat[i.cell]! / Math.PI) * H; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.stroke(); }
+        let kx = 10;
+        ctx.font = '11px system-ui, sans-serif';
+        for (const [c, label] of [['#e0563a', 'those who began it, and their friends'], ['#4f8fe0', 'those it was begun against, and theirs']] as const) { ctx.fillStyle = c; ctx.fillRect(kx, H - 18, 12, 8); ctx.fillStyle = '#ece7db'; ctx.fillText(label, kx + 16, H - 10); kx += 22 + ctx.measureText(label).width + 10; }
+        if (great.institutions.length) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(kx + 5, H - 14, 5, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = '#ece7db'; ctx.fillText('where the peace was made', kx + 15, H - 10); }
+      }
     }
     // ---- a plague, town by town (system E37): the ways trade travels drawn faintly, and over them the way the sickness
     // went, from each town to the next, redder the earlier it was reached
@@ -1169,6 +1185,9 @@ async function boot(): Promise<void> {
       // documentary director: cut to wherever something notable just happened
       if ((state.director || state.postcard) && ev.importance >= 2 && ev.cellId >= 0 && scene.following === null) actions.flyToCell(ev.cellId, 0.9);
       if ((ev.type === 'war' || ev.type === 'plague') && ev.cellId >= 0) scene.civUnrest(ev.cellId, ev.type);
+      // every battle flickers where it is fought, and a world war flickers in every town of every country in it (system E40)
+      if (ev.type === 'battle' && ev.cellId >= 0) scene.civUnrest(ev.cellId, 'war');
+      if (ev.type === 'world-war' && ev.data) { const ids = new Set(String(ev.data.sides ?? '').split(/[,|]/).map(Number)); for (const st of state.settlements) if (st.ruined < 0 && st.nation !== undefined && ids.has(st.nation)) scene.civUnrest(st.cell, 'war'); }
       // a fallen capital goes dark; a civil war flickers like any other
       if (ev.type === 'nation-collapse' && ev.cellId >= 0) scene.civUnrest(ev.cellId, 'plague');
       if (ev.type === 'civil-war' && ev.cellId >= 0) scene.civUnrest(ev.cellId, 'war');
@@ -1325,6 +1344,9 @@ async function boot(): Promise<void> {
       }
       case 'diplomacy':
         update({ diplomacy: msg.web });
+        break;
+      case 'greatWars':
+        update({ greatWars: msg.list, greatShown: msg.list.some((g) => g.id === state.greatShown) ? state.greatShown : msg.list[0]?.id ?? -1 });
         break;
       case 'plagues':
         update({ plagues: msg.list, plagueWays: msg.ways, plagueShown: msg.list.some((p) => p.id === state.plagueShown) ? state.plagueShown : msg.list[0]?.id ?? -1 });

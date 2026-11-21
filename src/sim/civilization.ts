@@ -27,6 +27,7 @@ import { clash, describeBattle, siegeYears, type Army, type Battle, type BattleK
 import { GRUDGE_YEARS, pactBetween, type Treaty, type TreatyKind } from './history/diplomacy';
 import { growsApart, odds, ready, shipped, waits, type Colony, type Standing } from './history/colony';
 import { ordinal } from './history/grammar';
+import { LEAGUE_HOLDS, chain, describeGreatWar, institutionName, isWorld, powers, purposeOf, victor, INSTITUTION_KINDS, type GreatWar, type Institution } from './history/greatwar';
 import { chooses, comesOut, dares, strikes, type Secret } from './history/secrets';
 import { BURST, BURST_EVERY, SPILL, WATCH_YEARS, armsLean, describeRace, drive, peers, tension, type Race } from './history/arms';
 import { CATCHING_YEARS, carried, describePandemic, describeVia, plagueName, shuts, toll, type Edge, type Pandemic, type Reach, type Via } from './history/plague';
@@ -516,6 +517,8 @@ export class Civilization {
         if (o.nation === st.nation && o.species === st.species) continue;
         // a marriage between the ruling houses keeps the peace while it is remembered (system E7)
         if (this.allied(n, o.nation, year)) continue;
+        // a league set up after a world war keeps its members from each other, most of the time (system E40)
+        if (o.nation >= 0 && o.nation !== n.id && this.leagued(sim, n, o.nation, st, year)) continue;
         // a treaty holds, about one time in three that it is tested (system E34); the other times it is broken
         const pact = o.nation >= 0 && o.nation !== n.id ? pactBetween(this.h, n.id, o.nation, year) : undefined;
         if (pact && hash32(this.seedNum, st.id, Math.floor(year), 0xd1b) % 100 < 35) continue;
@@ -2205,6 +2208,194 @@ export class Civilization {
   }
 
   /**
+   * The allies come in (system E40). A campaign has begun between two countries. Every country sworn to
+   * either (an alliance in force, read out or not) joins its side, and those sworn to them, round by round
+   * (`chain`); a country sworn to both stays out. Each that joins goes to war with the principal on the other
+   * side: a war of its own, caused by its alliance and by the first war. If enough of the great powers are in
+   * it, it is a world war: every belligerent's workshops are turned to it at once.
+   */
+  private rally(sim: Simulation, war: War, year: number): void {
+    const h = this.h, ev = sim.events.events;
+    const alive = (id: number): boolean => !!h.nations[id] && h.nations[id]!.ended < 0;
+    const pacts = (id: number): { id: number; eventId: number; secret: boolean }[] => {
+      const out: { id: number; eventId: number; secret: boolean }[] = [];
+      for (const t of h.treaties ?? []) if (t.kind === 'alliance' && !t.broken && t.until > year && (t.a === id || t.b === id)) { const o = t.a === id ? t.b : t.a; if (alive(o) && h.nations[o]!.species === h.nations[id]!.species) out.push({ id: o, eventId: t.eventId, secret: !!t.secret }); }
+      return out;
+    };
+    // (while a world war is being fought, and for a generation after one, no one follows an ally into another war)
+    if ((h.great ?? []).some((x) => x.world && (x.ended < 0 || year - x.ended < 40))) return;
+    const { sides, joined } = chain(war.a, war.b, (id) => pacts(id).map((x) => x.id));
+    if (!joined.length) return;
+    const A = h.nations[war.a]!, B = h.nations[war.b]!;
+    const id = (h.greatSeq = (h.greatSeq ?? 0) + 1);
+    const g: GreatWar = { id, name: '', own: '', began: year, ended: -1, origin: war.id, wars: [war.id], sides, world: false, eventId: -1, endEvent: -1, winner: -1, taken: [] };
+    war.great = id;
+    const p = sim.grid.pos;
+    for (const j of joined) {
+      const X = h.nations[j.nation]!, E = j.side === 0 ? B : A, friend = h.nations[j.with]!;
+      // its town nearest one of the enemy's
+      let from: Settlement | undefined, at: Settlement | undefined, best = -2;
+      for (const o of this.settlements) {
+        if (o.ruined >= 0 || o.nation !== E.id) continue;
+        for (const st of this.settlements) { if (st.ruined >= 0 || st.nation !== X.id) continue; const d = p[st.cell * 3]! * p[o.cell * 3]! + p[st.cell * 3 + 1]! * p[o.cell * 3 + 1]! + p[st.cell * 3 + 2]! * p[o.cell * 3 + 2]!; if (d > best) { best = d; from = st; at = o; } }
+      }
+      if (!from || !at) continue;
+      const pact = pacts(j.nation).find((x) => x.id === j.with);
+      const e = sim.emit({
+        type: 'war', year, cellId: from.cell, title: `${X.name} joins the war against ${E.name}`,
+        description: `${X.name} is sworn to ${friend.name}${pact && pact.secret ? ', by a pact that was never read out' : ''}. ${friend.name} is at war with ${E.name}, and ${X.name} follows it in.`,
+        causes: [pact ? pact.eventId : -1, war.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: 1, speciesIds: [X.species],
+        data: { town: from.id, other: at.id, nation: X.id, foe: E.id, joins: war.id },
+      });
+      if (e.id < 0) continue;
+      this.credit(sim, null, X, e.id, '{name} gave the order.');
+      this.fought(X, E, year, e.id);
+      X.fatigue = sat(X.fatigue + 0.15); E.fatigue = sat(E.fatigue + 0.1);
+      this.woe(X, 'war', e.id, year, 0.03);
+      const joinedWar = this.campaign(sim, X, E, from, at, e.id, year, '', '', true, true);
+      if (joinedWar) { joinedWar.great = id; g.wars.push(joinedWar.id); }
+    }
+    if (g.wars.length < 2) { war.great = undefined; return; }
+    // ---- is it a world war? enough of the great powers, or most of the world's people
+    const living = h.nations.filter((x) => x.ended < 0);
+    const all = [...sides[0], ...sides[1]];
+    let world = 0, theirs = 0;
+    for (const x of living) { world += x.pop; if (all.includes(x.id)) theirs += x.pop; }
+    g.world = isWorld(all, powers(living.map((x) => ({ id: x.id, pop: x.pop, tech: x.tech }))), world > 0 ? theirs / world : 0);
+    const list = (h.great ??= []);
+    const nth = list.filter((x) => x.world).length;
+    g.name = g.world ? (nth === 0 ? 'the Great War' : `the ${['Second', 'Third', 'Fourth', 'Fifth', 'Sixth'][Math.min(4, nth - 1)]} Great War`) : `the war of ${A.name} and ${B.name}`;
+    g.own = compound(this.languageOf(A), 'fire', 'great', year);
+    const first = g.world && h.firstWorldWar === undefined;
+    const names = (ids: number[]): string => { const x = ids.map((k) => h.nations[k]!.name); return x.length > 1 ? `${x.slice(0, -1).join(', ')} and ${x[x.length - 1]}` : x[0]!; };
+    const e = sim.emit({
+      type: g.world ? 'world-war' : 'alliance-war', year, cellId: this.settlements[B.capital]?.cell ?? -1,
+      title: g.world ? (first ? 'The first world war' : `${capital(g.name)}`) : `The allies of ${A.name} and ${B.name} are drawn in`,
+      description: g.world
+        ? `What began as "${ev[war.eventId]?.title ?? 'a war'}" has not stayed between two countries. ${names(sides[0])} stand against ${names(sides[1])}: most of the powers of the world. They call it ${g.own}, ${g.name}. Every forge in every one of them is working for it.`
+        : `${names(sides[0])} stand against ${names(sides[1])}. A war between two countries has become a war between their friends.`,
+      causes: [war.eventId, ...joined.map((j) => { const pact = pacts(j.nation).find((x) => x.id === j.with); return pact ? pact.eventId : -1; })].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 4),
+      importance: g.world ? 2 : 1, speciesIds: [A.species], data: { great: id, sides: `${sides[0].join(',')}|${sides[1].join(',')}`, world: g.world ? 1 : 0 },
+    });
+    g.eventId = e.id;
+    if (first && e.id >= 0) h.firstWorldWar = e.id;
+    // (a war between alliances with members of a standing league on both sides is the end of that league)
+    for (const old of list) {
+      if (!old.order || old.order.until >= 0 || !sides[0].some((x) => old.order!.members.includes(x)) || !sides[1].some((x) => old.order!.members.includes(x))) continue;
+      const league = old.order.institutions[0]!;
+      old.order.until = year;
+      old.order.failEvent = sim.emit({
+        type: 'order-fails', year, cellId: this.settlements[league.seat]?.cell ?? -1, title: `${capital(league.name)} fails`,
+        description: `${league.own}, ${league.name}, was founded ${Math.max(1, Math.round(year - old.order.year))} years ago so that there would not be another war like the last. Its members are on both sides of this one. The envoys go home.`,
+        causes: [league.eventId, e.id].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: 1, speciesIds: [A.species], data: { great: old.id },
+      }).id;
+    }
+    // every workshop is turned to it: the "huge jump" of a world war, and a lesser one of any war between alliances
+    if (this.armsRaces) for (const k of all) { const x = h.nations[k]!; if (x.ended < 0) x.know.saved += g.world ? 1.5 : 0.5; }
+    list.push(g);
+    if (list.length > 30) { const k = list.findIndex((x) => x.ended >= 0 && !x.order); if (k >= 0) list.splice(k, 1); }
+  }
+
+  /**
+   * A great war is over (system E40): the last of its wars has ended. Who had the better of it is counted
+   * from the wars won and the towns kept (`victor`). The peace is one event caused by every peace before it.
+   * After a world war the countries that fought it set up an order meant to prevent the next: a league, a
+   * court and a common fund, each with a name and a seat in the chief town of the greatest victor.
+   */
+  private conclude(sim: Simulation, g: GreatWar, year: number): void {
+    const h = this.h, ev = sim.events.events;
+    const wars = (h.wars ?? []).filter((w) => w.great === g.id);
+    g.ended = year;
+    const kept = (w: War): number[] => w.taken.filter((id) => this.settlements[id]!.ruined < 0 && this.settlements[id]!.nation === w.a);
+    g.winner = victor(wars.map((w) => ({ side: g.sides[0].includes(w.a) ? 0 : 1, outcome: w.outcome, kept: kept(w).length })));
+    g.taken = [...new Set(wars.flatMap(kept))];
+    const all = [...g.sides[0], ...g.sides[1]].map((id) => h.nations[id]!).filter((x) => x.ended < 0);
+    if (!all.length) return;
+    // the terms of a world war's peace: each defeated country that has towns to spare gives up the one nearest a victor
+    if (g.world && g.winner >= 0) {
+      const p = sim.grid.pos;
+      const won = all.filter((x) => g.sides[g.winner as 0 | 1].includes(x.id)), lost = all.filter((x) => !g.sides[g.winner as 0 | 1].includes(x.id));
+      for (const loser of lost) {
+        const theirs = this.settlements.filter((st) => st.ruined < 0 && st.nation === loser.id && st.id !== loser.capital);
+        if (theirs.length < 2) continue;
+        let give: Settlement | undefined, to: Nation | undefined, best = 0.94;
+        for (const st of theirs) for (const o of this.settlements) {
+          if (o.ruined >= 0 || o.nation < 0 || !won.some((x) => x.id === o.nation)) continue;
+          const d = p[st.cell * 3]! * p[o.cell * 3]! + p[st.cell * 3 + 1]! * p[o.cell * 3 + 1]! + p[st.cell * 3 + 2]! * p[o.cell * 3 + 2]!;
+          if (d > best) { best = d; give = st; to = h.nations[o.nation]; }
+        }
+        if (!give || !to) continue;
+        give.nation = to.id;
+        sim.cellLog.note(give.cell, year, Log.Owner, to.id);
+        if (!g.taken.includes(give.id)) g.taken.push(give.id);
+      }
+    }
+    // the peace is made in the chief town of the greatest of the victors (of the greatest country left, if no one won)
+    const side = g.winner >= 0 ? all.filter((x) => g.sides[g.winner as 0 | 1].includes(x.id)) : [];
+    const host = (side.length ? side : all).reduce((a, b) => (b.pop > a.pop ? b : a));
+    const seat = this.settlements[host.capital]!;
+    const name = (id: number): string => h.nations[id]?.name ?? '';
+    const towns = g.taken.map((id) => this.settlements[id]!.name);
+    const peace = sim.emit({
+      type: 'great-peace', year, cellId: seat.cell, title: `The peace of ${seat.name}`,
+      description: `${capital(g.name)} is over. ${describeGreatWar(g, name, year)} ${towns.length ? `${towns.length > 1 ? `${towns.slice(0, 4).slice(0, -1).join(', ')} and ${towns.slice(0, 4).pop()}` : towns[0]} ${towns.length > 1 ? 'have' : 'has'} a new flag${towns.length > 4 ? `, and ${towns.length - 4} more` : ''}.` : 'The borders are where they were.'} The envoys of every country that fought meet at ${seat.name} to settle the rest.`,
+      causes: [...wars.map((w) => w.peaceEvent), g.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 5), importance: g.world ? 2 : 1, speciesIds: [host.species],
+      data: { great: g.id, winner: g.winner, towns: g.taken.length, world: g.world ? 1 : 0 },
+    });
+    g.endEvent = peace.id;
+    for (const x of all) { x.fatigue = sat(x.fatigue + (g.world ? 0.25 : 0.1)); if (g.world) this.woe(x, 'war', peace.id >= 0 ? peace.id : g.eventId, year, 0.03); }
+    if (!g.world) return;
+    // ---- the order after a world war: new institutions, in the seat of the peace
+    const lang = this.languageOf(host);
+    const words: Record<Institution['kind'], [string, string]> = { league: ['people', 'many'], court: ['tongue', 'great'], fund: ['hand', 'give'] };
+    const institutions: Institution[] = [];
+    for (const kind of INSTITUTION_KINDS) {
+      let plain = institutionName(kind, seat.name);
+      if ((h.great ?? []).some((x) => x.order && x.order.institutions.some((i) => i.name === plain))) plain = plain.replace(/^the /, 'the New ');
+      for (let k = 2; (h.great ?? []).some((x) => x.order && x.order.institutions.some((i) => i.name === plain)); k++) plain = `${institutionName(kind, seat.name)}, the ${ordinal(k + 1)}`;
+      const own = compound(lang, words[kind][0], words[kind][1], year);
+      const e = sim.emit({
+        type: 'institution', year, cellId: seat.cell, title: `${capital(plain)} is founded`,
+        description: `Out of the peace of ${seat.name} comes ${own}, ${plain}: ${purposeOf(kind)}.`,
+        causes: [peace.id, g.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 1), importance: kind === 'league' ? 2 : 1, speciesIds: [host.species], data: { great: g.id, kind },
+      });
+      institutions.push({ kind, name: plain, own, seat: seat.id, eventId: e.id });
+    }
+    g.order = { year, members: all.map((x) => x.id), institutions, until: -1, failEvent: -1 };
+    // (the fund pays out: the towns that were burned in it are rebuilt sooner than they would have been)
+    for (const w of wars) for (const b of w.battles) { const st = this.settlements[b.settlement]; if (st && st.ruined < 0) st.pop *= 1.06; }
+  }
+
+  /**
+   * Does the league keep these two from war (system E40)? If both belong to an order that still holds, most of
+   * the time the quarrel goes to its court instead (`LEAGUE_HOLDS`); when it does not, the order has failed.
+   */
+  private leagued(sim: Simulation, n: Nation, other: number, st: Settlement, year: number): boolean {
+    const h = this.h, ev = sim.events.events;
+    const g = (h.great ?? []).find((x) => x.order && x.order.until < 0 && x.order.members.includes(n.id) && x.order.members.includes(other));
+    if (!g || !g.order) return false;
+    const o = h.nations[other];
+    if (!o || o.ended >= 0) return false;
+    const league = g.order.institutions[0]!, court = g.order.institutions[1] ?? league;
+    if ((hash32(this.seedNum, st.id, Math.floor(year), 0xe40) % 1000) / 1000 < LEAGUE_HOLDS) {
+      // (a settlement worth recording, once a generation)
+      if (g.order.settled === undefined || year - g.order.settled > 25) {
+        g.order.settled = year;
+        sim.emit({ type: 'arbitration', year, cellId: this.settlements[court.seat]?.cell ?? st.cell, title: `${n.name} and ${o.name} go to ${court.name}`, description: `${n.name} and ${o.name} have a quarrel over the land by ${st.name} that would once have been a war. They bring it to ${court.own}, ${court.name}, and both accept what it rules.`, causes: [court.eventId].filter((x) => x >= 0 && ev[x]), importance: 0, speciesIds: [n.species], data: { great: g.id, a: n.id, b: o.id } });
+      }
+      return true;
+    }
+    g.order.until = year;
+    const e = sim.emit({
+      type: 'order-fails', year, cellId: this.settlements[league.seat]?.cell ?? st.cell, title: `${capital(league.name)} fails`,
+      description: `${n.name} has marched on ${o.name}, and both are members of ${league.own}, ${league.name}, which was founded ${Math.max(1, Math.round(year - g.order.year))} years ago so that this would not happen. The envoys go home.`,
+      causes: [league.eventId].filter((x) => x >= 0 && ev[x]), importance: 1, speciesIds: [n.species], data: { great: g.id, a: n.id, b: o.id },
+    });
+    g.order.failEvent = e.id;
+    return false;
+  }
+
+  /**
    * Spies and secrets (system E39), for one country over `y` years. A country a rival presses may act against
    * it in secret (`dares`): steal a craft the rival has and it has not, strike at the rival's ruler, or sign
    * an unread pact with another country the rival has fought (`chooses`). Each is an event marked hidden, and
@@ -2333,6 +2524,15 @@ export class Civilization {
       const t = tension(year - f.year, atWar, sore);
       if (t > top) { top = t; rival = o; cause = f.eventId; }
     }
+    // (a country in a great war is pressed as hard as a country can be: system E40)
+    {
+      const g = (h.great ?? []).find((x) => x.ended < 0 && (x.sides[0].includes(n.id) || x.sides[1].includes(n.id)));
+      if (g) {
+        // (and if no peer it has fought presses it, the enemy it watches is the first country on the other side)
+        const foe = g.sides[g.sides[0].includes(n.id) ? 1 : 0].map((id) => h.nations[id]).find((x) => x && x.ended < 0);
+        if (foe && (!rival || top < 1)) { rival = rival ?? foe; top = 1; }
+      }
+    }
     n.pressed = top > 0.05 ? top : undefined;
     n.rival = rival && top > 0.05 ? rival.id : undefined;
     const list = (h.races ??= []);
@@ -2351,7 +2551,7 @@ export class Civilization {
       r.endEvent = e.id;
     }
     // ---- a race begins: two peers who both make arms, pressing each other hard
-    if (!rival || top < 0.5 || n.tech < 0.41 || rival.tech < 0.41) return;
+    if (!rival || top < 0.5 || n.tech < 0.41 || rival.tech < 0.41 || !n.foes?.[rival.id]) return;
     if (list.some((r) => r.ended < 0 && (r.a === n.id || r.b === n.id || r.a === rival!.id || r.b === rival!.id))) return;
     const [A, B] = n.id < rival.id ? [n, rival] : [rival, n];
     const first = h.firstRace === undefined;
@@ -2649,7 +2849,7 @@ export class Civilization {
     if (war.id >= 0) this.credit(sim, null, n, war.id, '{name} gave the order.');
     n.fatigue = sat(n.fatigue + 0.15);
     this.woe(n, 'war', war.id, year, 0.04);
-    const fought = this.fine && war.id >= 0 ? this.campaign(sim, n, child, port, seat, war.id, year, '', '', false) : undefined;
+    const fought = this.fine && war.id >= 0 ? this.campaign(sim, n, child, port, seat, war.id, year, '', '', false, true) : undefined;
     if (fought) {
       // what can be shipped is a part of what could be raised, it lands hungry, and it is fighting its own cousins;
       // the colony fights at home, and everyone who can carry a weapon does
@@ -2894,6 +3094,19 @@ export class Civilization {
         if (this.treaty(sim, n, o, 'alliance', year, war ? war.eventId : -1, 60)) break;
       }
     }
+    // ---- blocs (system E40): in the ages of engines a country in an arms race looks for a friend against its rival,
+    // among those it is in touch with that are not that rival's friends already
+    if (n.era >= 6 && n.rival !== undefined && (n.pressed ?? 0) >= 0.3 && luck(0xd4) < 1 / 25) {
+      const rival = n.rival;
+      const race = (h.races ?? []).find((r) => r.ended < 0 && ((r.a === n.id && r.b === rival) || (r.a === rival && r.b === n.id)));
+      for (const id of n.contacts) {
+        const o = h.nations[id];
+        if (!o || o.ended >= 0 || id === rival || o.species !== n.species) continue;
+        const theirs = pactBetween(h, id, rival, year);
+        if (theirs && theirs.kind === 'alliance') continue;
+        if (this.treaty(sim, n, o, 'alliance', year, race ? race.eventId : n.foes?.[rival]?.eventId ?? -1, 60)) break;
+      }
+    }
     // ---- an old wrong: when it is able, the country betrayed goes to war over it
     for (const g of n.grudges ?? []) {
       if (g.avenged !== undefined || year - g.year < 20 || year - g.year > GRUDGE_YEARS) continue;
@@ -2931,7 +3144,7 @@ export class Civilization {
    * raises an army and means to go on: toward the nearest towns of its enemy, and the capital if it is near
    * enough. The defender raises one too. From here `warfare` moves them, a year at a time.
    */
-  private campaign(sim: Simulation, n: Nation, foe: Nation, base: Settlement, first: Settlement, warEvent: number, year: number, general: string, other: string, opening = true): War | undefined {
+  private campaign(sim: Simulation, n: Nation, foe: Nation, base: Settlement, first: Settlement, warEvent: number, year: number, general: string, other: string, opening = true, alone = false): War | undefined {
     const h = this.h, wars = (h.wars ??= []);
     if (wars.some((w) => w.ended < 0 && ((w.a === n.id && w.b === foe.id) || (w.a === foe.id && w.b === n.id)))) return undefined;
     const p = sim.grid.pos, c = base.cell;
@@ -2953,6 +3166,8 @@ export class Civilization {
     if (opening) { a.size *= 0.95; d.size *= 0.9; }
     wars.push(war);
     if (wars.length > 80) { const k = wars.findIndex((w) => w.ended >= 0); if (k >= 0) wars.splice(k, 1); }
+    // those sworn to either side follow it in, and those sworn to them (system E40)
+    if (!alone) this.rally(sim, war, year);
     return war;
   }
 
@@ -3070,6 +3285,8 @@ export class Civilization {
         }
       }
     }
+    // ---- a great war is over when the last of its wars is (system E40)
+    for (const g of h.great ?? []) if (g.ended < 0 && year > g.began && !(h.wars ?? []).some((x) => x.great === g.id && x.ended < 0)) this.conclude(sim, g, year);
   }
 
   /**

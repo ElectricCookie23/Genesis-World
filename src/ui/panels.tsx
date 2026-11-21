@@ -467,7 +467,7 @@ export function FlatMap() {
     draw();
     const t = window.setInterval(draw, 1500);
     return () => window.clearInterval(t);
-  }, [s.overlay, s.mapOf, s.warShown, s.wars, s.plagueShown, s.plagues]);
+  }, [s.overlay, s.mapOf, s.warShown, s.wars, s.plagueShown, s.plagues, s.greatShown, s.greatWars]);
   const war = s.mapOf === -3 ? (s.wars ?? []).find((w) => w.id === s.warShown) : undefined;
   // the countries whose own map can be shown: the living ones that have begun to farm, largest first
   const makers = s.realms.filter((r) => r.ended < 0 && r.charting).sort((a, b) => b.pop - a.pop).slice(0, 40);
@@ -479,13 +479,14 @@ export function FlatMap() {
         {(makers.length > 0 || s.mapOf < -1 || s.realms.some((r) => r.ended < 0 && r.trade)) && (
           <div class={css.sub} style={{ margin: '0 0 8px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <span>Show</span>
-            <select value={String(whose ? whose.id : s.mapOf < -1 ? s.mapOf : -1)} onChange={(e) => { const v = Number((e.target as HTMLSelectElement).value); if (v === -3) actions.openWars(); else if (v === -6) actions.openPlagues(); else update({ mapOf: v, mapNote: '' }); }} style={{ background: '#1b1f2a', color: '#ece7db', border: '1px solid #ffffff2a', borderRadius: '5px', padding: '3px 6px', font: '400 12.5px system-ui, sans-serif' }}>
+            <select value={String(whose ? whose.id : s.mapOf < -1 ? s.mapOf : -1)} onChange={(e) => { const v = Number((e.target as HTMLSelectElement).value); if (v === -3) actions.openWars(); else if (v === -6) actions.openPlagues(); else if (v === -7) actions.openGreatWars(); else update({ mapOf: v, mapNote: '' }); }} style={{ background: '#1b1f2a', color: '#ece7db', border: '1px solid #ffffff2a', borderRadius: '5px', padding: '3px 6px', font: '400 12.5px system-ui, sans-serif' }}>
               <option value="-1">the true world</option>
               <option value="-2">trade routes, coloured by what they carry</option>
               <option value="-3">the wars, battle by battle</option>
               <option value="-4">ideas of how to rule, and where they hold</option>
               <option value="-5">colonies overseas, and the countries born of them</option>
               <option value="-6">the plagues, town by town</option>
+              <option value="-7">the great wars: who stood with whom</option>
               {makers.map((r) => <option key={r.id} value={String(r.id)}>the world as {r.name} believes it to be ({r.eraName})</option>)}
             </select>
           </div>
@@ -496,6 +497,35 @@ export function FlatMap() {
           {!whose && s.mapOf >= -1 && <MigrationArrows />}
         </div>
         {(s.mapOf === -2 || s.mapOf === -4 || s.mapOf === -5) && <div class={css.when} style={{ color: '#ece7db', margin: '8px 0 0' }}>{s.mapNote}</div>}
+        {s.mapOf === -7 && (
+          <div style={{ margin: '8px 0 0', maxHeight: '38vh', overflowY: 'auto' }}>
+            {!s.greatWars && <p class={css.sub}>Asking the chroniclers.</p>}
+            {s.greatWars && s.greatWars.length === 0 && <p class={css.sub}>No war has yet drawn in the allies of those who began it. Alliances are followed into war while time runs at the pace of history or slower.</p>}
+            {s.greatWars && s.greatWars.length > 0 && (
+              <div class={css.sub} style={{ margin: '0 0 6px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span>War</span>
+                <select value={String(s.greatShown)} onChange={(e) => update({ greatShown: Number((e.target as HTMLSelectElement).value) })} style={{ background: '#1b1f2a', color: '#ece7db', border: '1px solid #ffffff2a', borderRadius: '5px', padding: '3px 6px', font: '400 12.5px system-ui, sans-serif' }}>
+                  {s.greatWars.map((g) => <option key={g.id} value={String(g.id)}>{g.name}{g.world ? ' (a world war)' : ''}, {Math.max(0, Math.round((s.stats?.simYear ?? 0) - g.began)).toLocaleString('en-US')} years ago{g.ended < 0 ? ' (still being fought)' : ''}</option>)}
+                </select>
+              </div>
+            )}
+            {(() => {
+              const g = (s.greatWars ?? []).find((x) => x.id === s.greatShown);
+              if (!g) return null;
+              return (
+                <>
+                  <div class={css.when} style={{ color: '#ece7db', margin: '0 0 6px' }}>{g.world && <>{g.own}, {g.name}. </>}{g.text} {g.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="How it began" onClick={() => update({ whyEvent: g.eventId })}>how it began</button>}{g.endEvent >= 0 && <> <button class={css.link} style={{ marginRight: 0 }} title="The peace" onClick={() => update({ whyEvent: g.endEvent })}>the peace</button></>}</div>
+                  {g.institutions.length > 0 && <div class={css.sub} style={{ margin: '8px 0 4px', letterSpacing: '0.08em' }}>WHAT THE PEACE SET UP{g.holds ? '' : ' (IT HAS SINCE FAILED)'}</div>}
+                  {g.institutions.map((i) => (
+                    <div key={i.kind} class={css.when} style={{ color: '#ece7db', margin: '0 0 3px' }}>
+                      {i.own}, {i.name}. {i.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} onClick={() => update({ whyEvent: i.eventId })}>what it is for</button>} {i.cell >= 0 && <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.flyToCell(i.cell)}>show place</button>}
+                    </div>
+                  ))}
+                </>
+              );
+            })()}
+          </div>
+        )}
         {s.mapOf === -6 && (
           <div style={{ margin: '8px 0 0', maxHeight: '38vh', overflowY: 'auto' }}>
             {!s.plagues && <p class={css.sub}>Asking the chroniclers.</p>}
@@ -865,6 +895,7 @@ export function NationPanel() {
             {' '}Its land offers {d.land.length ? d.land.join(', ') : 'little'}{d.land.includes('ore') ? '' : '; no ore, so no metal'}.
             {' '}Its people are the {realm.culture} and speak <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openLanguages(realm.language)}>{realm.language}</button>.
             {realm.ended < 0 && <>{' '}It is {governedAs(realm.government)}{realm.creed ? <>, and has been since the revolution of {ago(realm.creed.since)} in the name of {realm.creed.own}, {realm.creed.name}</> : ''}.</>}
+            {realm.ended < 0 && realm.league && <>{' '}It belongs to {realm.league.own}, {realm.league.name}, founded {ago(realm.league.since)} after a world war. {realm.league.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this league" onClick={() => update({ whyEvent: realm.league!.eventId })}>why</button>}</>}
             {realm.ended < 0 && realm.race && <>{' '}It is in an arms race with <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.race!.with)}>{realm.race.withName}</button>, {Math.max(1, Math.round(year - realm.race.since)).toLocaleString('en-US')} years now: pressed as it is, its workshops work about {drive(realm.race.pressed).toFixed(1)} times as fast as in peace, and {realm.race.arms} of the {realm.race.found} things it has learned since were arms. {realm.race.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this race" onClick={() => update({ whyEvent: realm.race!.eventId })}>why</button>}</>}
             {realm.colonyOf && <>{' '}It began as a colony of <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.colonyOf!.mother)}>{realm.colonyOf.motherName}</button>, planted {ago(realm.colonyOf.founded)}; it declared itself free {ago(realm.colonyOf.declared)}{realm.colonyOf.freed < 0 && realm.ended < 0 ? ' and is fighting for that now' : realm.colonyOf.freed >= 0 ? `, and its mother country gave up the fight ${ago(realm.colonyOf.freed)}` : ''}. {realm.colonyOf.warEvent >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this war" onClick={() => update({ whyEvent: realm.colonyOf!.warEvent })}>why</button>}</>}
             {realm.ended < 0 && realm.colonies && realm.colonies.map((c) => (
@@ -957,7 +988,7 @@ export function Peoples() {
         {(s.stats?.longPeace ?? -1) >= 0 && s.nations.length > 0 && (
           <p class={css.sub} style={{ margin: '0 0 8px' }}>The long peace, {Math.max(0, Math.round((s.stats?.simYear ?? 0) - (s.stats?.longPeace ?? 0))).toLocaleString('en-US')} years old. History is no longer made here: these nations and their towns live on as they are, by custom, until the planet disturbs them.</p>
         )}
-        {s.realms.some((r) => r.ended < 0) && <p class={css.sub} style={{ margin: '0 0 6px' }}><button class={css.link} title="The family tree of the languages spoken now, and their words side by side" onClick={() => actions.openLanguages()}>the languages they speak</button><button class={css.link} title="Paintings of things that happened, in the manner of each age" onClick={() => actions.openGallery()}>what they have painted</button><button class={css.link} title="Stories told about the bones of animals that died out long ago" onClick={() => actions.openLegends()}>old bones</button><button class={css.link} title="What each good has cost over the years, and the panics" onClick={() => actions.openMarket()}>markets</button><button class={css.link} title="Each war on the map, battle by battle" onClick={() => actions.openWars()}>wars</button><button class={css.link} title="Each plague on the map, town by town, over the ways trade travels" onClick={() => actions.openPlagues()}>plagues</button><button class={css.link} title="Who is allied with whom, who trades, who is at war, and what is remembered" onClick={() => actions.openDiplomacy()}>diplomacy</button></p>}
+        {s.realms.some((r) => r.ended < 0) && <p class={css.sub} style={{ margin: '0 0 6px' }}><button class={css.link} title="The family tree of the languages spoken now, and their words side by side" onClick={() => actions.openLanguages()}>the languages they speak</button><button class={css.link} title="Paintings of things that happened, in the manner of each age" onClick={() => actions.openGallery()}>what they have painted</button><button class={css.link} title="Stories told about the bones of animals that died out long ago" onClick={() => actions.openLegends()}>old bones</button><button class={css.link} title="What each good has cost over the years, and the panics" onClick={() => actions.openMarket()}>markets</button><button class={css.link} title="Each war on the map, battle by battle" onClick={() => actions.openWars()}>wars</button><button class={css.link} title="Each plague on the map, town by town, over the ways trade travels" onClick={() => actions.openPlagues()}>plagues</button><button class={css.link} title="The wars that drew in the allies of those who began them, and what the peace set up" onClick={() => actions.openGreatWars()}>great wars</button><button class={css.link} title="Who is allied with whom, who trades, who is at war, and what is remembered" onClick={() => actions.openDiplomacy()}>diplomacy</button></p>}
         {s.nations.length > 0 && <div class={css.sub} style={{ margin: '4px 0 6px' }}>NATIONS</div>}
         {[...s.nations].sort((a, b) => b.pop - a.pop).slice(0, 24).map((n) => {
           const cap = s.settlements.find((x) => x.id === n.capital);

@@ -1,7 +1,7 @@
 // Tiny observable store shared by the Preact UI and the app.
 import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
-import type { DynastyDetail, DiplomacyInfo, LanguageInfo, LegendInfo, MarketInfo, WarInfo, PlagueInfo, MovementInfo, PaintingInfo, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
+import type { DynastyDetail, DiplomacyInfo, LanguageInfo, LegendInfo, MarketInfo, WarInfo, PlagueInfo, GreatWarInfo, MovementInfo, PaintingInfo, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 import type { Nation } from '../render/gfx/nations';
 import type { GoalRecord, GoalState } from '../game/goals';
 import type { CosmosInfo } from '../sim/cosmos';
@@ -124,6 +124,9 @@ export interface UIState {
   wars: WarInfo[] | null;
   warShown: number;
   /** The plagues on record, when they have arrived (system E37), the ways trade travels, and the plague shown on the map (its id). */
+  /** The great wars on record, when they have arrived (system E40), and the one shown on the map (its id). */
+  greatWars: GreatWarInfo[] | null;
+  greatShown: number;
   plagues: PlagueInfo[] | null;
   plagueWays: { a: number; b: number; via: string }[];
   plagueShown: number;
@@ -228,6 +231,8 @@ export const state: UIState = {
   wars: null,
   diplomacy: null,
   warShown: -1,
+  greatWars: null,
+  greatShown: -1,
   plagues: null,
   plagueWays: [],
   plagueShown: -1,
@@ -386,6 +391,8 @@ export const actions = {
   openWars: () => {},
   /** Open the map on the plagues, town by town. */
   openPlagues: () => {},
+  /** Open the map on the great wars: who stood with whom, and what the peace set up. */
+  openGreatWars: () => {},
   /** Open the world's market: prices and panics. */
   openMarket: () => {},
   /** Open the stories told about old bones. */

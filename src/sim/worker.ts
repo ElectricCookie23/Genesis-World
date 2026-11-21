@@ -20,6 +20,7 @@ import { galleryList } from './history/gallery';
 import { describeMusic, lineOf, tradition } from './history/music';
 import { describeColony } from './history/colony';
 import { describePandemic } from './history/plague';
+import { describeGreatWar } from './history/greatwar';
 import { chartingOf } from './history/worldmap';
 import { GOODS, describeMarket } from './history/trade';
 import { GRUDGE_YEARS, secretTies, web } from './history/diplomacy';
@@ -286,6 +287,13 @@ function monstersOf(s: Simulation, n: Simulation['civ']['h']['nations'][number],
   return giants.filter((g) => p[c * 3]! * p[g.cell * 3]! + p[c * 3 + 1]! * p[g.cell * 3 + 1]! + p[c * 3 + 2]! * p[g.cell * 3 + 2]! >= far).slice(0, 3).map((g) => ({ species: g.id, name: g.name, cell: g.cell, size: g.size }));
 }
 
+/** The league a nation belongs to (system E40), if the order it came from still holds. */
+function leagueOf(s: Simulation, n: Simulation['civ']['h']['nations'][number]): NationInfo['league'] {
+  const g = (s.civ.h.great ?? []).find((x) => x.order && x.order.until < 0 && x.order.members.includes(n.id));
+  const league = g?.order?.institutions[0];
+  return g && g.order && league ? { name: league.name, own: league.own, since: g.order.year, eventId: league.eventId } : undefined;
+}
+
 /** The arms race a nation is in now (system E38). */
 function raceOf(s: Simulation, n: Simulation['civ']['h']['nations'][number]): NationInfo['race'] {
   const h = s.civ.h, r = (h.races ?? []).find((x) => x.ended < 0 && (x.a === n.id || x.b === n.id));
@@ -386,7 +394,7 @@ function nationList(s: Simulation): NationInfo[] {
     return {
       id: n.id, name: n.name, species: n.species, capital: n.capital, founded: n.founded, ended: n.ended, parent: n.parent, government: n.government,
       stability: n.stability, tech: n.tech, era: n.era, eraName: s.civ.eraName(n), eraOwn: s.civ.eraOwnName(n), earth: earthNote(n.era), hue: n.hue, pop: n.pop, towns: n.towns,
-      culture: culture.name, language: h.languages[culture.language]!.name, music: musicOf(s, n), idea: n.idea && h.ideologies?.[n.idea.id] ? { name: h.ideologies[n.idea.id]!.name, own: h.ideologies[n.idea.id]!.own, kind: h.ideologies[n.idea.id]!.kind, share: n.idea.share, eventId: h.ideologies[n.idea.id]!.eventId } : undefined, flag: n.flag, race: raceOf(s, n), colonies: coloniesOf(s, n), colonyOf: n.colonyOf !== undefined && h.colonies?.[n.colonyOf] ? { mother: h.colonies[n.colonyOf]!.mother, motherName: h.nations[h.colonies[n.colonyOf]!.mother]?.name ?? '', founded: h.colonies[n.colonyOf]!.founded, declared: h.colonies[n.colonyOf]!.declared, freed: h.colonies[n.colonyOf]!.freed, warEvent: h.colonies[n.colonyOf]!.warEvent } : undefined, creed: n.creed !== undefined && h.ideologies?.[n.creed] ? { name: h.ideologies[n.creed]!.name, own: h.ideologies[n.creed]!.own, kind: h.ideologies[n.creed]!.kind, since: n.revolved ?? 0 } : undefined, trade: n.trade && h.nations[n.trade.to] && h.nations[n.trade.to]!.ended < 0 ? { good: GOODS[n.trade.good]!, to: n.trade.to, toName: h.nations[n.trade.to]!.name, since: n.trade.since, eventId: n.trade.eventId } : undefined, market: n.ended < 0 && n.era >= 1 ? describeMarket({ land: n.land, tech: n.tech, pop: n.pop, towns: Math.max(1, n.towns), mines: n.mines ?? 0, felled: n.felled !== undefined ? 0.7 : 0, knows: knows(n) }) : undefined, festivals: n.festivals && n.festivals.length ? n.festivals : undefined, charting: chartingOf(knows(n), n.tech), contacts: n.contacts.filter((id) => h.nations[id] && h.nations[id]!.ended < 0), monsters: monstersOf(s, n, chartingOf(knows(n), n.tech).sea, giants), script: scriptInfo(h, n.script, n.species, s.simYear, bodyOf(s)), signs: n.signs ?? (s.civ.settlements[n.capital] ? ['land', s.civ.settlements[n.capital]!.modifier || s.civ.settlements[n.capital]!.head] : undefined), ruler: ruler && ruler.died < 0 ? ruler.name : '', rulerSince: ruler && ruler.died < 0 ? ruler.reignFrom : -1,
+      culture: culture.name, language: h.languages[culture.language]!.name, music: musicOf(s, n), idea: n.idea && h.ideologies?.[n.idea.id] ? { name: h.ideologies[n.idea.id]!.name, own: h.ideologies[n.idea.id]!.own, kind: h.ideologies[n.idea.id]!.kind, share: n.idea.share, eventId: h.ideologies[n.idea.id]!.eventId } : undefined, flag: n.flag, league: leagueOf(s, n), race: raceOf(s, n), colonies: coloniesOf(s, n), colonyOf: n.colonyOf !== undefined && h.colonies?.[n.colonyOf] ? { mother: h.colonies[n.colonyOf]!.mother, motherName: h.nations[h.colonies[n.colonyOf]!.mother]?.name ?? '', founded: h.colonies[n.colonyOf]!.founded, declared: h.colonies[n.colonyOf]!.declared, freed: h.colonies[n.colonyOf]!.freed, warEvent: h.colonies[n.colonyOf]!.warEvent } : undefined, creed: n.creed !== undefined && h.ideologies?.[n.creed] ? { name: h.ideologies[n.creed]!.name, own: h.ideologies[n.creed]!.own, kind: h.ideologies[n.creed]!.kind, since: n.revolved ?? 0 } : undefined, trade: n.trade && h.nations[n.trade.to] && h.nations[n.trade.to]!.ended < 0 ? { good: GOODS[n.trade.good]!, to: n.trade.to, toName: h.nations[n.trade.to]!.name, since: n.trade.since, eventId: n.trade.eventId } : undefined, market: n.ended < 0 && n.era >= 1 ? describeMarket({ land: n.land, tech: n.tech, pop: n.pop, towns: Math.max(1, n.towns), mines: n.mines ?? 0, felled: n.felled !== undefined ? 0.7 : 0, knows: knows(n) }) : undefined, festivals: n.festivals && n.festivals.length ? n.festivals : undefined, charting: chartingOf(knows(n), n.tech), contacts: n.contacts.filter((id) => h.nations[id] && h.nations[id]!.ended < 0), monsters: monstersOf(s, n, chartingOf(knows(n), n.tech).sea, giants), script: scriptInfo(h, n.script, n.species, s.simYear, bodyOf(s)), signs: n.signs ?? (s.civ.settlements[n.capital] ? ['land', s.civ.settlements[n.capital]!.modifier || s.civ.settlements[n.capital]!.head] : undefined), ruler: ruler && ruler.died < 0 ? ruler.name : '', rulerSince: ruler && ruler.died < 0 ? ruler.reignFrom : -1,
       house: house ? house.name : '', houseReigns: house ? house.reigns : 0, houseId: house ? house.id : -1, eventId: n.eventId, ...fashionSource(s, n), networks: networksOf(s, n.id), golden: n.golden ? n.golden.own : '', goldenSince: n.golden ? n.golden.since : -1, goldenWorks: n.golden ? n.golden.works : 0,
       calendar: cal ? cal.name : '', calendarOwn: cal ? cal.own : '', calendarEpoch: cal ? cal.epoch : 0, calendarEvent: cal ? cal.eventId : -1,
     };
@@ -678,6 +686,18 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
             list: (h.plagues ?? []).slice().reverse().map((p) => ({ id: p.id, name: p.name, own: p.own, began: p.began, ended: p.ended, eventId: p.eventId, text: describePandemic(p, live, s.simYear), steps: p.reached.map((r) => ({ cell: towns[r.town]!.cell, from: r.from >= 0 ? towns[r.from]!.cell : -1, town: towns[r.town]!.name, year: r.year, via: r.via, dead: r.dead, shut: r.shut, eventId: r.eventId })) })),
             ways: s.civ.tradeEdges(s).map((e) => ({ a: towns[e.a]!.cell, b: towns[e.b]!.cell, via: e.via })),
           });
+        }
+        break;
+      case 'requestGreatWars':
+        if (sim) {
+          const s = sim, h = s.civ.h, towns = s.civ.settlements;
+          const name = (id: number): string => h.nations[id]?.name ?? '';
+          post({ type: 'greatWars', list: (h.great ?? []).slice().reverse().map((g) => ({
+            id: g.id, name: g.name, own: g.own, began: g.began, ended: g.ended, world: g.world, eventId: g.eventId, endEvent: g.endEvent, text: describeGreatWar(g, name, s.simYear),
+            sides: g.sides.map((ids) => ({ names: ids.map(name), cells: towns.filter((t) => t.ruined < 0 && ids.includes(t.nation) && h.nations[t.nation]!.ended < 0).map((t) => t.cell) })),
+            institutions: (g.order?.institutions ?? []).map((i) => ({ kind: i.kind, name: i.name, own: i.own, cell: towns[i.seat]?.cell ?? -1, eventId: i.eventId })),
+            holds: !!g.order && g.order.until < 0,
+          })) });
         }
         break;
       case 'requestWars':

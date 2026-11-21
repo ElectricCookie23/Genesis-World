@@ -175,6 +175,21 @@ export interface WarInfo {
   battles: { year: number; cell: number; town: string; kind: string; winner: number; sizes: [number, number]; decided: string; taken: boolean; eventId: number; text: string }[];
 }
 
+/** A great war as the page sees it (system E40): the two sides with where their towns stand now, and what the peace set up. */
+export interface GreatWarInfo {
+  id: number;
+  name: string; own: string;
+  began: number; ended: number;
+  world: boolean;
+  eventId: number; endEvent: number;
+  text: string;
+  /** Each side: its countries by name, and the cells of the towns those still living hold. */
+  sides: { names: string[]; cells: number[] }[];
+  /** What the peace set up, if it was a world war: each with the cell of its seat. And whether that order still holds. */
+  institutions: { kind: string; name: string; own: string; cell: number; eventId: number }[];
+  holds: boolean;
+}
+
 /** A pandemic as the page sees it (system E37): each town it reached, in order, with where it came from and how. */
 export interface PlagueInfo {
   id: number;
@@ -343,6 +358,8 @@ export interface NationInfo {
   houseId: number;
   /** The days it keeps (system E30). */
   festivals?: Festival[];
+  /** The league it belongs to (system E40), set up after a world war and still holding: its name, since when, and the event of its founding. */
+  league?: { name: string; own: string; since: number; eventId: number };
   /** The arms race it is in (system E38): against whom, since when, how hard it is pressed (0..1), and what it has learned while it lasted (and how much of that was arms). */
   race?: { with: number; withName: string; since: number; pressed: number; found: number; arms: number; eventId: number };
   /** Its colonies overseas (system E36): each one's chief town, when it was planted, how many towns it has, how far its people think of themselves as their own (0..1 and over) and how it stands in a few words. */
@@ -542,6 +559,7 @@ export type ToWorker =
   | { type: 'requestLegends' }
   | { type: 'requestMarket' }
   | { type: 'requestWars' }
+  | { type: 'requestGreatWars' }
   | { type: 'requestPlagues' }
   | { type: 'requestDiplomacy' }
   | { type: 'requestSite'; id: number }
@@ -571,6 +589,7 @@ export type FromWorker =
   | { type: 'legends'; list: LegendInfo[] }
   | { type: 'market'; market: MarketInfo }
   | { type: 'wars'; list: WarInfo[] }
+  | { type: 'greatWars'; list: GreatWarInfo[] }
   | { type: 'plagues'; list: PlagueInfo[]; ways: { a: number; b: number; via: string }[] }
   | { type: 'diplomacy'; web: DiplomacyInfo }
   | { type: 'site'; detail: SiteDetail }

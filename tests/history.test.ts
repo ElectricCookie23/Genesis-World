@@ -6,6 +6,7 @@ import { applyChange, compound, makeLanguage, personName, placeMeanings, soundCh
 import { count, listing, ordinal, write } from '../src/sim/history/grammar';
 import { IDEAS, IDEA_COLOUR, IDEA_GOVERNMENT, IDEA_SAYS, drift as driftIdea, governedAs, ideaName, pressure, ripest, type Conditions } from '../src/sim/history/ideology';
 import { emblemOf } from '../src/render/gfx/nations';
+import { INSTITUTION_KINDS, LEAGUE_HOLDS, chain, describeGreatWar, institutionName, isWorld, powers, purposeOf, victor, weight } from '../src/sim/history/greatwar';
 import { HIDDEN_TYPES, chooses, comesOut, coverStory, dares, strikes } from '../src/sim/history/secrets';
 import { records } from '../src/sim/memory';
 import { secretTies } from '../src/sim/history/diplomacy';
@@ -2886,6 +2887,136 @@ describe('spies and secrets (E39)', () => {
     expect(secrets).toBeGreaterThan(0);
     // the done-when
     expect(changed).toBeGreaterThan(0);
+  });
+});
+
+describe('world wars (E40)', () => {
+  it('alliances chain, a country sworn to both sides stays out, and it is a world war when enough of the powers are in it', () => {
+    // 1 and 2 go to war; 3 is sworn to 1, 4 to 2, 5 to 3 (so it follows), 6 to both 1 and 2 (so it stays out), 7 to no one
+    const pacts: Record<number, number[]> = { 1: [3, 6], 2: [4, 6], 3: [1, 5], 4: [2], 5: [3], 6: [1, 2], 7: [] };
+    const { sides, joined } = chain(1, 2, (id) => pacts[id] ?? []);
+    expect(sides[0]).toEqual([1, 3, 5]);
+    expect(sides[1]).toEqual([2, 4]);
+    expect(joined).toEqual([{ nation: 3, side: 0, with: 1 }, { nation: 4, side: 1, with: 2 }, { nation: 5, side: 0, with: 3 }]);
+    expect(chain(1, 2, () => []).joined).toEqual([]);
+    // the powers of the day: within a third of the greatest
+    expect(weight(100, 0.5)).toBe(100);
+    expect(powers([{ id: 0, pop: 100, tech: 1 }, { id: 1, pop: 90, tech: 1 }, { id: 2, pop: 60, tech: 0.5 }, { id: 3, pop: 10, tech: 1 }])).toEqual([0, 1, 2]);
+    expect(powers([])).toEqual([]);
+    expect(isWorld([0, 1, 2], [0, 1, 2], 0.9)).toBe(false);
+    expect(isWorld([0, 1, 2, 3], [0, 1, 2], 0.2)).toBe(true);
+    expect(isWorld([0, 3, 4, 5], [0, 1, 2], 0.3)).toBe(false);
+    expect(isWorld([0, 3, 4, 5], [0, 1, 2], 0.7)).toBe(true);
+    // who had the better of it: wars won, and towns kept
+    expect(victor([{ side: 0, outcome: 'attacker', kept: 2 }, { side: 1, outcome: 'attacker', kept: 0 }])).toBe(0);
+    expect(victor([{ side: 0, outcome: 'defender', kept: 0 }])).toBe(1);
+    expect(victor([{ side: 0, outcome: 'stalemate', kept: 0 }])).toBe(-1);
+    expect(LEAGUE_HOLDS).toBeGreaterThan(0.5);
+    for (const k of INSTITUTION_KINDS) { expect(institutionName(k, 'Kim')).toMatch(/^the .* of Kim$/); expect(purposeOf(k).length).toBeGreaterThan(40); }
+  });
+
+  it('a war between four powers bound by alliances becomes a world war, redraws borders and ends in an order with new institutions', () => {
+    // (a copy of one of the five histories at its six-thousandth year: nothing here changes the shared ones)
+    let done = 0;
+    for (const { sim: base, seed } of fiveHistories()) {
+      if (done) break;
+      const pool = base.civ.h.nations.filter((n) => n.ended < 0 && base.civ.settlements.filter((s) => s.ruined < 0 && s.nation === n.id).length >= 2);
+      const kind = pool.find((n) => pool.filter((x) => x.species === n.species).length >= 4)?.species;
+      if (kind === undefined) continue;
+      const sim = new Simulation(seed, 17);
+      loadSimulation(sim, saveSimulation(base, 'before'));
+      const h = sim.civ.h, ev = sim.events.events, towns = sim.civ.settlements;
+      // the four that count for most, of one kind: the first two go to war, each with one of the others sworn to it
+      const four = h.nations.filter((n) => n.ended < 0 && n.species === kind && towns.filter((s) => s.ruined < 0 && s.nation === n.id).length >= 2).sort((a, b) => weight(b.pop, b.tech) - weight(a.pop, a.tech)).slice(0, 4);
+      const [a, b, c, d] = four as [typeof four[number], typeof four[number], typeof four[number], typeof four[number]];
+      const civ = sim.civ as unknown as {
+        treaty(sim: Simulation, a: unknown, b: unknown, kind: string, year: number, cause: number, years: number, secret?: boolean): { id: number; eventId: number } | null;
+        campaign(sim: Simulation, n: unknown, foe: unknown, base: unknown, first: unknown, warEvent: number, year: number, general: string, other: string): { id: number; great?: number } | undefined;
+      };
+      // (whatever stood between them before is set aside, so that the alliances are exactly these two)
+      h.treaties = []; h.wars = []; h.great = [];
+      expect(civ.treaty(sim, a, c, 'alliance', sim.simYear, -1, 60)).toBeTruthy();
+      expect(civ.treaty(sim, b, d, 'alliance', sim.simYear, -1, 60, true)).toBeTruthy();
+      const from = towns.find((s) => s.ruined < 0 && s.nation === a.id)!, at = towns.find((s) => s.ruined < 0 && s.nation === b.id)!;
+      const before = ev.length;
+      sim.civEvent('war', from.species, from.cell, from.id, at.id);
+      expect(ev.length).toBeGreaterThan(before);
+      const owners = new Map(towns.map((s) => [s.id, s.nation]));
+      const war = civ.campaign(sim, a, b, from, at, before, sim.simYear, '', '')!;
+      expect(war).toBeTruthy();
+      const g = h.great![0]!;
+      expect(g).toBeTruthy();
+      done++;
+      // the allies came in, each on its friend's side, each with a war of its own caused by its alliance and the first war
+      expect(war.great).toBe(g.id);
+      expect(g.sides[0]).toEqual([a.id, c.id]);
+      expect(g.sides[1]).toEqual([b.id, d.id]);
+      expect(g.wars.length).toBe(3);
+      for (const w of h.wars!) {
+        expect(w.great).toBe(g.id);
+        if (w.id === war.id) continue;
+        const e = ev[w.eventId]!;
+        expect(e.type).toBe('war');
+        expect(e.title).toMatch(/joins the war against/);
+        expect(e.causes).toContain(before);
+        expect(e.causes.some((x) => ev[x]!.type === 'treaty' || ev[x]!.type === 'secret-treaty')).toBe(true);
+      }
+      // four of the powers of the day: a world war, on record as one
+      expect(g.world).toBe(true);
+      const begun = ev[g.eventId]!;
+      expect(begun.type).toBe('world-war');
+      expect(begun.importance).toBeGreaterThanOrEqual(2);
+      expect(String(begun.data!.sides)).toBe(`${a.id},${c.id}|${b.id},${d.id}`);
+      expect(describeGreatWar(g, (id) => h.nations[id]!.name, sim.simYear)).toContain(a.name);
+      // it is fought out, and ends
+      for (let y = 0; y < 14 && g.ended < 0; y++) sim.step(1);
+      expect(g.ended).toBeGreaterThan(g.began);
+      const peace = ev[g.endEvent]!;
+      expect(peace.type).toBe('great-peace');
+      expect(peace.causes.length).toBeGreaterThan(0);
+      // the map is not what it was: where one side had the better of it, towns have a new flag
+      if (g.winner >= 0) for (const id of g.taken) expect(towns[id]!.nation).not.toBe(owners.get(id));
+      // and the peace set up an order: a league, a court and a fund, each founded by an event caused by the peace
+      const order = g.order!;
+      expect(order).toBeTruthy();
+      expect(order.institutions.map((i) => i.kind)).toEqual([...INSTITUTION_KINDS]);
+      for (const i of order.institutions) {
+        const e = ev[i.eventId]!;
+        expect(e.type).toBe('institution');
+        expect(e.causes).toContain(peace.id);
+        expect(i.name).toMatch(/^the /);
+        expect(i.own.length).toBeGreaterThan(2);
+        expect(towns[i.seat]).toBeTruthy();
+      }
+      expect(order.members.length).toBeGreaterThanOrEqual(2);
+      expect(order.until).toBe(-1);
+      console.log('E40 forced', { seed, wars: g.wars.length, winner: g.winner, taken: g.taken.length, years: g.ended - g.began, members: order.members.length });
+    }
+    expect(done).toBe(1);
+  }, 900000);
+
+  it('every war that drew in allies has two sides, wars of its own and an end; and every world war that ended left an order', () => {
+    const runs = fiveHistories();
+    let great = 0, world = 0, orders = 0;
+    for (const { sim } of runs) {
+      const h = sim.civ.h, ev = sim.events.events;
+      for (const g of h.great ?? []) {
+        great++;
+        expect(g.sides[0].length + g.sides[1].length).toBeGreaterThanOrEqual(3);
+        for (const id of g.sides[0]) expect(g.sides[1]).not.toContain(id);
+        expect(g.wars.length).toBeGreaterThanOrEqual(2);
+        const e = ev[g.eventId];
+        if (e) expect(e.type).toBe(g.world ? 'world-war' : 'alliance-war');
+        if (g.world) world++;
+        if (g.ended >= 0) { expect(ev[g.endEvent]!.type).toBe('great-peace'); if (g.world) { expect(g.order).toBeTruthy(); orders++; expect(g.order!.institutions.length).toBe(3); } else expect(g.order).toBeUndefined(); }
+        if (g.order && g.order.until >= 0) expect(ev[g.order.failEvent]!.type).toBe('order-fails');
+      }
+      // never two world wars within a generation of each other
+      const ws = (h.great ?? []).filter((g) => g.world);
+      for (let i = 1; i < ws.length; i++) if (ws[i - 1]!.ended >= 0) expect(ws[i]!.began - ws[i - 1]!.ended).toBeGreaterThanOrEqual(40);
+      if (h.firstWorldWar !== undefined) expect(ev[h.firstWorldWar]!.title).toBe('The first world war');
+    }
+    console.log('E40', { great, world, orders });
   });
 });
 
