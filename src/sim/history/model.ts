@@ -5,6 +5,7 @@ import type { Legend } from './legend';
 import type { Festival } from './festival';
 import type { War } from './war';
 import type { Grudge, Treaty } from './diplomacy';
+import type { Ideology } from './ideology';
 // The entities of history. All of them are plain data, so the whole of history saves, loads and
 // rewinds with the rest of the simulation.
 import type { Calendar } from './calendar';
@@ -120,7 +121,7 @@ export const NETWORKS = [
   { id: 'power', name: 'power line', plural: 'power lines', needs: 'grid', every: 12, glow: 0.2, sea: true },
 ] as const;
 
-export type Government = 'band' | 'chiefdom' | 'kingdom' | 'republic' | 'empire' | 'council' | 'custom';
+export type Government = 'band' | 'chiefdom' | 'kingdom' | 'republic' | 'empire' | 'council' | 'custom' | 'iron rule' | 'rule of the learned' | 'the old law' | 'council of merchants';
 
 export interface Nation {
   id: number;
@@ -169,6 +170,12 @@ export interface Nation {
   woes: { kind: string; eventId: number; year: number }[];
   /** Its building laws, each made after a calamity in one of its towns (system E20). */
   codes?: Codes;
+  /** The idea gaining ground in it (system E35): which (an ideology's id), the share of its people who hold it, and since when. And how many times its flag has changed. */
+  idea?: { id: number; share: number; since: number };
+  flag?: number;
+  /** The year of its last revolution, and the idea it has been governed by since. */
+  revolved?: number;
+  creed?: number;
   /** Betrayals it remembers (system E34). */
   grudges?: Grudge[];
   /** The year until which it is in a slump after a crash (system E32): learning and building are slow meanwhile. */
@@ -232,6 +239,10 @@ export interface HistoryState {
   movements?: Movement[];
   firstStyles?: number[];
   paintingSeq?: number;
+  /** The ideas of the world (system E35), and the events of the first idea and the first revolution. */
+  ideologies?: Ideology[];
+  firstIdea?: number;
+  firstRevolution?: number;
   /** Treaties made (system E34): those in force, and those broken or run out lately; the events of the first treaty and the first betrayal. */
   treaties?: Treaty[];
   treatySeq?: number;

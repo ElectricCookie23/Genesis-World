@@ -24,6 +24,7 @@ import { Music } from './audio/music';
 import { believedSpot, describeMap, knownAt } from './sim/history/worldmap';
 import { feastOf, festivalOn } from './sim/history/festival';
 import { GOOD_COLOUR } from './sim/history/trade';
+import { IDEA_COLOUR, IDEA_LABEL, type Idea } from './sim/history/ideology';
 import type { SlotInfo, UIState } from './ui/store';
 import { GOALS, emptyRecord, evaluateGoals, type GoalRecord } from './game/goals';
 import { planFilm, shotAt, type Shot } from './game/film';
@@ -653,6 +654,28 @@ async function boot(): Promise<void> {
         });
         ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
       }
+    }
+    // ---- ideas of how to rule (system E35): a filled disc on every town of a country governed by an idea, a ring
+    // (wider as more of its people hold it) where one is gaining ground
+    if (state.mapOf === -4) {
+      ctx.fillStyle = 'rgba(6, 8, 14, 0.45)'; ctx.fillRect(0, 0, W, H);
+      const used = new Set<Idea>();
+      let ruled = 0, rising = 0;
+      for (const r of state.realms) {
+        if (r.ended >= 0 || (!r.idea && !r.creed)) continue;
+        if (r.creed) ruled++;
+        if (r.idea) rising++;
+        for (const st of state.settlements) {
+          if (st.nation !== r.id || st.ruined >= 0) continue;
+          const x = ((grid.lon[st.cell]! + Math.PI) / (Math.PI * 2)) * W, y = (0.5 - grid.lat[st.cell]! / Math.PI) * H;
+          if (r.creed) { used.add(r.creed.kind as Idea); ctx.globalAlpha = 0.6; ctx.fillStyle = IDEA_COLOUR[r.creed.kind as Idea] ?? '#fff'; ctx.beginPath(); ctx.arc(x, y, st.id === r.capital ? 7 : 5, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
+          if (r.idea) { used.add(r.idea.kind as Idea); ctx.strokeStyle = IDEA_COLOUR[r.idea.kind as Idea] ?? '#fff'; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.arc(x, y, 4 + 9 * r.idea.share, 0, Math.PI * 2); ctx.stroke(); }
+        }
+      }
+      let kx = 10;
+      ctx.font = '11px system-ui, sans-serif';
+      for (const k of used) { ctx.fillStyle = IDEA_COLOUR[k]; ctx.fillRect(kx, H - 18, 12, 8); ctx.fillStyle = '#ece7db'; ctx.fillText(IDEA_LABEL[k], kx + 16, H - 10); kx += 22 + ctx.measureText(IDEA_LABEL[k]).width + 10; }
+      update({ mapNote: ruled + rising ? `${ruled} ${ruled === 1 ? 'country is' : 'countries are'} governed by an idea its people rose for (filled). In ${rising} an idea is gaining ground (a ring, wider as more hold it). The colour is what the idea wants: who should rule.` : 'No one has yet had an idea of how a country should be run, other than the way it is.' });
     }
     // settlements as warm dots
     ctx.fillStyle = '#ffd27a';

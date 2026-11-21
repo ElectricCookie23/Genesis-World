@@ -25,6 +25,7 @@ import { lightOf, type Festival, type FestivalKind } from './history/festival';
 import { GOODS, bestTrade, prices, type Economy } from './history/trade';
 import { clash, describeBattle, siegeYears, type Army, type Battle, type BattleKind, type War } from './history/war';
 import { GRUDGE_YEARS, pactBetween, type Treaty, type TreatyKind } from './history/diplomacy';
+import { IDEA_GOVERNMENT, IDEA_SAYS, drift, governedAs, ideaName, pressure, ripest, type Conditions, type Ideology } from './history/ideology';
 import { stillCleared } from './history/decay';
 import { answer, damage, hazards, type CalamityKind, type Ground, type Rebuild, type Scar } from './history/calamity';
 import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role, type Wonder, type WonderKind } from './history/model';
@@ -365,6 +366,8 @@ export class Civilization {
       this.network(sim, rng, n, towns, y, year);
       // ---- golden ages begin, raise their monuments and end (system E10)
       this.flourish(sim, rng, n, towns, y, year);
+      // ---- the ideas its people hold about how it should be run, and now and then a revolution (system E35)
+      this.ideas(sim, n, year, y);
       // ---- treaties made, and old wrongs gone to war over (system E34)
       this.diplomacy(sim, n, towns, year);
       // ---- what it sells, and to whom: its merchants follow the best price (system E31)
@@ -2161,6 +2164,102 @@ export class Civilization {
         });
         if (first && ev.id >= 0) h.firstTongue = ev.id;
       }
+    }
+  }
+
+  /** How a country is, as far as ideas care (system E35). */
+  private conditionsOf(n: Nation, year: number): Conditions {
+    const knows = (slot: string): boolean => { const i = SLOT_INDEX.get(slot); return i !== undefined && n.know.way[i]! >= 0; };
+    return { inequality: n.inequality, stability: n.stability, fatigue: n.fatigue, tech: n.tech, custom: this.h.cultures[n.culture]!.custom, trade: !!n.trade, coin: knows('coin'), slump: (n.slump ?? -1) > year, press: knows('press') };
+  }
+
+  /**
+   * Ideologies (system E35), for one country over `y` years. A country with written law that holds no idea
+   * takes one up: the one its conditions call for most, founded there with a name of its own, or (more often
+   * where a neighbour already holds one that fits) learned from across the border. The share of its people
+   * who hold it grows while conditions favour it and fades when they do not. When most of an unsteady country
+   * holds an idea, there is a revolution: it is governed that idea's way from then on, under a new flag.
+   * (The luck in it comes from the country and the year, not from the stream that decides wars.)
+   */
+  private ideas(sim: Simulation, n: Nation, year: number, y: number): void {
+    const h = this.h, ev = sim.events.events;
+    // (the plain course of things first: chiefs become kings when there are cities to be king of)
+    if (n.government === 'chiefdom' && n.era >= 2) n.government = 'kingdom';
+    if (n.tech < 0.39) return;
+    const list = (h.ideologies ??= []);
+    const luck = (k: number): number => (hash32(this.seedNum, n.id, Math.floor(year), k) % 100000) / 100000;
+    const c = this.conditionsOf(n, year);
+    const cap = this.settlements[n.capital]!;
+    if (!n.idea) {
+      // (a country that has just had a revolution has had enough of ideas for a few generations)
+      if (n.revolved !== undefined && year - n.revolved < 120) return;
+      // ---- heard from a neighbour whose people hold an idea, or are governed by one, that fits here too
+      const adopt = (idea: Ideology, from: Nation | undefined): void => {
+        n.idea = { id: idea.id, share: 0.08, since: year };
+        sim.emit({ type: 'idea-spreads', year, cellId: cap.cell, title: `${idea.name} reaches ${n.name}`, description: `${from ? `Travellers from ${from.name} bring` : 'Printed sheets from abroad carry'} ${idea.own}, ${idea.name}: the teaching ${IDEA_SAYS[idea.kind]}. In ${cap.name} it finds people who had been thinking the same.`, causes: [idea.eventId, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: 0, speciesIds: [n.species], data: { nation: n.id, idea: idea.id, from: from ? from.id : -1 } });
+      };
+      const heldBy = (o: Nation | undefined): Ideology | undefined => (!o || o.ended >= 0 ? undefined : o.idea && o.idea.share > 0.3 ? list[o.idea.id] : o.creed !== undefined ? list[o.creed] : undefined);
+      let from: Nation | undefined, fit = 0.45;
+      for (const id of n.contacts) {
+        const theirs = heldBy(h.nations[id]);
+        if (theirs && IDEA_GOVERNMENT[theirs.kind] !== n.government && pressure(theirs.kind, c) > fit) { fit = pressure(theirs.kind, c); from = h.nations[id]; }
+      }
+      if (from) { if (luck(0xe1) < 1 - Math.exp(-y / 30)) adopt(heldBy(from)!, from); return; }
+      // ---- or begun here, when conditions call loudly enough
+      const kind = ripest(c, n.government);
+      if (!kind || luck(0xe2) >= 1 - Math.exp((-y * pressure(kind, c)) / 70)) return;
+      // (where there is print, an idea of the same kind that is alive anywhere in the world is read here before one is thought of)
+      if (c.press) {
+        const abroad = list.filter((x) => x.kind === kind && h.nations.some((o) => o.id !== n.id && heldBy(o) === x));
+        if (abroad.length) { adopt(abroad[abroad.length - 1]!, undefined); return; }
+      }
+      const lang = this.languageOf(n);
+      let head = '', modifier = '', name = '';
+      for (let k = 0; k < 6; k++) { [head, modifier, name] = ideaName(kind, hash32(this.seedNum, n.id, list.length, 0xe3) + k); if (!list.some((x) => x.name === name)) break; }
+      if (list.some((x) => x.name === name)) name = `${name} of ${n.name}`;
+      const first = h.firstIdea === undefined;
+      const woe = n.woes.length ? n.woes[n.woes.length - 1]!.eventId : -1;
+      const idea: Ideology = { id: list.length, kind, name, own: compound(lang, head, modifier, year), born: year, nation: n.id, eventId: -1 };
+      const e = sim.emit({
+        type: 'ideology', year, cellId: cap.cell, title: first ? `The first idea of how to rule: ${name}` : `${name}: an idea takes hold in ${n.name}`,
+        description: `In ${cap.name} people have begun to say, first in the markets and then in writing, ${IDEA_SAYS[kind]}. They call it ${idea.own}, ${name}. ${kind === 'levelling' ? `A few houses in ${n.name} own most of it.` : kind === 'order' ? `${n.name} has not been steady for a generation.` : kind === 'reason' ? `${n.name} has learned more in a lifetime than in the thousand years before.` : kind === 'custom' ? `Nothing in ${n.name} is done the way it was done.` : `${n.name} lives by what it sells.`}`,
+        causes: [woe, n.trade && kind === 'commons' ? n.trade.eventId : -1, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 2), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, idea: idea.id, kind },
+      });
+      idea.eventId = e.id;
+      list.push(idea);
+      if (first && e.id >= 0) h.firstIdea = e.id;
+      n.idea = { id: idea.id, share: 0.1, since: year };
+      return;
+    }
+    // ---- an idea held: it gains or loses ground
+    const idea = list[n.idea.id];
+    if (!idea) { n.idea = undefined; return; }
+    n.idea.share = drift(n.idea.share, idea.kind, c, y);
+    if (n.idea.share < 0.02) { n.idea = undefined; return; }
+    // ---- a revolution: most of an unsteady country holds it, and the country is not yet run that way
+    const wants = IDEA_GOVERNMENT[idea.kind];
+    const shaken = n.stability < 0.5 || (n.woes.length > 0 && year - n.woes[n.woes.length - 1]!.year < 15);
+    if (n.idea.share > 0.6 && shaken && n.government !== wants && n.government !== 'custom' && luck(0xe4) < 1 - Math.exp(-y / 12)) {
+      const was = n.government;
+      const first = h.firstRevolution === undefined;
+      const woe = n.woes.length ? n.woes[n.woes.length - 1]!.eventId : -1;
+      n.government = wants;
+      n.flag = (n.flag ?? 0) + 1;
+      const e = sim.emit({
+        type: 'revolution', year, cellId: cap.cell, title: first ? `The first revolution: ${n.name} comes ${governedAs(wants).replace(/^an? /, 'to be a ')}` : `Revolution in ${n.name}`,
+        description: `For ${Math.max(1, Math.round(year - n.idea.since))} years more and more of ${n.name} has held with ${idea.own}, ${idea.name}. This year the gates of ${cap.name} are opened from inside. ${n.name}, which was ${governedAs(was)}, is ${governedAs(wants)} from today: ${idea.kind === 'levelling' ? 'the great estates are divided' : idea.kind === 'order' ? 'the assemblies are sent home and one voice gives the orders' : idea.kind === 'reason' ? 'offices go to those who can pass the examinations' : idea.kind === 'custom' ? 'the new laws are burned and the old ones read out' : 'the tolls and the courts are in the hands of the guilds'}. The old flag is taken down and another is raised.`,
+        causes: [idea.eventId, woe, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 3), importance: first ? 2 : 1, speciesIds: [n.species], data: { nation: n.id, idea: idea.id, kind: idea.kind, from: was, to: wants, flag: n.flag },
+      });
+      if (first && e.id >= 0) h.firstRevolution = e.id;
+      // what a revolution does: the thing it was for (the estates divided, or one hand on the country)
+      if (idea.kind === 'levelling') n.inequality = sat(n.inequality * 0.45);
+      if (idea.kind === 'order') n.stability = sat(n.stability + 0.2);
+      n.revolved = year; n.creed = idea.id;
+      this.credit(sim, null, n, e.id, '{name} was the last to rule in the old way.');
+      // and the news crosses the border: those who hold the same idea elsewhere take heart
+      for (const id of n.contacts) { const o = h.nations[id]; if (o && o.ended < 0 && o.idea && o.idea.id === idea.id) o.idea.share = sat(o.idea.share + 0.1); }
+      // (the idea has what it wanted here: it is how the country is run, not a thing gaining ground)
+      n.idea = undefined;
     }
   }
 

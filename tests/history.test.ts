@@ -4,6 +4,8 @@ import { RNG } from '../src/sim/rng';
 import { hash32, unit } from '../src/sim/history/hash';
 import { applyChange, compound, makeLanguage, personName, placeMeanings, soundChange, splitLanguage, word, wordAt, wordDistance, type Language, type Voice } from '../src/sim/history/language';
 import { count, listing, ordinal, write } from '../src/sim/history/grammar';
+import { IDEAS, IDEA_COLOUR, IDEA_GOVERNMENT, IDEA_SAYS, drift as driftIdea, governedAs, ideaName, pressure, ripest, type Conditions } from '../src/sim/history/ideology';
+import { emblemOf } from '../src/render/gfx/nations';
 
 const big: Voice = { size: 0.9, water: 0.1, flight: 0, hearing: 0.3, harsh: 0.7 };
 const small: Voice = { size: 0.1, water: 0.1, flight: 0.9, hearing: 0.8, harsh: 0.1 };
@@ -2441,6 +2443,80 @@ describe('wars with campaigns (E33)', () => {
     expect(wars).toBeGreaterThan(2);
     expect(battles).toBeGreaterThan(wars);
     expect(ended).toBeGreaterThan(1);
+  });
+});
+
+describe('ideologies (E35)', () => {
+  it('conditions call for ideas: the unequal for levelling, the unsteady for one strong hand, and no one rises for what they have', () => {
+    const calm: Conditions = { inequality: 0.3, stability: 0.7, fatigue: 0, tech: 0.5, custom: 0.8, trade: false, coin: false, slump: false, press: false };
+    expect(ripest(calm)).toBeNull();
+    expect(ripest({ ...calm, inequality: 0.85 })).toBe('levelling');
+    expect(ripest({ ...calm, stability: 0.25, fatigue: 0.5 })).toBe('order');
+    expect(ripest({ ...calm, trade: true, coin: true, tech: 0.6 })).toBe('commons');
+    expect(ripest({ ...calm, tech: 1, custom: 0.5, press: true })).toBe('reason');
+    expect(ripest({ ...calm, tech: 1, custom: 0.95, press: true })).toBe('custom');
+    // a slump makes the unequal angrier
+    expect(pressure('levelling', { ...calm, inequality: 0.6, slump: true })).toBeGreaterThan(pressure('levelling', { ...calm, inequality: 0.6 }));
+    // a republic does not rise to become a republic
+    expect(ripest({ ...calm, inequality: 0.85 }, IDEA_GOVERNMENT.levelling)).not.toBe('levelling');
+    // an idea gains ground while conditions call for it (faster in print) and fades when they stop
+    const unequal = { ...calm, inequality: 0.85 };
+    expect(driftIdea(0.2, 'levelling', unequal, 10)).toBeGreaterThan(0.2);
+    expect(driftIdea(0.2, 'levelling', { ...unequal, press: true }, 10)).toBeGreaterThan(driftIdea(0.2, 'levelling', unequal, 10));
+    expect(driftIdea(0.2, 'levelling', calm, 10)).toBeLessThan(0.2);
+    for (const k of IDEAS) { expect(IDEA_COLOUR[k]).toBeTruthy(); expect(IDEA_SAYS[k].length).toBeGreaterThan(20); expect(governedAs(IDEA_GOVERNMENT[k]).length).toBeGreaterThan(IDEA_GOVERNMENT[k].length); const [a, b, name] = ideaName(k, 1); expect(LEXICON).toContain(a); expect(LEXICON).toContain(b); expect(name).toMatch(/^the /); }
+  });
+
+  it('a revolution changes how a country is governed and its flag, in the name of an idea that arose for a reason', () => {
+    const runs = fiveHistories();
+    let ideas = 0, spreads = 0, revolutions = 0, withOne = 0;
+    const kinds = new Set<string>();
+    for (const { sim } of runs) {
+      const h = sim.civ.h, ev = sim.events.events;
+      const list = h.ideologies ?? [];
+      ideas += list.length;
+      expect(new Set(list.map((i) => i.name)).size).toBe(list.length);
+      for (const i of list) {
+        expect(IDEAS).toContain(i.kind);
+        expect(i.own.length).toBeGreaterThan(2);
+        const e = ev[i.eventId]!;
+        expect(e.type).toBe('ideology');
+        expect(e.causes.length).toBeGreaterThan(0);
+        expect(e.description).toContain(i.own);
+      }
+      spreads += ev.filter((e) => e.type === 'idea-spreads').length;
+      const revs = ev.filter((e) => e.type === 'revolution');
+      revolutions += revs.length;
+      if (revs.length) withOne++;
+      const flags = new Map<number, number>();
+      for (const e of revs) {
+        const d = e.data!, n = h.nations[Number(d.nation)]!, idea = list[Number(d.idea)]!;
+        kinds.add(String(d.to));
+        // the government changed, to the one the idea wants
+        expect(d.to).not.toBe(d.from);
+        expect(d.to).toBe(IDEA_GOVERNMENT[idea.kind]);
+        // the flag changed: one more than at its last revolution, and the emblem drawn from it is another
+        expect(Number(d.flag)).toBe((flags.get(n.id) ?? 0) + 1);
+        flags.set(n.id, Number(d.flag));
+        const cap = sim.civ.settlements[n.capital]!;
+        expect(emblemOf(cap.id, n.species, Number(d.flag))).not.toEqual(emblemOf(cap.id, n.species, Number(d.flag) - 1));
+        // and it is in the cause graph: the idea first, then whatever had shaken the country
+        expect(ev[e.causes[0]!]!.type).toBe('ideology');
+        expect(e.causes[0]).toBe(idea.eventId);
+        expect(e.title).toMatch(/revolution/i);
+      }
+      for (const n of h.nations) {
+        expect(n.flag ?? 0).toBe(flags.get(n.id) ?? 0);
+        // a country's last revolution is how it is governed now (unless a long peace has since made custom of it)
+        const last = [...revs].reverse().find((e) => e.data!.nation === n.id);
+        if (last && n.government !== 'custom') expect(n.government).toBe(last.data!.to);
+        if (!last) expect(['chiefdom', 'kingdom', 'custom']).toContain(n.government);
+        if (n.idea) { expect(list[n.idea.id]).toBeTruthy(); expect(n.idea.share).toBeGreaterThan(0); expect(n.idea.share).toBeLessThanOrEqual(1); }
+      }
+      if (h.firstRevolution !== undefined) { expect(ev[h.firstRevolution]!.importance).toBe(2); expect(ev[h.firstRevolution]!.title).toMatch(/^The first revolution/); }
+    }
+    console.log('E35', { ideas, spreads, revolutions, withOne, kinds: [...kinds] });
+    expect(revolutions).toBeGreaterThan(0);
   });
 });
 

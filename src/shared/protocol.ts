@@ -326,6 +326,11 @@ export interface NationInfo {
   houseId: number;
   /** The days it keeps (system E30). */
   festivals?: Festival[];
+  /** The idea gaining ground in it (system E35): its name, its name in their tongue, its kind, the share of the people who hold it; and how many times its flag has changed. */
+  idea?: { name: string; own: string; kind: string; share: number; eventId: number };
+  flag?: number;
+  /** The idea it has been governed by since its last revolution, and that revolution's year. */
+  creed?: { name: string; own: string; kind: string; since: number };
   /** Its chief trade (system E31): the good, the country it goes to (id and name), since when, the event that recorded it; and its market in a sentence. */
   trade?: { good: string; to: number; toName: string; since: number; eventId: number };
   market?: string;
