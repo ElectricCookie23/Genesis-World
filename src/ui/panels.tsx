@@ -1,3 +1,4 @@
+import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Nation } from '../render/gfx/nations';
 import { CreatureSketch } from './sketch';
@@ -890,11 +891,24 @@ export function NationPanel() {
       <div class={css.scroll}>
         {!d && <p class={css.sub}>Asking the archives.</p>}
         {d && realm && (
-          <p class={css.sub} style={{ margin: '0 0 8px' }}>
+          <div style={{ margin: '0 0 10px' }}>
+            <Fact label="Age">
             {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}){realm.ended >= 0 ? ' (the nation is gone)' : ''}. {realm.calendar && realm.ended < 0 ? `${dateIn({ name: realm.calendar, epoch: realm.calendarEpoch }, year)} (sim year ${Math.floor(year).toLocaleString('en-US')}). ` : ''}{d.tech.filter((t) => t.state === 1).length} of {d.tech.filter((t) => t.state !== 2).length} things its land allows are known.
+            </Fact>
+            <Fact label="Land">
             {' '}Its land offers {d.land.length ? d.land.join(', ') : 'little'}{d.land.includes('ore') ? '' : '; no ore, so no metal'}.
+            </Fact>
+            <Fact label="People">
             {' '}Its people are the {realm.culture} and speak <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openLanguages(realm.language)}>{realm.language}</button>.
+            {realm.script && realm.signs && <>{' '}In the {realm.script.name} its name is written <Written meanings={realm.signs} script={realm.script} wear={wearAt(realm.script, year)} size={20} rosetta={s.rosetta} />.</>}
+            {realm.music && <>{' '}Their music: {realm.music.about.charAt(0).toLowerCase()}{realm.music.about.slice(1)} <button class={css.link} style={{ marginRight: 0 }} title="Play half a minute of it" onClick={() => actions.listen(realm.id)}>listen</button></>}
+            </Fact>
+            <Fact label="Rule">
             {realm.ended < 0 && <>{' '}It is {governedAs(realm.government)}{realm.creed ? <>, and has been since the revolution of {ago(realm.creed.since)} in the name of {realm.creed.own}, {realm.creed.name}</> : ''}.</>}
+            {realm.ended < 0 && realm.idea && <>{' '}About {Math.max(1, Math.round(realm.idea.share * 100))} in a hundred of its people hold with {realm.idea.own}, {realm.idea.name}: {IDEA_SAYS[realm.idea.kind as Idea]}. <button class={css.link} style={{ marginRight: 0 }} title="Why this idea" onClick={() => update({ whyEvent: realm.idea!.eventId })}>why</button> <button class={css.link} style={{ marginRight: 0 }} onClick={() => update({ panel: 'map', mapOf: -4, mapNote: '' })}>on the map</button></>}
+            </Fact>
+            {(realm.league || realm.race || realm.colonyOf || (realm.colonies && realm.colonies.length > 0)) && (
+            <Fact label="Abroad">
             {realm.ended < 0 && realm.league && <>{' '}It belongs to {realm.league.own}, {realm.league.name}, founded {ago(realm.league.since)} after a world war. {realm.league.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this league" onClick={() => update({ whyEvent: realm.league!.eventId })}>why</button>}</>}
             {realm.ended < 0 && realm.race && <>{' '}It is in an arms race with <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.race!.with)}>{realm.race.withName}</button>, {Math.max(1, Math.round(year - realm.race.since)).toLocaleString('en-US')} years now: pressed as it is, its workshops work about {drive(realm.race.pressed).toFixed(1)} times as fast as in peace, and {realm.race.arms} of the {realm.race.found} things it has learned since were arms. {realm.race.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this race" onClick={() => update({ whyEvent: realm.race!.eventId })}>why</button>}</>}
             {realm.colonyOf && <>{' '}It began as a colony of <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.colonyOf!.mother)}>{realm.colonyOf.motherName}</button>, planted {ago(realm.colonyOf.founded)}; it declared itself free {ago(realm.colonyOf.declared)}{realm.colonyOf.freed < 0 && realm.ended < 0 ? ' and is fighting for that now' : realm.colonyOf.freed >= 0 ? `, and its mother country gave up the fight ${ago(realm.colonyOf.freed)}` : ''}. {realm.colonyOf.warEvent >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this war" onClick={() => update({ whyEvent: realm.colonyOf!.warEvent })}>why</button>}</>}
@@ -903,9 +917,16 @@ export function NationPanel() {
                 It holds a colony overseas at {c.name} ({c.towns === 1 ? 'one town' : `${c.towns} towns`}, planted {ago(c.founded)}): {c.note}. {c.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this colony" onClick={() => update({ whyEvent: c.eventId })}>why</button>} <button class={css.link} style={{ marginRight: 0 }} onClick={() => update({ panel: 'map', mapOf: -5, mapNote: '' })}>on the map</button>
               </span>
             ))}
-            {realm.ended < 0 && realm.idea && <>{' '}About {Math.max(1, Math.round(realm.idea.share * 100))} in a hundred of its people hold with {realm.idea.own}, {realm.idea.name}: {IDEA_SAYS[realm.idea.kind as Idea]}. <button class={css.link} style={{ marginRight: 0 }} title="Why this idea" onClick={() => update({ whyEvent: realm.idea!.eventId })}>why</button> <button class={css.link} style={{ marginRight: 0 }} onClick={() => update({ panel: 'map', mapOf: -4, mapNote: '' })}>on the map</button></>}
+            </Fact>
+            )}
+            {(realm.market || realm.trade) && (
+            <Fact label="Trade">
             {realm.market && <>{' '}{realm.market}</>}
             {realm.trade && <>{' '}Its merchants carry {realm.trade.good} to <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.trade!.to)}>{realm.trade.toName}</button>, and have for {Math.max(1, Math.round(year - realm.trade.since)).toLocaleString('en-US')} years. <button class={css.link} style={{ marginRight: 0 }} title="Why this trade" onClick={() => update({ whyEvent: realm.trade!.eventId })}>why</button></>}
+            </Fact>
+            )}
+            {realm.festivals && realm.festivals.length > 0 && (
+            <Fact label="Festivals">
             {realm.festivals && realm.festivals.map((f) => (
               <span key={f.id} style={{ display: 'block', margin: '3px 0 0' }}>
                 {describeFestival(f, year)}{' '}
@@ -913,9 +934,9 @@ export function NationPanel() {
                 <button class={css.link} style={{ marginRight: 0 }} title="Fly out and see its towns lit as on that night" onClick={() => actions.showFestival(realm.id, f.id)}>see its lights</button>
               </span>
             ))}
-            {realm.music && <>{' '}Their music: {realm.music.about.charAt(0).toLowerCase()}{realm.music.about.slice(1)} <button class={css.link} style={{ marginRight: 0 }} title="Play half a minute of it" onClick={() => actions.listen(realm.id)}>listen</button></>}
-            {realm.script && realm.signs && <>{' '}In the {realm.script.name} its name is written <Written meanings={realm.signs} script={realm.script} wear={wearAt(realm.script, year)} size={20} rosetta={s.rosetta} />.</>}
-          </p>
+            </Fact>
+            )}
+          </div>
         )}
         {d && <Pace d={d} year={year} />}
         {d && ERA_NAMES.map((era, e) => {
@@ -1084,6 +1105,16 @@ export function nameLine(st: SettlementInfo, year: number): string {
   const ago = (y: number) => Math.max(1, Math.round(year - y)).toLocaleString('en-US');
   const parts = names.map((n, i) => i === 0 ? `${n.name} when it was founded` : i === names.length - 1 ? `${n.name} for the last ${ago(n.year)} years (${n.why})` : `${n.name} from ${ago(n.year)} years ago (${n.why})`);
   return `It has been called ${parts.join('; ')}.`;
+}
+
+/** One labelled line of a country's page: what it is about on the left, what there is to say on the right. */
+function Fact({ label, children }: { label: string; children: ComponentChildren }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '78px 1fr', gap: '10px', margin: '0 0 7px', alignItems: 'baseline' }}>
+      <span class={css.sub} style={{ letterSpacing: '0.08em', fontSize: '10.5px', textTransform: 'uppercase' }}>{label}</span>
+      <span class={css.sub} style={{ color: '#d5d0c4', lineHeight: 1.5 }}>{children}</span>
+    </div>
+  );
 }
 
 /**

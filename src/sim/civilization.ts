@@ -4108,6 +4108,8 @@ export class Civilization {
     if (apart && from) this.rename(st, lang, year, `the speech of ${n.name} had become ${culture.name}`, -1, false);
     const dawn = h.began < 0;
     if (dawn) h.began = year;
+    // (a history begins in the age its first country is in: the Age of Fields is the leading age from the dawn, not passed over)
+    if (n.era > h.topEra) { h.topEra = n.era; h.peakEra = Math.max(h.peakEra ?? 0, n.era); }
     const sp = sim.creatures.species[st.species]!;
     const ev = sim.emit({
       type: 'nation', year, cellId: st.cell, title: dawn ? 'The dawn of history' : `${n.name} is founded`,
