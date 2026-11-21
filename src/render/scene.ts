@@ -99,6 +99,7 @@ export class GenesisScene {
   vegetation?: Flora;
   /** Camps, fields, boats at anchor, rocks: made models standing about the world (the asset pass). */
   props?: Props;
+  private propsAsked = false;
   creatures?: CreatureLayer;
   rivers?: Rivers;
   data?: PlanetData;
@@ -228,10 +229,11 @@ export class GenesisScene {
   /** Fetch the made models for the things that stand about (camps, fields, boats, rocks); each is drawn once its model is here. */
   private async loadPropModels(): Promise<void> {
     if (!this.useAssets || !this.props) return;
-    for (const kind of Object.keys(PROP_MODELS) as Prop[]) {
+    // all at once: each is small, and one after another they took many seconds to appear
+    await Promise.all((Object.keys(PROP_MODELS) as Prop[]).map(async (kind) => {
       const model = await loadFirst(PROP_MODELS[kind]);
-      if (model) this.props.add(kind, model);
-    }
+      if (model) this.props?.add(kind, model);
+    }));
   }
 
   /** Put a comet in the sky for so many seconds. Where it hangs is fixed by the number given (the event that reported it). */
@@ -338,7 +340,6 @@ export class GenesisScene {
     void this.loadPlantModels();
     this.props = new Props(grid, this.data, this.erosion.texture, this.clouds.shadow);
     this.props.onMesh = (m) => this.scene.add(m);
-    void this.loadPropModels();
     this.particles = new ParticleSystem(grid);
     this.scene.add(this.particles.sprite);
     // a captured second moon, hidden until the sim says it exists
@@ -1087,6 +1088,8 @@ export class GenesisScene {
     this.terrain?.update(this.cam.camera.position);
     this.ocean?.update(this.renderer, this.cam.camera.position, this.time, this.keepSeaPatch);
     this.vegetation?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist, this.cam.camera.position, this.renderer);
+    // (their models are not fetched until the camera first comes close enough to see any of them)
+    if (this.props && !this.propsAsked && this.cam.dist < this.props.uShow.value) { this.propsAsked = true; void this.loadPropModels(); }
     this.props?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist);
     const c = this.cam.camera;
     const far = c.position.length() + this.moonDistance + 4;

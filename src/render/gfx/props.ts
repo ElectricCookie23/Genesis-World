@@ -24,7 +24,7 @@ type Rest = 'ground' | 'float' | 'shore';
 
 export const PROPS = {
   fire: { rest: 'ground', cap: 96 }, tent: { rest: 'ground', cap: 320 }, tentSmall: { rest: 'ground', cap: 320 },
-  cropLeaf: { rest: 'ground', cap: 2400 }, cropGrain: { rest: 'ground', cap: 2400 }, mill: { rest: 'ground', cap: 48 },
+  cropLeaf: { rest: 'ground', cap: 4000 }, cropGrain: { rest: 'ground', cap: 2500 }, mill: { rest: 'ground', cap: 48 },
   rowboat: { rest: 'float', cap: 160 }, sailboat: { rest: 'float', cap: 160 }, ship: { rest: 'float', cap: 96 }, steamer: { rest: 'float', cap: 64 },
   wreck: { rest: 'shore', cap: 24 },
   rockA: { rest: 'ground', cap: 500 }, rockB: { rest: 'ground', cap: 500 }, rockC: { rest: 'ground', cap: 500 }, rockD: { rest: 'ground', cap: 500 },
@@ -197,35 +197,45 @@ export class Props {
       const ruined = st.ruined >= 0;
       // the sea beside it, if any
       const wet: number[] = [];
-      for (let k = 0; k < 6; k++) { const j = nb[c * 6 + k]!; if (j >= 0 && cells.elevation[j]! < sea) wet.push(j); }
+      // (and which way it lies: fields, the mill and the camp's fire are put on the landward side)
+      let sx = 0, sy = 0;
+      for (let k = 0; k < 6; k++) {
+        const j = nb[c * 6 + k]!;
+        if (j < 0 || cells.elevation[j]! >= sea) continue;
+        wet.push(j);
+        const jx = pos[j * 3]! - cx, jy = pos[j * 3 + 1]! - cy, jz = pos[j * 3 + 2]! - cz;
+        sx += jx * ex + jz * ez; sy += jx * nx + jy * ny + jz * nz;
+      }
+      const seaward = Math.atan2(sy, sx);
+      const inland = (a: number): number => (wet.length && Math.cos(a - seaward) > 0.2 ? 2 * seaward + Math.PI - a : a);
 
       if (!ruined) {
         // ---- a camp: a fire with tents round it, at the edge of the huts
         if ((st.nation ?? -1) < 0 || st.tech < 0.14) {
-          const a = hash(st.id * 31 + 7) * 6.283, d = R * 0.75 + 0.0007 * boost;
+          const a = inland(hash(st.id * 31 + 7) * 6.283), d = R * 0.75 + 0.0007 * boost;
           const fx = Math.cos(a) * d, fy = Math.sin(a) * d;
-          this.put('fire', ...at(fx, fy), 0.00026 * boost, a, hash(st.id));
+          this.put('fire', ...at(fx, fy), 0.00018 * boost, a, hash(st.id));
           const tents = 2 + Math.floor(hash(st.id * 17 + 3) * 3);
           for (let t = 0; t < tents; t++) {
-            const b = a + 1.2 + (t / tents) * 4.2, r = (0.00062 + 0.00018 * hash(st.id * 5 + t)) * boost;
+            const b = a + 1.2 + (t / tents) * 4.2, r = (0.00048 + 0.00014 * hash(st.id * 5 + t)) * boost;
             // the model's opening is turned to face the fire
-            this.put(t % 2 ? 'tentSmall' : 'tent', ...at(fx + Math.cos(b) * r, fy + Math.sin(b) * r), (t % 2 ? 0.0004 : 0.00052) * boost, -b + Math.PI / 2, hash(st.id * 91 + t));
+            this.put(t % 2 ? 'tentSmall' : 'tent', ...at(fx + Math.cos(b) * r, fy + Math.sin(b) * r), (t % 2 ? 0.0003 : 0.0004) * boost, -b + Math.PI / 2, hash(st.id * 91 + t));
           }
         }
         // ---- fields: patches of crops in rows outside the houses, and a mill once they know how to build one
         if (st.farms) {
-          const patches = 4 + Math.floor(size * 10);
+          const patches = 5 + Math.floor(size * 12);
           for (let p = 0; p < patches; p++) {
-            const a = p * 2.39996 + hash(st.id * 13) * 6.283, d = R * (1.12 + 0.55 * hash(st.id * 7 + p * 3));
+            const a = inland(p * 2.39996 + hash(st.id * 13) * 6.283), d = R * (1.1 + 0.5 * hash(st.id * 7 + p * 3));
             const kind: Prop = hash(st.id * 3 + p) < 0.5 ? 'cropLeaf' : 'cropGrain';
-            const step = 0.00017 * boost, ca = Math.cos(a), sa = Math.sin(a);
-            for (let r = 0; r < 3; r++) for (let q = 0; q < 5; q++) {
-              const u = (q - 2) * step, v = (r - 1) * step * 1.5;
-              this.put(kind, ...at(Math.cos(a) * d + ca * v - sa * u, Math.sin(a) * d + sa * v + ca * u), 0.0002 * boost * (0.85 + 0.3 * hash(p * 97 + r * 13 + q)), a, hash(st.id + p * 31 + r * 7 + q));
+            const step = 0.00021 * boost, ca = Math.cos(a), sa = Math.sin(a);
+            for (let r = 0; r < 4; r++) for (let q = 0; q < 6; q++) {
+              const u = (q - 2.5) * step, v = (r - 1.5) * step * 1.4;
+              this.put(kind, ...at(Math.cos(a) * d + ca * v - sa * u, Math.sin(a) * d + sa * v + ca * u), 0.0003 * boost * (0.85 + 0.3 * hash(p * 97 + r * 13 + q)), a, hash(st.id + p * 31 + r * 7 + q));
             }
           }
           if (st.tech >= 0.3 && st.tech < 0.85) {
-            const a = hash(st.id * 43 + 1) * 6.283, d = R * 1.3;
+            const a = inland(hash(st.id * 43 + 1) * 6.283), d = R * 1.2;
             this.put('mill', ...at(Math.cos(a) * d, Math.sin(a) * d), 0.0015 * boost, a, hash(st.id * 3));
           }
         }
@@ -245,7 +255,7 @@ export class Props {
           for (let b = 0; b < boats; b++) {
             const h = hash(st.id * 59 + b * 11);
             const kind: Prop = st.tech < 0.3 ? 'rowboat' : st.tech < 0.55 ? (h < 0.5 ? 'rowboat' : 'sailboat') : st.tech < 0.8 ? (h < 0.6 ? 'sailboat' : 'ship') : h < 0.45 ? 'steamer' : h < 0.8 ? 'sailboat' : 'ship';
-            const len = kind === 'rowboat' ? 0.00045 : kind === 'sailboat' ? 0.0009 : kind === 'ship' ? 0.0015 : 0.002;
+            const len = kind === 'rowboat' ? 0.0007 : kind === 'sailboat' ? 0.0013 : kind === 'ship' ? 0.002 : 0.0026;
             this.put(kind, ...off(b, 0.5 + 0.28 * hash(st.id * 3 + b * 5), (hash(st.id * 7 + b * 13) - 0.5) * 0.008), len * boost, h * 6.283, h);
           }
         }
