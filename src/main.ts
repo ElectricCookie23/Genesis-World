@@ -303,6 +303,7 @@ async function boot(): Promise<void> {
     scene.civ.setFeasts(feasts);
   }, 500);
   actions.showFestival = (nation, festival) => { shownFeast = { nation, festival, until: performance.now() + 20000 }; const r = state.realms.find((x) => x.id === nation); const cap = r ? state.settlements.find((t) => t.id === r.capital) : undefined; if (cap) { update({ panel: 'none' }); scene.cam.flyTo(grid.lon[cap.cell]!, grid.lat[cap.cell]!, 1.1); } };
+  actions.openDiplomacy = () => { update({ panel: 'diplomacy' }); send({ type: 'requestDiplomacy' }); };
   actions.openWars = () => { update({ panel: 'map', mapOf: -3 }); send({ type: 'requestWars' }); };
   actions.openMarket = () => { update({ panel: 'market' }); send({ type: 'requestMarket' }); };
   actions.openLegends = () => { update({ panel: 'legends' }); send({ type: 'requestLegends' }); };
@@ -1213,6 +1214,9 @@ async function boot(): Promise<void> {
         } else if (a.what === 'place' && state.chrono && a.data && a.data.id === state.chrono.id) { update({ memPlace: a.data }); scene.setSettlements(withPast(state.settlements), state.realms); }
         break;
       }
+      case 'diplomacy':
+        update({ diplomacy: msg.web });
+        break;
       case 'wars':
         update({ wars: msg.list, warShown: msg.list.some((w) => w.id === state.warShown) ? state.warShown : msg.list[0]?.id ?? -1 });
         break;

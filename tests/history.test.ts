@@ -1038,6 +1038,7 @@ describe('golden ages (E10)', () => {
 import { NETWORKS, WONDER_KINDS } from '../src/sim/history/model';
 import { ART_STYLES, SUBJECTS, against, compose, describePainting, styleOfEra, subjectOf, type Movement } from '../src/sim/history/art';
 import { galleryList } from '../src/sim/history/gallery';
+import { GRUDGE_YEARS, TIE_COLOUR, TIE_KINDS, TREATY_KINDS, pactBetween, web } from '../src/sim/history/diplomacy';
 import { BATTLE_KINDS, clash, describeBattle, siegeYears, strength, type Army, type Battle, type Field } from '../src/sim/history/war';
 import { pricePath } from '../src/ui/market';
 import { GOODS, GOOD_COLOUR, bestTrade, describeMarket, prices, type Economy, type Good } from '../src/sim/history/trade';
@@ -2440,5 +2441,90 @@ describe('wars with campaigns (E33)', () => {
     expect(wars).toBeGreaterThan(2);
     expect(battles).toBeGreaterThan(wars);
     expect(ended).toBeGreaterThan(1);
+  });
+});
+
+describe('diplomacy (E34)', () => {
+  it('treaties are made for reasons, and the web shows the strongest thing between each pair', () => {
+    const runs = fiveHistories();
+    let treaties = 0;
+    const kinds = new Set<string>();
+    for (const { sim } of runs) {
+      const h = sim.civ.h, ev = sim.events.events;
+      for (const t of h.treaties ?? []) {
+        treaties++; kinds.add(t.kind);
+        expect(TREATY_KINDS).toContain(t.kind);
+        expect(t.a).not.toBe(t.b);
+        expect(t.until).toBeGreaterThan(t.year);
+        const e = ev[t.eventId];
+        if (e) { expect(e.type).toBe('treaty'); expect(e.data!.kind).toBe(t.kind); if (t.kind === 'peace') expect(ev[e.causes[0]!]!.type).toMatch(/peace|war/); if (t.kind === 'trade') expect(ev[e.causes[0]!]!.type).toMatch(/trade/); }
+        if (t.broken) { expect(ev[t.broken.eventId]!.type).toBe('betrayal'); expect([t.a, t.b]).toContain(t.broken.by); }
+      }
+      // never two treaties in force between the same two countries
+      const live = (h.treaties ?? []).filter((t) => !t.broken && t.until > sim.simYear).map((t) => [t.a, t.b].sort().join('-'));
+      expect(new Set(live).size).toBe(live.length);
+      // the web: one line a pair, between living countries, and a war outranks everything
+      const ties = web(h, sim.simYear);
+      const pairs = ties.map((t) => `${t.a}-${t.b}`);
+      expect(new Set(pairs).size).toBe(pairs.length);
+      for (const t of ties) {
+        expect(t.a).toBeLessThan(t.b);
+        expect(h.nations[t.a]!.ended).toBeLessThan(0);
+        expect(h.nations[t.b]!.ended).toBeLessThan(0);
+        expect(TIE_KINDS).toContain(t.kind);
+        expect(TIE_COLOUR[t.kind]).toBeTruthy();
+        expect(t.label.length).toBeGreaterThan(10);
+      }
+      for (const w of h.wars ?? []) if (w.ended < 0 && h.nations[w.a]!.ended < 0 && h.nations[w.b]!.ended < 0) expect(ties.find((t) => t.a === Math.min(w.a, w.b) && t.b === Math.max(w.a, w.b))!.kind).toBe('war');
+    }
+    expect(treaties).toBeGreaterThan(10);
+    expect(kinds.size).toBeGreaterThanOrEqual(2);
+  });
+
+  it('a betrayal leads to a war decades later, linked in the cause graph', () => {
+    // (this changes the shared histories: nothing after it may depend on them)
+    const runs = fiveHistories();
+    let wronged = 0, wars = 0;
+    for (const { sim } of runs) {
+      const h = sim.civ.h, ev = sim.events.events;
+      const civ = sim.civ as unknown as {
+        treaty(sim: Simulation, a: unknown, b: unknown, kind: string, year: number, cause: number, years: number): { id: number; eventId: number } | null;
+        betray(sim: Simulation, n: unknown, foe: unknown, pact: unknown, warEvent: number, struck: unknown, year: number): void;
+      };
+      // two living countries of one kind, in touch, the second not much the smaller: the first swears peace and breaks it
+      const living = h.nations.filter((n) => n.ended < 0);
+      let pair: [typeof living[number], typeof living[number]] | undefined;
+      for (const a of living) for (const id of a.contacts) { const b = h.nations[id]; if (!pair && b && b.ended < 0 && b.species === a.species && b.pop > a.pop * 0.6 && !pactBetween(h, a.id, b.id, sim.simYear) && sim.civ.settlements.some((s) => s.ruined < 0 && s.nation === b.id)) pair = [a, b]; }
+      if (!pair) continue;
+      const [a, b] = pair;
+      const sworn = civ.treaty(sim, a, b, 'peace', sim.simYear, -1, 40)!;
+      expect(sworn).toBeTruthy();
+      expect(pactBetween(h, a.id, b.id, sim.simYear)!.id).toBe(sworn.id);
+      const struck = sim.civ.settlements.find((s) => s.ruined < 0 && s.nation === b.id)!;
+      const year = sim.simYear;
+      civ.betray(sim, a, b, h.treaties!.find((t) => t.id === sworn.id), -1, struck, year);
+      wronged++;
+      const wrong = ev[ev.length - 1]!;
+      expect(wrong.type).toBe('betrayal');
+      expect(wrong.causes).toContain(sworn.eventId);
+      expect(pactBetween(h, a.id, b.id, sim.simYear)).toBeUndefined();
+      const grudge = b.grudges!.find((g) => g.eventId === wrong.id)!;
+      expect(grudge.against).toBe(a.id);
+      expect(web(h, sim.simYear).find((t) => t.a === Math.min(a.id, b.id) && t.b === Math.max(a.id, b.id))!.kind).toMatch(/grudge|war/);
+      // the years go by; the wrong is remembered; and when the wronged country is able, it goes to war over it
+      for (let y = 0; y < GRUDGE_YEARS && grudge.avenged === undefined && a.ended < 0 && b.ended < 0; y++) sim.step(1);
+      if (grudge.avenged === undefined) continue;
+      wars++;
+      const war = ev.find((e) => e.type === 'war' && e.data && e.data.avenges === wrong.id)!;
+      expect(war).toBeTruthy();
+      // decades later, and the betrayal is among its causes: the cause graph leads from the war back to the broken treaty
+      expect(war.simYear - wrong.simYear).toBeGreaterThanOrEqual(20);
+      expect(war.causes).toContain(wrong.id);
+      expect(wrong.effects).toContain(war.id);
+      expect(sim.events.chain(war.id).some((e) => e.id === sworn.eventId)).toBe(true);
+      expect(war.description).toMatch(/has not forgotten/);
+    }
+    expect(wronged).toBeGreaterThan(1);
+    expect(wars).toBeGreaterThan(0);
   });
 });

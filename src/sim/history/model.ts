@@ -4,6 +4,7 @@ import type { Movement, Painting } from './art';
 import type { Legend } from './legend';
 import type { Festival } from './festival';
 import type { War } from './war';
+import type { Grudge, Treaty } from './diplomacy';
 // The entities of history. All of them are plain data, so the whole of history saves, loads and
 // rewinds with the rest of the simulation.
 import type { Calendar } from './calendar';
@@ -168,6 +169,8 @@ export interface Nation {
   woes: { kind: string; eventId: number; year: number }[];
   /** Its building laws, each made after a calamity in one of its towns (system E20). */
   codes?: Codes;
+  /** Betrayals it remembers (system E34). */
+  grudges?: Grudge[];
   /** The year until which it is in a slump after a crash (system E32): learning and building are slow meanwhile. */
   slump?: number;
   /** Its chief trade (system E31): which good (an index into GOODS) it sells to which country, since when, and the event that recorded it. */
@@ -229,6 +232,11 @@ export interface HistoryState {
   movements?: Movement[];
   firstStyles?: number[];
   paintingSeq?: number;
+  /** Treaties made (system E34): those in force, and those broken or run out lately; the events of the first treaty and the first betrayal. */
+  treaties?: Treaty[];
+  treatySeq?: number;
+  firstTreaty?: number;
+  firstBetrayal?: number;
   /** The wars fought as campaigns (system E33): those going on and the last few dozen ended. */
   wars?: War[];
   warSeq?: number;

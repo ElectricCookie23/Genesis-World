@@ -24,6 +24,7 @@ import { legendKind, legendName, tale, trueAnimal, type Legend } from './history
 import { lightOf, type Festival, type FestivalKind } from './history/festival';
 import { GOODS, bestTrade, prices, type Economy } from './history/trade';
 import { clash, describeBattle, siegeYears, type Army, type Battle, type BattleKind, type War } from './history/war';
+import { GRUDGE_YEARS, pactBetween, type Treaty, type TreatyKind } from './history/diplomacy';
 import { stillCleared } from './history/decay';
 import { answer, damage, hazards, type CalamityKind, type Ground, type Rebuild, type Scar } from './history/calamity';
 import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role, type Wonder, type WonderKind } from './history/model';
@@ -364,6 +365,8 @@ export class Civilization {
       this.network(sim, rng, n, towns, y, year);
       // ---- golden ages begin, raise their monuments and end (system E10)
       this.flourish(sim, rng, n, towns, y, year);
+      // ---- treaties made, and old wrongs gone to war over (system E34)
+      this.diplomacy(sim, n, towns, year);
       // ---- what it sells, and to whom: its merchants follow the best price (system E31)
       this.commerce(sim, n, towns, year);
       // ---- the days it keeps: its founding, the harvest, a victory, a night of remembrance, the comet's year (system E30)
@@ -493,7 +496,12 @@ export class Civilization {
         if (o.nation === st.nation && o.species === st.species) continue;
         // a marriage between the ruling houses keeps the peace while it is remembered (system E7)
         if (this.allied(n, o.nation, year)) continue;
-        if (o.species === st.species && (o.lore === st.lore || o.lore < 0 || st.lore < 0) && !rng.chance(0.35)) continue;
+        // a treaty holds, about one time in three that it is tested (system E34); the other times it is broken
+        const pact = o.nation >= 0 && o.nation !== n.id ? pactBetween(this.h, n.id, o.nation, year) : undefined;
+        if (pact && hash32(this.seedNum, st.id, Math.floor(year), 0xd1b) % 100 < 35) continue;
+        // (a country that has been betrayed does not let kinship stay its hand)
+        const sore = o.nation >= 0 ? (n.grudges ?? []).find((g) => g.against === o.nation && g.avenged === undefined && year - g.year < GRUDGE_YEARS) : undefined;
+        if (!sore && o.species === st.species && (o.lore === st.lore || o.lore < 0 || st.lore < 0) && !rng.chance(0.35)) continue;
         st.pop *= 0.7; o.pop *= 0.65; st.tech = Math.max(0.03, st.tech - 0.02); o.tech = Math.max(0.03, o.tech - 0.02);
         n.fatigue = sat(n.fatigue + 0.22);
         // conquest carries knowledge with it, or burns it (system E3)
@@ -535,6 +543,9 @@ export class Civilization {
               if (this.rename(o, this.languageOf(n), year, `renamed by ${n.name}, who took it from ${foe.name}`, taken.id, true)) taken.description += ` Its new masters call it ${o.name}, which means in their tongue what ${was} meant in the old one.`;
             }
           }
+          // a treaty broken by this war is a betrayal, and a betrayal avenged by it is its cause (system E34)
+          if (pact) this.betray(sim, n, foe, pact, warEvent, o, year);
+          if (sore) this.avenge(sim, n, foe, sore, warEvent, year);
           // what follows the first blow is a campaign (system E33), while the years are being watched
           if (this.fine && warEvent >= 0) this.campaign(sim, n, foe, st, o, warEvent, year, general ? general.name : '', other ? other.name : '');
         }
@@ -2153,6 +2164,113 @@ export class Civilization {
     }
   }
 
+  /** Make a treaty between two countries (system E34): an event caused by what led to it. */
+  private treaty(sim: Simulation, a: Nation, b: Nation, kind: TreatyKind, year: number, cause: number, years: number): Treaty | null {
+    const h = this.h, ev = sim.events.events;
+    if (pactBetween(h, a.id, b.id, year)) return null;
+    const list = (h.treaties ??= []);
+    const first = h.firstTreaty === undefined;
+    const cap = this.settlements[a.capital]!;
+    const e = sim.emit({
+      type: 'treaty', year, cellId: cap.cell, title: first ? `The first treaty: ${a.name} and ${b.name}` : kind === 'peace' ? `${a.name} and ${b.name} swear peace` : kind === 'trade' ? `A pact of trade between ${a.name} and ${b.name}` : `${a.name} and ${b.name} become allies`,
+      description: kind === 'peace' ? `${a.name} and ${b.name} swear that neither will take up arms against the other for ${years} years. It is written twice, and each keeps a copy.`
+        : kind === 'trade' ? `The merchants of ${a.name} have carried their goods to ${b.name} for a generation. The two countries now agree on the tolls, the weights and the safety of the road, for ${years} years.`
+          : `${a.name} and ${b.name} have the same enemy. They agree that an attack on one will be answered by both, for ${years} years.`,
+      causes: [cause, a.eventId].filter((x, i, arr) => x >= 0 && ev[x] && arr.indexOf(x) === i), importance: first ? 2 : 0, speciesIds: [a.species], data: { a: a.id, b: b.id, kind, years },
+    });
+    const t: Treaty = { id: (h.treatySeq = (h.treatySeq ?? 0) + 1), a: a.id, b: b.id, kind, year, until: year + years, eventId: e.id };
+    list.push(t);
+    if (first && e.id >= 0) h.firstTreaty = e.id;
+    // (the record keeps those in force and the last few dozen that are not)
+    if (list.length > 160) { const k = list.findIndex((x) => x.until <= year || x.broken); list.splice(k >= 0 ? k : 0, 1); }
+    return t;
+  }
+
+  /** A treaty is broken by the war just begun (system E34): a betrayal, which the country betrayed will remember. */
+  private betray(sim: Simulation, n: Nation, foe: Nation, pact: Treaty, warEvent: number, struck: Settlement, year: number): void {
+    const h = this.h, ev = sim.events.events;
+    const first = h.firstBetrayal === undefined;
+    const e = sim.emit({
+      type: 'betrayal', year, cellId: struck.cell, title: first ? `The first betrayal: ${n.name} breaks its word to ${foe.name}` : `${n.name} breaks its treaty with ${foe.name}`,
+      description: `${Math.max(1, Math.round(year - pact.year))} years ago ${n.name} and ${foe.name} ${pact.kind === 'peace' ? 'swore peace' : pact.kind === 'trade' ? 'made a pact of trade' : 'became allies'}, with ${Math.max(1, Math.round(pact.until - year))} years still to run. This year the army of ${n.name} is at the gates of ${struck.name}. In ${foe.name} the treaty is read aloud in every market, and children are taught the date.`,
+      causes: [pact.eventId, warEvent].filter((x, i, arr) => x >= 0 && ev[x] && arr.indexOf(x) === i), importance: first ? 2 : 1, speciesIds: [n.species], data: { by: n.id, against: foe.id, treaty: pact.id, kind: pact.kind },
+    });
+    pact.broken = { year, by: n.id, eventId: e.id };
+    (foe.grudges ??= []).push({ against: n.id, eventId: e.id, year });
+    if (foe.grudges.length > 6) foe.grudges.shift();
+    if (first && e.id >= 0) h.firstBetrayal = e.id;
+    // (and no one else is quick to trust the one who broke it)
+    n.stability = sat(n.stability - 0.03);
+  }
+
+  /** A war begun against the country that once betrayed this one has that betrayal among its causes (system E34). */
+  private avenge(sim: Simulation, n: Nation, foe: Nation, sore: { against: number; eventId: number; year: number; avenged?: number }, warEvent: number, year: number): void {
+    const ev = sim.events.events;
+    sore.avenged = year;
+    const war = ev[warEvent], wrong = ev[sore.eventId];
+    if (!war || !wrong || war.causes.includes(wrong.id)) return;
+    war.causes.unshift(wrong.id); war.causeWeights.unshift(1);
+    wrong.effects.push(war.id);
+    war.description += ` ${n.name} has not forgotten what ${foe.name} did ${Math.max(1, Math.round(year - sore.year))} years ago.`;
+    war.data = { ...war.data, avenges: wrong.id };
+  }
+
+  /**
+   * Diplomacy (system E34), for one country in one year. A long-standing trade becomes a pact of trade; two
+   * countries in touch that have fought the same third within living memory become allies; and a country that
+   * has been betrayed, once it is steady and strong enough again, goes to war over it. (The luck in it comes
+   * from the country and the year, not from the stream that decides other wars.)
+   */
+  private diplomacy(sim: Simulation, n: Nation, towns: Settlement[], year: number): void {
+    const h = this.h;
+    const luck = (k: number): number => (hash32(this.seedNum, n.id, Math.floor(year), k) % 100000) / 100000;
+    // ---- a pact of trade with a buyer of thirty years' standing
+    if (n.trade && year - n.trade.since >= 30 && luck(0xd1) < 1 / 40) { const o = h.nations[n.trade.to]; if (o && o.ended < 0) this.treaty(sim, n, o, 'trade', year, n.trade.eventId, 50); }
+    // ---- an alliance with a neighbour that has fought the same enemy
+    if (luck(0xd2) < 1 / 50) {
+      const fought = (x: number): Set<number> => { const s = new Set<number>(); for (const w of h.wars ?? []) if (year - w.year < 80) { if (w.a === x) s.add(w.b); if (w.b === x) s.add(w.a); } return s; };
+      const mine = fought(n.id);
+      if (mine.size) for (const id of n.contacts) {
+        const o = h.nations[id];
+        if (!o || o.ended >= 0 || mine.has(id)) continue;
+        const theirs = fought(id);
+        const enemy = [...mine].find((e) => theirs.has(e) && h.nations[e] && h.nations[e]!.ended < 0);
+        if (enemy === undefined) continue;
+        const war = (h.wars ?? []).filter((w) => (w.a === enemy || w.b === enemy) && (w.a === n.id || w.b === n.id)).pop();
+        if (this.treaty(sim, n, o, 'alliance', year, war ? war.eventId : -1, 60)) break;
+      }
+    }
+    // ---- an old wrong: when it is able, the country betrayed goes to war over it
+    for (const g of n.grudges ?? []) {
+      if (g.avenged !== undefined || year - g.year < 20 || year - g.year > GRUDGE_YEARS) continue;
+      const foe = h.nations[g.against];
+      if (!foe || foe.ended >= 0 || foe.species !== n.species) continue;
+      if (n.stability < 0.4 || n.fatigue > 0.5 || n.pop < 0.25 * foe.pop || luck(0xd3 + g.against) >= 1 / 12) continue;
+      if ((h.wars ?? []).some((w) => w.ended < 0 && (w.a === n.id || w.b === n.id))) continue;
+      // its town nearest to one of theirs strikes it
+      const p = sim.grid.pos;
+      let from: Settlement | undefined, at: Settlement | undefined, best = -2;
+      for (const o of this.settlements) {
+        if (o.ruined >= 0 || o.nation !== foe.id) continue;
+        for (const st of towns) { const d = p[st.cell * 3]! * p[o.cell * 3]! + p[st.cell * 3 + 1]! * p[o.cell * 3 + 1]! + p[st.cell * 3 + 2]! * p[o.cell * 3 + 2]!; if (d > best) { best = d; from = st; at = o; } }
+      }
+      if (!from || !at || best < 0.9) continue;
+      const before = sim.events.events.length;
+      sim.civEvent('war', from.species, from.cell, from.id, at.id);
+      const warEvent = sim.events.events.length > before ? before : -1;
+      from.pop *= 0.9; at.pop *= 0.8;
+      n.fatigue = sat(n.fatigue + 0.2); foe.fatigue = sat(foe.fatigue + 0.2);
+      if (at.tech >= 0.3) this.layer(at, year, 'burnt', warEvent, 120);
+      this.fortify(at, year);
+      this.woe(n, 'war', warEvent, year, 0.05); this.woe(foe, 'war', warEvent, year, 0.08);
+      this.avenge(sim, n, foe, g, warEvent, year);
+      // (the ruler who gave the order is named, as in every war)
+      if (warEvent >= 0) this.credit(sim, null, n, warEvent, '{name} gave the order.');
+      if (this.fine && warEvent >= 0) this.campaign(sim, n, foe, from, at, warEvent, year, '', '');
+      break;
+    }
+  }
+
   /**
    * A campaign begins (system E33). The first blow has fallen on a town (and may have taken it). The attacker
    * raises an army and means to go on: toward the nearest towns of its enemy, and the capital if it is near
@@ -2217,6 +2335,8 @@ export class Civilization {
         if (winner && winner.ended < 0) winner.stability = sat(winner.stability + 0.04);
         if (loser && loser.ended < 0) this.woe(loser, 'war', e.id >= 0 ? e.id : war.eventId, year, 0.06);
         for (const x of [A, B]) if (x.ended < 0) x.fatigue = sat(x.fatigue + 0.08);
+        // the peace is sworn to (system E34): a treaty for a generation or two
+        if (A.ended < 0 && B.ended < 0) this.treaty(sim, A, B, 'peace', year, e.id >= 0 ? e.id : war.eventId, 40);
       };
       if (A.ended >= 0 || B.ended >= 0) { end(A.ended >= 0 ? 'defender' : 'attacker'); continue; }
       if (year - war.year > 10) { end('stalemate'); continue; }

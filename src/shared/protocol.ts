@@ -1,6 +1,7 @@
 import type { Tradition } from '../sim/history/music';
 import type { Charting } from '../sim/history/worldmap';
 import type { Festival } from '../sim/history/festival';
+import type { Tie } from '../sim/history/diplomacy';
 // Message protocol between the simulation worker and the main thread.
 import type { SimEvent } from '../sim/events';
 import type { CosmosInfo } from '../sim/cosmos';
@@ -149,6 +150,14 @@ export interface PlantInfo {
   aquatic: boolean;
   extinct: boolean;
   cover: number;
+}
+
+/** The web of diplomacy as the page sees it (system E34): the living countries, where each has its capital on the flat map, and how each pair stands. */
+export interface DiplomacyInfo {
+  nations: { id: number; name: string; hue: number; u: number; v: number; pop: number }[];
+  ties: Tie[];
+  /** Betrayals still remembered: who broke faith with whom, when, and whether it has been gone to war over. */
+  betrayals: { by: string; against: string; year: number; eventId: number; avenged: number }[];
 }
 
 /** A war as the page sees it (system E33): who against whom, how it went, and every battle in order with where it was fought. */
@@ -494,6 +503,7 @@ export type ToWorker =
   | { type: 'requestLegends' }
   | { type: 'requestMarket' }
   | { type: 'requestWars' }
+  | { type: 'requestDiplomacy' }
   | { type: 'requestSite'; id: number }
   | { type: 'requestMemory'; ask: MemoryAsk }
   /** Run the world twice from before an event, with it and without it (E55); or with and without one small herd spared at a cell (E56); or stop. */
@@ -521,6 +531,7 @@ export type FromWorker =
   | { type: 'legends'; list: LegendInfo[] }
   | { type: 'market'; market: MarketInfo }
   | { type: 'wars'; list: WarInfo[] }
+  | { type: 'diplomacy'; web: DiplomacyInfo }
   | { type: 'site'; detail: SiteDetail }
   | { type: 'memory'; answer: MemoryAnswer }
   | { type: 'whatif'; state: WhatIfState | null; maps?: WhatIfMaps; problem?: string }
