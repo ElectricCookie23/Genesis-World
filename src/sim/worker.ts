@@ -606,7 +606,14 @@ function tick(): void {
   }
   const now = performance.now();
   tickMs = tickMs * 0.9 + (now - start) * 0.1;
-  const cellInterval = yps > 0 ? 250 : 1000;
+  // How often the page is sent the planet and the lists depends on how fast the world is changing, not on the clock.
+  // At a day a second (1x) a quarter of a second is a quarter of a day: the page was rebuilding its textures, towns
+  // and plants from a snapshot four times a second for nothing, and each rebuild is a dropped frame or two (the GPU
+  // review counted about four hitches a second at 1x). At the pace of history twice a second is plenty. At 10x a
+  // year passes each second and the seasons with it, so that keeps the full rate, as do the fast speeds.
+  const dayPace = yps > 0 && yps < 0.5, historyPace = yps === HISTORY_YPS;
+  const cellInterval = yps <= 0 ? 1000 : dayPace ? 1500 : historyPace ? 500 : 250;
+  const listInterval = dayPace ? 3000 : historyPace ? 1000 : 700;
   if (cellsRequested || now - lastCells > cellInterval) {
     if (yps > 0 || cellsRequested) {
       const { cells, transfer } = snapshotCells(s);
@@ -621,7 +628,7 @@ function tick(): void {
     post({ type: 'stats', stats: stats(s) });
     lastStats = now;
   }
-  if (now - lastSpecies > 700 && s.stage === 'animals' && (pageHas || now - sentLists > 8000)) {
+  if (now - lastSpecies > listInterval && s.stage === 'animals' && (pageHas || now - sentLists > 8000)) {
     lastSpecies = now;
     post({ type: 'species', species: speciesList(s) });
     if (s.civ.settlements.length) {
@@ -635,7 +642,7 @@ function tick(): void {
       plantVersion = s.plants.version;
       post({ type: 'plants', plants: plantList(s) });
     }
-  } else if (now - lastSpecies > 700 && s.plants.version !== plantVersion) {
+  } else if (now - lastSpecies > listInterval && s.plants.version !== plantVersion) {
     lastSpecies = now;
     plantVersion = s.plants.version;
     post({ type: 'plants', plants: plantList(s) });
