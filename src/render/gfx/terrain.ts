@@ -269,7 +269,7 @@ export class TerrainSurface {
     const specN: N = (normalize as any)((mix as any)(Nrm, dir, river));
     const spec = pow(max(dot(reflect(V.negate(), specN), L), 0), 48).mul(gloss).mul(day).mul(shadow)
       .add(pow(max(dot(reflect(V.negate(), specN), M), 0), 48).mul(river).mul(0.12).mul(moonUp).mul(float(1).sub(day)));
-    let lit: N = albedo.mul(sunColor.mul(direct).add(vec3(0.7, 0.8, 1.0).mul(second)).add(skyLight).add(moonLight).add(airglow)).add(sunColor.mul(spec));
+    let lit: N = albedo.mul(sunColor.mul(direct).add(vec3(uLook.star2).mul(second)).add(skyLight).add(moonLight).add(airglow)).add(sunColor.mul(spec));
 
     // molten crust during the opening sequence
     const cracks = smoothstep(0.12, -0.1, abs(e1.r.sub(0.5).mul(2.2)).sub(uMolten.mul(uMolten).mul(0.5)));

@@ -1,7 +1,7 @@
 // Tiny observable store shared by the Preact UI and the app.
 import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
-import type { DynastyDetail, LanguageInfo, LegendInfo, MarketInfo, WarInfo, MovementInfo, PaintingInfo, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
+import type { DynastyDetail, DiplomacyInfo, LanguageInfo, LegendInfo, MarketInfo, WarInfo, PlagueInfo, GreatWarInfo, MovementInfo, PaintingInfo, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 import type { Nation } from '../render/gfx/nations';
 import type { GoalRecord, GoalState } from '../game/goals';
 import type { CosmosInfo } from '../sim/cosmos';
@@ -18,7 +18,7 @@ import type { AnchorState, Battle, CitizenLife, Museum, Witness } from '../sim/g
 import type { Vision } from '../sim/senses';
 import type { WhatIfMaps, WhatIfState } from '../sim/whatif';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'tongues' | 'gallery' | 'legends' | 'market' | 'goals' | 'system' | 'microscope' | 'archive' | 'ground';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'tongues' | 'gallery' | 'legends' | 'market' | 'diplomacy' | 'goals' | 'system' | 'microscope' | 'archive' | 'ground';
 export type GroundTab = 'citizen' | 'anchor' | 'witness' | 'museum' | 'battle' | 'senses' | 'explore';
 export type MemoryTab = 'archive' | 'atlas' | 'braid' | 'records' | 'ancestry' | 'chronoscope' | 'forecasts' | 'whatif' | 'film';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
@@ -50,6 +50,10 @@ export interface UIState {
   panel: Panel;
   /** Event shown in the "Why did this happen?" panel. */
   whyEvent: number;
+  /** The Truth switch (system E39): show what was kept secret when it happened. And the hidden events on hand, and those that have since come out. */
+  truth: boolean;
+  hiddenIds: number[];
+  revealed: number[];
   selectedSpecies: number;
   /** The individual creature selected or followed. */
   creature: { key: number; species: number; name: string; age: string; action: string; following: boolean } | null;
@@ -114,9 +118,18 @@ export interface UIState {
   /** The gallery, when it has arrived (system E26), and the painting being looked at (its id, or -1 for the newest). */
   gallery: { paintings: PaintingInfo[]; movements: MovementInfo[] } | null;
   painting: number;
+  /** The web of diplomacy, when it has arrived (system E34). */
+  diplomacy: DiplomacyInfo | null;
   /** The wars on record, when they have arrived (system E33), and the one shown on the map (its id). */
   wars: WarInfo[] | null;
   warShown: number;
+  /** The plagues on record, when they have arrived (system E37), the ways trade travels, and the plague shown on the map (its id). */
+  /** The great wars on record, when they have arrived (system E40), and the one shown on the map (its id). */
+  greatWars: GreatWarInfo[] | null;
+  greatShown: number;
+  plagues: PlagueInfo[] | null;
+  plagueWays: { a: number; b: number; via: string }[];
+  plagueShown: number;
   /** The world's market, when it has arrived (system E32). */
   market: MarketInfo | null;
   /** The stories told about old bones, when they have arrived (system E28). */
@@ -187,6 +200,9 @@ export const state: UIState = {
   plants: new Map(),
   panel: 'none',
   whyEvent: -1,
+  truth: false,
+  hiddenIds: [],
+  revealed: [],
   selectedSpecies: -1,
   creature: null,
   milestone: null,
@@ -213,7 +229,13 @@ export const state: UIState = {
   legends: null,
   market: null,
   wars: null,
+  diplomacy: null,
   warShown: -1,
+  greatWars: null,
+  greatShown: -1,
+  plagues: null,
+  plagueWays: [],
+  plagueShown: -1,
   gallery: null,
   painting: -1,
   siteDetail: null,
@@ -311,8 +333,8 @@ export const actions = {
   setOverlay: (_o: Overlay) => {},
   setColorblind: (_on: boolean) => {},
   rewind: (_index: number) => {},
-  /** Skip ahead until some nation reaches this age (0 is the dawn of history); -1 stops a skip under way. */
-  skipTo: (_era: number) => {},
+  /** Skip ahead until some nation reaches this age (0 is the dawn of history), or to a moment before history (a key of BEFORE_HISTORY); -1 stops a skip under way. */
+  skipTo: (_to: number | string) => {},
   drawMap: (_canvas: HTMLCanvasElement) => {},
   mapClick: (_u: number, _v: number) => {},
   /** Where a cell lies on the flat map, as fractions of its width and height. */
@@ -363,8 +385,14 @@ export const actions = {
   listen: (_id: number) => {},
   /** Fly out to a nation and show the lights of one of its festivals for a while, whatever the day (by nation id and festival id). */
   showFestival: (_nation: number, _festival: number) => {},
+  /** Open the web of diplomacy. */
+  openDiplomacy: () => {},
   /** Open the map on the wars, battle by battle. */
   openWars: () => {},
+  /** Open the map on the plagues, town by town. */
+  openPlagues: () => {},
+  /** Open the map on the great wars: who stood with whom, and what the peace set up. */
+  openGreatWars: () => {},
   /** Open the world's market: prices and panics. */
   openMarket: () => {},
   /** Open the stories told about old bones. */

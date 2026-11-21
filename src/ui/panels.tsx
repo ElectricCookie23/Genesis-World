@@ -1,15 +1,18 @@
+import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Nation } from '../render/gfx/nations';
 import { CreatureSketch } from './sketch';
 import { ART_NAMES, Portrait, artStyle } from './portrait';
 import { G, GENE_NAMES, HUNTER_DIET } from '../sim/genetics';
 import type { SimEvent } from '../sim/events';
-import type { NationInfo, PersonInfo, SettlementInfo, SpeciesInfo, WonderInfo } from '../shared/protocol';
+import type { NationDetail, NationInfo, PersonInfo, SettlementInfo, SpeciesInfo, WonderInfo } from '../shared/protocol';
 import { dateIn } from '../sim/history/calendar';
 import { describeRuin } from '../sim/history/decay';
 import { CALAMITIES, REBUILDS, describeScar } from '../sim/history/calamity';
 import { Written, wearAt } from './glyphs';
 import { describeFestival } from '../sim/history/festival';
+import { IDEA_SAYS, governedAs, type Idea } from '../sim/history/ideology';
+import { drive } from '../sim/history/arms';
 import { actions, state, update, useStore, type Relative, type UIState } from './store';
 import { ERAS } from '../sim/history/eras';
 import { bigNumber, eventColor, eventGlyph, formatYear, hsl, metres, shortYear } from './format';
@@ -51,10 +54,13 @@ export function Num({ value, format }: { value: number; format: (n: number) => s
 
 export function Chronicle() {
   const s = useStore();
-  const ids = s.chronicle.slice(-160).reverse();
+  // what was kept secret is listed only with the Truth switch on, or once it has come out (system E39)
+  const out = new Set(s.revealed);
+  const secret = s.hiddenIds.filter((id) => s.truth || out.has(id)).slice(-80);
+  const ids = [...s.chronicle.slice(-160), ...secret].sort((a, b) => b - a);
   return (
     <div class={`${css.panel} ${css.side}`}>
-      <div class={css.head}><h2>Chronicle</h2><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
+      <div class={css.head}><h2>Chronicle</h2>{s.hiddenIds.length > 0 && <button class={css.link} style={{ marginRight: 0, color: s.truth ? '#c39bff' : undefined }} title="Show what was kept secret when it happened: thefts, killings and unread treaties" onClick={() => update({ truth: !s.truth })}>◈ Truth: {s.truth ? 'on' : 'off'}</button>}<button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
       <div class={css.scroll}>
         {ids.length === 0 && <p class={css.sub}>Nothing has happened yet. Give it time.</p>}
         {ids.map((id) => {
@@ -63,7 +69,7 @@ export function Chronicle() {
             <button class={css.entry} key={id} onClick={() => update({ whyEvent: id })} style={{ color: eventColor(e.type) }}>
               <i class={css.dot} />
               <div class={css.when} style={{ color: '#ece7db' }}>{formatYear(e.simYear)}{(() => { const own = localDate(s.realms, e); return own ? ` · ${own}` : ''; })()}</div>
-              <div class={`${css.what} ${e.importance >= 3 ? css.big : ''}`} style={{ color: '#ece7db' }}>{e.importance >= 3 ? e.title : e.description}</div>
+              <div class={`${css.what} ${e.importance >= 3 ? css.big : ''}`} style={{ color: e.hidden ? '#d9c4ff' : '#ece7db' }}>{e.hidden && <span style={{ color: '#c39bff' }}>{out.has(e.id) ? 'kept secret, and since come out: ' : 'kept secret: '}</span>}{e.importance >= 3 ? e.title : e.description}</div>
             </button>
           );
         })}
@@ -73,12 +79,13 @@ export function Chronicle() {
 }
 
 /** Walk the cause graph backward from an event: strongest cause first at each level. */
-function causeChain(events: SimEvent[], id: number, max = 14): { e: SimEvent; depth: number }[] {
+function causeChain(events: SimEvent[], id: number, max = 14, known: (e: SimEvent) => boolean = () => true): { e: SimEvent; depth: number }[] {
   const out: { e: SimEvent; depth: number }[] = [];
   const seen = new Set<number>();
   const visit = (eid: number, depth: number) => {
     const e = events[eid];
-    if (!e || seen.has(eid) || out.length >= max) return;
+    // (what was kept secret is no part of the answer, unless it is what was asked about: system E39)
+    if (!e || seen.has(eid) || out.length >= max || (depth > 0 && !known(e))) return;
     seen.add(eid);
     out.push({ e, depth });
     const order = e.causes.map((c, i) => ({ c, w: e.causeWeights[i] ?? 1 })).sort((a, b) => b.w - a.w);
@@ -92,10 +99,13 @@ export function Why() {
   const s = useStore();
   const root = s.events[s.whyEvent];
   if (!root) return null;
-  const chain = causeChain(s.events, root.id);
+  const out = new Set(s.revealed);
+  const chain = causeChain(s.events, root.id, 14, (e) => !e.hidden || s.truth || out.has(e.id));
+  // (is there something behind this that the public record does not have?)
+  const behind = !s.truth && chain.some(({ e }) => e.causes.some((c) => s.events[c]?.hidden && !out.has(c)));
   return (
     <div class={`${css.panel} ${css.side} ${css.sideLeft}`}>
-      <div class={css.head}><h2>Why did this happen?</h2><button class={css.close} onClick={() => update({ whyEvent: -1 })}>✕</button></div>
+      <div class={css.head}><h2>Why did this happen?</h2>{(s.truth || behind) && <button class={css.link} style={{ marginRight: 0, color: s.truth ? '#c39bff' : undefined }} title="Show what was kept secret when it happened" onClick={() => update({ truth: !s.truth })}>◈ Truth: {s.truth ? 'on' : 'off'}</button>}<button class={css.close} onClick={() => update({ whyEvent: -1 })}>✕</button></div>
       <div class={css.scroll}>
         {chain.map(({ e }, i) => (
           <>
@@ -105,7 +115,8 @@ export function Why() {
               <div class={css.thumb}>{eventGlyph(e.type)}</div>
               <div style={{ color: '#ece7db' }}>
                 <div class={css.when}>{formatYear(e.simYear)}{(() => { const own = localDate(s.realms, e); return own ? ` · ${own}` : ''; })()}</div>
-                <h3>{e.title}</h3>
+                <h3 style={e.hidden ? { color: '#d9c4ff' } : undefined}>{e.title}</h3>
+                {e.hidden && <div class={css.when} style={{ color: '#c39bff' }}>{out.has(e.id) ? 'kept secret when it happened; it has since come out' : 'kept secret: the public record does not have this'}</div>}
                 <p>{e.description}</p>
                 {e.cellId >= 0 && <button class={css.link} onClick={() => actions.flyToCell(e.cellId)}>show place</button>}
                 {canUndo(e.type) && <button class={css.link} onClick={() => actions.whatIf(e.id)}>what if this had not happened?</button>}
@@ -457,7 +468,7 @@ export function FlatMap() {
     draw();
     const t = window.setInterval(draw, 1500);
     return () => window.clearInterval(t);
-  }, [s.overlay, s.mapOf, s.warShown, s.wars]);
+  }, [s.overlay, s.mapOf, s.warShown, s.wars, s.plagueShown, s.plagues, s.greatShown, s.greatWars]);
   const war = s.mapOf === -3 ? (s.wars ?? []).find((w) => w.id === s.warShown) : undefined;
   // the countries whose own map can be shown: the living ones that have begun to farm, largest first
   const makers = s.realms.filter((r) => r.ended < 0 && r.charting).sort((a, b) => b.pop - a.pop).slice(0, 40);
@@ -469,10 +480,14 @@ export function FlatMap() {
         {(makers.length > 0 || s.mapOf < -1 || s.realms.some((r) => r.ended < 0 && r.trade)) && (
           <div class={css.sub} style={{ margin: '0 0 8px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <span>Show</span>
-            <select value={String(whose ? whose.id : s.mapOf === -2 || s.mapOf === -3 ? s.mapOf : -1)} onChange={(e) => { const v = Number((e.target as HTMLSelectElement).value); if (v === -3) actions.openWars(); else update({ mapOf: v, mapNote: '' }); }} style={{ background: '#1b1f2a', color: '#ece7db', border: '1px solid #ffffff2a', borderRadius: '5px', padding: '3px 6px', font: '400 12.5px system-ui, sans-serif' }}>
+            <select value={String(whose ? whose.id : s.mapOf < -1 ? s.mapOf : -1)} onChange={(e) => { const v = Number((e.target as HTMLSelectElement).value); if (v === -3) actions.openWars(); else if (v === -6) actions.openPlagues(); else if (v === -7) actions.openGreatWars(); else update({ mapOf: v, mapNote: '' }); }} style={{ background: '#1b1f2a', color: '#ece7db', border: '1px solid #ffffff2a', borderRadius: '5px', padding: '3px 6px', font: '400 12.5px system-ui, sans-serif' }}>
               <option value="-1">the true world</option>
               <option value="-2">trade routes, coloured by what they carry</option>
               <option value="-3">the wars, battle by battle</option>
+              <option value="-4">ideas of how to rule, and where they hold</option>
+              <option value="-5">colonies overseas, and the countries born of them</option>
+              <option value="-6">the plagues, town by town</option>
+              <option value="-7">the great wars: who stood with whom</option>
               {makers.map((r) => <option key={r.id} value={String(r.id)}>the world as {r.name} believes it to be ({r.eraName})</option>)}
             </select>
           </div>
@@ -480,9 +495,67 @@ export function FlatMap() {
         <div style={{ position: 'relative' }}>
           <canvas ref={ref} width={720} height={360} style={{ width: '100%', borderRadius: '8px', cursor: 'crosshair', display: 'block' }}
             onClick={(e) => { const r = (e.target as HTMLCanvasElement).getBoundingClientRect(); actions.mapClick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); }} />
-          {!whose && s.mapOf !== -2 && s.mapOf !== -3 && <MigrationArrows />}
+          {!whose && s.mapOf >= -1 && <MigrationArrows />}
         </div>
-        {s.mapOf === -2 && <div class={css.when} style={{ color: '#ece7db', margin: '8px 0 0' }}>{s.mapNote}</div>}
+        {(s.mapOf === -2 || s.mapOf === -4 || s.mapOf === -5) && <div class={css.when} style={{ color: '#ece7db', margin: '8px 0 0' }}>{s.mapNote}</div>}
+        {s.mapOf === -7 && (
+          <div style={{ margin: '8px 0 0', maxHeight: '38vh', overflowY: 'auto' }}>
+            {!s.greatWars && <p class={css.sub}>Asking the chroniclers.</p>}
+            {s.greatWars && s.greatWars.length === 0 && <p class={css.sub}>No war has yet drawn in the allies of those who began it. Alliances are followed into war while time runs at the pace of history or slower.</p>}
+            {s.greatWars && s.greatWars.length > 0 && (
+              <div class={css.sub} style={{ margin: '0 0 6px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span>War</span>
+                <select value={String(s.greatShown)} onChange={(e) => update({ greatShown: Number((e.target as HTMLSelectElement).value) })} style={{ background: '#1b1f2a', color: '#ece7db', border: '1px solid #ffffff2a', borderRadius: '5px', padding: '3px 6px', font: '400 12.5px system-ui, sans-serif' }}>
+                  {s.greatWars.map((g) => <option key={g.id} value={String(g.id)}>{g.name}{g.world ? ' (a world war)' : ''}, {Math.max(0, Math.round((s.stats?.simYear ?? 0) - g.began)).toLocaleString('en-US')} years ago{g.ended < 0 ? ' (still being fought)' : ''}</option>)}
+                </select>
+              </div>
+            )}
+            {(() => {
+              const g = (s.greatWars ?? []).find((x) => x.id === s.greatShown);
+              if (!g) return null;
+              return (
+                <>
+                  <div class={css.when} style={{ color: '#ece7db', margin: '0 0 6px' }}>{g.world && <>{g.own}, {g.name}. </>}{g.text} {g.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="How it began" onClick={() => update({ whyEvent: g.eventId })}>how it began</button>}{g.endEvent >= 0 && <> <button class={css.link} style={{ marginRight: 0 }} title="The peace" onClick={() => update({ whyEvent: g.endEvent })}>the peace</button></>}</div>
+                  {(g.taken ?? []).length > 0 && <div class={css.when} style={{ color: '#ece7db', margin: '0 0 6px' }}>Under a new flag since: {g.taken.slice(0, 8).map((t, i) => <span key={i}>{i > 0 ? ', ' : ''}<button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.flyToCell(t.cell)}>{t.town}</button></span>)}{g.taken.length > 8 ? ` and ${g.taken.length - 8} more` : ''}.</div>}
+                  {g.institutions.length > 0 && <div class={css.sub} style={{ margin: '8px 0 4px', letterSpacing: '0.08em' }}>WHAT THE PEACE SET UP{g.holds ? '' : ' (IT HAS SINCE FAILED)'}</div>}
+                  {g.institutions.map((i) => (
+                    <div key={i.kind} class={css.when} style={{ color: '#ece7db', margin: '0 0 3px' }}>
+                      {i.own}, {i.name}. {i.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} onClick={() => update({ whyEvent: i.eventId })}>what it is for</button>} {i.cell >= 0 && <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.flyToCell(i.cell)}>show place</button>}
+                    </div>
+                  ))}
+                </>
+              );
+            })()}
+          </div>
+        )}
+        {s.mapOf === -6 && (
+          <div style={{ margin: '8px 0 0', maxHeight: '38vh', overflowY: 'auto' }}>
+            {!s.plagues && <p class={css.sub}>Asking the chroniclers.</p>}
+            {s.plagues && s.plagues.length === 0 && <p class={css.sub}>No sickness has yet travelled from town to town. A plague is followed while time runs at the pace of history or slower.</p>}
+            {s.plagues && s.plagues.length > 0 && (
+              <div class={css.sub} style={{ margin: '0 0 6px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span>Plague</span>
+                <select value={String(s.plagueShown)} onChange={(e) => update({ plagueShown: Number((e.target as HTMLSelectElement).value) })} style={{ background: '#1b1f2a', color: '#ece7db', border: '1px solid #ffffff2a', borderRadius: '5px', padding: '3px 6px', font: '400 12.5px system-ui, sans-serif' }}>
+                  {s.plagues.map((p) => <option key={p.id} value={String(p.id)}>{p.name} ({p.own}), {Math.max(0, Math.round((s.stats?.simYear ?? 0) - p.began)).toLocaleString('en-US')} years ago{p.ended < 0 ? ' (still abroad)' : ''}</option>)}
+                </select>
+              </div>
+            )}
+            {(() => {
+              const p = (s.plagues ?? []).find((x) => x.id === s.plagueShown);
+              if (!p) return null;
+              return (
+                <>
+                  <div class={css.when} style={{ color: '#ece7db', margin: '0 0 6px' }}>{p.text} {p.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this plague" onClick={() => update({ whyEvent: p.eventId })}>why</button>}</div>
+                  {p.steps.map((st, i) => (
+                    <div key={i} class={css.when} style={{ color: '#ece7db', margin: '0 0 3px' }}>
+                      <span style={{ color: '#9aa3b5' }}>{st.from < 0 ? 'year 1' : `year ${Math.max(1, Math.round(st.year - p.began) + 1)}`}</span> {st.town}: {st.via === 'origin' ? 'it began here' : st.via === 'road' ? 'along the made road' : st.via === 'sea' ? 'by the sea lane' : st.via === 'trade' ? 'with the merchants' : 'on foot from the next valley'}{st.shut ? '; the gates were shut' : ''}; about {Math.max(1, Math.round(st.dead * 100))} in a hundred died. {st.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} onClick={() => update({ whyEvent: st.eventId })}>why</button>}
+                    </div>
+                  ))}
+                </>
+              );
+            })()}
+          </div>
+        )}
         {s.mapOf === -3 && (
           <div style={{ margin: '8px 0 0', maxHeight: '38vh', overflowY: 'auto' }}>
             {!s.wars && <p class={css.sub}>Asking the chroniclers.</p>}
@@ -507,7 +580,7 @@ export function FlatMap() {
           </div>
         )}
         {whose && <div class={css.when} style={{ color: '#ece7db', margin: '8px 0 0' }}>{s.mapNote} Their own country is in the middle. Filled marks are their towns, hollow ones towns they have heard of; blank paper is what they have never seen{(whose.monsters ?? []).length ? `; in the sea are the great animals their sailors have met (${(whose.monsters ?? []).map((m) => m.name).join(', ')})` : ''}.</div>}
-        {recentMigrations(s.events).length > 0 && <div class={css.sub} style={{ margin: '6px 0 0' }}>Arrows: peoples on the move (<span style={{ color: MOVE_COLOUR.ice }}>driven by ice</span>, <span style={{ color: MOVE_COLOUR.sea }}>by the sea</span>, <span style={{ color: MOVE_COLOUR.famine }}>by hunger</span>). Click one to see why.</div>}
+        {!whose && s.mapOf >= -1 && recentMigrations(s.events).length > 0 && <div class={css.sub} style={{ margin: '6px 0 0' }}>Arrows: peoples on the move (<span style={{ color: MOVE_COLOUR.ice }}>driven by ice</span>, <span style={{ color: MOVE_COLOUR.sea }}>by the sea</span>, <span style={{ color: MOVE_COLOUR.famine }}>by hunger</span>). Click one to see why.</div>}
       </div>
     </div>
   );
@@ -819,12 +892,42 @@ export function NationPanel() {
       <div class={css.scroll}>
         {!d && <p class={css.sub}>Asking the archives.</p>}
         {d && realm && (
-          <p class={css.sub} style={{ margin: '0 0 8px' }}>
+          <div style={{ margin: '0 0 10px' }}>
+            <Fact label="Age">
             {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}){realm.ended >= 0 ? ' (the nation is gone)' : ''}. {realm.calendar && realm.ended < 0 ? `${dateIn({ name: realm.calendar, epoch: realm.calendarEpoch }, year)} (sim year ${Math.floor(year).toLocaleString('en-US')}). ` : ''}{d.tech.filter((t) => t.state === 1).length} of {d.tech.filter((t) => t.state !== 2).length} things its land allows are known.
+            </Fact>
+            <Fact label="Land">
             {' '}Its land offers {d.land.length ? d.land.join(', ') : 'little'}{d.land.includes('ore') ? '' : '; no ore, so no metal'}.
+            </Fact>
+            <Fact label="People">
             {' '}Its people are the {realm.culture} and speak <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openLanguages(realm.language)}>{realm.language}</button>.
+            {realm.script && realm.signs && <>{' '}In the {realm.script.name} its name is written <Written meanings={realm.signs} script={realm.script} wear={wearAt(realm.script, year)} size={20} rosetta={s.rosetta} />.</>}
+            {realm.music && <>{' '}Their music: {realm.music.about.charAt(0).toLowerCase()}{realm.music.about.slice(1)} <button class={css.link} style={{ marginRight: 0 }} title="Play half a minute of it" onClick={() => actions.listen(realm.id)}>listen</button></>}
+            </Fact>
+            <Fact label="Rule">
+            {realm.ended < 0 && <>{' '}It is {governedAs(realm.government)}{realm.creed ? <>, and has been since the revolution of {ago(realm.creed.since)} in the name of {realm.creed.own}, {realm.creed.name}</> : ''}.</>}
+            {realm.ended < 0 && realm.idea && <>{' '}About {Math.max(1, Math.round(realm.idea.share * 100))} in a hundred of its people hold with {realm.idea.own}, {realm.idea.name}: {IDEA_SAYS[realm.idea.kind as Idea]}. <button class={css.link} style={{ marginRight: 0 }} title="Why this idea" onClick={() => update({ whyEvent: realm.idea!.eventId })}>why</button> <button class={css.link} style={{ marginRight: 0 }} onClick={() => update({ panel: 'map', mapOf: -4, mapNote: '' })}>on the map</button></>}
+            </Fact>
+            {(realm.league || realm.race || realm.colonyOf || (realm.colonies && realm.colonies.length > 0)) && (
+            <Fact label="Abroad">
+            {realm.ended < 0 && realm.league && <>{' '}It belongs to {realm.league.own}, {realm.league.name}, founded {ago(realm.league.since)} after a world war. {realm.league.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this league" onClick={() => update({ whyEvent: realm.league!.eventId })}>why</button>}</>}
+            {realm.ended < 0 && realm.race && <>{' '}It is in an arms race with <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.race!.with)}>{realm.race.withName}</button>, {Math.max(1, Math.round(year - realm.race.since)).toLocaleString('en-US')} years now{drive(realm.race.pressed) >= 1.1 ? <>: pressed as it is, its workshops work about {drive(realm.race.pressed).toFixed(1)} times as fast as in peace</> : <>: the watching has slackened</>}{realm.race.found > 0 ? <>, and {realm.race.arms} of the {realm.race.found} things it has learned since were arms</> : ''}. {realm.race.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this race" onClick={() => update({ whyEvent: realm.race!.eventId })}>why</button>}</>}
+            {realm.colonyOf && <>{' '}It began as a colony of <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.colonyOf!.mother)}>{realm.colonyOf.motherName}</button>, planted {ago(realm.colonyOf.founded)}; it declared itself free {ago(realm.colonyOf.declared)}{realm.colonyOf.freed < 0 && realm.ended < 0 ? ' and is fighting for that now' : realm.colonyOf.freed >= 0 ? `, and its mother country gave up the fight ${ago(realm.colonyOf.freed)}` : ''}. {realm.colonyOf.warEvent >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this war" onClick={() => update({ whyEvent: realm.colonyOf!.warEvent })}>why</button>}</>}
+            {realm.ended < 0 && realm.colonies && realm.colonies.map((c) => (
+              <span key={c.id} style={{ display: 'block', margin: '3px 0 0' }}>
+                It holds a colony overseas at {c.name} ({c.towns === 1 ? 'one town' : `${c.towns} towns`}, planted {ago(c.founded)}): {c.note}. {c.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this colony" onClick={() => update({ whyEvent: c.eventId })}>why</button>} <button class={css.link} style={{ marginRight: 0 }} onClick={() => update({ panel: 'map', mapOf: -5, mapNote: '' })}>on the map</button>
+              </span>
+            ))}
+            </Fact>
+            )}
+            {(realm.market || realm.trade) && (
+            <Fact label="Trade">
             {realm.market && <>{' '}{realm.market}</>}
             {realm.trade && <>{' '}Its merchants carry {realm.trade.good} to <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.trade!.to)}>{realm.trade.toName}</button>, and have for {Math.max(1, Math.round(year - realm.trade.since)).toLocaleString('en-US')} years. <button class={css.link} style={{ marginRight: 0 }} title="Why this trade" onClick={() => update({ whyEvent: realm.trade!.eventId })}>why</button></>}
+            </Fact>
+            )}
+            {realm.festivals && realm.festivals.length > 0 && (
+            <Fact label="Festivals">
             {realm.festivals && realm.festivals.map((f) => (
               <span key={f.id} style={{ display: 'block', margin: '3px 0 0' }}>
                 {describeFestival(f, year)}{' '}
@@ -832,10 +935,11 @@ export function NationPanel() {
                 <button class={css.link} style={{ marginRight: 0 }} title="Fly out and see its towns lit as on that night" onClick={() => actions.showFestival(realm.id, f.id)}>see its lights</button>
               </span>
             ))}
-            {realm.music && <>{' '}Their music: {realm.music.about.charAt(0).toLowerCase()}{realm.music.about.slice(1)} <button class={css.link} style={{ marginRight: 0 }} title="Play half a minute of it" onClick={() => actions.listen(realm.id)}>listen</button></>}
-            {realm.script && realm.signs && <>{' '}In the {realm.script.name} its name is written <Written meanings={realm.signs} script={realm.script} wear={wearAt(realm.script, year)} size={20} rosetta={s.rosetta} />.</>}
-          </p>
+            </Fact>
+            )}
+          </div>
         )}
+        {d && <Pace d={d} year={year} />}
         {d && ERA_NAMES.map((era, e) => {
           const cells = d.tech.filter((t) => t.era === e);
           if (!cells.length) return null;
@@ -906,7 +1010,7 @@ export function Peoples() {
         {(s.stats?.longPeace ?? -1) >= 0 && s.nations.length > 0 && (
           <p class={css.sub} style={{ margin: '0 0 8px' }}>The long peace, {Math.max(0, Math.round((s.stats?.simYear ?? 0) - (s.stats?.longPeace ?? 0))).toLocaleString('en-US')} years old. History is no longer made here: these nations and their towns live on as they are, by custom, until the planet disturbs them.</p>
         )}
-        {s.realms.some((r) => r.ended < 0) && <p class={css.sub} style={{ margin: '0 0 6px' }}><button class={css.link} title="The family tree of the languages spoken now, and their words side by side" onClick={() => actions.openLanguages()}>the languages they speak</button><button class={css.link} title="Paintings of things that happened, in the manner of each age" onClick={() => actions.openGallery()}>what they have painted</button><button class={css.link} title="Stories told about the bones of animals that died out long ago" onClick={() => actions.openLegends()}>old bones</button><button class={css.link} title="What each good has cost over the years, and the panics" onClick={() => actions.openMarket()}>markets</button><button class={css.link} title="Each war on the map, battle by battle" onClick={() => actions.openWars()}>wars</button></p>}
+        {s.realms.some((r) => r.ended < 0) && <p class={css.sub} style={{ margin: '0 0 6px' }}><button class={css.link} title="The family tree of the languages spoken now, and their words side by side" onClick={() => actions.openLanguages()}>the languages they speak</button><button class={css.link} title="Paintings of things that happened, in the manner of each age" onClick={() => actions.openGallery()}>what they have painted</button><button class={css.link} title="Stories told about the bones of animals that died out long ago" onClick={() => actions.openLegends()}>old bones</button><button class={css.link} title="What each good has cost over the years, and the panics" onClick={() => actions.openMarket()}>markets</button><button class={css.link} title="Each war on the map, battle by battle" onClick={() => actions.openWars()}>wars</button><button class={css.link} title="Each plague on the map, town by town, over the ways trade travels" onClick={() => actions.openPlagues()}>plagues</button><button class={css.link} title="The wars that drew in the allies of those who began them, and what the peace set up" onClick={() => actions.openGreatWars()}>great wars</button><button class={css.link} title="Who is allied with whom, who trades, who is at war, and what is remembered" onClick={() => actions.openDiplomacy()}>diplomacy</button></p>}
         {s.nations.length > 0 && <div class={css.sub} style={{ margin: '4px 0 6px' }}>NATIONS</div>}
         {[...s.nations].sort((a, b) => b.pop - a.pop).slice(0, 24).map((n) => {
           const cap = s.settlements.find((x) => x.id === n.capital);
@@ -966,6 +1070,7 @@ export function Peoples() {
                 </div>
               ))}
               {(st.means || st.names) && <div class={css.when} style={{ color: '#cfc9bd' }}>{st.means ? `Its name means "${st.means}". ` : ''}{nameLine(st, s.stats?.simYear ?? 0)}</div>}
+              {st.cordon && <div class={css.when} style={{ color: '#e8b49a' }}>It shut its gates against {st.cordon.name} {Math.max(0, Math.round((s.stats?.simYear ?? 0) - st.cordon.year)).toLocaleString('en-US')} years ago.</div>}
               {scarLines(st, s.stats?.simYear ?? 0).map((line, i) => <div key={`scar${i}`} class={css.when} style={{ color: '#e8b49a' }}>{line}</div>)}
               <WonderLines st={st} year={s.stats?.simYear ?? 0} />
               {(st.monuments ?? 0) > 0 && <div class={css.when} style={{ color: '#ffd76a' }}>{st.monuments} great {st.monuments === 1 ? 'work stands' : 'works stand'} here from a golden age.</div>}
@@ -1001,6 +1106,50 @@ export function nameLine(st: SettlementInfo, year: number): string {
   const ago = (y: number) => Math.max(1, Math.round(year - y)).toLocaleString('en-US');
   const parts = names.map((n, i) => i === 0 ? `${n.name} when it was founded` : i === names.length - 1 ? `${n.name} for the last ${ago(n.year)} years (${n.why})` : `${n.name} from ${ago(n.year)} years ago (${n.why})`);
   return `It has been called ${parts.join('; ')}.`;
+}
+
+/** One labelled line of a country's page: what it is about on the left, what there is to say on the right. */
+function Fact({ label, children }: { label: string; children: ComponentChildren }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '78px 1fr', gap: '10px', margin: '0 0 7px', alignItems: 'baseline' }}>
+      <span class={css.sub} style={{ letterSpacing: '0.08em', fontSize: '10.5px', textTransform: 'uppercase' }}>{label}</span>
+      <span class={css.sub} style={{ color: '#d5d0c4', lineHeight: 1.5 }}>{children}</span>
+    </div>
+  );
+}
+
+/**
+ * What a country learned, by quarter-century, over its last six hundred years, with the years it was in an arms
+ * race marked (system E38): the bursts of discovery that rivalry brings can be seen against the quiet between.
+ */
+function Pace({ d, year }: { d: NationDetail; year: number }) {
+  if (!d.races || !d.races.length) return null;
+  const step = 25, n = 24, from = year - step * n;
+  const made: number[] = new Array(n).fill(0), arms: number[] = new Array(n).fill(0);
+  for (const t of d.tech) if (t.state === 1 && t.year >= from) { const k = Math.min(n - 1, Math.floor((t.year - from) / step)); made[k]!++; if (t.field === 'war') arms[k]!++; }
+  if (made.every((x) => !x)) return null;
+  const top = Math.max(3, ...made);
+  const raced = (k: number): boolean => d.races.some((r) => r.began < from + (k + 1) * step && (r.ended < 0 ? year : r.ended) > from + k * step);
+  let inRace = 0, inPeace = 0, raceBins = 0, peaceBins = 0;
+  for (let k = 0; k < n; k++) { if (raced(k)) { inRace += made[k]!; raceBins++; } else { inPeace += made[k]!; peaceBins++; } }
+  return (
+    <div style={{ margin: '0 0 10px' }}>
+      <svg viewBox="0 0 240 44" style={{ width: '100%', height: '54px', display: 'block' }} preserveAspectRatio="none">
+        {made.map((m, k) => (
+          <g key={k}>
+            {raced(k) && <rect x={k * 10} y={0} width={10} height={44} fill="#e0563a" opacity={0.16} />}
+            <rect x={k * 10 + 1.5} y={42 - (m / top) * 38} width={7} height={(m / top) * 38} fill="#c9d6e8" />
+            {arms[k]! > 0 && <rect x={k * 10 + 1.5} y={42 - (arms[k]! / top) * 38} width={7} height={(arms[k]! / top) * 38} fill="#e0563a" />}
+          </g>
+        ))}
+        <line x1={0} y1={42.5} x2={240} y2={42.5} stroke="#ffffff33" stroke-width={0.6} />
+      </svg>
+      <p class={css.sub} style={{ margin: '2px 0 0' }}>
+        What it learned in each quarter-century of its last six hundred years (the red part of a bar is arms); the red bands are its arms races.
+        {raceBins > 0 && peaceBins > 0 && <>{' '}In a quarter-century of rivalry it learned {(inRace / raceBins).toFixed(1)} things on average, against {(inPeace / peaceBins).toFixed(1)} in one of peace.</>}
+      </p>
+    </div>
+  );
 }
 
 /** What calamities have left on a town (system E20): the last two, newest first, each in a sentence. */
@@ -1130,7 +1279,7 @@ export function Settings() {
         <div class={css.row}><span>Fork the timeline here<br /><span class={css.sub}>On a desktop this starts a second future running beside this one; you can compare them and cross over. It is also kept as a rewind point.</span></span><button class={css.btn} onClick={() => actions.fork()}>fork</button></div>
         <div class={css.sub} style={{ margin: '12px 0 2px' }}>SKIP TO AN AGE</div>
         {s.stats?.skipTo != null
-          ? <div class={css.row}><span>Skipping ahead to the {ERAS[s.stats.skipTo]!.name}<br /><span class={css.sub}>now at {formatYear(s.stats.simYear).toLowerCase()}</span></span><button class={css.btn} onClick={() => actions.skipTo(-1)}>stop</button></div>
+          ? <div class={css.row}><span>Skipping ahead to {typeof s.stats.skipTo === 'string' ? s.stats.skipTo.replace(/-/g, ' ') : `the ${ERAS[s.stats.skipTo]!.name}`}<br /><span class={css.sub}>now at {formatYear(s.stats.simYear).toLowerCase()}</span></span><button class={css.btn} onClick={() => actions.skipTo(-1)}>stop</button></div>
           : ERAS.map((e, i) => {
             const here = !!s.stats?.history && (s.stats.topEra ?? 0) >= i;
             const back = s.timeline.find((t) => t.title === `Start of the ${e.name}`);

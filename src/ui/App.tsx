@@ -1,4 +1,4 @@
-import { SPEEDS } from '../shared/protocol';
+import { BEFORE_HISTORY, SPEEDS } from '../shared/protocol';
 import { ERAS } from '../sim/history/eras';
 import { actions, togglePanel, useStore } from './store';
 import { GoalMarker, Goals } from './goals';
@@ -12,6 +12,7 @@ import { LanguagesPanel } from './tongues';
 import { GalleryPanel } from './gallery';
 import { LegendsPanel } from './legends';
 import { MarketPanel } from './market';
+import { DiplomacyPanel } from './diplomacy';
 import { SitePanel } from './site';
 import { Chronicle, CreatureCard, CrossSection, Designer, FlatMap, Experiments, Graphs, Guide, Futures, Help, NationLabels, NationPanel, Num, Peoples, Settings, SpeciesCard, TimelineStrip, Tree, Why } from './panels';
 import css from './ui.module.css';
@@ -71,6 +72,7 @@ export function App() {
           {s.panel === 'gallery' && <GalleryPanel />}
           {s.panel === 'legends' && <LegendsPanel />}
           {s.panel === 'market' && <MarketPanel />}
+          {s.panel === 'diplomacy' && <DiplomacyPanel />}
           {s.panel === 'site' && <SitePanel />}
           {s.panel === 'graphs' && <Graphs />}
           {s.panel === 'goals' && <Goals />}
@@ -93,11 +95,12 @@ export function App() {
               </button>
             ))}
             {st?.skipTo != null
-              ? <button class={css.active} onClick={() => actions.skipTo(-1)} title="Stop skipping ahead">■ to the {ERAS[st.skipTo]!.name}</button>
+              ? <button class={css.active} onClick={() => actions.skipTo(-1)} title="Stop skipping ahead">■ to {typeof st.skipTo === 'string' ? BEFORE_HISTORY.find((b) => b.key === st.skipTo)?.name.toLowerCase() : `the ${ERAS[st.skipTo]!.name}`}</button>
               : (
                 <select title="Skip ahead to an age" value="" style={{ background: 'none', color: 'inherit', border: 'none', font: 'inherit', opacity: 0.8, cursor: 'pointer', maxWidth: '92px' }}
-                  onChange={(e) => { const el = e.target as HTMLSelectElement, v = el.value; el.value = ''; if (v !== '') actions.skipTo(+v); }}>
+                  onChange={(e) => { const el = e.target as HTMLSelectElement, v = el.value; el.value = ''; if (v !== '') actions.skipTo(/^\d+$/.test(v) ? +v : v); }}>
                   <option value="">skip to…</option>
+                  {!st?.history && BEFORE_HISTORY.map((b) => !st?.reached?.includes(b.key) && <option value={b.key} style={{ color: '#000' }}>{b.name}</option>)}
                   {ERAS.map((e, i) => !(st?.history && (st.topEra ?? 0) >= i) && <option value={i} style={{ color: '#000' }}>{i === 0 ? 'Dawn of history' : e.name}</option>)}
                 </select>
               )}
@@ -135,8 +138,8 @@ export function App() {
         </div>
       )}
       {/* on a phone a panel is a sheet over the lower screen: the narration would lie across its text */}
-      {s.chronicleLine && !s.milestone && !s.film && !s.walking && !s.skyView && s.panel !== 'archive' && s.panel !== 'ground' && !(s.mobile && s.panel !== 'none') && <div class={css.narration} key={s.chronicleLine}>{s.chronicleLine}</div>}
-      {!s.opening && !s.chronicleLine && !s.milestone && last && s.panel !== 'chronicle' && s.panel !== 'archive' && s.panel !== 'ground' && !(s.mobile && s.panel !== 'none') && !hidden && (st?.simYear ?? 0) - last.simYear < 4e6 && (
+      {s.chronicleLine && !s.milestone && !s.film && !s.walking && !s.skyView && s.panel !== 'archive' && s.panel !== 'ground' && s.panel !== 'map' && !(s.mobile && s.panel !== 'none') && <div class={css.narration} key={s.chronicleLine}>{s.chronicleLine}</div>}
+      {!s.opening && !s.chronicleLine && !s.milestone && last && s.panel !== 'chronicle' && s.panel !== 'archive' && s.panel !== 'ground' && s.panel !== 'map' && !(s.mobile && s.panel !== 'none') && !hidden && (st?.simYear ?? 0) - last.simYear < 4e6 && (
         <div class={css.narration} key={last.id}><small>{formatYear(last.simYear).toUpperCase()}</small>{last.description}</div>
       )}
       {s.opening && s.skipVisible && <button class={css.skip} onClick={() => actions.skipOpening()}>SKIP</button>}

@@ -24,6 +24,14 @@ import { legendKind, legendName, tale, trueAnimal, type Legend } from './history
 import { lightOf, type Festival, type FestivalKind } from './history/festival';
 import { GOODS, bestTrade, prices, type Economy } from './history/trade';
 import { clash, describeBattle, siegeYears, type Army, type Battle, type BattleKind, type War } from './history/war';
+import { GRUDGE_YEARS, pactBetween, type Treaty, type TreatyKind } from './history/diplomacy';
+import { growsApart, odds, ready, shipped, waits, type Colony, type Standing } from './history/colony';
+import { ordinal } from './history/grammar';
+import { LEAGUE_HOLDS, chain, describeGreatWar, institutionName, isWorld, powers, purposeOf, victor, INSTITUTION_KINDS, type GreatWar, type Institution } from './history/greatwar';
+import { chooses, comesOut, dares, strikes, type Secret } from './history/secrets';
+import { BURST, BURST_EVERY, SPILL, WATCH_YEARS, armsLean, describeRace, drive, peers, tension, type Race } from './history/arms';
+import { CATCHING_YEARS, carried, describePandemic, describeVia, plagueName, shuts, toll, type Edge, type Pandemic, type Reach, type Via } from './history/plague';
+import { IDEA_GOVERNMENT, IDEA_SAYS, drift, governedAs, ideaName, pressure, ripest, type Conditions, type Ideology } from './history/ideology';
 import { stillCleared } from './history/decay';
 import { answer, damage, hazards, type CalamityKind, type Ground, type Rebuild, type Scar } from './history/calamity';
 import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role, type Wonder, type WonderKind } from './history/model';
@@ -86,6 +94,10 @@ export interface Settlement {
   relic: number;
   /** Founded by settlers who came across the sea. */
   overseas?: boolean;
+  /** The colony it belongs to or began in (system E36): a colony's id. */
+  colony?: number;
+  /** The last time it shut its gates against a sickness (system E37): the year, and the pandemic's id. */
+  cordon?: { year: number; plague: number };
   /** The most people it ever held (thousands): how large its ruin is (system E18). */
   peak?: number;
   /** After it was left: the tame animals that run wild in it, and the animals that nest in its towers (species ids). */
@@ -111,6 +123,18 @@ export const INTELLIGENCE_THRESHOLD = 0.5;
 export const MIND_YEARS = 15e6;
 /** Level of knowledge at which a camp plants fields and history begins for it. */
 export const FARMING = 0.22;
+
+/**
+ * One step of a town's people toward what its land can feed: the textbook rule, `pop += pop * rate * (1 - pop / room)`,
+ * which grows a town into its room and shrinks one that is over it. The rule overshoots when a town is many
+ * times over its room (the land's yield collapsed in one season): it used to come out with fewer than no
+ * people, which were counted as that for a year (and turned sums into nonsense) before the town was found
+ * empty. Now it comes out with none, and is found empty the same way.
+ */
+export function grown(pop: number, room: number, rate: number): number {
+  const next = pop + pop * rate * (1 - pop / room);
+  return next > 0 ? next : 0;
+}
 /** At most this many history ticks in one call: under a fast-forward each tick covers more years. */
 const MAX_TICKS = 300;
 /** Ticks longer than this many years are a fast-forward: rulers and minor events are summarised, not recorded. */
@@ -223,7 +247,7 @@ export class Civilization {
       const s = cr.species[st.species]!;
       if (this.failed(sim, st, s.extinctYear >= 0)) { this.abandon(sim, st, sim.simYear); continue; }
       const capacity = this.capacity(sim, st);
-      st.pop += st.pop * 0.6 * (1 - st.pop / Math.max(0.5, capacity)) * Math.min(1, tau * 2);
+      st.pop = grown(st.pop, Math.max(0.5, capacity), 0.6 * Math.min(1, tau * 2));
       const neighbours = this.neighbourCount(sim, st);
       st.tech = Math.min(FARMING + 0.001, st.tech + tau * 0.0009 * (0.4 + Math.log10(1 + st.pop)) * (1 + 0.35 * neighbours) * (0.6 + s.ref[G.Intelligence]!));
       if (!st.painted && st.tech > 0.06) {
@@ -318,6 +342,8 @@ export class Civilization {
     }
     if ((h.peace ?? -1) >= 0) { this.peaceTick(sim, rng, members, y, year); return; }
     let most = 1;
+    this.topPop = 0; this.livingNations = 0;
+    for (const x of h.nations) if (x.ended < 0) { this.livingNations++; if (x.pop > this.topPop) this.topPop = x.pop; }
     for (const list of members.values()) if (list.length > most) most = list.length;
     for (const n of h.nations) {
       // (a country founded during this very tick has its first turn in the next one)
@@ -350,6 +376,8 @@ export class Civilization {
       const quick = 1 + 6 * sat((n.tech - 0.7) / 0.3) ** 2;
       // (learning gathers where the people are: a country much smaller than the greatest of its day works more slowly)
       const rate = 6.5e-5 * (n.golden ? 1.45 : 1) * ((n.slump ?? -1) > year ? 0.6 : 1) * (0.5 + 0.5 * Math.min(1, towns.length / Math.max(1, 0.5 * most))) * (0.45 + Math.log10(1 + pop) / 3) * (0.6 + sp.ref[G.Intelligence]!) * (1 + reach) * quick * (0.6 + 0.4 * n.stability) * (0.9 + 0.2 * (ruler ? ruler.wise : 0.5));
+      // ---- whom it watches, and how hard that presses it (system E38)
+      if (this.armsRaces) this.rivalry(sim, n, year);
       this.research(sim, rng, n, towns, rate * y, year, y);
       // ---- a library burns (system E5): likelier in troubled times, and only once there is writing to burn
       if (n.know.way[SLOT_INDEX.get('write')!]! >= 0 && rng.chance(1 - Math.exp(-y * (0.4 + 1.6 * (1 - n.stability) + n.fatigue) / 2600))) {
@@ -364,6 +392,14 @@ export class Civilization {
       this.network(sim, rng, n, towns, y, year);
       // ---- golden ages begin, raise their monuments and end (system E10)
       this.flourish(sim, rng, n, towns, y, year);
+      // ---- what is done in secret against a rival, and what comes out generations later (system E39)
+      if (this.fine) this.intrigue(sim, n, year, y);
+      // ---- colonies planted overseas, growing apart, and declaring themselves free (system E36)
+      this.colonies(sim, n, towns, year, y);
+      // ---- the ideas its people hold about how it should be run, and now and then a revolution (system E35)
+      this.ideas(sim, n, year, y);
+      // ---- treaties made, and old wrongs gone to war over (system E34)
+      this.diplomacy(sim, n, towns, year);
       // ---- what it sells, and to whom: its merchants follow the best price (system E31)
       this.commerce(sim, n, towns, year);
       // ---- the days it keeps: its founding, the harvest, a victory, a night of remembrance, the comet's year (system E30)
@@ -408,6 +444,8 @@ export class Civilization {
     }
     // ---- the wars now being fought: each army marches, is fed or is not, and meets the other (system E33)
     if (this.fine) this.warfare(sim, y, year);
+    // ---- a sickness abroad: it goes where trade goes, town by town (system E37)
+    if (this.fine) this.pandemics(sim, year);
     // ---- the world's market: prices, a bubble now and then, and the panic when it bursts (system E32)
     this.market(sim, y, year);
     // industry: burning the buried forests of older ages warms the whole world
@@ -455,7 +493,7 @@ export class Civilization {
     } else {
       // people: a few per cent a year while there is room
       const grow = 1 - Math.exp(-0.03 * y);
-      st.pop += st.pop * grow * (1 - st.pop / Math.max(0.5, capacity));
+      st.pop = grown(st.pop, Math.max(0.5, capacity), grow);
       if (st.pop > capacity * 1.5) st.pop = capacity * 1.5;
     }
     // what the nation knows reaches its towns within a generation or two; the capital first
@@ -493,7 +531,14 @@ export class Civilization {
         if (o.nation === st.nation && o.species === st.species) continue;
         // a marriage between the ruling houses keeps the peace while it is remembered (system E7)
         if (this.allied(n, o.nation, year)) continue;
-        if (o.species === st.species && (o.lore === st.lore || o.lore < 0 || st.lore < 0) && !rng.chance(0.35)) continue;
+        // a league set up after a world war keeps its members from each other, most of the time (system E40)
+        if (o.nation >= 0 && o.nation !== n.id && this.leagued(sim, n, o.nation, st, year)) continue;
+        // a treaty holds, about one time in three that it is tested (system E34); the other times it is broken
+        const pact = o.nation >= 0 && o.nation !== n.id ? pactBetween(this.h, n.id, o.nation, year) : undefined;
+        if (pact && hash32(this.seedNum, st.id, Math.floor(year), 0xd1b) % 100 < 35) continue;
+        // (a country that has been betrayed does not let kinship stay its hand)
+        const sore = o.nation >= 0 ? (n.grudges ?? []).find((g) => g.against === o.nation && g.avenged === undefined && year - g.year >= 20 && year - g.year < GRUDGE_YEARS) : undefined;
+        if (!sore && o.species === st.species && (o.lore === st.lore || o.lore < 0 || st.lore < 0) && !rng.chance(0.35)) continue;
         st.pop *= 0.7; o.pop *= 0.65; st.tech = Math.max(0.03, st.tech - 0.02); o.tech = Math.max(0.03, o.tech - 0.02);
         n.fatigue = sat(n.fatigue + 0.22);
         // conquest carries knowledge with it, or burns it (system E3)
@@ -517,6 +562,7 @@ export class Civilization {
         this.woe(n, 'war', warEvent, year, 0.07);
         const general = this.credit(sim, rng, n, warEvent, `{name} led the host of ${n.name}.`, 'general', year);
         if (foe && foe.ended < 0 && foe.id !== n.id) {
+          this.fought(n, foe, year, warEvent);
           foe.fatigue = sat(foe.fatigue + 0.22);
           this.woe(foe, 'war', warEvent, year, 0.09);
           const other = this.fine ? this.credit(sim, rng, foe, warEvent, `{name} stood against them for ${foe.name}.`, 'general', year) : null;
@@ -527,7 +573,7 @@ export class Civilization {
             o.nation = n.id; o.pop *= 0.85;
             sim.cellLog.note(o.cell, year, Log.Owner, n.id);
             const taken = sim.emit({ type: 'conquest', year, cellId: o.cell, title: `${n.name} takes ${o.name}`, description: `${o.name} has a new flag over its gate. It belonged to ${foe.name} until this year.`, causes: [warEvent, n.eventId].filter((x) => x >= 0), importance: foe.capital === o.id ? 1 : 0, speciesIds: [st.species], data: { nation: n.id, from: foe.id } });
-            if (general && taken.id >= 0) { taken.description += ` ${general.name} rode in first.`; taken.data = { ...taken.data, person: general.id }; general.events.push(taken.id); }
+            if (general && taken.id >= 0) { taken.description += ` ${general.name} rode in first.`; taken.data = { ...taken.data, person: general.id }; this.note(general, taken.id); }
             // conquerors rename what they take (system E22): the same meaning said in their own tongue, more often the more warlike they are
             // (the luck in it comes from the town and the year, not from the stream that decides wars)
             if (taken.id >= 0 && (hash32(this.seedNum, o.id, Math.floor(year), 0x4e3a) % 1000) / 1000 < 0.3 + 0.5 * warlike) {
@@ -535,6 +581,9 @@ export class Civilization {
               if (this.rename(o, this.languageOf(n), year, `renamed by ${n.name}, who took it from ${foe.name}`, taken.id, true)) taken.description += ` Its new masters call it ${o.name}, which means in their tongue what ${was} meant in the old one.`;
             }
           }
+          // a treaty broken by this war is a betrayal, and a betrayal avenged by it is its cause (system E34)
+          if (pact) this.betray(sim, n, foe, pact, warEvent, o, year);
+          if (sore) this.avenge(sim, n, foe, sore, warEvent, year);
           // what follows the first blow is a campaign (system E33), while the years are being watched
           if (this.fine && warEvent >= 0) this.campaign(sim, n, foe, st, o, warEvent, year, general ? general.name : '', other ? other.name : '');
         }
@@ -551,6 +600,8 @@ export class Civilization {
       sim.civEvent('city-plague', st.species, st.cell, st.id);
       if (sim.events.events.length > plagueAt) this.credit(sim, rng, n, plagueAt, '{name}, a healer, stayed to tend the sick when others fled.', 'scholar', year);
       this.woe(n, 'plague', sim.events.events.length > plagueAt ? plagueAt : -1, year, 0.14);
+      // a town on a road or a merchants' route does not keep its sickness to itself (system E37)
+      if (this.fine && sim.events.events.length > plagueAt) this.outbreak(sim, n, st, plagueAt, year);
       // when the few who knew a craft die together, the craft dies with them
       if (isCapital && rng.chance(0.35)) this.loseKnowledge(sim, rng, n, [st], 1 + rng.int(2), year, `The plague in ${st.name} took the last who knew how.`, sim.events.events.length > plagueAt ? plagueAt : -1);
       for (let j = 0; j < reg.grid.ncount[st.region]!; j++) {
@@ -577,10 +628,14 @@ export class Civilization {
           const cap = this.settlements[n.capital]!, gp = sim.grid.pos;
           const cos = gp[cap.cell * 3]! * gp[d.cell * 3]! + gp[cap.cell * 3 + 1]! * gp[d.cell * 3 + 1]! + gp[cap.cell * 3 + 2]! * gp[d.cell * 3 + 2]!;
           const spacing = Math.sqrt((4 * Math.PI) / reg.count);
-          if (Math.acos(Math.max(-1, Math.min(1, cos))) > REACH[n.era]! * spacing) {
+          // (a colony's own daughter towns are part of the colony, however far from the old country: system E36)
+          if (st.colony !== undefined && this.h.colonies?.[st.colony] && this.h.colonies[st.colony]!.freed < 0 && this.h.colonies[st.colony]!.mother === n.id) {
+            d.nation = n.id; d.colony = st.colony; d.overseas = true; sim.cellLog.note(d.cell, year, Log.Owner, n.id);
+            { const born = sim.events.events[d.eventId]; if (born) born.description = `${born.description} Their parents came by sea, with the colony at ${st.name}.`; }
+          } else if (Math.acos(Math.max(-1, Math.min(1, cos))) > REACH[n.era]! * spacing) {
             const far = this.newNation(sim, rng, d, year, n);
             const ev = sim.events.events[d.eventId], first = this.h.people[far.ruler];
-            if (ev && first) { ev.description = `${ev.description} The settlers were led by ${first.name}.`; ev.data = { ...(ev.data ?? {}), person: first.id, nation: far.id }; first.events.push(ev.id); }
+            if (ev && first) { ev.description = `${ev.description} The settlers were led by ${first.name}.`; ev.data = { ...(ev.data ?? {}), person: first.id, nation: far.id }; this.note(first, ev.id); }
           } else {
             d.nation = n.id; sim.cellLog.note(d.cell, year, Log.Owner, n.id);
             this.credit(sim, rng, n, d.eventId, 'The settlers were led by {name}.', 'explorer', year);
@@ -933,7 +988,7 @@ export class Civilization {
       if (i > ev.id && (e.type !== 'milestone' || !e.causes.includes(ev.id))) continue;
       e.description = `${e.description} ${said}`;
       e.data = { ...(e.data ?? {}), person: who.id, nation: (e.data?.nation as number | undefined) ?? n.id };
-      who.events.push(e.id);
+      this.note(who, e.id);
     }
     return who;
   }
@@ -1072,8 +1127,8 @@ export class Civilization {
         const claimant = h.people[other.ruler]!, crowned = h.people[n.ruler];
         ev.description += ` ${claimant.name} claims the country${crowned ? ` against ${crowned.name}` : ''}.`;
         ev.data = { ...ev.data, person: claimant.id };
-        claimant.events.push(ev.id);
-        if (crowned) { claimant.rival = crowned.id; crowned.rival = claimant.id; crowned.events.push(ev.id); }
+        this.note(claimant, ev.id);
+        if (crowned) { claimant.rival = crowned.id; crowned.rival = claimant.id; this.note(crowned, ev.id); }
       }
       for (const st of others) {
         st.pop *= 0.8;
@@ -1088,13 +1143,15 @@ export class Civilization {
     // ---- secession: the furthest province goes its own way
     if (rng.chance(1 - Math.exp(-y / 60))) {
       const seed = others[0]!;
+      // (a far province that is a colony does not slip away: it declares itself free, and there is a war over it. System E36)
+      { const col = seed.colony !== undefined ? h.colonies?.[seed.colony] : undefined; if (col && col.mother === n.id && col.freed < 0 && col.gone < 0 && col.child < 0) { const part = towns.filter((st) => st.colony === col.id); if (ready({ identity: col.identity + 0.4, crushed: col.crushed }, part.length, this.standingOf(sim, n, col, part, year).share, year)) this.declare(sim, n, col, year); return false; } }
       const ev = sim.emit({
         type: 'secession', year, cellId: seed.cell, title: `${seed.name} breaks away from ${n.name}`,
         description: `The far province around ${seed.name} has stopped sending its taxes and its sons: ${because}.`,
         causes: [n.eventId, ...causes].filter((x) => x >= 0), importance: 1, speciesIds: [n.species], data: { nation: n.id },
       });
       const other = this.newNation(sim, rng, seed, year, n, 'breakaway', [ev.id]);
-      { const leader = h.people[other.ruler]!; ev.description += ` ${leader.name} leads them.`; ev.data = { ...ev.data, person: leader.id }; leader.events.push(ev.id); }
+      { const leader = h.people[other.ruler]!; ev.description += ` ${leader.name} leads them.`; ev.data = { ...ev.data, person: leader.id }; this.note(leader, ev.id); }
       let taken = 1;
       for (const st of others) {
         if (st.id === seed.id || taken >= towns.length / 2) continue;
@@ -1312,6 +1369,11 @@ export class Civilization {
       const cap = this.settlements[n.capital]!, far = this.settlements[o.capital]!;
       const apart = Math.abs(n.era - o.era);
       const ahead = n.era > o.era ? n : o, behind = n.era > o.era ? o : n;
+      // (in a world of many countries, two lesser neighbours of the same age finding each other across a hill is no one's
+      // news and would be thousands of events: they are in touch from now on, and that is all)
+      if (way === 0 && apart < 2 && !this.notable(n) && !this.notable(o)) { n.know.saved += 0.002; continue; }
+      // (nor, by any way, where the world is crowded and neither is a country of note)
+      if (this.crowded && !this.notable(n) && !this.notable(o)) { n.know.saved += 0.002; continue; }
       const ev = sim.emit({
         type: 'contact', year, cellId: far.cell, title: `${n.name} meets ${o.name}`,
         description: (way === 1
@@ -1320,7 +1382,7 @@ export class Civilization {
             ? `A voice from ${o.name} is heard in ${cap.name}, carried on nothing but air. Until now neither country knew the other was there.`
             : `Travellers from ${n.name} come over the last hill and find tilled fields that are not theirs. The country is ${o.name}.`)
           + (apart >= 2 ? ` ${ahead.name} is in its ${this.eraName(ahead)}; ${behind.name} is still in its ${this.eraName(behind)}, and has never seen such things.` : ''),
-        causes: [n.eventId, o.eventId].filter((x) => x >= 0), importance: apart >= 2 || way === 1 ? 1 : 0, speciesIds: n.species === o.species ? [n.species] : [n.species, o.species], data: { nation: n.id, other: o.id, way },
+        causes: [n.eventId, o.eventId].filter((x) => x >= 0), importance: (apart >= 2 || way === 1) && this.notable(n) && this.notable(o) ? 1 : 0, speciesIds: n.species === o.species ? [n.species] : [n.species, o.species], data: { nation: n.id, other: o.id, way },
       });
       // a crossing or a meeting of unequal peoples makes a name; a meeting at a border is only dated by who ruled
       const who = way === 0 && apart < 2 ? (this.credit(sim, null, n, ev.id, 'It was in the reign of {name}.'), null)
@@ -1365,7 +1427,7 @@ export class Civilization {
       description: `${after}, ${who.name} walks from town to town in ${n.name} saying ${says}. ${end}`,
       causes: [woe.eventId, n.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [n.species], data: { nation: n.id, person: who.id },
     });
-    who.events.push(ev.id);
+    this.note(who, ev.id);
     if (ruler && who.died >= 0) who.rival = ruler.id;
   }
 
@@ -1380,7 +1442,7 @@ export class Civilization {
   private leaning(n: Nation): Leaning {
     const c = this.h.cultures[n.culture]!, r = this.h.people[n.ruler];
     return {
-      war: 0.55 + 0.9 * c.war + (r ? r.bold * 0.3 : 0), trade: 0.6 + 0.9 * c.trade, craft: 0.7 + 0.6 * c.craft, mind: 0.7 + 0.5 * c.craft + (r ? r.wise * 0.3 : 0),
+      war: (0.55 + 0.9 * c.war + (r ? r.bold * 0.3 : 0)) * (this.armsRaces ? armsLean(n.pressed ?? 0) : 1), trade: 0.6 + 0.9 * c.trade, craft: 0.7 + 0.6 * c.craft, mind: 0.7 + 0.5 * c.craft + (r ? r.wise * 0.3 : 0),
       life: 0.8 + 0.4 * c.custom, sea: 0.7 + 0.6 * c.trade, sky: 0.75 + 0.5 * c.craft, build: 0.8 + 0.4 * c.custom, food: 1, power: 1,
     };
   }
@@ -1391,6 +1453,8 @@ export class Civilization {
    */
   private research(sim: Simulation, rng: RNG, n: Nation, towns: Settlement[], gain: number, year: number, y: number): void {
     const h = this.h;
+    // (a country pressed by a rival learns faster: system E38)
+    if (this.armsRaces) gain *= drive(n.pressed ?? 0);
     if (year - n.surveyed > 60) {
       // (what the surveyors find that the country did not have before changes what it has to sell: system E31)
       const before = n.land;
@@ -1432,19 +1496,25 @@ export class Civilization {
       if (n.know.saved < cost) break;
       n.know.saved -= cost;
       n.know.way[i] = k; n.know.year[i] = year;
+      // (what a pressed country learns is counted in its race, and each new weapon leaves something for the peaceful crafts: system E38)
+      if (this.armsRaces && n.pressed) {
+        const race = (h.races ?? []).find((x) => x.ended < 0 && (x.a === n.id || x.b === n.id));
+        if (race) { const side = race.a === n.id ? 0 : 1; race.found[side]++; if (slot.field === 'war') race.arms[side]++; }
+        if (slot.field === 'war') n.know.saved += SPILL * n.pressed;
+      }
       // (a craft that makes something to sell: system E31)
       if (CRAFT_GOOD[slot.id] !== undefined) n.found = { good: GOODS.indexOf(CRAFT_GOOD[slot.id]!), eventId: -1, year, what: `how to make ${way.name}` };
       if (n.know.lost[i]! > 0) {
         const gone = Math.round(year - n.know.lost[i]!);
         const capTown = this.settlements[n.capital]!;
-        sim.emit({
+        const again = sim.emit({
           type: 'knowledge-regained', year, cellId: capTown.cell, title: `${capital(way.name)} found again`,
           description: `${n.name} can make ${way.name} once more, ${gone.toLocaleString('en-US')} years after the knowledge was lost${relicHere ? `. They learned it from what the old builders left standing in ${towns.find((st) => st.relic === i)!.name}` : ''}.`,
           causes: [n.know.lostEvent[i]!, n.eventId].filter((x) => x >= 0), importance: slot.key || gone > 300 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, slot: slot.id, years: gone },
         });
         n.know.lost[i] = 0;
         for (const st of towns) if (st.relic === i) st.relic = -1;
-        if (sim.events.events.length && sim.events.events[sim.events.events.length - 1]!.type === 'knowledge-regained') this.credit(sim, rng, n, sim.events.events.length - 1, 'The one who worked it out was {name}.', 'scholar', year);
+        if (again.id >= 0) this.credit(sim, rng, n, again.id, 'The one who worked it out was {name}.', 'scholar', year);
         continue;
       }
       const first = !h.firsts[i];
@@ -1461,7 +1531,7 @@ export class Civilization {
             : `${n.name} has ${way.name} now. Their word for it is ${own.toLowerCase()}.`,
           causes: [n.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [n.species], data: inventor ? { nation: n.id, slot: slot.id, way: way.id, person: inventor.id } : { nation: n.id, slot: slot.id, way: way.id },
         });
-        if (inventor) inventor.events.push(ev.id);
+        if (inventor) this.note(inventor, ev.id);
       }
     }
     n.tech = Math.min(1.2, levelOf(n.know, land));
@@ -1607,6 +1677,55 @@ export class Civilization {
     if (walls.length >= 4 || (last && st.pop < last.pop * 2.2)) return;
     walls.push({ pop: st.pop, tech: st.tech, year });
   }
+
+  /** The people of the greatest living country (thousands), as of this tick: what "a notable country" is measured against. */
+  private topPop = 0;
+
+  /**
+   * Is this one of the countries of its day whose doings the chronicle should carry? In a world of a dozen
+   * countries nearly all are; in a world of two hundred, only those within a quarter of the greatest. What
+   * happens in the others is still on record and in the cause graph: it is just not narrated.
+   */
+  private notable(n: Nation | undefined): boolean {
+    return !!n && (this.livingNations <= 12 || n.pop >= 0.25 * this.topPop);
+  }
+
+  /** How many countries there are, as of this tick. */
+  private livingNations = 0;
+
+  /**
+   * Above this many living countries a world is crowded: its lesser countries then keep only their turning
+   * points on record, as a fast-forwarded history does (see `Simulation.emit`). A world of two hundred
+   * countries that kept every festival and border treaty of every one of them made a hundred thousand events in
+   * three thousand years, and every kept copy of the world (for going back) carried them all.
+   */
+  crowdedAbove = 40;
+
+  /** Is the world crowded (see `crowdedAbove`)? */
+  get crowded(): boolean {
+    return this.livingNations > this.crowdedAbove;
+  }
+
+  /** Put an event on a person's record, if it is an event that was kept (one of a lesser country in a crowded world, or in a fast-forwarded age, is not). */
+  private note(p: Person, eventId: number): void {
+    if (eventId >= 0) p.events.push(eventId);
+  }
+
+  /** Is the country with this id one the chronicle should carry (see `notable`)? */
+  isNotable(id: number): boolean {
+    return this.notable(this.h.nations[id]);
+  }
+
+  /** The country that holds the town nearest this cell (the town of its region), or -1. */
+  nationAt(sim: Simulation, cell: number): number {
+    if (cell < 0) return -1;
+    const id = this.occupied.get(sim.regions.regionOf[cell]!);
+    const st = id !== undefined ? this.settlements[id] : undefined;
+    return st && st.ruined < 0 ? st.nation : -1;
+  }
+
+  /** False switches off arms races (system E38): used to measure what they do. */
+  armsRaces = true;
 
   /** False switches off every change people make to the land (system E16): used to measure what those changes do. */
   landUse = true;
@@ -1904,10 +2023,10 @@ export class Civilization {
     n.calendar = cal.id;
     const cap = this.settlements[n.capital]!;
     const first = !h.calendars!.some((c) => c.id !== cal.id && c.kind !== 'founding');
-    const remembered = sim.events.events[cal.eventId]!;
+    const remembered = sim.events.events[cal.eventId];
     const out = sim.emit({
       type: 'calendar', year, cellId: cap.cell, title: first ? 'The first calendar' : `${n.name} counts its years anew`,
-      description: `The star-watchers of ${cap.name} fix the count of years for ${n.name}. Year 1 is the year of ${cal.name}: "${remembered.title}". In their own tongue the count is ${cal.own}. By it, this is ${dateIn(cal, year)}.`,
+      description: `The star-watchers of ${cap.name} fix the count of years for ${n.name}. Year 1 is the year of ${cal.name}${remembered ? `: "${remembered.title}"` : ''}. In their own tongue the count is ${cal.own}. By it, this is ${dateIn(cal, year)}.`,
       causes: [cal.eventId, n.eventId].filter((x, i, a) => x >= 0 && a.indexOf(x) === i), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, calendar: cal.id },
     });
     this.credit(sim, rng, n, out.id, '{name} worked out the count.', 'scholar', year);
@@ -2154,13 +2273,953 @@ export class Civilization {
   }
 
   /**
+   * The allies come in (system E40). A campaign has begun between two countries. Every country sworn to
+   * either (an alliance in force, read out or not) joins its side, and those sworn to them, round by round
+   * (`chain`); a country sworn to both stays out. Each that joins goes to war with the principal on the other
+   * side: a war of its own, caused by its alliance and by the first war. If enough of the great powers are in
+   * it, it is a world war: every belligerent's workshops are turned to it at once.
+   */
+  private rally(sim: Simulation, war: War, year: number): void {
+    const h = this.h, ev = sim.events.events;
+    const alive = (id: number): boolean => !!h.nations[id] && h.nations[id]!.ended < 0;
+    const pacts = (id: number): { id: number; eventId: number; secret: boolean }[] => {
+      const out: { id: number; eventId: number; secret: boolean }[] = [];
+      for (const t of h.treaties ?? []) if (t.kind === 'alliance' && !t.broken && t.until > year && (t.a === id || t.b === id)) { const o = t.a === id ? t.b : t.a; if (alive(o) && h.nations[o]!.species === h.nations[id]!.species) out.push({ id: o, eventId: t.eventId, secret: !!t.secret }); }
+      return out;
+    };
+    // (while a world war is being fought, and for three generations after one, no one follows an ally into another war;
+    // nor does a country already in a war between alliances start a second)
+    if ((h.great ?? []).some((x) => (x.ended < 0 && (x.world || x.sides[0].includes(war.a) || x.sides[1].includes(war.a) || x.sides[0].includes(war.b) || x.sides[1].includes(war.b))) || (x.world && x.ended >= 0 && year - x.ended < 100))) return;
+    const { sides, joined } = chain(war.a, war.b, (id) => pacts(id).map((x) => x.id));
+    if (!joined.length) return;
+    const A = h.nations[war.a]!, B = h.nations[war.b]!;
+    const id = (h.greatSeq = (h.greatSeq ?? 0) + 1);
+    const g: GreatWar = { id, name: '', own: '', began: year, ended: -1, origin: war.id, wars: [war.id], sides, world: false, eventId: -1, endEvent: -1, winner: -1, taken: [] };
+    war.great = id;
+    const p = sim.grid.pos;
+    for (const j of joined) {
+      const X = h.nations[j.nation]!, E = j.side === 0 ? B : A, friend = h.nations[j.with]!;
+      // its town nearest one of the enemy's
+      let from: Settlement | undefined, at: Settlement | undefined, best = -2;
+      for (const o of this.settlements) {
+        if (o.ruined >= 0 || o.nation !== E.id) continue;
+        for (const st of this.settlements) { if (st.ruined >= 0 || st.nation !== X.id) continue; const d = p[st.cell * 3]! * p[o.cell * 3]! + p[st.cell * 3 + 1]! * p[o.cell * 3 + 1]! + p[st.cell * 3 + 2]! * p[o.cell * 3 + 2]!; if (d > best) { best = d; from = st; at = o; } }
+      }
+      if (!from || !at) continue;
+      const pact = pacts(j.nation).find((x) => x.id === j.with);
+      const e = sim.emit({
+        type: 'war', year, cellId: from.cell, title: `${X.name} joins the war against ${E.name}`,
+        description: `${X.name} is sworn to ${friend.name}${pact && pact.secret ? ', by a pact that was never read out' : ''}. ${friend.name} is at war with ${E.name}, and ${X.name} follows it in.`,
+        causes: [pact ? pact.eventId : -1, war.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: this.notable(X) ? 1 : 0, speciesIds: [X.species],
+        data: { town: from.id, other: at.id, nation: X.id, foe: E.id, joins: war.id },
+      });
+      if (e.id < 0) continue;
+      this.credit(sim, null, X, e.id, '{name} gave the order.');
+      this.fought(X, E, year, e.id);
+      X.fatigue = sat(X.fatigue + 0.15); E.fatigue = sat(E.fatigue + 0.1);
+      this.woe(X, 'war', e.id, year, 0.03);
+      const joinedWar = this.campaign(sim, X, E, from, at, e.id, year, '', '', true, true);
+      if (joinedWar) { joinedWar.great = id; g.wars.push(joinedWar.id); }
+    }
+    if (g.wars.length < 2) { war.great = undefined; return; }
+    // ---- is it a world war? enough of the great powers, or most of the world's people
+    const living = h.nations.filter((x) => x.ended < 0);
+    const all = [...sides[0], ...sides[1]];
+    let world = 0, theirs = 0;
+    for (const x of living) { world += x.pop; if (all.includes(x.id)) theirs += x.pop; }
+    g.world = isWorld(all, powers(living.map((x) => ({ id: x.id, pop: x.pop, tech: x.tech }))), world > 0 ? theirs / world : 0);
+    const list = (h.great ??= []);
+    const nth = list.filter((x) => x.world).length;
+    g.name = g.world ? (nth === 0 ? 'the Great War' : `the ${['Second', 'Third', 'Fourth', 'Fifth', 'Sixth'][Math.min(4, nth - 1)]} Great War`) : `the war of ${A.name} and ${B.name}`;
+    g.own = compound(this.languageOf(A), 'fire', 'great', year);
+    const first = g.world && h.firstWorldWar === undefined;
+    const names = (ids: number[]): string => { const x = ids.map((k) => h.nations[k]!.name); return x.length > 1 ? `${x.slice(0, -1).join(', ')} and ${x[x.length - 1]}` : x[0]!; };
+    const e = sim.emit({
+      type: g.world ? 'world-war' : 'alliance-war', year, cellId: this.settlements[B.capital]?.cell ?? -1,
+      title: g.world ? (first ? 'The first world war' : `${capital(g.name)}`) : `The allies of ${A.name} and ${B.name} are drawn in`,
+      description: g.world
+        ? `What began as "${ev[war.eventId]?.title ?? 'a war'}" has not stayed between two countries. ${names(sides[0])} stand against ${names(sides[1])}: most of the powers of the world. They call it ${g.own}, ${g.name}. Every forge in every one of them is working for it.`
+        : `${names(sides[0])} stand against ${names(sides[1])}. A war between two countries has become a war between their friends.`,
+      causes: [war.eventId, ...joined.map((j) => { const pact = pacts(j.nation).find((x) => x.id === j.with); return pact ? pact.eventId : -1; })].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 4),
+      importance: g.world ? 2 : this.notable(A) || this.notable(B) ? 1 : 0, speciesIds: [A.species], data: { great: id, sides: `${sides[0].join(',')}|${sides[1].join(',')}`, world: g.world ? 1 : 0 },
+    });
+    g.eventId = e.id;
+    if (first && e.id >= 0) h.firstWorldWar = e.id;
+    // (a war between alliances with members of a standing league on both sides is the end of that league)
+    for (const old of list) {
+      if (!old.order || old.order.until >= 0 || !sides[0].some((x) => old.order!.members.includes(x)) || !sides[1].some((x) => old.order!.members.includes(x))) continue;
+      const league = old.order.institutions[0]!;
+      old.order.until = year;
+      old.order.failEvent = sim.emit({
+        type: 'order-fails', year, cellId: this.settlements[league.seat]?.cell ?? -1, title: `${capital(league.name)} fails`,
+        description: `${league.own}, ${league.name}, was founded ${Math.max(1, Math.round(year - old.order.year))} years ago so that there would not be another war like the last. Its members are on both sides of this one. The envoys go home.`,
+        causes: [league.eventId, e.id].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: 1, speciesIds: [A.species], data: { great: old.id },
+      }).id;
+    }
+    // every workshop is turned to it: the "huge jump" of a world war, and a lesser one of any war between alliances
+    if (this.armsRaces) for (const k of all) { const x = h.nations[k]!; if (x.ended < 0) x.know.saved += g.world ? 1.5 : 0.5; }
+    list.push(g);
+    if (list.length > 30) { const k = list.findIndex((x) => x.ended >= 0 && !x.order); if (k >= 0) list.splice(k, 1); }
+  }
+
+  /**
+   * A great war is over (system E40): the last of its wars has ended. Who had the better of it is counted
+   * from the wars won and the towns kept (`victor`). The peace is one event caused by every peace before it.
+   * After a world war the countries that fought it set up an order meant to prevent the next: a league, a
+   * court and a common fund, each with a name and a seat in the chief town of the greatest victor.
+   */
+  private conclude(sim: Simulation, g: GreatWar, year: number): void {
+    const h = this.h, ev = sim.events.events;
+    const wars = (h.wars ?? []).filter((w) => w.great === g.id);
+    g.ended = year;
+    const kept = (w: War): number[] => w.taken.filter((id) => this.settlements[id]!.ruined < 0 && this.settlements[id]!.nation === w.a);
+    g.winner = victor(wars.map((w) => ({ side: g.sides[0].includes(w.a) ? 0 : 1, outcome: w.outcome, kept: kept(w).length })));
+    g.taken = [...new Set(wars.flatMap(kept))];
+    const all = [...g.sides[0], ...g.sides[1]].map((id) => h.nations[id]!).filter((x) => x.ended < 0);
+    if (!all.length) return;
+    // the terms of a world war's peace: each defeated country that has towns to spare gives up the one nearest a victor
+    if (g.world && g.winner >= 0) {
+      const p = sim.grid.pos;
+      const won = all.filter((x) => g.sides[g.winner as 0 | 1].includes(x.id)), lost = all.filter((x) => !g.sides[g.winner as 0 | 1].includes(x.id));
+      for (const loser of lost) {
+        const theirs = this.settlements.filter((st) => st.ruined < 0 && st.nation === loser.id && st.id !== loser.capital);
+        if (theirs.length < 2) continue;
+        let give: Settlement | undefined, to: Nation | undefined, best = 0.94;
+        for (const st of theirs) for (const o of this.settlements) {
+          if (o.ruined >= 0 || o.nation < 0 || !won.some((x) => x.id === o.nation)) continue;
+          const d = p[st.cell * 3]! * p[o.cell * 3]! + p[st.cell * 3 + 1]! * p[o.cell * 3 + 1]! + p[st.cell * 3 + 2]! * p[o.cell * 3 + 2]!;
+          if (d > best) { best = d; give = st; to = h.nations[o.nation]; }
+        }
+        if (!give || !to) continue;
+        give.nation = to.id;
+        sim.cellLog.note(give.cell, year, Log.Owner, to.id);
+        if (!g.taken.includes(give.id)) g.taken.push(give.id);
+      }
+    }
+    // the peace is made in the chief town of the greatest of the victors (of the greatest country left, if no one won)
+    const side = g.winner >= 0 ? all.filter((x) => g.sides[g.winner as 0 | 1].includes(x.id)) : [];
+    const host = (side.length ? side : all).reduce((a, b) => (b.pop > a.pop ? b : a));
+    const seat = this.settlements[host.capital]!;
+    const name = (id: number): string => h.nations[id]?.name ?? '';
+    const towns = g.taken.map((id) => this.settlements[id]!.name);
+    const peace = sim.emit({
+      type: 'great-peace', year, cellId: seat.cell, title: `The peace of ${seat.name}`,
+      description: `${capital(g.name)} is over. ${describeGreatWar(g, name, year)} ${towns.length ? `${towns.length > 1 ? `${towns.slice(0, 4).slice(0, -1).join(', ')} and ${towns.slice(0, 4).pop()}` : towns[0]} ${towns.length > 1 ? 'have' : 'has'} a new flag${towns.length > 4 ? `, and ${towns.length - 4} more` : ''}.` : 'The borders are where they were.'} The envoys of every country that fought meet at ${seat.name} to settle the rest.`,
+      causes: [...wars.map((w) => w.peaceEvent), g.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 5), importance: g.world ? 2 : this.notable(host) ? 1 : 0, speciesIds: [host.species],
+      data: { great: g.id, winner: g.winner, towns: g.taken.length, world: g.world ? 1 : 0 },
+    });
+    g.endEvent = peace.id;
+    for (const x of all) { x.fatigue = sat(x.fatigue + (g.world ? 0.25 : 0.1)); if (g.world) this.woe(x, 'war', peace.id >= 0 ? peace.id : g.eventId, year, 0.03); }
+    if (!g.world) return;
+    // ---- the order after a world war: new institutions, in the seat of the peace
+    const lang = this.languageOf(host);
+    const words: Record<Institution['kind'], [string, string]> = { league: ['people', 'many'], court: ['tongue', 'great'], fund: ['hand', 'give'] };
+    const institutions: Institution[] = [];
+    for (const kind of INSTITUTION_KINDS) {
+      let plain = institutionName(kind, seat.name);
+      if ((h.great ?? []).some((x) => x.order && x.order.institutions.some((i) => i.name === plain))) plain = plain.replace(/^the /, 'the New ');
+      for (let k = 2; (h.great ?? []).some((x) => x.order && x.order.institutions.some((i) => i.name === plain)); k++) plain = `${institutionName(kind, seat.name)}, the ${ordinal(k + 1)}`;
+      const own = compound(lang, words[kind][0], words[kind][1], year);
+      const e = sim.emit({
+        type: 'institution', year, cellId: seat.cell, title: `${capital(plain)} is founded`,
+        description: `Out of the peace of ${seat.name} comes ${own}, ${plain}: ${purposeOf(kind)}.`,
+        causes: [peace.id, g.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 1), importance: kind === 'league' ? 2 : 1, speciesIds: [host.species], data: { great: g.id, kind },
+      });
+      institutions.push({ kind, name: plain, own, seat: seat.id, eventId: e.id });
+    }
+    g.order = { year, members: all.map((x) => x.id), institutions, until: -1, failEvent: -1 };
+    // (the fund pays out: the towns that were burned in it are rebuilt sooner than they would have been)
+    for (const w of wars) for (const b of w.battles) { const st = this.settlements[b.settlement]; if (st && st.ruined < 0) st.pop *= 1.06; }
+  }
+
+  /**
+   * Does the league keep these two from war (system E40)? If both belong to an order that still holds, most of
+   * the time the quarrel goes to its court instead (`LEAGUE_HOLDS`); when it does not, the order has failed.
+   */
+  private leagued(sim: Simulation, n: Nation, other: number, st: Settlement, year: number): boolean {
+    const h = this.h, ev = sim.events.events;
+    const g = (h.great ?? []).find((x) => x.order && x.order.until < 0 && x.order.members.includes(n.id) && x.order.members.includes(other));
+    if (!g || !g.order) return false;
+    const o = h.nations[other];
+    if (!o || o.ended >= 0) return false;
+    const league = g.order.institutions[0]!, court = g.order.institutions[1] ?? league;
+    if ((hash32(this.seedNum, st.id, Math.floor(year), 0xe40) % 1000) / 1000 < LEAGUE_HOLDS) {
+      // (a settlement worth recording, once a generation)
+      if (g.order.settled === undefined || year - g.order.settled > 25) {
+        g.order.settled = year;
+        sim.emit({ type: 'arbitration', year, cellId: this.settlements[court.seat]?.cell ?? st.cell, title: `${n.name} and ${o.name} go to ${court.name}`, description: `${n.name} and ${o.name} have a quarrel over the land by ${st.name} that would once have been a war. They bring it to ${court.own}, ${court.name}, and both accept what it rules.`, causes: [court.eventId].filter((x) => x >= 0 && ev[x]), importance: 0, speciesIds: [n.species], data: { great: g.id, a: n.id, b: o.id } });
+      }
+      return true;
+    }
+    g.order.until = year;
+    const e = sim.emit({
+      type: 'order-fails', year, cellId: this.settlements[league.seat]?.cell ?? st.cell, title: `${capital(league.name)} fails`,
+      description: `${n.name} has marched on ${o.name}, and both are members of ${league.own}, ${league.name}, which was founded ${Math.max(1, Math.round(year - g.order.year))} years ago so that this would not happen. The envoys go home.`,
+      causes: [league.eventId].filter((x) => x >= 0 && ev[x]), importance: 1, speciesIds: [n.species], data: { great: g.id, a: n.id, b: o.id },
+    });
+    g.order.failEvent = e.id;
+    return false;
+  }
+
+  /**
+   * Spies and secrets (system E39), for one country over `y` years. A country a rival presses may act against
+   * it in secret (`dares`): steal a craft the rival has and it has not, strike at the rival's ruler, or sign
+   * an unread pact with another country the rival has fought (`chooses`). Each is an event marked hidden, and
+   * where the public saw something (a new craft, a ruler dead) there is a second, public event telling the
+   * story that was told, with the hidden one as its cause. A blow at a ruler that fails is public at once, and
+   * is remembered as a wrong. And an old secret may come out, generations on (`comesOut`).
+   * (The luck in it comes from the country and the year, not from the stream that decides other things.)
+   */
+  private intrigue(sim: Simulation, n: Nation, year: number, y: number): void {
+    const h = this.h, ev = sim.events.events;
+    const list = (h.secrets ??= []);
+    const luck = (k: number): number => (hash32(this.seedNum, n.id, Math.floor(year), k) % 100000) / 100000;
+    // ---- an old secret of this country's comes out
+    for (const s of list) {
+      if (s.by !== n.id || s.known >= 0 || luck(0x5e00 + s.id) >= 1 - Math.exp(-y * comesOut(year - s.year))) continue;
+      const hidden = ev[s.eventId], victim = h.nations[s.against];
+      if (!hidden || !victim) continue;
+      const cap = this.settlements[n.capital]!;
+      const e = sim.emit({
+        type: 'secret-revealed', year, cellId: cap.cell, title: s.kind === 'pact' ? `The secret pact of ${n.name} and ${victim.name}` : `What ${n.name} did to ${victim.name}`,
+        description: `A chest of letters is opened in the archive at ${cap.name}, ${Math.round(year - s.year)} years after they were sealed. They say what was never said aloud: ${hidden.description.charAt(0).toLowerCase()}${hidden.description.slice(1)}`,
+        causes: [s.eventId, s.cover].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: s.kind === 'assassination' && this.notable(victim) ? 1 : 0, speciesIds: [n.species], data: { secret: s.eventId, by: n.id, against: s.against, kind: s.kind },
+      });
+      s.known = year; s.knownEvent = e.id;
+      // a killing that comes out is a wrong the victim's country did not know it had: it knows now
+      if (s.kind === 'assassination' && victim.ended < 0 && e.id >= 0) { (victim.grudges ??= []).push({ against: n.id, eventId: e.id, year }); if (victim.grudges.length > 6) victim.grudges.shift(); }
+    }
+    // ---- something new, against the rival that presses it
+    if (n.tech < 0.45 || n.rival === undefined) return;
+    const o = h.nations[n.rival];
+    const ruler = h.people[n.ruler];
+    if (!o || o.ended >= 0 || luck(0x51) >= 1 - Math.exp(-y * dares(n.pressed ?? 0, ruler ? ruler.cruel : 0.5, ruler ? ruler.bold : 0.5))) return;
+    const land = new Set(n.land);
+    const slot = borrowable(n.know, o.know, land);
+    const theirs = h.people[o.ruler];
+    const canStrike = !!theirs && theirs.died < 0 && year - theirs.reignFrom >= 2 && !list.some((s) => s.kind === 'assassination' && s.against === o.id && year - s.year < 40);
+    // (a secret friend: a country in touch that has fought the same rival, and has no pact with this one)
+    let friend: Nation | undefined;
+    for (const id of n.contacts) { const f = h.nations[id]; if (f && f.ended < 0 && f.id !== o.id && f.foes?.[o.id] && !pactBetween(h, n.id, f.id, year)) { friend = f; break; } }
+    const kind = chooses(slot >= 0, canStrike, !!friend, luck(0x52));
+    if (!kind) return;
+    const since = n.foes?.[o.id];
+    const race = (h.races ?? []).find((r) => r.ended < 0 && ((r.a === n.id && r.b === o.id) || (r.a === o.id && r.b === n.id)));
+    const cause = [race ? race.eventId : -1, since ? since.eventId : -1].find((x) => x >= 0 && ev[x]) ?? -1;
+    const cap = this.settlements[n.capital]!, ocap = this.settlements[o.capital]!;
+    const push = (kind: Secret['kind'], eventId: number, cover: number, against: number): void => { list.push({ id: list.length ? list[list.length - 1]!.id + 1 : 1, kind, year, by: n.id, against, eventId, cover, known: -1, knownEvent: -1 }); if (list.length > 120) list.shift(); };
+    if (kind === 'theft') {
+      const k = wayFor(slot, land), way = WEB[slot]!.ways[k]!;
+      n.know.way[slot] = k; n.know.year[slot] = year;
+      const hidden = sim.emit({
+        type: 'theft', hidden: true, year, cellId: ocap.cell, title: `${n.name} steals the secret of ${way.name}`,
+        description: `A clerk in the ${WEB[slot]!.field === 'war' ? 'arsenal' : 'archive'} at ${ocap.name} is paid more by ${n.name} than ${o.name} pays him. What ${o.name} knows of ${way.name} leaves the country in a bale of cloth.`,
+        causes: [cause].filter((x) => x >= 0), importance: 0, speciesIds: [n.species], data: { by: n.id, against: o.id, slot },
+      });
+      const cover = sim.emit({
+        type: 'craft-learned', year, cellId: cap.cell, title: `${capital(way.name)} in ${n.name}`,
+        description: `${capital(way.name)} is known in ${cap.name} now, and practised. In ${n.name} it is said that their own ${WEB[slot]!.field === 'war' ? 'smiths' : 'scholars'} found the way.`,
+        causes: [hidden.id].filter((x) => x >= 0), importance: 0, speciesIds: [n.species], data: { nation: n.id, slot },
+      });
+      if (hidden.id >= 0) push('theft', hidden.id, cover.id, o.id);
+      return;
+    }
+    if (kind === 'pact' && friend) {
+      const t = this.treaty(sim, n, friend, 'alliance', year, cause, 60, true);
+      if (t && t.eventId >= 0) push('pact', t.eventId, -1, friend.id);
+      return;
+    }
+    if (kind !== 'assassination' || !theirs) return;
+    if (luck(0x53) >= strikes(o.stability)) {
+      // ---- it fails, and is known at once: a wrong the rival will remember
+      const e = sim.emit({
+        type: 'plot-uncovered', year, cellId: ocap.cell, title: `A plot against ${theirs.name} of ${o.name}`,
+        description: `A cook at the court of ${ocap.name} is caught with a paper of white powder, and names a merchant from ${n.name}. ${theirs.name} lives. ${o.name} will not forget who sent it.`,
+        causes: [cause].filter((x) => x >= 0), importance: 0, speciesIds: [o.species], data: { by: n.id, against: o.id, person: theirs.id },
+      });
+      if (e.id >= 0) { (o.grudges ??= []).push({ against: n.id, eventId: e.id, year }); if (o.grudges.length > 6) o.grudges.shift(); this.note(theirs, e.id); }
+      return;
+    }
+    // ---- it succeeds: the ruler is dead of "a short illness", and what follows a ruler's death follows
+    const hidden = sim.emit({
+      type: 'assassination', hidden: true, year, cellId: ocap.cell, title: `${theirs.name} of ${o.name} is poisoned`,
+      description: `A cup is carried to ${theirs.name} at the court of ${ocap.name} by a servant who has been in the pay of ${n.name} for a year. By morning ${theirs.name} is dead.`,
+      causes: [cause].filter((x) => x >= 0), importance: 0, speciesIds: [n.species], data: { by: n.id, against: o.id, person: theirs.id },
+    });
+    const cover = sim.emit({
+      type: 'ruler-death', year, cellId: ocap.cell, title: `${theirs.name} of ${o.name} is dead`,
+      description: `${theirs.name}, who ruled ${o.name} for ${Math.max(1, Math.round(year - theirs.reignFrom))} years, has died after a short illness. The court is in mourning.`,
+      causes: [hidden.id].filter((x) => x >= 0), importance: 0, speciesIds: [o.species], data: { nation: o.id, person: theirs.id },
+    });
+    if (cover.id >= 0 || hidden.id >= 0) theirs.events.push(cover.id >= 0 ? cover.id : hidden.id);
+    const from = ev.length;
+    this.succession(sim, new RNG(hash32(this.seedNum, o.id, Math.floor(year), 0x54)), o, this.settlements.filter((st) => st.ruined < 0 && st.nation === o.id), year, 'died after a short illness');
+    // (whatever the succession brought, a quarrel or a war for the throne, the hidden blow is among its causes)
+    if (hidden.id >= 0) for (let i = from; i < ev.length; i++) { const e = ev[i]!; if (!e.causes.includes(hidden.id)) { e.causes.push(hidden.id); e.causeWeights.push(1); hidden.effects.push(e.id); } }
+    this.woe(o, 'succession', cover.id >= 0 ? cover.id : hidden.id, year, 0.05);
+    if (hidden.id >= 0) push('assassination', hidden.id, cover.id, o.id);
+  }
+
+  /** Two countries have fought (system E38): each remembers the year and the war. */
+  private fought(a: Nation, b: Nation, year: number, eventId: number): void {
+    if (a.id === b.id) return;
+    (a.foes ??= {})[b.id] = { year, eventId };
+    (b.foes ??= {})[a.id] = { year, eventId };
+    // a war between peers who both make arms sets the workshops of both to work at once
+    if (!this.armsRaces || a.tech < 0.41 || b.tech < 0.41 || !peers(a.pop, b.pop, a.tech, b.tech)) return;
+    for (const x of [a, b]) if (x.jolted === undefined || year - x.jolted >= BURST_EVERY) { x.jolted = year; x.know.saved += BURST; }
+  }
+
+  /**
+   * Arms races (system E38), for one country in one year. Of the countries it has fought, the one of like
+   * strength that presses it hardest is its rival (`tension`): fully while they are at war, less each year
+   * since, more while an old wrong stands between them. `research` reads the result. When two such countries
+   * that both know how to make arms press each other hard, that is an arms race, on record from that year
+   * until they have had two generations without a war.
+   */
+  private rivalry(sim: Simulation, n: Nation, year: number): void {
+    const h = this.h, ev = sim.events.events;
+    let rival: Nation | undefined, top = 0, cause = -1;
+    for (const key in n.foes ?? {}) {
+      const id = Number(key), o = h.nations[id], f = n.foes![id]!;
+      if (!o || o.ended >= 0) { delete n.foes![id]; continue; }
+      if (year - f.year > WATCH_YEARS * 2) { delete n.foes![id]; continue; }
+      if (!peers(n.pop, o.pop, n.tech, o.tech)) continue;
+      const atWar = (h.wars ?? []).some((w) => w.ended < 0 && ((w.a === n.id && w.b === id) || (w.a === id && w.b === n.id)));
+      const sore = [...(n.grudges ?? []), ...(o.grudges ?? [])].some((g) => (g.against === id || g.against === n.id) && g.avenged === undefined && year - g.year < GRUDGE_YEARS);
+      const t = tension(year - f.year, atWar, sore);
+      if (t > top) { top = t; rival = o; cause = f.eventId; }
+    }
+    // (a country in a great war is pressed as hard as a country can be: system E40)
+    {
+      const g = (h.great ?? []).find((x) => x.ended < 0 && (x.sides[0].includes(n.id) || x.sides[1].includes(n.id)));
+      if (g) {
+        // (and if no peer it has fought presses it, the enemy it watches is the first country on the other side)
+        const foe = g.sides[g.sides[0].includes(n.id) ? 1 : 0].map((id) => h.nations[id]).find((x) => x && x.ended < 0);
+        if (foe && (!rival || top < 1)) { rival = rival ?? foe; top = 1; }
+      }
+    }
+    n.pressed = top > 0.05 ? top : undefined;
+    n.rival = rival && top > 0.05 ? rival.id : undefined;
+    const list = (h.races ??= []);
+    // ---- a race cools when the two have had two generations without a war, or one of them is gone
+    for (const r of list) {
+      if (r.ended >= 0 || (r.a !== n.id && r.b !== n.id)) continue;
+      const A = h.nations[r.a]!, B = h.nations[r.b]!;
+      const last = A.foes?.[B.id]?.year ?? -1e9;
+      if (A.ended < 0 && B.ended < 0 && year - last <= WATCH_YEARS) continue;
+      r.ended = year;
+      const e = sim.emit({
+        type: 'arms-race-ends', year, cellId: this.settlements[(A.ended < 0 ? A : B).capital]?.cell ?? -1, title: `${A.name} and ${B.name} stand down`,
+        description: `${A.ended >= 0 || B.ended >= 0 ? `${(A.ended >= 0 ? A : B).name} is no more, and there is no one left to arm against.` : `It is two generations since ${A.name} and ${B.name} fought, and the arsenals are let run down.`} ${describeRace(r, A.name, B.name, year)}`,
+        causes: [r.eventId].filter((x) => x >= 0 && ev[x]), importance: 0, speciesIds: [A.species], data: { race: r.id, a: r.a, b: r.b },
+      });
+      r.endEvent = e.id;
+    }
+    // ---- a race begins: two peers who both make arms, pressing each other hard
+    if (!rival || top < 0.5 || n.tech < 0.41 || rival.tech < 0.41 || !n.foes?.[rival.id]) return;
+    if (list.some((r) => r.ended < 0 && (r.a === n.id || r.b === n.id || r.a === rival!.id || r.b === rival!.id))) return;
+    const [A, B] = n.id < rival.id ? [n, rival] : [rival, n];
+    const first = h.firstRace === undefined;
+    const id = (h.raceSeq = (h.raceSeq ?? 0) + 1);
+    const war = ev[cause];
+    const e = sim.emit({
+      type: 'arms-race', year, cellId: this.settlements[n.capital]!.cell, title: first ? `The first arms race: ${A.name} and ${B.name}` : `${A.name} and ${B.name} arm against each other`,
+      description: `${war ? `Since "${war.title}"` : 'Since their last war'} neither ${A.name} nor ${B.name} has stood its soldiers down. Each watches what the other's smiths are making, and orders the same, and better. The workshops of both have never been so busy.`,
+      causes: [cause].filter((x) => x >= 0 && ev[x]), importance: first ? 2 : 0, speciesIds: [n.species], data: { race: id, a: A.id, b: B.id },
+    });
+    list.push({ id, a: A.id, b: B.id, began: year, ended: -1, eventId: e.id, endEvent: -1, found: [0, 0], arms: [0, 0] });
+    if (first && e.id >= 0) h.firstRace = e.id;
+    if (list.length > 40) { const k = list.findIndex((r) => r.ended >= 0); if (k >= 0) list.splice(k, 1); }
+  }
+
+  /**
+   * The ways trade travels between towns (system E37): the made roads, canals and railways (system E15), and
+   * each country's chief trade route, from its capital to its buyer's (system E31), by sea where water lies between.
+   */
+  tradeEdges(sim: Simulation): Edge[] {
+    const h = this.h, out: Edge[] = [];
+    const live = (id: number): boolean => { const st = this.settlements[id]; return !!st && st.ruined < 0; };
+    for (const l of h.links ?? []) {
+      const k = NETWORKS[l.kind];
+      if (!k || (k.id !== 'road' && k.id !== 'canal' && k.id !== 'rail') || !live(l.a) || !live(l.b)) continue;
+      out.push({ a: l.a, b: l.b, via: 'road', eventId: -1 });
+    }
+    for (const n of h.nations) {
+      if (n.ended >= 0 || !n.trade) continue;
+      const o = h.nations[n.trade.to];
+      if (!o || o.ended >= 0 || !live(n.capital) || !live(o.capital) || n.capital === o.capital) continue;
+      const a = this.settlements[n.capital]!, b = this.settlements[o.capital]!;
+      out.push({ a: a.id, b: b.id, via: a.overseas !== b.overseas || this.seaBetween(sim, a.cell, b.cell) ? 'sea' : 'trade', eventId: n.trade.eventId });
+    }
+    return out;
+  }
+
+  /**
+   * A pandemic begins (system E37). A sickness has broken out in a town (the engine's ordinary town plague). If
+   * that town is on a road or a merchants' route, and no other sickness is abroad or lately spent, it will not
+   * stay there: it gets a name in the town's tongue, the strain it came from is on record as its cause, and
+   * `pandemics` carries it onward from the next year.
+   */
+  private outbreak(sim: Simulation, n: Nation, st: Settlement, eventId: number, year: number): void {
+    const h = this.h, list = (h.plagues ??= []), ev = sim.events.events;
+    if (list.some((p) => p.ended < 0)) return;
+    const last = list[list.length - 1];
+    if (last && year - last.ended < 250) return;
+    const edge = this.tradeEdges(sim).find((e) => e.a === st.id || e.b === st.id);
+    if (!edge) return;
+    const id = (h.plagueSeq = (h.plagueSeq ?? 0) + 1);
+    const r = (k: number): number => (hash32(this.seedNum, id, Math.floor(year), k) % 10000) / 10000;
+    let head = '', modifier = '', name = '';
+    for (let k = 0; k < 8; k++) { [head, modifier, name] = plagueName(hash32(this.seedNum, id, 0xf1) + k); if (!list.some((x) => x.name === name)) break; }
+    if (list.some((x) => x.name === name)) name = `${name} of ${st.name}`;
+    const strain = sim.strange.strainFor(sim, st.region);
+    const p: Pandemic = {
+      id, name, own: compound(this.languageOf(n), head, modifier, year), began: year, ended: -1, origin: st.id, eventId, strain, endEvent: -1,
+      catching: 0.5 + 0.5 * r(1), deadly: 0.12 + 0.25 * r(2), reached: [{ town: st.id, year, from: -1, via: 'origin', dead: 0.5, shut: false, eventId }],
+    };
+    const e = ev[eventId];
+    if (e) {
+      e.title = `${name} begins at ${st.name}`;
+      e.description += ` They call it ${p.own}, ${name}. ${st.name} stands on ${edge.via === 'road' ? 'a made road' : edge.via === 'sea' ? 'a sea lane' : 'a merchants\' route'}, and the sickness will not stay here.`;
+      if (strain >= 0 && ev[strain] && !e.causes.includes(strain)) { e.causes.push(strain); e.causeWeights.push(1); ev[strain]!.effects.push(e.id); }
+      e.data = { ...e.data, pandemic: id, town: st.id };
+    }
+    list.push(p);
+    if (list.length > 24) { const k = list.findIndex((x) => x.ended >= 0); if (k >= 0) list.splice(k, 1); }
+  }
+
+  /**
+   * The sickness abroad (system E37), a year at a time. Every town that caught it within the last two years
+   * may give it to each town a way of trade joins it to (`carried`), and now and then to the next valley on
+   * foot. A country that knows enough and is steady enough shuts its gates (`shuts`): fewer catch it, fewer
+   * die, and a wall goes up across the road. Each town reached is an event caused by the town it came from.
+   * When no town has it any more it is spent, and the countries it emptied are changed (`spent`).
+   * (The luck in it comes from the sickness, the towns and the year, not from the stream that decides other things.)
+   */
+  private pandemics(sim: Simulation, year: number): void {
+    const h = this.h, ev = sim.events.events, reg = sim.regions;
+    for (const p of [...(h.plagues ?? [])]) {
+      if (p.ended >= 0) continue;
+      const edges = this.tradeEdges(sim);
+      const has = new Set<number>(p.reached.map((r) => r.town));
+      const hot = p.reached.filter((r) => year > r.year && year - r.year <= CATCHING_YEARS && this.settlements[r.town]!.ruined < 0);
+      const luck = (a: number, b: number, k: number): number => (hash32(this.seedNum, p.id * 131 + a, b * 7 + Math.floor(year), k) % 10000) / 10000;
+      const fresh: Reach[] = [];
+      const reach = (to: Settlement | undefined, from: Reach, via: Via, edgeEvent: number): void => {
+        if (!to || has.has(to.id) || to.ruined >= 0 || to.nation < 0 || p.reached.length + fresh.length >= 90) return;
+        const n = h.nations[to.nation];
+        if (!n || n.ended >= 0) return;
+        const shut = shuts(n.tech, n.stability, year - p.began);
+        if (luck(from.town, to.id, 1) >= carried(via, p.catching, shut)) return;
+        const dead = toll(p.deadly, n.tech, shut, luck(to.id, 0, 2));
+        to.pop *= 1 - dead;
+        let walled = false;
+        if (shut) {
+          to.cordon = { year, plague: p.id };
+          // (the wall thrown up across the road stays: a town's walls are a record of what it has feared)
+          const walls = (to.walls ??= []);
+          if (to.tech >= 0.3 && walls.length < 4 && !walls.some((w) => year - w.year < 30)) { walls.push({ pop: to.pop, tech: to.tech, year }); walled = true; }
+        }
+        const firstHere = !p.reached.some((r) => this.settlements[r.town]!.nation === n.id) && !fresh.some((r) => this.settlements[r.town]!.nation === n.id);
+        const src = this.settlements[from.town]!;
+        const e = sim.emit({
+          type: 'plague', year, cellId: to.cell, title: `${p.name} reaches ${to.name}`,
+          description: `${p.own}, ${p.name}, comes to ${to.name} ${describeVia(via)}, from ${src.name}. ${shut ? `The gates had been shut${walled ? ' and a wall thrown up across the road' : ''}; even so about` : 'About'} ${Math.max(1, Math.round(dead * 100))} in a hundred of its people die.`,
+          causes: [from.eventId, edgeEvent].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: firstHere && to.id === n.capital ? 1 : 0, speciesIds: [to.species],
+          data: { pandemic: p.id, town: to.id, from: from.town, via, shut: shut ? 1 : 0 },
+        });
+        const r: Reach = { town: to.id, year, from: from.town, via, dead, shut, eventId: e.id >= 0 ? e.id : from.eventId };
+        fresh.push(r); has.add(to.id);
+        if (firstHere) this.woe(n, 'plague', r.eventId, year, shut ? 0.04 : 0.09);
+      };
+      for (const r of hot) {
+        for (const e of edges) { const other = e.a === r.town ? e.b : e.b === r.town ? e.a : -1; if (other >= 0) reach(this.settlements[other], r, e.via, e.eventId); }
+        const st = this.settlements[r.town]!;
+        for (let j = 0; j < reg.grid.ncount[st.region]!; j++) { const oid = this.occupied.get(reg.grid.neighbors[st.region * 6 + j]!); if (oid !== undefined) reach(this.settlements[oid], r, 'foot', -1); }
+      }
+      for (const r of fresh) p.reached.push(r);
+      // (the first sickness to reach five towns is the first great plague: it is remembered as that)
+      if (h.firstPandemic === undefined && p.reached.length >= 5) {
+        const e = ev[p.eventId];
+        h.firstPandemic = p.eventId;
+        if (e) { e.title = `The first great plague: ${p.name}`; e.importance = Math.max(e.importance, 2); }
+      }
+      if (!p.reached.some((r) => year - r.year <= CATCHING_YEARS) || year - p.began > 30) this.spent(sim, p, year);
+    }
+  }
+
+  /** A pandemic is over (system E37): what it took, and what is different in the countries it emptied. */
+  private spent(sim: Simulation, p: Pandemic, year: number): void {
+    const h = this.h, ev = sim.events.events;
+    p.ended = year;
+    // (a sickness that never left the town it began in was a town's plague, not the world's)
+    if (p.reached.length < 2) { const at = (h.plagues ?? []).indexOf(p); if (at >= 0) h.plagues!.splice(at, 1); return; }
+    // what each country lost: the towns it reached there, against all its towns
+    const hit = new Map<number, number>();
+    for (const r of p.reached) { const st = this.settlements[r.town]!; if (st.nation >= 0) hit.set(st.nation, (hit.get(st.nation) ?? 0) + r.dead); }
+    const emptied: string[] = [];
+    for (const [id, dead] of hit) {
+      const n = h.nations[id];
+      if (!n || n.ended >= 0) continue;
+      const lost = dead / Math.max(1, n.towns);
+      // hands are scarce: those who are left ask more for their work, and get it
+      if (lost >= 0.1) { n.inequality = sat(n.inequality * (1 - Math.min(0.4, lost))); emptied.push(n.name); }
+    }
+    const last = p.reached[p.reached.length - 1]!;
+    const where = this.settlements[last.town]!;
+    const live = this.settlements.filter((st) => st.ruined < 0).length;
+    const e = sim.emit({
+      type: 'plague-ends', year, cellId: where.cell, title: `${p.name} is spent`,
+      description: `${describePandemic(p, live, year)}${emptied.length ? ` In ${emptied.length > 1 ? `${emptied.slice(0, 3).slice(0, -1).join(', ')} and ${emptied.slice(0, 3).pop()}` : emptied[0]} there are not hands enough for the fields. Those who are left ask more for their work, and get it.` : ''}`,
+      causes: [last.eventId, p.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: p.reached.length >= 8 ? 1 : 0, speciesIds: [where.species], data: { pandemic: p.id, towns: p.reached.length },
+    });
+    p.endEvent = e.id;
+  }
+
+  /** How a colony stands with its mother country (system E36). */
+  private standingOf(sim: Simulation, n: Nation, col: Colony, towns: Settlement[], year: number): Standing {
+    const p = sim.grid.pos, cap = this.settlements[n.capital]!, seat = this.settlements[col.seat]!;
+    const cos = p[cap.cell * 3]! * p[seat.cell * 3]! + p[cap.cell * 3 + 1]! * p[seat.cell * 3 + 1]! + p[cap.cell * 3 + 2]! * p[seat.cell * 3 + 2]!;
+    let pop = 0;
+    for (const st of towns) pop += st.pop;
+    const i = SLOT_INDEX.get('press');
+    return { distance: Math.acos(Math.max(-1, Math.min(1, cos))), share: pop / Math.max(1e-6, n.pop), inequality: n.inequality, fatigue: n.fatigue, stability: n.stability, revolution: n.revolved !== undefined && year - n.revolved < 60, press: i !== undefined && n.know.way[i]! >= 0 };
+  }
+
+  /**
+   * Colonization and independence (system E36), for one country over `y` years. A country with ocean-going
+   * ships, towns enough and a steady hand plants a colony on a far shore: a town across open water, governed
+   * from home. Each of its colonies then grows apart, year by year (`growsApart`), and when its people think
+   * of themselves as their own it declares itself free (`declare`).
+   * (The luck in it comes from the country and the year, not from the stream that decides other things.)
+   */
+  private colonies(sim: Simulation, n: Nation, towns: Settlement[], year: number, y: number): void {
+    const h = this.h, ev = sim.events.events, reg = sim.regions, g = reg.grid;
+    const list = (h.colonies ??= []);
+    const luck = (k: number): number => (hash32(this.seedNum, n.id, Math.floor(year), k) % 100000) / 100000;
+    const knows = (slot: string): boolean => { const i = SLOT_INDEX.get(slot); return i !== undefined && n.know.way[i]! >= 0; };
+    // ---- the colonies it has: each grows apart, and in time declares
+    let held = 0;
+    for (const col of list) {
+      if (col.mother !== n.id || col.freed >= 0 || col.gone >= 0 || col.child >= 0) continue;
+      const mine = towns.filter((st) => st.colony === col.id);
+      if (!mine.length) { col.gone = year; continue; }
+      held++;
+      if (!mine.some((st) => st.id === col.seat)) col.seat = mine.reduce((a, b) => (b.pop > a.pop ? b : a)).id;
+      const s = this.standingOf(sim, n, col, mine, year);
+      col.identity = Math.min(1.5, col.identity + growsApart(s) * y);
+      if (ready(col, mine.length, s.share, year) && luck(0xc30 + col.id) < 1 - Math.exp(-y / waits(s)) && !(h.wars ?? []).some((w) => w.ended < 0 && (w.a === n.id || w.b === n.id))) { this.declare(sim, n, col, year); return; }
+    }
+    // ---- a new colony: ships that cross oceans, people to spare, and a far shore no one holds
+    if (!(knows('ship2') || knows('steamship')) || towns.length < 4 || n.stability < 0.45 || held >= 2 || n.colonyOf !== undefined && year - n.founded < 150) return;
+    if (luck(0xc1) >= 1 - Math.exp(-y / 80)) return;
+    const cap = this.settlements[n.capital]!;
+    const spacing = Math.sqrt((4 * Math.PI) / reg.count), range = knows('steamship') ? 4 : 1.7;
+    const rp = g.pos, o = cap.region;
+    const away = (r: number, from: number): number => Math.acos(Math.max(-1, Math.min(1, rp[r * 3]! * rp[from * 3]! + rp[r * 3 + 1]! * rp[from * 3 + 1]! + rp[r * 3 + 2]! * rp[from * 3 + 2]!)));
+    let target = -1, best = -Infinity;
+    for (let r = 0; r < reg.count; r++) {
+      if (reg.land[r]! <= 0.3 || reg.ice[r]! >= 0.5 || this.occupied.has(r)) continue;
+      const d = away(r, o);
+      if (d < Math.max(0.45, 4 * spacing) || d > range) continue;
+      // (far from every town it already has, and across water from home)
+      if (towns.some((st) => away(r, st.region) < 2.5 * spacing)) continue;
+      if (!this.seaBetween(sim, cap.cell, reg.cellList[reg.cellStart[r]!]!)) continue;
+      let room = 0;
+      for (let k = 0; k < g.ncount[r]!; k++) { const nb = g.neighbors[r * 6 + k]!; if (reg.land[nb]! > 0.3 && reg.ice[nb]! < 0.5 && !this.occupied.has(nb)) room++; }
+      const score = room + reg.land[r]! - 0.4 * d + (hash32(this.seedNum, n.id, r, 0xc2) % 1000) / 1000;
+      if (score > best) { best = score; target = r; }
+    }
+    if (target < 0) return;
+    // (it sails from the country's largest town)
+    const port = towns.reduce((a, b) => (b.pop > a.pop ? b : a));
+    const d = this.found(sim, new RNG(hash32(this.seedNum, n.id, Math.floor(year), 0xc3)), n.species, target, port.id, year);
+    if (!d) return;
+    const first = h.firstColony === undefined;
+    const col: Colony = { id: list.length, mother: n.id, seat: d.id, founded: year, eventId: -1, identity: 0, declared: -1, war: -1, warEvent: -1, child: -1, freed: -1, crushed: -1, gone: -1 };
+    d.overseas = true; d.colony = col.id; d.nation = n.id; d.tech = Math.max(FARMING, port.tech * 0.8); d.lore = port.lore; d.farms = true; d.pop = Math.max(d.pop, port.pop * 0.08); port.pop *= 0.96;
+    sim.cellLog.note(d.cell, year, Log.Owner, n.id);
+    { const born = ev[d.eventId]; if (born) born.description = `${born.description} They came by sea from ${port.name}.`; }
+    const far = away(target, o);
+    const e = sim.emit({
+      type: 'colony', year, cellId: d.cell, title: first ? `The first colony overseas: ${d.name}` : `${n.name} plants a colony at ${d.name}`,
+      description: `Ships from ${port.name} put settlers ashore ${far > 1.2 ? 'on the far side of the world' : far > 0.7 ? 'across the ocean' : 'across the sea'}, on land no one holds. They call the place ${d.name}. It answers to ${cap.name}: its governor is sent out and its taxes are sent back.`,
+      causes: [d.eventId, n.trade ? n.trade.eventId : -1, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 3), importance: first ? 2 : this.notable(n) ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, colony: col.id, town: d.id },
+    });
+    col.eventId = e.id;
+    list.push(col);
+    if (first && e.id >= 0) h.firstColony = e.id;
+    if (e.id >= 0) this.credit(sim, null, n, e.id, '{name} sent them.');
+  }
+
+  /**
+   * A colony declares itself free (system E36). Its towns become a country of their own, with a people of
+   * their own (mixed, where another people lives beside them), and the mother country goes to war to bring
+   * them back. While time runs slowly enough the war is fought out as a campaign across the water
+   * (`warfare`), and `afterRising` settles it; otherwise it is settled at once by `odds`.
+   */
+  private declare(sim: Simulation, n: Nation, col: Colony, year: number): void {
+    const h = this.h, ev = sim.events.events;
+    const mine = this.settlements.filter((st) => st.ruined < 0 && st.nation === n.id && st.colony === col.id);
+    if (!mine.length) { col.gone = year; return; }
+    let seat = this.settlements[col.seat]!;
+    if (seat.ruined >= 0 || seat.nation !== n.id || seat.id === n.capital) seat = mine.reduce((a, b) => (b.pop > a.pop ? b : a));
+    if (seat.id === n.capital) return;
+    col.seat = seat.id;
+    const stand = this.standingOf(sim, n, col, mine, year);
+    const luck = (k: number): number => (hash32(this.seedNum, col.id, Math.floor(year), k) % 100000) / 100000;
+    const cap = this.settlements[n.capital]!;
+    const woe = n.woes.length ? n.woes[n.woes.length - 1]!.eventId : -1;
+    const idea = n.idea && h.ideologies?.[n.idea.id] ? h.ideologies[n.idea.id]!.eventId : -1;
+    col.declared = year;
+    const decl = sim.emit({
+      type: 'independence-declared', year, cellId: seat.cell, title: `${seat.name} declares itself free of ${n.name}`,
+      description: `It is ${Math.max(1, Math.round(year - col.founded))} years since ships from ${n.name} first put in at ${seat.name}. No one living there has seen ${cap.name}. This year the governor is put on a ship home with a letter: the colony will send no more taxes${stand.fatigue > 0.3 ? ' and no more soldiers for wars that are not its own' : stand.inequality > 0.55 ? ' to houses that own everything already' : ''}, and it will answer to itself.`,
+      causes: [col.eventId, woe, idea].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 3), importance: this.notable(n) ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, colony: col.id, town: seat.id },
+    });
+    const rng = new RNG(hash32(this.seedNum, col.id, Math.floor(year), 0xc4));
+    const child = this.newNation(sim, rng, seat, year, n, 'colony', decl.id >= 0 ? [decl.id] : []);
+    child.colonyOf = col.id; col.child = child.id;
+    for (const st of mine) { st.nation = child.id; sim.cellLog.note(st.cell, year, Log.Owner, child.id); }
+    // a people of two: where another people lives beside the colony, its ways are part of the new country's
+    const p = sim.grid.pos;
+    let beside: Settlement | undefined, bd = 0.9;
+    for (const o of this.settlements) {
+      if (o.ruined >= 0 || o.nation < 0 || o.nation === n.id || o.nation === child.id) continue;
+      const on = h.nations[o.nation];
+      if (!on || on.ended >= 0 || on.species !== child.species || on.culture === n.culture) continue;
+      const cos = p[o.cell * 3]! * p[seat.cell * 3]! + p[o.cell * 3 + 1]! * p[seat.cell * 3 + 1]! + p[o.cell * 3 + 2]! * p[seat.cell * 3 + 2]!;
+      if (cos > bd) { bd = cos; beside = o; }
+    }
+    const own = h.cultures[child.culture]!;
+    if (beside && own.id !== n.culture) {
+      const guest = h.cultures[h.nations[beside.nation]!.culture]!;
+      const mix = (a: number, b: number): number => sat(a * 0.7 + b * 0.3);
+      own.war = mix(own.war, guest.war); own.custom = mix(own.custom, guest.custom); own.trade = mix(own.trade, guest.trade); own.craft = mix(own.craft, guest.craft);
+      own.hue = (own.hue + (((guest.hue - own.hue + 1.5) % 1) - 0.5) * 0.3 + 1) % 1;
+      own.mixedWith = guest.id;
+      const born = ev[child.eventId];
+      if (born) born.description += ` They are not only the old country's people any more: the ${guest.name} live beside them and among them.`;
+    }
+    // ---- the mother country will not let it go
+    const port = this.settlements.filter((st) => st.ruined < 0 && st.nation === n.id).reduce((a, b) => (b.pop > a.pop ? b : a), cap);
+    const war = sim.emit({
+      type: 'war', year, cellId: seat.cell, title: `The war of independence of ${child.name}`,
+      description: `${n.name} will not let ${seat.name} go. An army is put on ships at ${port.name} to bring the colony back.`,
+      causes: [decl.id, col.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: this.notable(n) ? 1 : 0, speciesIds: [n.species],
+      data: { town: port.id, other: seat.id, nation: n.id, foe: child.id, independence: col.id },
+    });
+    col.warEvent = war.id;
+    this.fought(n, child, year, war.id);
+    if (war.id >= 0) this.credit(sim, null, n, war.id, '{name} gave the order.');
+    n.fatigue = sat(n.fatigue + 0.15);
+    this.woe(n, 'war', war.id, year, 0.04);
+    const fought = this.fine && war.id >= 0 ? this.campaign(sim, n, child, port, seat, war.id, year, '', '', false, true) : undefined;
+    if (fought) {
+      // what can be shipped is a part of what could be raised, it lands hungry, and it is fighting its own cousins;
+      // the colony fights at home, and everyone who can carry a weapon does
+      const [a, d] = fought.army, i = SLOT_INDEX.get('steamship');
+      a.size = Math.max(0.3, a.size * shipped(stand.distance, i !== undefined && n.know.way[i]! >= 0)); a.raised = a.size; a.supply = 0.75; a.morale = Math.min(a.morale, 0.6);
+      d.size *= 2.4; d.raised = d.size; d.morale = 0.85;
+      // (the war's record opens with the garrison driven out of the colony's chief town, the day it declared)
+      fought.battles.push({ year, settlement: seat.id, kind: 'field', winner: 1, sizes: [Math.max(0.2, d.size * 0.15), d.size], lost: [0.05, 0.02], decided: 'numbers', taken: false, eventId: war.id });
+      fought.independence = col.id; fought.conquest = true; col.war = fought.id;
+      return;
+    }
+    // (time is running too fast to follow a campaign: the rising is settled at once)
+    this.settleRising(sim, n, child, col, luck(0xc5) < odds(stand), year, war.id);
+  }
+
+  /** The end of a war fought over a colony (system E36): brought back if its chief town fell, a country if it held. */
+  private afterRising(sim: Simulation, war: War, year: number, peace: number): void {
+    const h = this.h, col = h.colonies?.[war.independence!];
+    const A = h.nations[war.a], B = h.nations[war.b];
+    if (!col || !A || !B || col.child !== B.id) return;
+    const seat = this.settlements[col.seat]!;
+    const held = B.ended < 0 && seat.ruined < 0 && seat.nation === B.id;
+    this.settleRising(sim, A, B, col, held, year, peace);
+  }
+
+  /** A colony's rising is over (system E36): either it is a country from now on, or it is the old country's again. */
+  private settleRising(sim: Simulation, n: Nation, child: Nation, col: Colony, free: boolean, year: number, cause: number): void {
+    const h = this.h, ev = sim.events.events;
+    const seat = this.settlements[col.seat]!;
+    const causes = [cause, col.warEvent, ev[col.eventId] ? col.eventId : -1].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 2);
+    if (free) {
+      const first = h.firstFree === undefined;
+      col.freed = year;
+      // (towns the old country took in the war and kept are its own now, not the colony's)
+      for (const st of this.settlements) if (st.colony === col.id && st.nation !== child.id) st.colony = undefined;
+      const e = sim.emit({
+        type: 'independence', year, cellId: seat.cell, title: first ? `The first colony to become a country: ${child.name}` : `${child.name} is a country`,
+        description: `${n.ended < 0 ? `${n.name} has given up trying to take ${seat.name} back` : `${n.name} is no more, and no one else claims ${seat.name}`}. ${child.name}, which was a colony for ${Math.max(1, Math.round(col.declared - col.founded))} years, is a country, with its own flag over ${seat.name} and its own name for its people: the ${h.cultures[child.culture]!.name}.`,
+        causes, importance: first ? 2 : this.notable(n) || this.notable(child) ? 1 : 0, speciesIds: [child.species], data: { nation: child.id, from: n.id, colony: col.id },
+      });
+      if (first && e.id >= 0) h.firstFree = e.id;
+      if (e.id >= 0) this.credit(sim, null, child, e.id, '{name} led them through it.');
+      child.stability = sat(child.stability + 0.1);
+      // (what the old country remembers is the war it lost, not the country that came of it)
+      if (n.ended < 0) { n.stability = sat(n.stability - 0.05); this.woe(n, 'war', cause >= 0 ? cause : e.id, year, 0.03); }
+      return;
+    }
+    // ---- brought back: its towns are the old country's again, and its people remember
+    // (and are called what the old country calls them: a name that lasted a year or two leaves no record)
+    const old = this.languageOf(n);
+    for (const st of this.settlements) if (st.ruined < 0 && st.nation === child.id) { st.nation = n.id; st.colony = col.id; sim.cellLog.note(st.cell, year, Log.Owner, n.id); this.rename(st, old, year, `said the way of ${n.name} again`, -1, false); }
+    if (child.ended < 0) this.closeNation(child, year, 'was brought back under the old country');
+    col.child = -1; col.crushed = year; col.identity = 0.45;
+    if (seat.nation !== n.id || seat.ruined >= 0) { const left = this.settlements.filter((st) => st.ruined < 0 && st.nation === n.id && st.colony === col.id); if (left.length) col.seat = left.reduce((a, b) => (b.pop > a.pop ? b : a)).id; else col.gone = year; }
+    sim.emit({
+      type: 'rising-crushed', year, cellId: seat.cell, title: `${n.name} takes ${seat.name} back`,
+      description: `The country that called itself ${child.name} lasted ${Math.max(1, Math.round(year - col.declared))} ${Math.round(year - col.declared) <= 1 ? 'year' : 'years'}. ${seat.name} has a governor from ${this.settlements[n.capital]!.name} again, and a garrison. No one there has forgotten.`,
+      causes, importance: 0, speciesIds: [n.species], data: { nation: n.id, colony: col.id },
+    });
+  }
+
+  /** How a country is, as far as ideas care (system E35). */
+  private conditionsOf(n: Nation, year: number): Conditions {
+    const knows = (slot: string): boolean => { const i = SLOT_INDEX.get(slot); return i !== undefined && n.know.way[i]! >= 0; };
+    return { inequality: n.inequality, stability: n.stability, fatigue: n.fatigue, tech: n.tech, custom: this.h.cultures[n.culture]!.custom, trade: !!n.trade, coin: knows('coin'), slump: (n.slump ?? -1) > year, press: knows('press') };
+  }
+
+  /**
+   * Ideologies (system E35), for one country over `y` years. A country with written law that holds no idea
+   * takes one up: the one its conditions call for most, founded there with a name of its own, or (more often
+   * where a neighbour already holds one that fits) learned from across the border. The share of its people
+   * who hold it grows while conditions favour it and fades when they do not. When most of an unsteady country
+   * holds an idea, there is a revolution: it is governed that idea's way from then on, under a new flag.
+   * (The luck in it comes from the country and the year, not from the stream that decides wars.)
+   */
+  private ideas(sim: Simulation, n: Nation, year: number, y: number): void {
+    const h = this.h, ev = sim.events.events;
+    // (the plain course of things first: chiefs become kings when there are cities to be king of)
+    if (n.government === 'chiefdom' && n.era >= 2) n.government = 'kingdom';
+    if (n.tech < 0.39) return;
+    const list = (h.ideologies ??= []);
+    const luck = (k: number): number => (hash32(this.seedNum, n.id, Math.floor(year), k) % 100000) / 100000;
+    const c = this.conditionsOf(n, year);
+    const cap = this.settlements[n.capital]!;
+    if (!n.idea) {
+      // (a country that has just had a revolution has had enough of ideas for a few generations)
+      if (n.revolved !== undefined && year - n.revolved < 200) return;
+      // ---- heard from a neighbour whose people hold an idea, or are governed by one, that fits here too
+      const adopt = (idea: Ideology, from: Nation | undefined): void => {
+        n.idea = { id: idea.id, share: 0.08, since: year };
+        sim.emit({ type: 'idea-spreads', year, cellId: cap.cell, title: `${idea.name} reaches ${n.name}`, description: `${from ? `Travellers from ${from.name} bring` : 'Printed sheets from abroad carry'} ${idea.own}, ${idea.name}: the teaching ${IDEA_SAYS[idea.kind]}. In ${cap.name} it finds people who had been thinking the same.`, causes: [idea.eventId, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: 0, speciesIds: [n.species], data: { nation: n.id, idea: idea.id, from: from ? from.id : -1 } });
+      };
+      const heldBy = (o: Nation | undefined): Ideology | undefined => (!o || o.ended >= 0 ? undefined : o.idea && o.idea.share > 0.3 ? list[o.idea.id] : o.creed !== undefined ? list[o.creed] : undefined);
+      // (and a country governed by an idea its conditions still call for is not looking for another)
+      const own = n.creed !== undefined && list[n.creed] ? pressure(list[n.creed]!.kind, c) : 0;
+      let from: Nation | undefined, fit = Math.max(0.45, own + 0.15);
+      for (const id of n.contacts) {
+        const theirs = heldBy(h.nations[id]);
+        if (theirs && IDEA_GOVERNMENT[theirs.kind] !== n.government && pressure(theirs.kind, c) > fit) { fit = pressure(theirs.kind, c); from = h.nations[id]; }
+      }
+      if (from) { if (luck(0xe1) < 1 - Math.exp(-y / 30)) adopt(heldBy(from)!, from); return; }
+      // ---- or begun here, when conditions call loudly enough
+      const kind = ripest(c, n.government);
+      if (kind && pressure(kind, c) < own + 0.15) return;
+      if (!kind || luck(0xe2) >= 1 - Math.exp((-y * pressure(kind, c)) / 70)) return;
+      // (where there is print, an idea of the same kind that is alive anywhere in the world is read here before one is thought of)
+      if (c.press) {
+        const abroad = list.filter((x) => x.kind === kind && h.nations.some((o) => o.id !== n.id && heldBy(o) === x));
+        if (abroad.length) { adopt(abroad[abroad.length - 1]!, undefined); return; }
+      }
+      const lang = this.languageOf(n);
+      let head = '', modifier = '', name = '';
+      for (let k = 0; k < 6; k++) { [head, modifier, name] = ideaName(kind, hash32(this.seedNum, n.id, list.length, 0xe3) + k); if (!list.some((x) => x.name === name)) break; }
+      if (list.some((x) => x.name === name)) {
+        const base = name;
+        for (const tried of [`${base} of ${n.name}`, `${base} of ${cap.name}`, `the New ${base.slice(4)}`, `the New ${base.slice(4)} of ${n.name}`]) { name = tried; if (!list.some((x) => x.name === name)) break; }
+        for (let k = 2; list.some((x) => x.name === name); k++) name = `${base} of ${n.name}, the ${ordinal(k)}`;
+      }
+      const first = h.firstIdea === undefined;
+      const woe = n.woes.length ? n.woes[n.woes.length - 1]!.eventId : -1;
+      const idea: Ideology = { id: list.length, kind, name, own: compound(lang, head, modifier, year), born: year, nation: n.id, eventId: -1 };
+      const e = sim.emit({
+        type: 'ideology', year, cellId: cap.cell, title: first ? `The first idea of how to rule: ${name}` : `${name}: an idea takes hold in ${n.name}`,
+        description: `In ${cap.name} people have begun to say, first in the markets and then in writing, ${IDEA_SAYS[kind]}. They call it ${idea.own}, ${name}. ${kind === 'levelling' ? `A few houses in ${n.name} own most of it.` : kind === 'order' ? `${n.name} has not been steady for a generation.` : kind === 'reason' ? `${n.name} has learned more in a lifetime than in the thousand years before.` : kind === 'custom' ? `Nothing in ${n.name} is done the way it was done.` : `${n.name} lives by what it sells.`}`,
+        causes: [woe, n.trade && kind === 'commons' ? n.trade.eventId : -1, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 2), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, idea: idea.id, kind },
+      });
+      idea.eventId = e.id;
+      list.push(idea);
+      if (first && e.id >= 0) h.firstIdea = e.id;
+      n.idea = { id: idea.id, share: 0.1, since: year };
+      return;
+    }
+    // ---- an idea held: it gains or loses ground
+    const idea = list[n.idea.id];
+    if (!idea) { n.idea = undefined; return; }
+    n.idea.share = drift(n.idea.share, idea.kind, c, y);
+    if (n.idea.share < 0.02) { n.idea = undefined; return; }
+    // ---- a revolution: most of an unsteady country holds it, and the country is not yet run that way
+    const wants = IDEA_GOVERNMENT[idea.kind];
+    const shaken = n.stability < 0.5 || (n.woes.length > 0 && year - n.woes[n.woes.length - 1]!.year < 15);
+    if (n.idea.share > 0.6 && shaken && n.government !== wants && n.government !== 'custom' && luck(0xe4) < 1 - Math.exp(-y / 12)) {
+      const was = n.government;
+      const first = h.firstRevolution === undefined;
+      const woe = n.woes.length ? n.woes[n.woes.length - 1]!.eventId : -1;
+      n.government = wants;
+      n.flag = (n.flag ?? 0) + 1;
+      const e = sim.emit({
+        type: 'revolution', year, cellId: cap.cell, title: first ? `The first revolution: ${n.name} comes ${governedAs(wants).replace(/^an? /, 'to be a ')}` : `Revolution in ${n.name}`,
+        description: `For ${Math.max(1, Math.round(year - n.idea.since))} years more and more of ${n.name} has held with ${idea.own}, ${idea.name}. This year the gates of ${cap.name} are opened from inside. ${n.name}, which was ${governedAs(was)}, is ${governedAs(wants)} from today: ${idea.kind === 'levelling' ? 'the great estates are divided' : idea.kind === 'order' ? 'the assemblies are sent home and one voice gives the orders' : idea.kind === 'reason' ? 'offices go to those who can pass the examinations' : idea.kind === 'custom' ? 'the new laws are burned and the old ones read out' : 'the tolls and the courts are in the hands of the guilds'}. A quarter of the town by the gates burns before it is over. The old flag is taken down and another is raised.`,
+        causes: [idea.eventId, woe, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 3), importance: first ? 2 : this.notable(n) ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, idea: idea.id, kind: idea.kind, from: was, to: wants, flag: n.flag },
+      });
+      if (first && e.id >= 0) h.firstRevolution = e.id;
+      // (the quarter by the gates is burned, and is seen burned and then rebuilt in the town itself: system E20)
+      this.scar(sim, null, n, cap, 'fire', 0.1 + 0.12 * luck(0xe5), e.id, year);
+      // what a revolution does: the thing it was for (the estates divided, or one hand on the country)
+      if (idea.kind === 'levelling') n.inequality = sat(n.inequality * 0.45);
+      if (idea.kind === 'order') n.stability = sat(n.stability + 0.2);
+      n.revolved = year; n.creed = idea.id;
+      this.credit(sim, null, n, e.id, '{name} was the last to rule in the old way.');
+      // and the news crosses the border: those who hold the same idea elsewhere take heart
+      for (const id of n.contacts) { const o = h.nations[id]; if (o && o.ended < 0 && o.idea && o.idea.id === idea.id) o.idea.share = sat(o.idea.share + 0.1); }
+      // (the idea has what it wanted here: it is how the country is run, not a thing gaining ground)
+      n.idea = undefined;
+    }
+  }
+
+  /** Make a treaty between two countries (system E34): an event caused by what led to it. */
+  private treaty(sim: Simulation, a: Nation, b: Nation, kind: TreatyKind, year: number, cause: number, years: number, secret = false): Treaty | null {
+    const h = this.h, ev = sim.events.events;
+    if (pactBetween(h, a.id, b.id, year)) return null;
+    const list = (h.treaties ??= []);
+    if (secret) {
+      // (signed and not read out, system E39: the event is hidden, and it is no one's first treaty)
+      const e = sim.emit({ type: 'secret-treaty', hidden: true, year, cellId: this.settlements[a.capital]!.cell, title: `A secret pact between ${a.name} and ${b.name}`, description: `${a.name} and ${b.name} have the same enemy. Two envoys meet where neither is known and sign one sheet: an attack on either will be answered by both, for ${years} years. It is not read out in either capital.`, causes: [cause].filter((x) => x >= 0 && ev[x]), importance: 0, speciesIds: [a.species], data: { a: a.id, b: b.id, kind, years } });
+      const t: Treaty = { id: (h.treatySeq = (h.treatySeq ?? 0) + 1), a: a.id, b: b.id, kind, year, until: year + years, eventId: e.id, secret: true };
+      list.push(t);
+      return t;
+    }
+    const first = h.firstTreaty === undefined;
+    const cap = this.settlements[a.capital]!;
+    const e = sim.emit({
+      type: 'treaty', year, cellId: cap.cell, title: first ? `The first treaty: ${a.name} and ${b.name}` : kind === 'peace' ? `${a.name} and ${b.name} swear peace` : kind === 'trade' ? `A pact of trade between ${a.name} and ${b.name}` : `${a.name} and ${b.name} become allies`,
+      description: kind === 'peace' ? `${a.name} and ${b.name} swear that neither will take up arms against the other for ${years} years. It is written twice, and each keeps a copy.`
+        : kind === 'trade' ? `The merchants of ${a.name} have carried their goods to ${b.name} for a generation. The two countries now agree on the tolls, the weights and the safety of the road, for ${years} years.`
+          : `${a.name} and ${b.name} have the same enemy. They agree that an attack on one will be answered by both, for ${years} years.`,
+      causes: [cause, a.eventId].filter((x, i, arr) => x >= 0 && ev[x] && arr.indexOf(x) === i), importance: first ? 2 : 0, speciesIds: [a.species], data: { a: a.id, b: b.id, kind, years },
+    });
+    const t: Treaty = { id: (h.treatySeq = (h.treatySeq ?? 0) + 1), a: a.id, b: b.id, kind, year, until: year + years, eventId: e.id };
+    list.push(t);
+    if (first && e.id >= 0) h.firstTreaty = e.id;
+    // (the record keeps those in force and the last few dozen that are not)
+    if (list.length > 160) { const k = list.findIndex((x) => x.until <= year || x.broken); list.splice(k >= 0 ? k : 0, 1); }
+    return t;
+  }
+
+  /** A treaty is broken by the war just begun (system E34): a betrayal, which the country betrayed will remember. */
+  private betray(sim: Simulation, n: Nation, foe: Nation, pact: Treaty, warEvent: number, struck: Settlement, year: number): void {
+    const h = this.h, ev = sim.events.events;
+    const first = h.firstBetrayal === undefined;
+    const e = sim.emit({
+      type: 'betrayal', year, cellId: struck.cell, title: first ? `The first betrayal: ${n.name} breaks its word to ${foe.name}` : `${n.name} breaks its treaty with ${foe.name}`,
+      description: `${Math.max(1, Math.round(year - pact.year))} years ago ${n.name} and ${foe.name} ${pact.kind === 'peace' ? 'swore peace' : pact.kind === 'trade' ? 'made a pact of trade' : 'became allies'}, with ${Math.max(1, Math.round(pact.until - year))} years still to run. This year the army of ${n.name} is at the gates of ${struck.name}. In ${foe.name} the treaty is read aloud in every market, and children are taught the date.`,
+      causes: [pact.eventId, warEvent].filter((x, i, arr) => x >= 0 && ev[x] && arr.indexOf(x) === i), importance: first ? 2 : 1, speciesIds: [n.species], data: { by: n.id, against: foe.id, treaty: pact.id, kind: pact.kind },
+    });
+    pact.broken = { year, by: n.id, eventId: e.id };
+    (foe.grudges ??= []).push({ against: n.id, eventId: e.id, year });
+    if (foe.grudges.length > 6) foe.grudges.shift();
+    if (first && e.id >= 0) h.firstBetrayal = e.id;
+    // (and no one else is quick to trust the one who broke it)
+    n.stability = sat(n.stability - 0.03);
+  }
+
+  /** A war begun against the country that once betrayed this one has that betrayal among its causes (system E34). */
+  private avenge(sim: Simulation, n: Nation, foe: Nation, sore: { against: number; eventId: number; year: number; avenged?: number }, warEvent: number, year: number): void {
+    const ev = sim.events.events;
+    sore.avenged = year;
+    const war = ev[warEvent], wrong = ev[sore.eventId];
+    if (!war || !wrong || war.causes.includes(wrong.id)) return;
+    war.causes.unshift(wrong.id); war.causeWeights.unshift(1);
+    wrong.effects.push(war.id);
+    war.description += ` ${n.name} has not forgotten what ${foe.name} did ${Math.max(1, Math.round(year - sore.year))} years ago.`;
+    war.data = { ...war.data, avenges: wrong.id };
+  }
+
+  /**
+   * Diplomacy (system E34), for one country in one year. A long-standing trade becomes a pact of trade; two
+   * countries in touch that have fought the same third within living memory become allies; and a country that
+   * has been betrayed, once it is steady and strong enough again, goes to war over it. (The luck in it comes
+   * from the country and the year, not from the stream that decides other wars.)
+   */
+  private diplomacy(sim: Simulation, n: Nation, towns: Settlement[], year: number): void {
+    const h = this.h;
+    const luck = (k: number): number => (hash32(this.seedNum, n.id, Math.floor(year), k) % 100000) / 100000;
+    // ---- a pact of trade with a buyer of thirty years' standing
+    if (n.trade && year - n.trade.since >= 30 && luck(0xd1) < 1 / 40) { const o = h.nations[n.trade.to]; if (o && o.ended < 0) this.treaty(sim, n, o, 'trade', year, n.trade.eventId, 50); }
+    // (no country keeps more than two alliances at once: a friend of everyone is a friend of no one)
+    const bound = (id: number): number => { let k = 0; for (const t of h.treaties ?? []) if (t.kind === 'alliance' && !t.broken && t.until > year && (t.a === id || t.b === id)) k++; return k; };
+    // ---- an alliance with a neighbour that has fought the same enemy
+    if (luck(0xd2) < 1 / 50 && bound(n.id) < 2) {
+      const fought = (x: number): Set<number> => { const s = new Set<number>(); for (const w of h.wars ?? []) if (year - w.year < 80) { if (w.a === x) s.add(w.b); if (w.b === x) s.add(w.a); } return s; };
+      const mine = fought(n.id);
+      if (mine.size) for (const id of n.contacts) {
+        const o = h.nations[id];
+        if (!o || o.ended >= 0 || mine.has(id) || bound(id) >= 2) continue;
+        const theirs = fought(id);
+        const enemy = [...mine].find((e) => theirs.has(e) && h.nations[e] && h.nations[e]!.ended < 0);
+        if (enemy === undefined) continue;
+        const war = (h.wars ?? []).filter((w) => (w.a === enemy || w.b === enemy) && (w.a === n.id || w.b === n.id)).pop();
+        if (this.treaty(sim, n, o, 'alliance', year, war ? war.eventId : -1, 60)) break;
+      }
+    }
+    // ---- blocs (system E40): in the ages of engines a country in an arms race looks for a friend against its rival,
+    // among those it is in touch with that are not that rival's friends already
+    if (n.era >= 6 && n.rival !== undefined && (n.pressed ?? 0) >= 0.3 && this.notable(n) && bound(n.id) < 2 && luck(0xd4) < 1 / 40) {
+      const rival = n.rival;
+      const race = (h.races ?? []).find((r) => r.ended < 0 && ((r.a === n.id && r.b === rival) || (r.a === rival && r.b === n.id)));
+      for (const id of n.contacts) {
+        const o = h.nations[id];
+        if (!o || o.ended >= 0 || id === rival || o.species !== n.species || !this.notable(o) || bound(id) >= 2) continue;
+        const theirs = pactBetween(h, id, rival, year);
+        if (theirs && theirs.kind === 'alliance') continue;
+        if (this.treaty(sim, n, o, 'alliance', year, race ? race.eventId : n.foes?.[rival]?.eventId ?? -1, 60)) break;
+      }
+    }
+    // ---- an old wrong: when it is able, the country betrayed goes to war over it
+    for (const g of n.grudges ?? []) {
+      if (g.avenged !== undefined || year - g.year < 20 || year - g.year > GRUDGE_YEARS) continue;
+      const foe = h.nations[g.against];
+      if (!foe || foe.ended >= 0 || foe.species !== n.species) continue;
+      if (n.stability < 0.4 || n.fatigue > 0.5 || n.pop < 0.25 * foe.pop || luck(0xd3 + g.against) >= 1 / 12) continue;
+      if ((h.wars ?? []).some((w) => w.ended < 0 && (w.a === n.id || w.b === n.id))) continue;
+      // its town nearest to one of theirs strikes it
+      const p = sim.grid.pos;
+      let from: Settlement | undefined, at: Settlement | undefined, best = -2;
+      for (const o of this.settlements) {
+        if (o.ruined >= 0 || o.nation !== foe.id) continue;
+        for (const st of towns) { const d = p[st.cell * 3]! * p[o.cell * 3]! + p[st.cell * 3 + 1]! * p[o.cell * 3 + 1]! + p[st.cell * 3 + 2]! * p[o.cell * 3 + 2]!; if (d > best) { best = d; from = st; at = o; } }
+      }
+      if (!from || !at || best < 0.9) continue;
+      const before = sim.events.events.length;
+      sim.civEvent('war', from.species, from.cell, from.id, at.id);
+      const warEvent = sim.events.events.length > before ? before : -1;
+      from.pop *= 0.9; at.pop *= 0.8;
+      n.fatigue = sat(n.fatigue + 0.2); foe.fatigue = sat(foe.fatigue + 0.2);
+      if (at.tech >= 0.3) this.layer(at, year, 'burnt', warEvent, 120);
+      this.fortify(at, year);
+      this.woe(n, 'war', warEvent, year, 0.05); this.woe(foe, 'war', warEvent, year, 0.08);
+      this.avenge(sim, n, foe, g, warEvent, year);
+      this.fought(n, foe, year, warEvent);
+      // (the ruler who gave the order is named, as in every war)
+      if (warEvent >= 0) this.credit(sim, null, n, warEvent, '{name} gave the order.');
+      if (this.fine && warEvent >= 0) this.campaign(sim, n, foe, from, at, warEvent, year, '', '');
+      break;
+    }
+  }
+
+  /**
    * A campaign begins (system E33). The first blow has fallen on a town (and may have taken it). The attacker
    * raises an army and means to go on: toward the nearest towns of its enemy, and the capital if it is near
    * enough. The defender raises one too. From here `warfare` moves them, a year at a time.
    */
-  private campaign(sim: Simulation, n: Nation, foe: Nation, base: Settlement, first: Settlement, warEvent: number, year: number, general: string, other: string): void {
+  private campaign(sim: Simulation, n: Nation, foe: Nation, base: Settlement, first: Settlement, warEvent: number, year: number, general: string, other: string, opening = true, alone = false): War | undefined {
     const h = this.h, wars = (h.wars ??= []);
-    if (wars.some((w) => w.ended < 0 && ((w.a === n.id && w.b === foe.id) || (w.a === foe.id && w.b === n.id)))) return;
+    if (wars.some((w) => w.ended < 0 && ((w.a === n.id && w.b === foe.id) || (w.a === foe.id && w.b === n.id)))) return undefined;
     const p = sim.grid.pos, c = base.cell;
     const near = (st: Settlement): number => p[c * 3]! * p[st.cell * 3]! + p[c * 3 + 1]! * p[st.cell * 3 + 1]! + p[c * 3 + 2]! * p[st.cell * 3 + 2]!;
     const theirs = this.settlements.filter((st) => st.ruined < 0 && st.nation === foe.id).sort((x, y) => near(y) - near(x));
@@ -2168,7 +3227,7 @@ export class Civilization {
     const route = theirs.slice(0, 3).map((st) => st.id);
     const seat = theirs.findIndex((st) => st.id === foe.capital);
     if (seat >= 3 && seat < 6) route.push(foe.capital);
-    if (!route.length) return;
+    if (!route.length) return undefined;
     const warlike = h.cultures[n.culture]!.war;
     const lead = (x: Nation): number => { const r = h.people[x.ruler]; return r ? 0.5 * r.bold + 0.5 * r.wise : 0.5; };
     const army = (x: Nation, share: number, morale: number, leader: string): Army => { const size = Math.max(0.5, x.pop * share); return { size, raised: size, tech: x.tech, morale, supply: 1, lead: lead(x), leader: leader || h.people[x.ruler]?.name || `the captains of ${x.name}` }; };
@@ -2176,10 +3235,13 @@ export class Civilization {
     const a = army(n, 0.03 * (0.7 + 0.6 * warlike), 0.65 + 0.2 * lead(n), general), d = army(foe, 0.026, 0.7, other);
     const war: War = { id, a: n.id, b: foe.id, year, ended: -1, eventId: warEvent, peaceEvent: -1, conquest: took || warlike > 0.55, route, at: 0, sieging: 0, army: [a, d], battles: [], outcome: '', taken: took ? [first.id] : [] };
     // the first blow is the first entry in the war's record
-    war.battles.push({ year, settlement: first.id, kind: took ? 'storm' : 'raid', winner: 0, sizes: [a.size, d.size * 0.4], lost: [a.size * 0.05, d.size * 0.1], decided: 'surprise', taken: took, eventId: warEvent });
-    a.size *= 0.95; d.size *= 0.9;
+    if (opening) war.battles.push({ year, settlement: first.id, kind: took ? 'storm' : 'raid', winner: 0, sizes: [a.size, d.size * 0.4], lost: [a.size * 0.05, d.size * 0.1], decided: 'surprise', taken: took, eventId: warEvent });
+    if (opening) { a.size *= 0.95; d.size *= 0.9; }
     wars.push(war);
     if (wars.length > 80) { const k = wars.findIndex((w) => w.ended >= 0); if (k >= 0) wars.splice(k, 1); }
+    // those sworn to either side follow it in, and those sworn to them (system E40)
+    if (!alone) this.rally(sim, war, year);
+    return war;
   }
 
   /**
@@ -2217,6 +3279,10 @@ export class Civilization {
         if (winner && winner.ended < 0) winner.stability = sat(winner.stability + 0.04);
         if (loser && loser.ended < 0) this.woe(loser, 'war', e.id >= 0 ? e.id : war.eventId, year, 0.06);
         for (const x of [A, B]) if (x.ended < 0) x.fatigue = sat(x.fatigue + 0.08);
+        // the peace is sworn to (system E34): a treaty for a generation or two
+        // a war over a colony ends with the colony brought back or a country recognised (system E36)
+        if (war.independence !== undefined) this.afterRising(sim, war, year, e.id >= 0 ? e.id : war.eventId);
+        if (A.ended < 0 && B.ended < 0) this.treaty(sim, A, B, 'peace', year, e.id >= 0 ? e.id : war.eventId, 40);
       };
       if (A.ended >= 0 || B.ended >= 0) { end(A.ended >= 0 ? 'defender' : 'attacker'); continue; }
       if (year - war.year > 10) { end('stalemate'); continue; }
@@ -2292,6 +3358,8 @@ export class Civilization {
         }
       }
     }
+    // ---- a great war is over when the last of its wars is (system E40)
+    for (const g of h.great ?? []) if (g.ended < 0 && year > g.began && !(h.wars ?? []).some((x) => x.great === g.id && x.ended < 0)) this.conclude(sim, g, year);
   }
 
   /**
@@ -2683,7 +3751,13 @@ export class Civilization {
       firsts[style] = e.id;
     }
     // (the gallery is kept to a few rooms: the first to go are the oldest that are not the first of their age)
-    if (paintings.length > 260) { const k = paintings.findIndex((x) => !x.first); paintings.splice(k >= 0 ? k : 0, 1); }
+    if (paintings.length > 260) {
+      // (the gallery is thinned: first whatever is not a country's first of an age; and where there is nothing else left,
+      // in a world of many countries, a first-of-an-age that is not the earliest picture of that age anywhere)
+      let k = paintings.findIndex((x) => !x.first);
+      if (k < 0) { const seen = new Set<number>(); k = paintings.findIndex((x) => (seen.has(x.era) ? true : (seen.add(x.era), false))); }
+      paintings.splice(k >= 0 ? k : paintings.length - 1, 1);
+    }
   }
 
   /**
@@ -2764,10 +3838,16 @@ export class Civilization {
     if (eventId >= 0) entry.eventId = eventId;
     // (two changes in one lifetime are remembered as one, unless a conqueror made the second)
     const last = names[names.length - 1]!;
-    if (!renamed && names.length > 1 && year - last.year < 25 && last.eventId === undefined) names[names.length - 1] = entry;
-    else names.push(entry);
+    if (!renamed && names.length > 1 && year - last.year < 25 && last.eventId === undefined) {
+      // (a name that went back to what it was within a lifetime never changed, as far as the record goes)
+      if (names[names.length - 2]!.name === next) { names.pop(); if (names.length === 1) st.names = undefined; }
+      else names[names.length - 1] = entry;
+    } else names.push(entry);
     // a long record keeps its first name and its latest
     if (names.length > 8) names.splice(1, names.length - 8);
+    // (and never the same name twice running, which dropping the middle of a long record can leave)
+    for (let i = names.length - 1; i > 0; i--) if (names[i]!.name === names[i - 1]!.name) names.splice(i, 1);
+    if (names.length === 1) st.names = undefined;
     st.name = next;
     return true;
   }
@@ -2830,7 +3910,7 @@ export class Civilization {
       description: `${ruler.name} of ${n.name} weds ${consort.name} of the ${theirs.name}, which rules ${other.name}. While the match is remembered the two countries will not fight, and a child of it may one day claim both.`,
       causes: [n.eventId, other.eventId].filter((x) => x >= 0), importance: n.towns >= 6 && other.towns >= 6 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, other: other.id, person: consort.id },
     });
-    consort.events.push(ev.id); ruler.events.push(ev.id);
+    this.note(consort, ev.id); this.note(ruler, ev.id);
     (n.allies ??= []).push({ nation: other.id, until, eventId: ev.id });
     (other.allies ??= []).push({ nation: n.id, until, eventId: ev.id });
     for (const x of [n, other]) if (x.allies!.length > 6) x.allies!.shift();
@@ -2876,7 +3956,7 @@ export class Civilization {
           description: `${old.name} ${fate}. The heir was a child of the ${house.name}; the army was ${general.name}'s. ${general.name} holds ${cap.name} now, and the ${house.name} is over after ${house.reigns} ${house.reigns === 1 ? 'reign' : 'reigns'}.`,
           causes: [n.eventId, general.events[0] ?? -1].filter((x) => x >= 0), importance: house.reigns >= 8 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, person: general.id },
         });
-        general.events.push(ev.id); old.events.push(ev.id);
+        this.note(general, ev.id); this.note(old, ev.id);
         this.woe(n, 'succession', ev.id, year, 0.12);
         return;
       }
@@ -2895,12 +3975,11 @@ export class Civilization {
           description: `${old.name} ${fate}, and two children of the ${house.name} both claim ${cap.name}. ${heir.name} is crowned there.`,
           causes: [n.eventId].filter((x) => x >= 0), importance: war ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, person: claimant.id },
         });
-        claimant.events.push(ev.id); heir.events.push(ev.id); old.events.push(ev.id);
+        this.note(claimant, ev.id); this.note(heir, ev.id); this.note(old, ev.id);
         if (war) this.successionWar(sim, rng, n, towns, year, heir, claimant, ev.id);
         else {
           const end = rng.pick(['flees over the border and is not heard of again', 'is shut up in a tower for life', 'dies in the fighting at the gate', 'is bought off with a province to govern']);
-          const ev2 = sim.events.events[ev.id]!;
-          ev2.description += ` ${claimant.name} ${end}.`;
+          ev.description += ` ${claimant.name} ${end}.`;
           if (!end.startsWith('is bought')) { claimant.died = end.startsWith('dies') ? year : -1; if (claimant.died >= 0) { claimant.fate = 'died fighting for the throne'; h.notables.splice(h.notables.indexOf(claimant.id), 1); } }
           this.woe(n, 'succession', ev.id, year, 0.07);
         }
@@ -2935,7 +4014,7 @@ export class Civilization {
             description: `${old.name} ${fate} and left no heir. By an old marriage the claim falls to ${claimer.name} of the ${theirs.name}, and ${n.name} with its ${towns.length} ${towns.length === 1 ? 'town' : 'towns'} becomes part of ${abroad.name}. No battle was fought for it.`,
             causes: [n.eventId, abroad.eventId].filter((x) => x >= 0), importance: towns.length + abroad.towns >= 8 ? 2 : 1, speciesIds: [n.species], data: { nation: abroad.id, other: n.id, person: claimer.id },
           });
-          claimer.events.push(ev.id); old.events.push(ev.id);
+          this.note(claimer, ev.id); this.note(old, ev.id);
           for (const st of towns) { st.nation = abroad.id; sim.cellLog.note(st.cell, year, Log.Owner, abroad.id); }
           abroad.towns += towns.length;
           // what either country knew, the united one knows
@@ -2956,7 +4035,7 @@ export class Civilization {
         causes: [n.eventId, abroad.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [n.species], data: { nation: n.id, other: abroad.id, person: next.id },
       });
       n.allies[n.allies.length - 1]!.eventId = ev.id; abroad.allies[abroad.allies.length - 1]!.eventId = ev.id;
-      next.events.push(ev.id); old.events.push(ev.id); claimer.events.push(ev.id);
+      this.note(next, ev.id); this.note(old, ev.id); this.note(claimer, ev.id);
       this.woe(n, 'succession', ev.id, year, 0.05);
       return;
     }
@@ -2969,7 +4048,7 @@ export class Civilization {
       description: house ? `${old.name} ${fate} and left no heir the great families would follow. ${next.name} takes ${cap.name}, and the ${house.name} is over after ${house.reigns} ${house.reigns === 1 ? 'reign' : 'reigns'}.` : `${next.name} takes ${cap.name}.`,
       causes: [n.eventId].filter((x) => x >= 0), importance: house && house.reigns >= 12 ? 1 : 0, speciesIds: [n.species], data: { nation: n.id, person: next.id },
     });
-    next.events.push(ev.id); old.events.push(ev.id);
+    this.note(next, ev.id); this.note(old, ev.id);
     this.woe(n, 'succession', ev.id, year, 0.16);
   }
 
@@ -2982,9 +4061,8 @@ export class Civilization {
     const others = towns.filter((st) => st.id !== cap.id && st.ruined < 0);
     if (!others.length) return;
     const seat = [...others].sort((a, b) => b.pop - a.pop).find((st) => angle(cap, st) > 1.2 * spacing) ?? others[0]!;
-    const ev = sim.events.events[eventId]!;
-    ev.description += ` ${claimant.name} is crowned in ${seat.name}. Towns choose a side, or have one chosen for them.`;
-    ev.cellId = seat.cell;
+    const ev = sim.events.events[eventId];
+    if (ev) { ev.description += ` ${claimant.name} is crowned in ${seat.name}. Towns choose a side, or have one chosen for them.`; ev.cellId = seat.cell; }
     const other = this.newNation(sim, rng, seat, year, n, 'breakaway', [eventId], claimant);
     for (const st of others) {
       st.pop *= 0.8;
@@ -3065,12 +4143,12 @@ export class Civilization {
   }
 
   /** A town becomes the first of a new country: on its own (the first farmers of a land) or by going beyond the reach of the one it came from. */
-  private newNation(sim: Simulation, rng: RNG, st: Settlement, year: number, from: Nation | null, why: 'far' | 'breakaway' | 'successor' = 'far', because: number[] = [], lead?: Person): Nation {
+  private newNation(sim: Simulation, rng: RNG, st: Settlement, year: number, from: Nation | null, why: 'far' | 'breakaway' | 'successor' | 'colony' = 'far', because: number[] = [], lead?: Person): Nation {
     const h = this.h;
     // its people (system E9): a country keeps the culture it came out of, but settlers who crossed the sea to found
     // their own, and farmers who began apart from every other nation, become a people of their own
     const root = from ? h.cultures[from.culture]! : this.cultureFor(sim, st.species, year);
-    const apart = from ? (why === 'far' ? !!st.overseas || rng.chance(0.2) : rng.chance(why === 'successor' ? 0.15 : 0.08)) : h.nations.some((x) => x.species === st.species);
+    const apart = from ? (why === 'colony' ? true : why === 'far' ? !!st.overseas || rng.chance(0.2) : rng.chance(why === 'successor' ? 0.15 : 0.08)) : h.nations.some((x) => x.species === st.species);
     const culture = apart ? this.daughterCulture(rng, root, year, st) : root;
     const lang = h.languages[culture.language]!;
     // named for its first town, in its own tongue
@@ -3107,12 +4185,16 @@ export class Civilization {
     if (apart && from) this.rename(st, lang, year, `the speech of ${n.name} had become ${culture.name}`, -1, false);
     const dawn = h.began < 0;
     if (dawn) h.began = year;
+    // (a history begins in the age its first country is in: the Age of Fields is the leading age from the dawn, not passed over)
+    if (n.era > h.topEra) { h.topEra = n.era; h.peakEra = Math.max(h.peakEra ?? 0, n.era); }
     const sp = sim.creatures.species[st.species]!;
     const ev = sim.emit({
       type: 'nation', year, cellId: st.cell, title: dawn ? 'The dawn of history' : `${n.name} is founded`,
       description: dawn
         ? `At ${st.name} the people of ${sp.name} have planted fields and stayed to guard them. They call their country ${n.name} and follow ${first.name}. From here on their years are worth counting one by one.`
-        : from && why === 'breakaway'
+        : from && why === 'colony'
+          ? `The colony at ${st.name} has declared that it is no one's colony. Its people were born there, as their parents were. They follow ${first.name} and call their country ${n.name}.`
+          : from && why === 'breakaway'
           ? `${st.name} and the towns around it will take no more orders from ${this.settlements[from.capital]?.name ?? from.name}. They follow ${first.name} now and call their country ${n.name}.`
           : from && why === 'successor'
             ? `Out of what was ${from.name}, ${first.name} holds ${st.name} and the land around it, and calls it ${n.name}.`
@@ -3122,7 +4204,7 @@ export class Civilization {
       causes: [st.eventId, from ? from.eventId : -1, ...because].filter((x) => x >= 0), importance: dawn ? 3 : 1, speciesIds: [st.species], data: { nation: n.id, person: first.id },
     });
     n.eventId = ev.id;
-    first.events.push(ev.id);
+    this.note(first, ev.id);
     if (dawn || (h.dawnEvent ?? -1) < 0) h.dawnEvent = ev.id;
     // its count of years (system E8): settlers and successors keep the count they were born under; a country that
     // broke away in anger, or began on its own, counts from its own beginning

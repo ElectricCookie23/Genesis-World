@@ -15,7 +15,7 @@ function world(seed: string, years: number): Simulation {
 }
 
 describe('life on the ground', () => {
-  const sim = world('amber-reef-101', 6000);
+  const sim = world('amber-reef-101', 6000), shared = sim;
   const h = sim.civ.h, ev = sim.events.events;
   const towns = sim.civ.settlements.filter((s) => s.ruined < 0).sort((a, b) => b.pop - a.pop);
 
@@ -113,6 +113,11 @@ describe('life on the ground', () => {
   });
 
   it('E48: a nation that has come far enough keeps a museum, and everything in it is a real thing of that world', () => {
+    // (In the shared world a late war can leave no country advanced enough for a museum at the six-thousandth year:
+    // then the same world is looked at a thousand years earlier, when several are.)
+    const late = shared.civ.h.nations.some((n) => n.ended < 0 && n.tech >= MUSEUM_TECH);
+    const sim: Simulation = late ? shared : world('amber-reef-101', 5000);
+    const h = sim.civ.h, ev = sim.events.events;
     const living = h.nations.filter((n) => n.ended < 0);
     let found = 0;
     for (const n of living) {

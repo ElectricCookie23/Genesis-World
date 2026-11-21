@@ -24,6 +24,7 @@ import { Music } from './audio/music';
 import { believedSpot, describeMap, knownAt } from './sim/history/worldmap';
 import { feastOf, festivalOn } from './sim/history/festival';
 import { GOOD_COLOUR } from './sim/history/trade';
+import { IDEA_COLOUR, IDEA_LABEL, type Idea } from './sim/history/ideology';
 import type { SlotInfo, UIState } from './ui/store';
 import { GOALS, emptyRecord, evaluateGoals, type GoalRecord } from './game/goals';
 import { planFilm, shotAt, type Shot } from './game/film';
@@ -303,7 +304,10 @@ async function boot(): Promise<void> {
     scene.civ.setFeasts(feasts);
   }, 500);
   actions.showFestival = (nation, festival) => { shownFeast = { nation, festival, until: performance.now() + 20000 }; const r = state.realms.find((x) => x.id === nation); const cap = r ? state.settlements.find((t) => t.id === r.capital) : undefined; if (cap) { update({ panel: 'none' }); scene.cam.flyTo(grid.lon[cap.cell]!, grid.lat[cap.cell]!, 1.1); } };
+  actions.openDiplomacy = () => { update({ panel: 'diplomacy' }); send({ type: 'requestDiplomacy' }); };
   actions.openWars = () => { update({ panel: 'map', mapOf: -3 }); send({ type: 'requestWars' }); };
+  actions.openGreatWars = () => { update({ panel: 'map', mapOf: -7 }); send({ type: 'requestGreatWars' }); };
+  actions.openPlagues = () => { update({ panel: 'map', mapOf: -6 }); send({ type: 'requestPlagues' }); };
   actions.openMarket = () => { update({ panel: 'market' }); send({ type: 'requestMarket' }); };
   actions.openLegends = () => { update({ panel: 'legends' }); send({ type: 'requestLegends' }); };
   actions.openGallery = () => { update({ panel: 'gallery' }); send({ type: 'requestGallery' }); };
@@ -464,7 +468,7 @@ async function boot(): Promise<void> {
   };
   actions.rewind = (index) => send({ type: 'rewind', index });
   // far enough for any world to get there if it ever will; the worker stops at the age asked for
-  actions.skipTo = (era) => send(era < 0 ? { type: 'warp', stop: true } : { type: 'warp', years: 1.5e9, untilEra: era });
+  actions.skipTo = (to) => send(typeof to === 'string' ? { type: 'warp', years: 1.5e9, untilMark: to, through: true } : to < 0 ? { type: 'warp', stop: true } : { type: 'warp', years: 1.5e9, untilEra: to });
   update({ colorblind: store.get('genesis:cb') === '1', earthNotes: store.get('genesis:earth') === '1' });
   actions.setEarthNotes = (on) => { update({ earthNotes: on }); store.set('genesis:earth', on ? '1' : '0'); };
 
@@ -586,18 +590,55 @@ async function boot(): Promise<void> {
     const img = ctx.createImageData(W, H);
     const sea = state.stats?.seaLevel ?? 0;
     const elev = scene.planet!.elevation;
-    for (let i = 0; i < W * H; i++) {
-      const c = mapCells[i]!;
+    // (the colour of one cell on a flat map, written into an image at pixel i)
+    const paint = (data: Uint8ClampedArray, i: number, c: number): void => {
       const wet = elev[c]! <= sea && state.overlay === 'none';
       // linear to display, with the sea drawn in blue by depth
       const r = wet ? 0.02 : colors[c * 3]!, g = wet ? 0.1 + Math.max(0, 0.25 + elev[c]! * 0.06) : colors[c * 3 + 1]!, b = wet ? 0.3 + Math.max(0, 0.3 + elev[c]! * 0.06) : colors[c * 3 + 2]!;
-      img.data[i * 4] = Math.pow(Math.min(1, r), 0.45) * 255;
-      img.data[i * 4 + 1] = Math.pow(Math.min(1, g), 0.45) * 255;
-      img.data[i * 4 + 2] = Math.pow(Math.min(1, b), 0.45) * 255;
-      img.data[i * 4 + 3] = 255;
-    }
+      data[i * 4] = Math.pow(Math.min(1, r), 0.45) * 255;
+      data[i * 4 + 1] = Math.pow(Math.min(1, g), 0.45) * 255;
+      data[i * 4 + 2] = Math.pow(Math.min(1, b), 0.45) * 255;
+      data[i * 4 + 3] = 255;
+    };
+    for (let i = 0; i < W * H; i++) paint(img.data, i, mapCells[i]!);
     ctx.putImageData(img, 0, 0);
     if (bare) return;
+    /**
+     * A close look at one part of the world, drawn in a box on the map: the land within `radius` radians of the middle
+     * of the given cells, with the towns there as dots. Returns where a cell falls in the box (or null if outside), so
+     * that whatever the view is about can be drawn on it.
+     */
+    const closeLook = (cells: number[], radius: number, bx: number, by: number, bw: number, bh: number): ((cell: number) => [number, number] | null) => {
+      let cx = 0, cy = 0, cz = 0;
+      for (const c of cells) { cx += grid.pos[c * 3]!; cy += grid.pos[c * 3 + 1]!; cz += grid.pos[c * 3 + 2]!; }
+      const cl = Math.hypot(cx, cy, cz) || 1; cx /= cl; cy /= cl; cz /= cl;
+      // east and north at the middle
+      let ex = -cz, ey = 0, ez = cx; const el = Math.hypot(ex, ey, ez) || 1; ex /= el; ey /= el; ez /= el;
+      const nx = cy * ez - cz * ey, ny = cz * ex - cx * ez, nz = cx * ey - cy * ex;
+      const k = Math.tan(radius), half = bw / 2;
+      const box = ctx.createImageData(bw, bh);
+      let hint = cells[0] ?? 0;
+      for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+        const u = ((x + 0.5 - half) / half) * k, v = ((bh / 2 - y - 0.5) / half) * k;
+        const dx = cx + u * ex + v * nx, dy = cy + u * ey + v * ny, dz = cz + u * ez + v * nz, dl = Math.hypot(dx, dy, dz);
+        hint = nearestCell(grid, dx / dl, dy / dl, dz / dl, hint);
+        paint(box.data, y * bw + x, hint);
+      }
+      ctx.putImageData(box, bx, by);
+      ctx.fillStyle = 'rgba(6, 8, 14, 0.35)'; ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeStyle = '#ffffffcc'; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+      const project = (cell: number): [number, number] | null => {
+        const px = grid.pos[cell * 3]!, py = grid.pos[cell * 3 + 1]!, pz = grid.pos[cell * 3 + 2]!;
+        const d = px * cx + py * cy + pz * cz;
+        if (d <= 0.2) return null;
+        const u = (px * ex + py * ey + pz * ez) / d / k, v = (px * nx + py * ny + pz * nz) / d / k;
+        const x = bx + half + u * half, y = by + bh / 2 - v * half;
+        return x < bx + 3 || x > bx + bw - 3 || y < by + 3 || y > by + bh - 3 ? null : [x, y];
+      };
+      ctx.fillStyle = '#ffd27a';
+      for (const st of state.settlements) { if (st.ruined >= 0) continue; const q = project(st.cell); if (q) ctx.fillRect(q[0] - 1.5, q[1] - 1.5, 3, 3); }
+      return project;
+    };
     // ---- trade routes, coloured by what they carry (system E31): from each country's capital to its buyer's
     if (state.mapOf === -2) {
       ctx.fillStyle = 'rgba(6, 8, 14, 0.45)'; ctx.fillRect(0, 0, W, H);
@@ -636,22 +677,161 @@ async function boot(): Promise<void> {
       ctx.fillStyle = 'rgba(6, 8, 14, 0.45)'; ctx.fillRect(0, 0, W, H);
       const war = (state.wars ?? []).find((w) => w.id === state.warShown);
       if (war) {
-        const at = war.battles.filter((b) => b.cell >= 0).map((b) => ({ b, x: ((grid.lon[b.cell]! + Math.PI) / (Math.PI * 2)) * W, y: (0.5 - grid.lat[b.cell]! / Math.PI) * H }));
-        // (meetings at the same town are fanned out a little so that each number can be read)
-        const seen = new Map<number, number>();
-        for (const p of at) { const k = seen.get(p.b.cell) ?? 0; seen.set(p.b.cell, k + 1); p.x += k * 9; p.y -= k * 5; }
-        ctx.strokeStyle = '#ffffffaa'; ctx.lineWidth = 1.2; ctx.setLineDash([4, 3]); ctx.beginPath();
-        at.forEach((p, i) => { if (i === 0 || Math.abs(p.x - at[i - 1]!.x) > W / 2) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
-        ctx.stroke(); ctx.setLineDash([]);
-        ctx.font = '600 10px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        at.forEach((p, i) => {
-          ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
-          ctx.fillStyle = p.b.winner === 0 ? '#e0563a' : '#4f8fe0'; ctx.fill();
-          ctx.strokeStyle = p.b.taken ? '#fff' : '#00000088'; ctx.lineWidth = p.b.taken ? 1.8 : 1; ctx.stroke();
-          ctx.fillStyle = '#fff'; ctx.fillText(String(i + 1), p.x, p.y + 0.5);
-        });
+        const fought = war.battles.filter((b) => b.cell >= 0);
+        // how far apart the meetings lie: at the size of a real world a whole war is often one dot on the map of everything
+        let spread = 0;
+        for (const a of fought) for (const b of fought) { const d = Math.acos(Math.max(-1, Math.min(1, grid.pos[a.cell * 3]! * grid.pos[b.cell * 3]! + grid.pos[a.cell * 3 + 1]! * grid.pos[b.cell * 3 + 1]! + grid.pos[a.cell * 3 + 2]! * grid.pos[b.cell * 3 + 2]!))); if (d > spread) spread = d; }
+        const marks = (place: (cell: number) => [number, number] | null, wrap: boolean): void => {
+          const at = fought.map((b) => ({ b, p: place(b.cell) })).filter((x): x is { b: typeof x.b; p: [number, number] } => !!x.p).map(({ b, p }) => ({ b, x: p[0], y: p[1] }));
+          // (meetings at the same town are fanned out a little so that each number can be read)
+          const seen = new Map<number, number>();
+          for (const p of at) { const k = seen.get(p.b.cell) ?? 0; seen.set(p.b.cell, k + 1); p.x += k * 9; p.y -= k * 5; }
+          ctx.strokeStyle = '#ffffffaa'; ctx.lineWidth = 1.2; ctx.setLineDash([4, 3]); ctx.beginPath();
+          at.forEach((p, i) => { if (i === 0 || (wrap && Math.abs(p.x - at[i - 1]!.x) > W / 2)) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+          ctx.stroke(); ctx.setLineDash([]);
+          ctx.font = '600 10px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          at.forEach((p) => {
+            ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+            ctx.fillStyle = p.b.winner === 0 ? '#e0563a' : '#4f8fe0'; ctx.fill();
+            ctx.strokeStyle = p.b.taken ? '#fff' : '#00000088'; ctx.lineWidth = p.b.taken ? 1.8 : 1; ctx.stroke();
+            ctx.fillStyle = '#fff'; ctx.fillText(String(war.battles.indexOf(p.b) + 1), p.x, p.y + 0.5);
+          });
+          ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+        };
+        const world = (cell: number): [number, number] => [((grid.lon[cell]! + Math.PI) / (Math.PI * 2)) * W, (0.5 - grid.lat[cell]! / Math.PI) * H];
+        if (fought.length && spread < 0.9) {
+          // one ring on the map of the world where it was fought, and a close look beside it
+          const [wx, wy] = world(fought[0]!.cell);
+          const bw = Math.round(W * 0.42), bh = Math.round(H * 0.62), bx = wx < W / 2 ? W - bw - 8 : 8, by = 8;
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(wx, wy, 9, 0, Math.PI * 2); ctx.stroke();
+          ctx.strokeStyle = '#ffffff88'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(wx + (bx > wx ? 9 : -9), wy); ctx.lineTo(bx > wx ? bx : bx + bw, by + bh / 2); ctx.stroke();
+          marks(closeLook(fought.map((b) => b.cell), Math.max(0.05, spread * 0.7 + 0.03), bx, by, bw, bh), false);
+        } else marks(world, true);
         ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
       }
+    }
+    // ---- ideas of how to rule (system E35): a filled disc on every town of a country governed by an idea, a ring
+    // (wider as more of its people hold it) where one is gaining ground
+    if (state.mapOf === -4) {
+      ctx.fillStyle = 'rgba(6, 8, 14, 0.45)'; ctx.fillRect(0, 0, W, H);
+      const used = new Set<Idea>();
+      let ruled = 0, rising = 0;
+      // (in a world of many countries every town of every one is a blur: each country is then marked at its capital alone)
+      const crowded = state.realms.filter((r) => r.ended < 0).length > 40;
+      for (const r of state.realms) {
+        if (r.ended >= 0 || (!r.idea && !r.creed)) continue;
+        if (r.creed) ruled++;
+        if (r.idea) rising++;
+        for (const st of state.settlements) {
+          if (st.nation !== r.id || st.ruined >= 0 || (crowded && st.id !== r.capital)) continue;
+          const x = ((grid.lon[st.cell]! + Math.PI) / (Math.PI * 2)) * W, y = (0.5 - grid.lat[st.cell]! / Math.PI) * H;
+          if (r.creed) { used.add(r.creed.kind as Idea); ctx.globalAlpha = 0.6; ctx.fillStyle = IDEA_COLOUR[r.creed.kind as Idea] ?? '#fff'; ctx.beginPath(); ctx.arc(x, y, st.id === r.capital ? 7 : 5, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
+          if (r.idea) { used.add(r.idea.kind as Idea); ctx.strokeStyle = IDEA_COLOUR[r.idea.kind as Idea] ?? '#fff'; ctx.lineWidth = crowded ? 1.3 : 1.8; ctx.beginPath(); ctx.arc(x, y, (crowded ? 3.5 : 4) + (crowded ? 5 : 9) * r.idea.share, 0, Math.PI * 2); ctx.stroke(); }
+        }
+      }
+      let kx = 10;
+      ctx.font = '11px system-ui, sans-serif';
+      for (const k of used) { ctx.fillStyle = IDEA_COLOUR[k]; ctx.fillRect(kx, H - 18, 12, 8); ctx.fillStyle = '#ece7db'; ctx.fillText(IDEA_LABEL[k], kx + 16, H - 10); kx += 22 + ctx.measureText(IDEA_LABEL[k]).width + 10; }
+      update({ mapNote: ruled + rising ? `${ruled} ${ruled === 1 ? 'country is' : 'countries are'} governed by an idea its people rose for (filled). In ${rising} an idea is gaining ground (a ring, wider as more hold it). The colour is what the idea wants: who should rule.` : 'No one has yet had an idea of how a country should be run, other than the way it is.' });
+    }
+    // ---- a great war (system E40): the towns of one side in red and of the other in blue, as they stand now, and the
+    // seat of what the peace set up ringed in white
+    if (state.mapOf === -7) {
+      ctx.fillStyle = 'rgba(6, 8, 14, 0.5)'; ctx.fillRect(0, 0, W, H);
+      const great = (state.greatWars ?? []).find((g) => g.id === state.greatShown);
+      if (great) {
+        const dot = (cell: number, colour: string, r: number): void => { const x = ((grid.lon[cell]! + Math.PI) / (Math.PI * 2)) * W, y = (0.5 - grid.lat[cell]! / Math.PI) * H; ctx.fillStyle = colour; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); };
+        great.sides.forEach((side, k) => { for (const c of side.cells) dot(c, k === 0 ? '#e0563a' : '#4f8fe0', 4); });
+        // the map as the peace left it: every town that has a new flag because of this war, squared in white
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+        for (const t of great.taken ?? []) { const x = ((grid.lon[t.cell]! + Math.PI) / (Math.PI * 2)) * W, y = (0.5 - grid.lat[t.cell]! / Math.PI) * H; ctx.strokeRect(x - 6.5, y - 6.5, 13, 13); }
+        for (const i of great.institutions.slice(0, 1)) if (i.cell >= 0) { const x = ((grid.lon[i.cell]! + Math.PI) / (Math.PI * 2)) * W, y = (0.5 - grid.lat[i.cell]! / Math.PI) * H; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.stroke(); }
+        let kx = 10;
+        ctx.font = '11px system-ui, sans-serif';
+        for (const [c, label] of [['#e0563a', 'those who began it, and their friends'], ['#4f8fe0', 'those it was begun against, and theirs']] as const) { ctx.fillStyle = c; ctx.fillRect(kx, H - 18, 12, 8); ctx.fillStyle = '#ece7db'; ctx.fillText(label, kx + 16, H - 10); kx += 22 + ctx.measureText(label).width + 10; }
+        if (great.institutions.length) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(kx + 5, H - 14, 5, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = '#ece7db'; ctx.fillText('where the peace was made', kx + 15, H - 10); kx += 22 + ctx.measureText('where the peace was made').width + 10; }
+        if ((great.taken ?? []).length) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4; ctx.strokeRect(kx, H - 19, 10, 10); ctx.fillStyle = '#ece7db'; ctx.fillText('a new flag', kx + 15, H - 10); }
+      }
+    }
+    // ---- a plague, town by town (system E37): the ways trade travels drawn faintly, and over them the way the sickness
+    // went, from each town to the next, redder the earlier it was reached
+    if (state.mapOf === -6) {
+      ctx.fillStyle = 'rgba(6, 8, 14, 0.5)'; ctx.fillRect(0, 0, W, H);
+      const at = (cell: number): [number, number] => [((grid.lon[cell]! + Math.PI) / (Math.PI * 2)) * W, (0.5 - grid.lat[cell]! / Math.PI) * H];
+      const seg = (a: number, b: number): void => {
+        const pa = [grid.pos[a * 3]!, grid.pos[a * 3 + 1]!, grid.pos[a * 3 + 2]!], pb = [grid.pos[b * 3]!, grid.pos[b * 3 + 1]!, grid.pos[b * 3 + 2]!];
+        ctx.beginPath();
+        let last = -1;
+        for (let k = 0; k <= 10; k++) {
+          const t = k / 10, x = pa[0]! + (pb[0]! - pa[0]!) * t, y = pa[1]! + (pb[1]! - pa[1]!) * t, z = pa[2]! + (pb[2]! - pa[2]!) * t, l = Math.hypot(x, y, z) || 1;
+          const u = ((Math.atan2(z / l, x / l) + Math.PI) / (Math.PI * 2)) * W, v = (0.5 - Math.asin(y / l) / Math.PI) * H;
+          if (last < 0 || Math.abs(u - last) > W / 2) ctx.moveTo(u, v); else ctx.lineTo(u, v);
+          last = u;
+        }
+        ctx.stroke();
+      };
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(236, 231, 219, 0.28)'; ctx.lineWidth = 1;
+      for (const w of state.plagueWays) seg(w.a, w.b);
+      const plague = (state.plagues ?? []).find((p) => p.id === state.plagueShown);
+      if (plague && plague.steps.length) {
+        const y0 = plague.began, y1 = Math.max(y0 + 1, ...plague.steps.map((x) => x.year));
+        const colour = (year: number): string => { const t = (year - y0) / (y1 - y0); return `rgb(${Math.round(232 - 30 * t)}, ${Math.round(70 + 130 * t)}, ${Math.round(58 + 110 * t)})`; };
+        for (const st of plague.steps) {
+          if (st.from < 0) continue;
+          ctx.strokeStyle = colour(st.year); ctx.lineWidth = st.via === 'foot' ? 1 : 2.2; ctx.setLineDash(st.via === 'foot' ? [2, 3] : []);
+          seg(st.from, st.cell);
+        }
+        ctx.setLineDash([]);
+        for (const st of plague.steps) {
+          const [x, y] = at(st.cell);
+          ctx.fillStyle = colour(st.year); ctx.beginPath(); ctx.arc(x, y, st.from < 0 ? 6 : 2.5 + 6 * st.dead, 0, Math.PI * 2); ctx.fill();
+          if (st.shut) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4; ctx.strokeRect(x - 6, y - 6, 12, 12); }
+          if (st.from < 0) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, y, 8.5, 0, Math.PI * 2); ctx.stroke(); }
+        }
+        let kx = 10;
+        ctx.font = '11px system-ui, sans-serif';
+        for (const [c, label] of [[colour(y0), 'reached first'], [colour(y1), 'reached last'], ['rgba(236, 231, 219, 0.5)', 'a way trade travels']] as const) { ctx.fillStyle = c; ctx.fillRect(kx, H - 18, 12, 8); ctx.fillStyle = '#ece7db'; ctx.fillText(label, kx + 16, H - 10); kx += 22 + ctx.measureText(label).width + 10; }
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4; ctx.strokeRect(kx, H - 19, 10, 10); ctx.fillStyle = '#ece7db'; ctx.fillText('gates shut', kx + 15, H - 10);
+      }
+    }
+    // ---- colonies overseas, and the countries born of them (system E36): a line from the mother country's capital to
+    // each colony's chief town, dashed while it is held, red while it is fought over, solid once it is a country
+    if (state.mapOf === -5) {
+      ctx.fillStyle = 'rgba(6, 8, 14, 0.45)'; ctx.fillRect(0, 0, W, H);
+      const townOf = (id: number) => state.settlements.find((t) => t.id === id);
+      const capOf = (id: number) => { const r = state.realms.find((x) => x.id === id); return r ? townOf(r.capital) : undefined; };
+      const line = (a: number, b: number, colour: string, dash: number[], width: number): void => {
+        const pa = [grid.pos[a * 3]!, grid.pos[a * 3 + 1]!, grid.pos[a * 3 + 2]!], pb = [grid.pos[b * 3]!, grid.pos[b * 3 + 1]!, grid.pos[b * 3 + 2]!];
+        ctx.strokeStyle = colour; ctx.lineWidth = width; ctx.setLineDash(dash); ctx.lineCap = 'round';
+        ctx.beginPath();
+        let last = -1;
+        for (let k = 0; k <= 14; k++) {
+          const t = k / 14, x = pa[0]! + (pb[0]! - pa[0]!) * t, y = pa[1]! + (pb[1]! - pa[1]!) * t, z = pa[2]! + (pb[2]! - pa[2]!) * t, l = Math.hypot(x, y, z) || 1;
+          const u = ((Math.atan2(z / l, x / l) + Math.PI) / (Math.PI * 2)) * W, v = (0.5 - Math.asin(y / l) / Math.PI) * H;
+          if (last < 0 || Math.abs(u - last) > W / 2) ctx.moveTo(u, v); else ctx.lineTo(u, v);
+          last = u;
+        }
+        ctx.stroke(); ctx.setLineDash([]);
+        const ux = ((grid.lon[b]! + Math.PI) / (Math.PI * 2)) * W, uy = (0.5 - grid.lat[b]! / Math.PI) * H;
+        ctx.fillStyle = colour; ctx.beginPath(); ctx.arc(ux, uy, 3.6, 0, Math.PI * 2); ctx.fill();
+      };
+      let held = 0, fighting = 0, free = 0;
+      for (const r of state.realms) {
+        if (r.ended >= 0) continue;
+        const home = townOf(r.capital);
+        if (home) for (const c of r.colonies ?? []) { const seat = townOf(c.seat); if (seat) { line(home.cell, seat.cell, '#f0c060', [5, 4], 1.4 + 1.6 * Math.min(1, c.identity)); held++; } }
+        if (r.colonyOf && home) {
+          const from = capOf(r.colonyOf.mother), alive = state.realms.some((x) => x.id === r.colonyOf!.mother && x.ended < 0);
+          if (r.colonyOf.freed < 0) fighting++; else free++;
+          if (from && alive) line(from.cell, home.cell, r.colonyOf.freed < 0 ? '#e0563a' : '#62c98a', r.colonyOf.freed < 0 ? [2, 4] : [], 2.2);
+          else { const ux = ((grid.lon[home.cell]! + Math.PI) / (Math.PI * 2)) * W, uy = (0.5 - grid.lat[home.cell]! / Math.PI) * H; ctx.fillStyle = '#62c98a'; ctx.beginPath(); ctx.arc(ux, uy, 3.6, 0, Math.PI * 2); ctx.fill(); }
+        }
+      }
+      let kx = 10;
+      ctx.font = '11px system-ui, sans-serif';
+      for (const [colour, label] of [['#f0c060', 'a colony (thicker as its people grow apart)'], ['#e0563a', 'fighting to be free'], ['#62c98a', 'a country born of a colony']] as const) { ctx.fillStyle = colour; ctx.fillRect(kx, H - 18, 12, 8); ctx.fillStyle = '#ece7db'; ctx.fillText(label, kx + 16, H - 10); kx += 22 + ctx.measureText(label).width + 10; }
+      update({ mapNote: held + fighting + free ? `${held} ${held === 1 ? 'colony is' : 'colonies are'} held from across the water. ${fighting ? `${fighting} ${fighting === 1 ? 'is' : 'are'} fighting to be free. ` : ''}${free} living ${free === 1 ? 'country was' : 'countries were'} born of a colony. Each line runs from the mother country's capital.` : 'No country has yet planted a town across an ocean and kept it.' });
     }
     // settlements as warm dots
     ctx.fillStyle = '#ffd27a';
@@ -1029,6 +1209,8 @@ async function boot(): Promise<void> {
   const resetHistory = () => {
     state.events = [];
     state.chronicle = [];
+    state.hiddenIds = [];
+    state.revealed = [];
     state.species = new Map();
     state.plants = new Map();
     toasts.length = 0;
@@ -1047,6 +1229,9 @@ async function boot(): Promise<void> {
         if (cause && !cause.effects.includes(ev.id)) cause.effects.push(ev.id);
       }
       if (ev.importance >= 1 && ev.id > 0) state.chronicle.push(ev.id);
+      // what was kept secret, and what has since come out (system E39)
+      if (ev.hidden) state.hiddenIds.push(ev.id);
+      if (ev.type === 'secret-revealed' && ev.data) state.revealed.push(Number(ev.data.secret));
       if (!live) continue;
       if (ev.importance >= 3) toasts.push(ev);
       // a new age somewhere in the world: a banner, for a few seconds
@@ -1059,6 +1244,9 @@ async function boot(): Promise<void> {
       // documentary director: cut to wherever something notable just happened
       if ((state.director || state.postcard) && ev.importance >= 2 && ev.cellId >= 0 && scene.following === null) actions.flyToCell(ev.cellId, 0.9);
       if ((ev.type === 'war' || ev.type === 'plague') && ev.cellId >= 0) scene.civUnrest(ev.cellId, ev.type);
+      // every battle flickers where it is fought, and a world war flickers in every town of every country in it (system E40)
+      if (ev.type === 'battle' && ev.cellId >= 0) scene.civUnrest(ev.cellId, 'war');
+      if (ev.type === 'world-war' && ev.data) { const ids = new Set(String(ev.data.sides ?? '').split(/[,|]/).map(Number)); for (const st of state.settlements) if (st.ruined < 0 && st.nation !== undefined && ids.has(st.nation)) scene.civUnrest(st.cell, 'war'); }
       // a fallen capital goes dark; a civil war flickers like any other
       if (ev.type === 'nation-collapse' && ev.cellId >= 0) scene.civUnrest(ev.cellId, 'plague');
       if (ev.type === 'civil-war' && ev.cellId >= 0) scene.civUnrest(ev.cellId, 'war');
@@ -1171,6 +1359,8 @@ async function boot(): Promise<void> {
         // (armies in the field show as camp fires on the night side: system E33)
         scene.civ?.setCamps(msg.armies ?? []);
         update({ settlements: msg.settlements, realms: msg.nations ?? state.realms });
+        // (tell the worker this list is in: it sends the next only then, so lists cannot pile up behind a busy page)
+        send({ type: 'got' });
         break;
       case 'timeline':
         update({ timeline: msg.points });
@@ -1213,6 +1403,15 @@ async function boot(): Promise<void> {
         } else if (a.what === 'place' && state.chrono && a.data && a.data.id === state.chrono.id) { update({ memPlace: a.data }); scene.setSettlements(withPast(state.settlements), state.realms); }
         break;
       }
+      case 'diplomacy':
+        update({ diplomacy: msg.web });
+        break;
+      case 'greatWars':
+        update({ greatWars: msg.list, greatShown: msg.list.some((g) => g.id === state.greatShown) ? state.greatShown : msg.list[0]?.id ?? -1 });
+        break;
+      case 'plagues':
+        update({ plagues: msg.list, plagueWays: msg.ways, plagueShown: msg.list.some((p) => p.id === state.plagueShown) ? state.plagueShown : msg.list[0]?.id ?? -1 });
+        break;
       case 'wars':
         update({ wars: msg.list, warShown: msg.list.some((w) => w.id === state.warShown) ? state.warShown : msg.list[0]?.id ?? -1 });
         break;

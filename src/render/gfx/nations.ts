@@ -92,6 +92,15 @@ export function settlementSize(pop: number): number {
  * Group living settlements into nations. The oldest settlement in a neighbourhood is the capital;
  * later ones of the same people nearby belong to it (towns that tell the same story of themselves hold together further).
  */
+/**
+ * A country's emblem: from its founding city and its people, and from how many revolutions it has had. Each
+ * revolution is sure to change how the field is divided and what is charged on it (system E35).
+ */
+export function emblemOf(capital: number, species: number, flag = 0): Emblem {
+  const seed = capital * 97 + species * 13;
+  return { division: (Math.floor(hash(seed + 1) * 6) + flag) % 6, charge: (Math.floor(hash(seed + 2) * 8) + flag * 3) % 8, points: 4 + Math.floor(hash(seed + 3 + flag * 7919) * 5) };
+}
+
 export function deriveNations(settlements: SettlementInfo[], grid: Grid, species: Map<number, SpeciesInfo>, known: NationInfo[] = []): Nation[] {
   // Where the simulation has founded nations, those are the nations: their towns are grouped as the simulation
   // has them, under its names and colours. Camps still outside history are grouped by nearness as before.
@@ -128,12 +137,13 @@ export function deriveNations(settlements: SettlementInfo[], grid: Grid, species
     const bio = sp ? (sp.genes[G.Glow]! > 0.3 ? sp.genes[G.GlowHue]! : sp.genes[G.Hue]!) : hash(s.species);
     const own = mine >= 0 ? info.get(mine) : undefined;
     const hue = own ? own.hue : (bio + nations.filter((n) => n.species === s.species).length * 0.381966 + hash(s.id * 13 + 5) * 0.08) % 1;
-    const emblemSeed = s.id * 97 + s.species * 13;
+    // (a country's flag is its own, and changes when a revolution changes how it is governed: system E35)
+    const flag = own?.flag ?? 0, emblemSeed = s.id * 97 + s.species * 13 + flag * 7919;
     nations.push({
       id: nations.length, capital: s.id, name: '', species: s.species, members: [s.id],
       signature: hsv(hue, 0.78, 1), color: FIRE, accent: hsv((hue + 0.42 + hash(emblemSeed) * 0.16) % 1, 0.6, 0.95), tech: 0, pop: 0,
       dir: [sx, sy, sz],
-      emblem: { division: Math.floor(hash(emblemSeed + 1) * 6), charge: Math.floor(hash(emblemSeed + 2) * 8), points: 4 + Math.floor(hash(emblemSeed + 3) * 5) },
+      emblem: emblemOf(s.id, s.species, flag),
     });
   }
   const byId = new Map(settlements.map((s) => [s.id, s]));

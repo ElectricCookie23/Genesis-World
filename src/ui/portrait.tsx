@@ -66,8 +66,9 @@ export function Portrait({ genes: g, era, role, seed, bold = 0.5, cruel = 0.5, w
   const id = `pt${seed}s${style}`;
   const j = (k: number, amount: number) => (rnd(seed, k) - 0.5) * 2 * amount;
   const head = g[G.Head]!, diet = g[G.Diet]!, neck = g[G.Neck]!, size = g[G.Size]!;
-  const hr = 13 + 8 * head + j(1, 1.2);
-  const sl = hr * (0.45 + 0.9 * diet) * (1 + j(2, 0.1));
+  // (one animal of a kind is not the next: each has its own size of head and length of muzzle, within the kind's range)
+  const hr = 13 + 8 * head + j(1, 2);
+  const sl = hr * (0.45 + 0.9 * diet) * (1 + j(2, 0.2));
   const neckLen = 10 + 24 * neck;
   const neckW = 9 + 7 * size + 3 * (1 - neck);
   const cx = Math.min(46 + neckLen * 0.25, 90 - hr - sl);
@@ -79,9 +80,12 @@ export function Portrait({ genes: g, era, role, seed, bold = 0.5, cruel = 0.5, w
     at(-hr, 0), at(-hr * 0.72, -hr * 0.8), at(0, -hr), at(hr * 0.65, -hr * (0.62 + 0.1 * bold)), at(hr + sl * 0.5, -hr * 0.2), at(hr + sl, hr * 0.12),
     at(hr + sl * 0.7, hr * 0.5), at(hr * 0.35, hr * 0.84), at(-hr * 0.5, hr * 0.76),
   ]);
-  const throat = `M ${f(cx - neckW * 0.8)} ${f(cy + hr * 0.3)} Q ${f(cx - neckW * 1.25)} ${f((cy + baseY) / 2)} ${f(42 - neckW)} ${f(baseY + 4)} L ${f(42 + neckW)} ${f(baseY + 4)} Q ${f(cx + neckW * 0.5)} ${f((cy + baseY) / 2 + hr * 0.3)} ${f(cx + neckW * 0.55)} ${f(cy + hr * 0.55)} Z`;
-  const shoulders = `M -2 124 L -2 ${f(baseY + 20)} Q 8 ${f(baseY + 4)} ${f(42 - neckW - 6)} ${f(baseY - 1)} Q 42 ${f(baseY - 5)} ${f(42 + neckW + 6)} ${f(baseY + 1)} Q 86 ${f(baseY + 8)} 102 ${f(baseY + 26)} L 102 124 Z`;
-  const figure = [shoulders, throat, skull];
+  // The neck runs down and out of the picture, as an animal's does: nothing is drawn below it. (There were shoulders
+  // here once, and things worn on them. The owner's rule is that nothing human-looking is drawn, and a head set on
+  // shoulders with a collar is how people are painted; so what marks a calling is the badge in the corner alone.)
+  const low = 132;
+  const throat = `M ${f(cx - neckW * 0.8)} ${f(cy + hr * 0.3)} Q ${f(cx - neckW * 1.25)} ${f((cy + baseY) / 2)} ${f(42 - neckW * 1.1)} ${f(baseY + 4)} L ${f(42 - neckW * 1.9)} ${low} L ${f(42 + neckW * 1.7)} ${low} L ${f(42 + neckW)} ${f(baseY + 4)} Q ${f(cx + neckW * 0.5)} ${f((cy + baseY) / 2 + hr * 0.3)} ${f(cx + neckW * 0.55)} ${f(cy + hr * 0.55)} Z`;
+  const figure = [throat, skull];
 
   // ---- the colours and line of each manner
   const hue = Math.round(g[G.Hue]! * 360), hue2 = Math.round(g[G.Hue2]! * 360);
@@ -97,14 +101,14 @@ export function Portrait({ genes: g, era, role, seed, bold = 0.5, cruel = 0.5, w
   const behind: preact.JSX.Element[] = [];
   const on: preact.JSX.Element[] = [];
   if (g[G.Ornament]! > 0.4) {
-    const ch = hr * (0.5 + 1.1 * g[G.Ornament]!);
+    const ch = hr * (0.5 + 1.1 * g[G.Ornament]!) * (1 + j(5, 0.25));
     const pts: P[] = [at(hr * 0.25, -hr * 0.95)];
     for (let i = 0; i <= 6; i++) { const u = i / 6, a = -Math.PI * 0.5 - u * Math.PI * 0.62, r = hr + ch * Math.pow(Math.sin(u * Math.PI), 0.7) * (0.8 + 0.2 * Math.cos(u * 19)); pts.push(at(Math.cos(a) * r, Math.sin(a) * r)); }
     pts.push(at(-hr * 0.8, hr * 0.5));
     behind.push(<path key="crest" d={`M ${pts.map((p) => `${f(p.x)} ${f(p.y)}`).join(' L ')} Z`} fill={look.fill} stroke={look.line} stroke-width={look.lw} stroke-linejoin="round" />);
   }
   if (g[G.Hearing]! > 0.45) {
-    const el = hr * (0.5 + 0.8 * g[G.Hearing]!);
+    const el = hr * (0.5 + 0.8 * g[G.Hearing]!) * (1 + j(6, 0.25));
     behind.push(<path key="ear" d={closed([at(-hr * 0.75, -hr * 0.5), at(-hr * 0.9 - el * 0.45, -hr * 0.7 - el), at(-hr * 0.3, -hr * 0.88)])} fill={look.fill} stroke={look.line} stroke-width={look.lw} />);
   }
   if (g[G.Armor]! > 0.45) for (let i = 0; i < 4; i++) {
@@ -112,7 +116,7 @@ export function Portrait({ genes: g, era, role, seed, bold = 0.5, cruel = 0.5, w
     behind.push(<path key={`pl${i}`} d={`M ${f(px + 1)} ${f(py - s * 0.6)} L ${f(px - s)} ${f(py)} L ${f(px + 1)} ${f(py + s * 0.6)} Z`} fill={look.fill} stroke={look.line} stroke-width={look.lw} stroke-linejoin="round" />);
   }
   if (g[G.Horn]! > 0.22) {
-    const hl = hr * (0.6 + 1.8 * g[G.Horn]!);
+    const hl = hr * (0.6 + 1.8 * g[G.Horn]!) * (1 + j(7, 0.3));
     const tip = at(hr * 0.1 - hl * 0.45, -hr * 0.9 - hl * 0.75), mid = at(hr * 0.45, -hr * 0.95 - hl * 0.55), w = Math.max(1.6, hr * 0.16);
     on.push(<path key="horn" d={`M ${f(cx + hr * 0.2 - w)} ${f(cy - hr * 0.9)} Q ${f(mid.x - w)} ${f(mid.y)} ${f(tip.x)} ${f(tip.y)} Q ${f(mid.x + w)} ${f(mid.y + w)} ${f(cx + hr * 0.2 + w)} ${f(cy - hr * 0.86)} Z`} fill={style === 2 ? look.fill : look.line} stroke={look.line} stroke-width={look.lw} stroke-linejoin="round" />);
   }
@@ -133,7 +137,7 @@ export function Portrait({ genes: g, era, role, seed, bold = 0.5, cruel = 0.5, w
 
   // the face
   const eyes = Math.min(3, Math.max(1, Math.round(g[G.EyeCount]! * 3)));
-  const er = Math.max(1.3, hr * (0.1 + 0.13 * g[G.EyeSize]!));
+  const er = Math.max(1.3, hr * (0.1 + 0.13 * g[G.EyeSize]!) * (1 + j(8, 0.18)));
   const face: preact.JSX.Element[] = [];
   for (let e = 0; e < eyes; e++) {
     const ex = cx + hr * (0.38 - e * 0.42), ey = cy - hr * (0.26 - e * 0.07), r = er * (1 - e * 0.18);
@@ -146,22 +150,16 @@ export function Portrait({ genes: g, era, role, seed, bold = 0.5, cruel = 0.5, w
     face.push(<circle key="nose" cx={f(cx + hr + sl * 0.8)} cy={f(cy - hr * 0.01)} r={0.9} fill={look.cut} />);
   }
 
-  // ---- what the calling adds
+  // ---- what a life leaves on a face (nothing is worn: see the note at the neck)
   const dress: preact.JSX.Element[] = [];
   const halo: preact.JSX.Element[] = [];
-  if (role === 'ruler' || role === 'founder' || role === 'consort') {
-    const a = at(-hr * 0.78, -hr * 0.62), b = at(0, -hr * 1.04), c = at(hr * 0.62, -hr * 0.7);
-    dress.push(<path key="band" d={`M ${f(a.x)} ${f(a.y)} Q ${f(b.x)} ${f(b.y)} ${f(c.x)} ${f(c.y)}`} stroke={look.dress} stroke-width={2.6} fill="none" stroke-linecap="round" />);
-    if (role === 'ruler') for (let i = 0; i < 3; i++) { const u = 0.2 + i * 0.3, x = a.x + (c.x - a.x) * u, y = a.y + (c.y - a.y) * u - hr * 0.22 * Math.sin(u * Math.PI) - 1; dress.push(<path key={`pt${i}`} d={`M ${f(x - 2)} ${f(y)} L ${f(x)} ${f(y - 5)} L ${f(x + 2)} ${f(y)} Z`} fill={look.dress} />); }
-  }
   if (role === 'general') {
-    for (let i = 0; i < 3; i++) dress.push(<path key={`g${i}`} d={`M ${f(42 - neckW - 5 + i)} ${f(baseY - 2 - i * 3.2)} Q 42 ${f(baseY + 4 - i * 3.2)} ${f(42 + neckW + 5 - i)} ${f(baseY - i * 3.2)}`} stroke={look.dress} stroke-width={2} fill="none" stroke-linecap="round" />);
     dress.push(<path key="scar" d={`M ${f(cx + hr * 0.7)} ${f(cy - hr * 0.12)} L ${f(cx + hr * 0.95)} ${f(cy + hr * 0.3)}`} stroke={look.cut} stroke-width={0.9} stroke-linecap="round" />);
   }
-  if (role === 'explorer') dress.push(<path key="scarf" d={`M ${f(42 + neckW + 3)} ${f(baseY - 5)} Q 42 ${f(baseY + 1)} ${f(42 - neckW - 3)} ${f(baseY - 6)} q -8 -1 -14 6 q 7 -1 13 2`} stroke={look.dress} stroke-width={2.4} fill="none" stroke-linecap="round" stroke-linejoin="round" />);
-  if (role === 'scholar' || role === 'inventor' || role === 'artist') {
-    dress.push(<path key="collar" d={`M ${f(42 - neckW - 4)} ${f(baseY - 2)} Q 42 ${f(baseY + 5)} ${f(42 + neckW + 4)} ${f(baseY)}`} stroke={look.dress} stroke-width={1.6} fill="none" stroke-linecap="round" />);
-    dress.push(<circle key="pendant" cx={f(42 + neckW * 0.3)} cy={f(baseY + 8)} r={role === 'artist' ? 1.6 : 2.2} fill={role === 'inventor' ? 'none' : look.dress} stroke={look.dress} stroke-width={1} />);
+  // a mark of its own on about half of them: a pale or dark blaze on the muzzle or the brow
+  if (rnd(seed, 9) < 0.55) {
+    const u = rnd(seed, 10), bx = cx + hr * (0.2 + 0.9 * u) + sl * 0.4 * u, by = cy + hr * (-0.45 + 0.6 * rnd(seed, 11));
+    dress.push(<ellipse key="blaze" cx={f(bx)} cy={f(by)} rx={f(hr * (0.16 + 0.2 * rnd(seed, 12)))} ry={f(hr * (0.1 + 0.12 * rnd(seed, 13)))} fill={look.mark} opacity={style === 4 ? 0.5 : 0.38} />);
   }
 
   // ---- the ground it is made on, and its frame

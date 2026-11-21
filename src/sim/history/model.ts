@@ -4,6 +4,13 @@ import type { Movement, Painting } from './art';
 import type { Legend } from './legend';
 import type { Festival } from './festival';
 import type { War } from './war';
+import type { Grudge, Treaty } from './diplomacy';
+import type { Ideology } from './ideology';
+import type { Colony } from './colony';
+import type { Pandemic } from './plague';
+import type { Race } from './arms';
+import type { Secret } from './secrets';
+import type { GreatWar } from './greatwar';
 // The entities of history. All of them are plain data, so the whole of history saves, loads and
 // rewinds with the rest of the simulation.
 import type { Calendar } from './calendar';
@@ -119,7 +126,7 @@ export const NETWORKS = [
   { id: 'power', name: 'power line', plural: 'power lines', needs: 'grid', every: 12, glow: 0.2, sea: true },
 ] as const;
 
-export type Government = 'band' | 'chiefdom' | 'kingdom' | 'republic' | 'empire' | 'council' | 'custom';
+export type Government = 'band' | 'chiefdom' | 'kingdom' | 'republic' | 'empire' | 'council' | 'custom' | 'iron rule' | 'rule of the learned' | 'the old law' | 'council of merchants';
 
 export interface Nation {
   id: number;
@@ -168,6 +175,23 @@ export interface Nation {
   woes: { kind: string; eventId: number; year: number }[];
   /** Its building laws, each made after a calamity in one of its towns (system E20). */
   codes?: Codes;
+  /** Whom it has fought (system E38): for each country (by id), the year of their last war and that war's event. */
+  foes?: Record<number, { year: number; eventId: number }>;
+  /** How hard it is pressed by a rival of like strength, 0..1, and who that is (a nation's id). */
+  pressed?: number;
+  rival?: number;
+  /** The year a war last set its workshops to work. */
+  jolted?: number;
+  /** The colony it was born from (system E36): a colony's id. */
+  colonyOf?: number;
+  /** The idea gaining ground in it (system E35): which (an ideology's id), the share of its people who hold it, and since when. And how many times its flag has changed. */
+  idea?: { id: number; share: number; since: number };
+  flag?: number;
+  /** The year of its last revolution, and the idea it has been governed by since. */
+  revolved?: number;
+  creed?: number;
+  /** Betrayals it remembers (system E34). */
+  grudges?: Grudge[];
   /** The year until which it is in a slump after a crash (system E32): learning and building are slow meanwhile. */
   slump?: number;
   /** Its chief trade (system E31): which good (an index into GOODS) it sells to which country, since when, and the event that recorded it. */
@@ -229,6 +253,33 @@ export interface HistoryState {
   movements?: Movement[];
   firstStyles?: number[];
   paintingSeq?: number;
+  /** Wars that drew in the allies of those who began them (system E40), world wars among them; and the event of the first world war. */
+  great?: GreatWar[];
+  greatSeq?: number;
+  firstWorldWar?: number;
+  /** What was done in secret (system E39): thefts, killings and unread treaties, each with the story told in its place. */
+  secrets?: Secret[];
+  /** Arms races (system E38): those going on and the last few dozen cooled; and the event of the first. */
+  races?: Race[];
+  raceSeq?: number;
+  firstRace?: number;
+  /** The plagues that have travelled the trade routes (system E37): the one abroad now and the last two dozen spent; and the event of the first. */
+  plagues?: Pandemic[];
+  plagueSeq?: number;
+  firstPandemic?: number;
+  /** Colonies planted overseas (system E36), and the events of the first colony and the first independence. */
+  colonies?: Colony[];
+  firstColony?: number;
+  firstFree?: number;
+  /** The ideas of the world (system E35), and the events of the first idea and the first revolution. */
+  ideologies?: Ideology[];
+  firstIdea?: number;
+  firstRevolution?: number;
+  /** Treaties made (system E34): those in force, and those broken or run out lately; the events of the first treaty and the first betrayal. */
+  treaties?: Treaty[];
+  treatySeq?: number;
+  firstTreaty?: number;
+  firstBetrayal?: number;
   /** The wars fought as campaigns (system E33): those going on and the last few dozen ended. */
   wars?: War[];
   warSeq?: number;

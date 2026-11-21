@@ -7,9 +7,9 @@ import { Counterfactual, changeFor, replayable, type Change } from './whatif';
 import { ancestry, archiveIndex, article, atlas, braid, placeAt, records } from './memory';
 import { G, P, PHEN_COUNT, sizeMetres } from './genetics';
 import { nearestCell } from './world';
-import { loadSimulation, saveSimulation, type SaveState } from './snapshot';
+import { loadSimulation, saveSimulation, type SaveState, packSave, eventsIn } from './snapshot';
 import {
-  HISTORY_SPEED, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type DynastyDetail, type HouseMember, type SiteDetail, type NationDetail, type PersonInfo, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
+  HISTORY_SPEED, BEFORE_HISTORY, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type DynastyDetail, type HouseMember, type SiteDetail, type NationDetail, type PersonInfo, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
   type WonderInfo, type MemoryAnswer,
 } from '../shared/protocol';
 import { ERAS, earthNote, eraOf } from './history/eras';
@@ -18,8 +18,13 @@ import { LEXICON, SAYINGS } from './history/syntax';
 import { languageList, scriptInfo } from './history/tongues';
 import { galleryList } from './history/gallery';
 import { describeMusic, lineOf, tradition } from './history/music';
+import { describeColony } from './history/colony';
+import { describePandemic } from './history/plague';
+import { describeGreatWar } from './history/greatwar';
+import { describeBattle } from './history/war';
 import { chartingOf } from './history/worldmap';
 import { GOODS, describeMarket } from './history/trade';
+import { GRUDGE_YEARS, secretTies, web } from './history/diplomacy';
 import { bodyFrom, type Body } from './history/script';
 import { compound } from './history/language';
 import { SLOT_INDEX, WEB, wayFor } from './history/tech';
@@ -33,11 +38,34 @@ let speedIndex = 0;
 let lastCells = 0;
 let lastStats = 0;
 let lastSpecies = 0;
+// The lists of species, towns and countries are large in a late world (a thousand towns, two hundred countries). If
+// the page takes longer to take one in than the worker takes to make the next, they queue without limit (it reached
+// gigabytes). So the next is not sent until the page says it has the last (or eight seconds have gone by).
+let pageHas = true, sentLists = 0;
 let lastCosmos = 0;
 let tickMs = 0;
 let cellsRequested = false;
 let slowOnEvents = true;
-let slowUntil = 0;
+// Time is slowed for a while around a great event so that it can be seen. The while is counted in steps of the
+// simulation, not in seconds: counted in seconds, how many slowed steps were taken depended on how busy the machine
+// was, and since a slowed step is a different length from a full one, one seed gave a different world every visit
+// (its history began at 83, 96, 127 and 144 million years in four runs of the same page).
+let slowTicks = 0;
+// One seed, one world, until its history begins. The simulation's result depends on the length of its steps, and
+// each speed had its own (1,500 years at 100x, 5,000 at 1000x, 15,000 at Epoch and in a skip). So how long a visitor
+// left the world at one speed before choosing another decided which world they got: two visits to one seed pressed
+// Epoch a few seconds apart and came out with different continents of life. Before history, at 100x and faster,
+// the world is therefore always stepped 15,000 years at a time, on boundaries that are multiples of 15,000 years,
+// whatever the speed: a speed only decides how often a step is taken. The years a speed has earned and not yet
+// spent wait in `owed` (and are shown, so the clock runs smoothly). Slower speeds still take their own small
+// steps, with seasons in them; a visitor who slows down before history has, knowingly, a world of their own.
+const GRID_YEARS = 15000;
+let owed = 0;
+/** The length of the next step that ends on a boundary. */
+function toBoundary(s: Simulation): number {
+  const left = GRID_YEARS - (s.simYear % GRID_YEARS);
+  return left > 1e-6 ? left : GRID_YEARS;
+}
 let speciesVersion = -1;
 let plantVersion = -1;
 const sentExtinct = new Set<number>();
@@ -79,7 +107,7 @@ let snapshotEra = 0;
 /** How many rewind points to keep (each is a whole copy of the world). */
 let rewindLimit = 12;
 /** A jump through time under way: run in slices so that it can be stopped, and so the page hears how far it has got. */
-let warp: { end: number; through: boolean; had: boolean; era: number } | null = null;
+let warp: { end: number; through: boolean; had: boolean; era: number; mark: string } | null = null;
 
 function warpSlice(): void {
   const w = warp;
@@ -88,9 +116,10 @@ function warpSlice(): void {
   let done = false;
   while (!done && performance.now() - t0 < 400) {
     // toward an age, history is walked in short steps: a whole age can pass in a century
-    sim.step(Math.min(w.era >= 0 && sim.civ.historyLive ? 25 : 15000, w.end - sim.simYear));
+    // (before history a skip steps to the same boundaries as the fast speeds do: see GRID_YEARS)
+    sim.step(Math.min(sim.civ.historyLive ? (w.era >= 0 ? 25 : GRID_YEARS) : toBoundary(sim), w.end - sim.simYear));
     keepEra(sim); // the ages passed on the way can be gone back to
-    done = sim.simYear >= w.end
+    done = sim.simYear >= w.end || (!!w.mark && sim.milestones.has(w.mark))
       || (w.era >= 0 ? sim.civ.historyLive && sim.civ.h.topEra >= w.era : !w.through && !w.had && sim.civ.historyLive);
   }
   if (done) endWarp();
@@ -200,7 +229,7 @@ function historyHeld(): boolean {
 
 function currentYps(): number {
   const yps = historyHeld() ? HISTORY_YPS : SPEEDS[speedIndex]!.yearsPerSecond;
-  return performance.now() < slowUntil ? Math.min(yps, SLOW_YPS) : yps;
+  return slowTicks > 0 ? Math.min(yps, SLOW_YPS) : yps;
 }
 
 function nationDetail(s: Simulation, id: number): NationDetail | null {
@@ -230,7 +259,8 @@ function nationDetail(s: Simulation, id: number): NationDetail | null {
   const first = mine.find((p) => p.role === 'founder'), now = h.people[n.ruler];
   const others = mine.filter((p) => p.role !== 'ruler' && p.role !== 'founder').reverse().slice(0, 40);
   const people = [...new Set([now, first, ...others].filter((p): p is NonNullable<typeof p> => !!p && p.nation === id))].map(info);
-  return { id, name: n.name, land: n.land.slice(), species: n.species, people, tech, rulers: rulers.slice(-60), houses };
+  const races = (h.races ?? []).filter((r) => r.a === id || r.b === id).map((r) => ({ with: h.nations[r.a === id ? r.b : r.a]?.name ?? '', began: r.began, ended: r.ended, eventId: r.eventId }));
+  return { id, name: n.name, land: n.land.slice(), species: n.species, people, tech, rulers: rulers.slice(-60), houses, races };
 }
 
 /** Whose building fashions a nation borrows (system E14): the most knowledgeable country it is in touch with, if that is another culture, and the more so the more its own culture trades. */
@@ -280,6 +310,35 @@ function monstersOf(s: Simulation, n: Simulation['civ']['h']['nations'][number],
   if (!cap || sea <= 0) return [];
   const p = s.grid.pos, c = cap.cell, far = Math.cos(Math.min(3.1, sea * 1.4 + 0.1));
   return giants.filter((g) => p[c * 3]! * p[g.cell * 3]! + p[c * 3 + 1]! * p[g.cell * 3 + 1]! + p[c * 3 + 2]! * p[g.cell * 3 + 2]! >= far).slice(0, 3).map((g) => ({ species: g.id, name: g.name, cell: g.cell, size: g.size }));
+}
+
+/** The league a nation belongs to (system E40), if the order it came from still holds. */
+function leagueOf(s: Simulation, n: Simulation['civ']['h']['nations'][number]): NationInfo['league'] {
+  const g = (s.civ.h.great ?? []).find((x) => x.order && x.order.until < 0 && x.order.members.includes(n.id));
+  const league = g?.order?.institutions[0];
+  return g && g.order && league ? { name: league.name, own: league.own, since: g.order.year, eventId: league.eventId } : undefined;
+}
+
+/** The arms race a nation is in now (system E38). */
+function raceOf(s: Simulation, n: Simulation['civ']['h']['nations'][number]): NationInfo['race'] {
+  const h = s.civ.h, r = (h.races ?? []).find((x) => x.ended < 0 && (x.a === n.id || x.b === n.id));
+  if (!r) return undefined;
+  const side = r.a === n.id ? 0 : 1, other = h.nations[side === 0 ? r.b : r.a];
+  return { with: other ? other.id : -1, withName: other ? other.name : '', since: r.began, pressed: n.pressed ?? 0, found: r.found[side], arms: r.arms[side], eventId: r.eventId };
+}
+
+/** A nation's colonies overseas (system E36): those it still holds. */
+function coloniesOf(s: Simulation, n: Simulation['civ']['h']['nations'][number]): NonNullable<NationInfo['colonies']> | undefined {
+  const out: NonNullable<NationInfo['colonies']> = [];
+  for (const c of s.civ.h.colonies ?? []) {
+    if (c.mother !== n.id || c.freed >= 0 || c.gone >= 0 || c.child >= 0) continue;
+    const seat = s.civ.settlements[c.seat];
+    if (!seat) continue;
+    let towns = 0;
+    for (const st of s.civ.settlements) if (st.ruined < 0 && st.nation === n.id && st.colony === c.id) towns++;
+    if (towns) out.push({ id: c.id, seat: seat.id, name: seat.name, founded: c.founded, towns, identity: c.identity, note: describeColony(c, s.simYear), eventId: c.eventId });
+  }
+  return out.length ? out : undefined;
 }
 
 /** The music of a nation's people in its present age (system E27), once any of its kind has made music. */
@@ -360,7 +419,7 @@ function nationList(s: Simulation): NationInfo[] {
     return {
       id: n.id, name: n.name, species: n.species, capital: n.capital, founded: n.founded, ended: n.ended, parent: n.parent, government: n.government,
       stability: n.stability, tech: n.tech, era: n.era, eraName: s.civ.eraName(n), eraOwn: s.civ.eraOwnName(n), earth: earthNote(n.era), hue: n.hue, pop: n.pop, towns: n.towns,
-      culture: culture.name, language: h.languages[culture.language]!.name, music: musicOf(s, n), trade: n.trade && h.nations[n.trade.to] && h.nations[n.trade.to]!.ended < 0 ? { good: GOODS[n.trade.good]!, to: n.trade.to, toName: h.nations[n.trade.to]!.name, since: n.trade.since, eventId: n.trade.eventId } : undefined, market: n.ended < 0 && n.era >= 1 ? describeMarket({ land: n.land, tech: n.tech, pop: n.pop, towns: Math.max(1, n.towns), mines: n.mines ?? 0, felled: n.felled !== undefined ? 0.7 : 0, knows: knows(n) }) : undefined, festivals: n.festivals && n.festivals.length ? n.festivals : undefined, charting: chartingOf(knows(n), n.tech), contacts: n.contacts.filter((id) => h.nations[id] && h.nations[id]!.ended < 0), monsters: monstersOf(s, n, chartingOf(knows(n), n.tech).sea, giants), script: scriptInfo(h, n.script, n.species, s.simYear, bodyOf(s)), signs: n.signs ?? (s.civ.settlements[n.capital] ? ['land', s.civ.settlements[n.capital]!.modifier || s.civ.settlements[n.capital]!.head] : undefined), ruler: ruler && ruler.died < 0 ? ruler.name : '', rulerSince: ruler && ruler.died < 0 ? ruler.reignFrom : -1,
+      culture: culture.name, language: h.languages[culture.language]!.name, music: musicOf(s, n), idea: n.idea && h.ideologies?.[n.idea.id] ? { name: h.ideologies[n.idea.id]!.name, own: h.ideologies[n.idea.id]!.own, kind: h.ideologies[n.idea.id]!.kind, share: n.idea.share, eventId: h.ideologies[n.idea.id]!.eventId } : undefined, flag: n.flag, league: leagueOf(s, n), race: raceOf(s, n), colonies: coloniesOf(s, n), colonyOf: n.colonyOf !== undefined && h.colonies?.[n.colonyOf] ? { mother: h.colonies[n.colonyOf]!.mother, motherName: h.nations[h.colonies[n.colonyOf]!.mother]?.name ?? '', founded: h.colonies[n.colonyOf]!.founded, declared: h.colonies[n.colonyOf]!.declared, freed: h.colonies[n.colonyOf]!.freed, warEvent: h.colonies[n.colonyOf]!.warEvent } : undefined, creed: n.creed !== undefined && h.ideologies?.[n.creed] ? { name: h.ideologies[n.creed]!.name, own: h.ideologies[n.creed]!.own, kind: h.ideologies[n.creed]!.kind, since: n.revolved ?? 0 } : undefined, trade: n.trade && h.nations[n.trade.to] && h.nations[n.trade.to]!.ended < 0 ? { good: GOODS[n.trade.good]!, to: n.trade.to, toName: h.nations[n.trade.to]!.name, since: n.trade.since, eventId: n.trade.eventId } : undefined, market: n.ended < 0 && n.era >= 1 ? describeMarket({ land: n.land, tech: n.tech, pop: n.pop, towns: Math.max(1, n.towns), mines: n.mines ?? 0, felled: n.felled !== undefined ? 0.7 : 0, knows: knows(n) }) : undefined, festivals: n.festivals && n.festivals.length ? n.festivals : undefined, charting: chartingOf(knows(n), n.tech), contacts: n.contacts.filter((id) => h.nations[id] && h.nations[id]!.ended < 0), monsters: monstersOf(s, n, chartingOf(knows(n), n.tech).sea, giants), script: scriptInfo(h, n.script, n.species, s.simYear, bodyOf(s)), signs: n.signs ?? (s.civ.settlements[n.capital] ? ['land', s.civ.settlements[n.capital]!.modifier || s.civ.settlements[n.capital]!.head] : undefined), ruler: ruler && ruler.died < 0 ? ruler.name : '', rulerSince: ruler && ruler.died < 0 ? ruler.reignFrom : -1,
       house: house ? house.name : '', houseReigns: house ? house.reigns : 0, houseId: house ? house.id : -1, eventId: n.eventId, ...fashionSource(s, n), networks: networksOf(s, n.id), golden: n.golden ? n.golden.own : '', goldenSince: n.golden ? n.golden.since : -1, goldenWorks: n.golden ? n.golden.works : 0,
       calendar: cal ? cal.name : '', calendarOwn: cal ? cal.own : '', calendarEpoch: cal ? cal.epoch : 0, calendarEvent: cal ? cal.eventId : -1,
     };
@@ -369,7 +428,8 @@ function nationList(s: Simulation): NationInfo[] {
 
 function stats(s: Simulation): WorldStats {
   return {
-    simYear: s.simYear,
+    // (with the years a speed has earned toward the next step, so that the clock does not tick in jumps)
+    simYear: s.simYear + (warp ? 0 : owed),
     yearFrac: s.yearFrac,
     meanTemp: s.climate.meanTemp,
     globalOffset: s.climate.globalOffset,
@@ -385,7 +445,8 @@ function stats(s: Simulation): WorldStats {
     historyHeld: historyHeld(),
     historyBegan: s.civ.h.began,
     topEra: s.civ.h.topEra,
-    skipTo: warp && warp.era >= 0 ? warp.era : undefined,
+    skipTo: warp?.mark ? warp.mark : warp && warp.era >= 0 ? warp.era : undefined,
+    reached: BEFORE_HISTORY.filter((b) => s.milestones.has(b.key)).map((b) => b.key),
     tickMs,
     stage: s.stage,
     era: s.era.kind,
@@ -457,7 +518,19 @@ function keepEra(s: Simulation): void {
   if (s.civ.h.topEra > snapshotEra) {
     snapshotEra = s.civ.h.topEra;
     const title = `Start of the ${ERAS[snapshotEra]!.name}`;
-    rewinds.push({ simYear: s.simYear, title, save: saveSimulation(s, title), era: true });
+    rewinds.push({ simYear: s.simYear, title, save: packSave(saveSimulation(s, title)), era: true });
+    // (Each copy is kept in its small form, `packSave`: its event log and its people on record as text.)
+    // A kept copy of the world is as large as its record. Where the record is long (a watched history of many
+    // countries), a dozen copies ran to gigabytes and the page stopped answering; so the copies together may hold
+    // only so many events' worth (a hundred thousand: three or four copies of a late, crowded world, or all the copies
+    // of an early one), and the heaviest that is not the newest goes first.
+    const weigh = (r: { save: SaveState }): number => eventsIn(r.save);
+    for (let guard = 0; guard < 40 && rewinds.reduce((a, r) => a + weigh(r), 0) > 100000; guard++) {
+      let drop = -1, top = -1;
+      for (let i = 0; i < rewinds.length - 1; i++) { const w = weigh(rewinds[i]!); if (rewinds[i]!.title !== 'Fork point' && w > top) { top = w; drop = i; } }
+      if (drop < 0) break;
+      rewinds.splice(drop, 1);
+    }
     // where memory is short only the most recent eras are kept
     const eraLimit = Math.max(3, rewindLimit - 2);
     while (rewinds.filter((r) => r.era).length > eraLimit) rewinds.splice(rewinds.findIndex((r) => r.era), 1);
@@ -471,20 +544,29 @@ function tick(): void {
   if (!s || warp) return;
   const start = performance.now();
   const yps = currentYps();
-  if (yps > 0) s.step(yps / TICK_HZ);
+  if (yps > 0) {
+    const fast = SPEEDS[speedIndex]!.yearsPerSecond >= GRID_YEARS * 2 && !historyHeld();
+    if (fast && !s.civ.historyLive) {
+      // (a slowed tick, around a great event, earns fewer years; it does not take a step of another length)
+      owed += yps / TICK_HZ;
+      for (let k = 0; k < 4 && owed >= toBoundary(s) && !s.civ.historyLive; k++) { const d = toBoundary(s); s.step(d); owed -= d; }
+      if (s.civ.historyLive) owed = 0;
+    } else { owed = 0; s.step(yps / TICK_HZ); }
+    if (slowTicks > 0) slowTicks--;
+  }
   // history has begun (or ended): the hold on time starts afresh each time
   const active = s.civ.historyLive;
   if (active !== wasHistory) { wasHistory = active; historyOverride = false; }
   keepEra(s);
   // slow time for a few seconds around big events so they can be seen
-  if (slowOnEvents && s.bigEvent >= 2 && SPEEDS[speedIndex]!.yearsPerSecond > SLOW_YPS) slowUntil = start + (s.bigEvent >= 3 ? 5000 : 3000);
+  if (slowOnEvents && yps > 0 && s.bigEvent >= 2 && SPEEDS[speedIndex]!.yearsPerSecond > SLOW_YPS) slowTicks = (s.bigEvent >= 3 ? 5 : 3) * TICK_HZ;
   const fresh = s.events.drainFresh();
   if (fresh.length) post({ type: 'events', events: fresh });
   // keep a few rewind points: every milestone-grade event, at most one per 4 My
   const major = fresh.find((e) => e.importance >= 3);
   if (major && s.simYear - lastRewindYear > 4e6) {
     lastRewindYear = s.simYear;
-    rewinds.push({ simYear: s.simYear, title: major.title, save: saveSimulation(s, major.title) });
+    rewinds.push({ simYear: s.simYear, title: major.title, save: packSave(saveSimulation(s, major.title)) });
     thinRewinds();
     post({ type: 'timeline', points: rewinds.map((r, index) => ({ index, simYear: r.simYear, title: r.title })) });
   }
@@ -505,13 +587,14 @@ function tick(): void {
     post({ type: 'stats', stats: stats(s) });
     lastStats = now;
   }
-  if (now - lastSpecies > 700 && s.stage === 'animals') {
+  if (now - lastSpecies > 700 && s.stage === 'animals' && (pageHas || now - sentLists > 8000)) {
     lastSpecies = now;
     post({ type: 'species', species: speciesList(s) });
     if (s.civ.settlements.length) {
+      pageHas = false; sentLists = now;
       const joins = linksByTown(s);
       const great = wondersByTown(s);
-      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, lore: t.lore, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, farms: t.farms, monuments: t.monuments ?? 0, wonders: great.get(t.id), means: t.modifier ? `${t.modifier} ${t.head}` : t.head, names: t.names && t.names.length > 1 ? t.names : undefined, scars: t.scars && t.scars.length ? t.scars.flatMap((x) => [x.year, CALAMITIES.indexOf(x.kind), x.share, REBUILDS.indexOf(x.rebuilt), x.toward ?? -1]) : undefined, codes: codeYears(s, t.nation), walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas, links: joins.get(t.id), dam: t.dam !== undefined, mine: t.mine !== undefined, layers: (t.strata ? t.strata.length : 1) + (t.over !== undefined ? 1 : 0), peak: t.peak, feral: t.feral !== undefined ? s.creatures.species[t.feral]?.name ?? '' : '', nesting: t.nesting !== undefined ? s.creatures.species[t.nesting]?.name ?? '' : '' })) , nations: nationList(s), armies: (s.civ.h.wars ?? []).filter((w) => w.ended < 0).map((w) => { const t = s.civ.settlements[w.route[Math.min(w.at, w.route.length - 1)]!]; return { cell: t ? t.cell : -1, size: w.army[0].size }; }).filter((a) => a.cell >= 0) });
+      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, lore: t.lore, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, farms: t.farms, monuments: t.monuments ?? 0, wonders: great.get(t.id), means: t.modifier ? `${t.modifier} ${t.head}` : t.head, names: t.names && t.names.length > 1 ? t.names : undefined, scars: t.scars && t.scars.length ? t.scars.flatMap((x) => [x.year, CALAMITIES.indexOf(x.kind), x.share, REBUILDS.indexOf(x.rebuilt), x.toward ?? -1]) : undefined, codes: codeYears(s, t.nation), cordon: t.cordon ? { year: t.cordon.year, name: (s.civ.h.plagues ?? []).find((p) => p.id === t.cordon!.plague)?.name ?? 'a sickness' } : undefined, walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas, links: joins.get(t.id), dam: t.dam !== undefined, mine: t.mine !== undefined, layers: (t.strata ? t.strata.length : 1) + (t.over !== undefined ? 1 : 0), peak: t.peak, feral: t.feral !== undefined ? s.creatures.species[t.feral]?.name ?? '' : '', nesting: t.nesting !== undefined ? s.creatures.species[t.nesting]?.name ?? '' : '' })) , nations: nationList(s), armies: (s.civ.h.wars ?? []).filter((w) => w.ended < 0).map((w) => { const t = s.civ.settlements[w.route[Math.min(w.at, w.route.length - 1)]!]; return { cell: t ? t.cell : -1, size: w.army[0].size }; }).filter((a) => a.cell >= 0) });
     }
     speciesVersion = s.creatures.version;
     if (s.plants.version !== plantVersion) {
@@ -536,6 +619,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
   try {
     switch (msg.type) {
       case 'init': {
+        owed = 0;
         warp = null;
         sim = new Simulation(msg.seed, msg.gridN);
         if (msg.neighbor) sim.link(msg.neighbor);
@@ -550,7 +634,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         speedIndex = Math.max(0, Math.min(SPEEDS.length - 1, msg.index));
         // choosing a faster speed while history runs is a decision to skip ahead: it lifts the hold
         historyOverride = !!sim && sim.civ.historyLive && SPEEDS[speedIndex]!.yearsPerSecond > HISTORY_YPS;
-        slowUntil = 0;
+        slowTicks = 0;
         break;
       case 'requestCells':
         cellsRequested = true;
@@ -563,7 +647,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
           beforeTool = saveSimulation(sim, 'before');
           if (msg.tool === 'species' && msg.genes) sim.designSpecies(msg.cell, msg.genes);
           else sim.intervene(msg.tool, msg.cell, msg.power ?? 0.8);
-          slowUntil = performance.now() + 6000;
+          slowTicks = 6 * TICK_HZ;
           cellsRequested = true;
         }
         break;
@@ -571,6 +655,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         if (sim) post({ type: 'saved', slot: msg.slot, save: saveSimulation(sim, msg.name) });
         break;
       case 'load': {
+        owed = 0;
         warp = null;
         const save = msg.save as SaveState;
         sim = new Simulation(save.seed, save.gridN);
@@ -631,8 +716,47 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
           post({ type: 'memory', answer });
         }
         break;
+      case 'requestDiplomacy':
+        if (sim) {
+          const s = sim, h = s.civ.h, g = s.grid;
+          const living = h.nations.filter((n) => n.ended < 0);
+          post({ type: 'diplomacy', web: {
+            nations: living.map((n) => { const c = s.civ.settlements[n.capital]?.cell ?? 0; return { id: n.id, name: n.name, hue: n.hue, u: (g.lon[c]! + Math.PI) / (Math.PI * 2), v: 0.5 - g.lat[c]! / Math.PI, pop: n.pop }; }),
+            // (in a world of many countries, who is merely in touch with whom is thousands of lines: only what is stronger is sent)
+            ties: living.length > 40 ? web(h, s.simYear).filter((t) => t.kind !== 'contact') : web(h, s.simYear),
+            secret: secretTies(h, s.simYear),
+            betrayals: living.flatMap((n) => (n.grudges ?? []).filter((x) => s.simYear - x.year < GRUDGE_YEARS).map((x) => ({ by: h.nations[x.against]?.name ?? '', against: n.name, year: x.year, eventId: x.eventId, avenged: x.avenged ?? -1 }))).sort((a, b) => b.year - a.year).slice(0, 30),
+          } });
+        }
+        break;
+      case 'requestPlagues':
+        if (sim) {
+          const s = sim, h = s.civ.h, towns = s.civ.settlements, live = towns.filter((t) => t.ruined < 0).length;
+          post({
+            type: 'plagues',
+            list: (h.plagues ?? []).slice().reverse().map((p) => ({ id: p.id, name: p.name, own: p.own, began: p.began, ended: p.ended, eventId: p.eventId, text: describePandemic(p, live, s.simYear), steps: p.reached.map((r) => ({ cell: towns[r.town]!.cell, from: r.from >= 0 ? towns[r.from]!.cell : -1, town: towns[r.town]!.name, year: r.year, via: r.via, dead: r.dead, shut: r.shut, eventId: r.eventId })) })),
+            ways: s.civ.tradeEdges(s).map((e) => ({ a: towns[e.a]!.cell, b: towns[e.b]!.cell, via: e.via })),
+          });
+        }
+        break;
+      case 'requestGreatWars':
+        if (sim) {
+          const s = sim, h = s.civ.h, towns = s.civ.settlements;
+          const name = (id: number): string => h.nations[id]?.name ?? '';
+          post({ type: 'greatWars', list: (h.great ?? []).slice().reverse().map((g) => ({
+            id: g.id, name: g.name, own: g.own, began: g.began, ended: g.ended, world: g.world, eventId: g.eventId, endEvent: g.endEvent, text: describeGreatWar(g, name, s.simYear),
+            sides: g.sides.map((ids) => ({ names: ids.map(name), cells: towns.filter((t) => t.ruined < 0 && ids.includes(t.nation) && h.nations[t.nation]!.ended < 0).map((t) => t.cell) })),
+            taken: g.taken.map((id) => towns[id]).filter((t) => !!t && t.ruined < 0).map((t) => ({ cell: t!.cell, town: t!.name })),
+            institutions: (g.order?.institutions ?? []).map((i) => ({ kind: i.kind, name: i.name, own: i.own, cell: towns[i.seat]?.cell ?? -1, eventId: i.eventId })),
+            holds: !!g.order && g.order.until < 0,
+          })) });
+        }
+        break;
+      case 'got':
+        pageHas = true;
+        break;
       case 'requestWars':
-        if (sim) { const s = sim, h = s.civ.h; post({ type: 'wars', list: (h.wars ?? []).slice(-30).reverse().map((w) => ({ id: w.id, attacker: h.nations[w.a]?.name ?? '', defender: h.nations[w.b]?.name ?? '', year: w.year, ended: w.ended, outcome: w.outcome, eventId: w.eventId, peaceEvent: w.peaceEvent, battles: w.battles.map((b) => { const t = s.civ.settlements[b.settlement]; return { year: b.year, cell: t ? t.cell : -1, town: t ? t.name : '', kind: b.kind, winner: b.winner, sizes: b.sizes, decided: b.decided, taken: b.taken, eventId: b.eventId, text: s.events.events[b.eventId]?.description ?? '' }; }) })) }); }
+        if (sim) { const s = sim, h = s.civ.h; post({ type: 'wars', list: (h.wars ?? []).slice(-30).reverse().map((w) => ({ id: w.id, attacker: h.nations[w.a]?.name ?? '', defender: h.nations[w.b]?.name ?? '', year: w.year, ended: w.ended, outcome: w.outcome, eventId: w.eventId, peaceEvent: w.peaceEvent, battles: w.battles.map((b, i) => { const t = s.civ.settlements[b.settlement]; return { year: b.year, cell: t ? t.cell : -1, town: t ? t.name : '', kind: b.kind, winner: b.winner, sizes: b.sizes, decided: b.decided, taken: b.taken, eventId: b.eventId, text: (i > 0 && b.eventId === w.eventId) || !s.events.events[b.eventId] ? describeBattle(b, t ? t.name : 'a town', h.nations[w.a]?.name ?? '', h.nations[w.b]?.name ?? '') : s.events.events[b.eventId]!.description }; }) })) }); }
         break;
       case 'requestMarket':
         if (sim) { const s = sim, h = s.civ.h, m = h.market; post({ type: 'market', market: { goods: [...GOODS], years: m ? m.years : [], prices: m ? m.prices : GOODS.map(() => []), bubble: m && m.bubble ? { good: GOODS[m.bubble.good]!, nation: h.nations[m.bubble.nation]?.name ?? '', since: m.bubble.since, froth: m.bubble.froth } : undefined, panics: s.events.events.filter((e) => e.type === 'panic').slice(-30).reverse().map((e) => ({ year: e.simYear, title: e.title, eventId: e.id, good: String(e.data?.good ?? '') })) } }); }
@@ -661,12 +785,13 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         break;
       case 'fork':
         if (sim) {
-          rewinds.push({ simYear: sim.simYear, title: 'Fork point', save: saveSimulation(sim, 'fork') });
+          rewinds.push({ simYear: sim.simYear, title: 'Fork point', save: packSave(saveSimulation(sim, 'fork')) });
           thinRewinds();
           post({ type: 'timeline', points: rewinds.map((r, index) => ({ index, simYear: r.simYear, title: r.title })) });
         }
         break;
       case 'rewind': {
+        owed = 0;
         const point = rewinds[msg.index];
         if (!point) break;
         warp = null;
@@ -689,7 +814,8 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         // run through), or at the age asked for: that is the part worth watching
         if (msg.stop) endWarp();
         else if (sim && !warp) {
-          warp = { end: sim.simYear + (msg.years ?? 0), through: !!msg.through, had: sim.civ.historyLive, era: msg.untilEra ?? -1 };
+          owed = 0;
+          warp = { end: sim.simYear + (msg.years ?? 0), through: !!msg.through, had: sim.civ.historyLive, era: msg.untilEra ?? -1, mark: msg.untilMark ?? '' };
           warpSlice();
         }
         break;

@@ -154,7 +154,8 @@ export function citizenLife(sim: Simulation, town: number, index: number): Citiz
   // ---- the life: what happened in their town and their country while they were alive, told by how old they were
   const born = c.born;
   const mine = ev.filter((e) => {
-    if (e.simYear < born || e.simYear > now || e.type === 'forecast' || e.type.startsWith('forecast-')) return false;
+    // (what was kept secret when it happened, E39, is no part of what a citizen lived through)
+    if (e.hidden || e.simYear < born || e.simYear > now || e.type === 'forecast' || e.type.startsWith('forecast-')) return false;
     const d = e.data ?? {};
     return e.cellId === st.cell || num(d.town) === st.id || num(d.other) === st.id || (st.nation >= 0 && (num(d.nation) === st.nation || num(d.foe) === st.nation));
   });

@@ -1,6 +1,7 @@
 import type { Tradition } from '../sim/history/music';
 import type { Charting } from '../sim/history/worldmap';
 import type { Festival } from '../sim/history/festival';
+import type { Tie } from '../sim/history/diplomacy';
 // Message protocol between the simulation worker and the main thread.
 import type { SimEvent } from '../sim/events';
 import type { CosmosInfo } from '../sim/cosmos';
@@ -78,8 +79,10 @@ export interface WorldStats {
   historyBegan?: number;
   /** Highest era any nation has reached. */
   topEra?: number;
-  /** The age a skip through time is heading for, while one is under way. */
-  skipTo?: number;
+  /** The age (a number) or the moment before history (a key of BEFORE_HISTORY) a skip through time is heading for, while one is under way. */
+  skipTo?: number | string;
+  /** Which of the BEFORE_HISTORY moments this world has already come to. */
+  reached?: string[];
   /** Actual years per second being simulated (may be reduced around big events). */
   yearsPerSecond: number;
   tickMs: number;
@@ -151,6 +154,16 @@ export interface PlantInfo {
   cover: number;
 }
 
+/** The web of diplomacy as the page sees it (system E34): the living countries, where each has its capital on the flat map, and how each pair stands. */
+export interface DiplomacyInfo {
+  nations: { id: number; name: string; hue: number; u: number; v: number; pop: number }[];
+  ties: Tie[];
+  /** Pacts in force that were signed in secret (system E39): shown only by the Truth switch. */
+  secret: Tie[];
+  /** Betrayals still remembered: who broke faith with whom, when, and whether it has been gone to war over. */
+  betrayals: { by: string; against: string; year: number; eventId: number; avenged: number }[];
+}
+
 /** A war as the page sees it (system E33): who against whom, how it went, and every battle in order with where it was fought. */
 export interface WarInfo {
   id: number;
@@ -160,6 +173,34 @@ export interface WarInfo {
   /** The event that began it and the event of the peace (-1 while it goes on). */
   eventId: number; peaceEvent: number;
   battles: { year: number; cell: number; town: string; kind: string; winner: number; sizes: [number, number]; decided: string; taken: boolean; eventId: number; text: string }[];
+}
+
+/** A great war as the page sees it (system E40): the two sides with where their towns stand now, and what the peace set up. */
+export interface GreatWarInfo {
+  id: number;
+  name: string; own: string;
+  began: number; ended: number;
+  world: boolean;
+  eventId: number; endEvent: number;
+  text: string;
+  /** The towns that changed hands in it and were kept: the cell of each, and its name. */
+  taken: { cell: number; town: string }[];
+  /** Each side: its countries by name, and the cells of the towns those still living hold. */
+  sides: { names: string[]; cells: number[] }[];
+  /** What the peace set up, if it was a world war: each with the cell of its seat. And whether that order still holds. */
+  institutions: { kind: string; name: string; own: string; cell: number; eventId: number }[];
+  holds: boolean;
+}
+
+/** A pandemic as the page sees it (system E37): each town it reached, in order, with where it came from and how. */
+export interface PlagueInfo {
+  id: number;
+  name: string; own: string;
+  began: number; ended: number;
+  eventId: number;
+  /** In a sentence: how long, how many towns, how many died, how far it kept to the ways of trade. */
+  text: string;
+  steps: { cell: number; from: number; town: string; year: number; via: string; dead: number; shut: boolean; eventId: number }[];
 }
 
 /** The world's market as the page sees it (system E32): the price of each good over time, the bubble now swelling, and the panics on record. */
@@ -279,6 +320,8 @@ export interface SettlementInfo {
    * as before, stone, braced, raised, moved) and the cell the harm came from (-1 if none).
    */
   scars?: number[];
+  /** The last time it shut its gates against a sickness (system E37): the year, and the sickness's name. */
+  cordon?: { year: number; name: string };
   /** The years its country's building laws were made: fire, earthquake, flood (-1 for none). */
   codes?: number[];
   /** Its walls, oldest first, as pairs: the people it held (thousands) and what it knew when each was built. */
@@ -317,6 +360,19 @@ export interface NationInfo {
   houseId: number;
   /** The days it keeps (system E30). */
   festivals?: Festival[];
+  /** The league it belongs to (system E40), set up after a world war and still holding: its name, since when, and the event of its founding. */
+  league?: { name: string; own: string; since: number; eventId: number };
+  /** The arms race it is in (system E38): against whom, since when, how hard it is pressed (0..1), and what it has learned while it lasted (and how much of that was arms). */
+  race?: { with: number; withName: string; since: number; pressed: number; found: number; arms: number; eventId: number };
+  /** Its colonies overseas (system E36): each one's chief town, when it was planted, how many towns it has, how far its people think of themselves as their own (0..1 and over) and how it stands in a few words. */
+  colonies?: { id: number; seat: number; name: string; founded: number; towns: number; identity: number; note: string; eventId: number }[];
+  /** The colony it was born from: its mother country, when it was planted, when it declared itself free, when it was recognised (-1 while it fights for that), and the event of its war of independence. */
+  colonyOf?: { mother: number; motherName: string; founded: number; declared: number; freed: number; warEvent: number };
+  /** The idea gaining ground in it (system E35): its name, its name in their tongue, its kind, the share of the people who hold it; and how many times its flag has changed. */
+  idea?: { name: string; own: string; kind: string; share: number; eventId: number };
+  flag?: number;
+  /** The idea it has been governed by since its last revolution, and that revolution's year. */
+  creed?: { name: string; own: string; kind: string; since: number };
   /** Its chief trade (system E31): the good, the country it goes to (id and name), since when, the event that recorded it; and its market in a sentence. */
   trade?: { good: string; to: number; toName: string; since: number; eventId: number };
   market?: string;
@@ -429,6 +485,8 @@ export interface NationDetail {
   rulers: { name: string; from: number; to: number; fate: string; house: string; houseId: number }[];
   /** Its ruling houses, latest first. */
   houses: { id: number; name: string; founded: number; ended: number; reigns: number; generations: number }[];
+  /** The arms races it has been in (system E38), oldest first: against whom, from when to when (-1 for still going), and the event of its beginning. */
+  races: { with: string; began: number; ended: number; eventId: number }[];
 }
 
 /** A point in history the user can rewind to. */
@@ -475,6 +533,15 @@ export type MemoryAnswer =
   | { what: 'museum'; data: Museum | null; asked: number }
   | { what: 'battle'; data: Battle | null };
 
+/** Moments before history that time can be skipped to: the simulation's own milestones, in the order they usually come. */
+export const BEFORE_HISTORY: { key: string; name: string }[] = [
+  { key: 'first-life', name: 'First life' },
+  { key: 'first-land-plant', name: 'Plants on land' },
+  { key: 'first-steps', name: 'Animals on land' },
+  { key: 'first-forest', name: 'First forests' },
+  { key: 'first-mind', name: 'A thinking animal' },
+];
+
 export type ToWorker =
   | { type: 'init'; seed: string; gridN?: number; neighbor?: string }
   | { type: 'speed'; index: number }
@@ -494,6 +561,11 @@ export type ToWorker =
   | { type: 'requestLegends' }
   | { type: 'requestMarket' }
   | { type: 'requestWars' }
+  /** The page has taken in the last list of towns and countries, and is ready for another. */
+  | { type: 'got' }
+  | { type: 'requestGreatWars' }
+  | { type: 'requestPlagues' }
+  | { type: 'requestDiplomacy' }
   | { type: 'requestSite'; id: number }
   | { type: 'requestMemory'; ask: MemoryAsk }
   /** Run the world twice from before an event, with it and without it (E55); or with and without one small herd spared at a cell (E56); or stop. */
@@ -502,7 +574,7 @@ export type ToWorker =
   /** Jump ahead by running the sim flat out (used by automated checks). */
   /** Jump ahead. It stops where a history begins, unless `through` is set (for scripts that need to reach a date). */
   /** With `untilEra` it stops when any nation reaches that age (0 is the dawn of history); `stop` ends a jump under way. */
-  | { type: 'warp'; years?: number; through?: boolean; untilEra?: number; stop?: boolean };
+  | { type: 'warp'; years?: number; through?: boolean; untilEra?: number; untilMark?: string; stop?: boolean };
 
 export type FromWorker =
   | { type: 'ready'; seed: string; gridN: number; tilt: number; cells: CellSnapshot; stats: WorldStats }
@@ -521,6 +593,9 @@ export type FromWorker =
   | { type: 'legends'; list: LegendInfo[] }
   | { type: 'market'; market: MarketInfo }
   | { type: 'wars'; list: WarInfo[] }
+  | { type: 'greatWars'; list: GreatWarInfo[] }
+  | { type: 'plagues'; list: PlagueInfo[]; ways: { a: number; b: number; via: string }[] }
+  | { type: 'diplomacy'; web: DiplomacyInfo }
   | { type: 'site'; detail: SiteDetail }
   | { type: 'memory'; answer: MemoryAnswer }
   | { type: 'whatif'; state: WhatIfState | null; maps?: WhatIfMaps; problem?: string }
