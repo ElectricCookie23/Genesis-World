@@ -151,6 +151,16 @@ export interface PlantInfo {
   cover: number;
 }
 
+/** The world's market as the page sees it (system E32): the price of each good over time, the bubble now swelling, and the panics on record. */
+export interface MarketInfo {
+  goods: string[];
+  /** The years of the samples, and for each good its price in each of those years. */
+  years: number[]; prices: number[][];
+  /** The bubble now swelling: the good, where it began, since when, and how many times its worth the price has reached. */
+  bubble?: { good: string; nation: string; since: number; froth: number };
+  panics: { year: number; title: string; eventId: number; good: string }[];
+}
+
 /** A story about old bones as the page sees it (system E28): the story, the real species it is about, and whether anyone has worked that out. */
 export interface LegendInfo {
   id: number; year: number;
@@ -471,6 +481,7 @@ export type ToWorker =
   | { type: 'requestLanguages' }
   | { type: 'requestGallery' }
   | { type: 'requestLegends' }
+  | { type: 'requestMarket' }
   | { type: 'requestSite'; id: number }
   | { type: 'requestMemory'; ask: MemoryAsk }
   /** Run the world twice from before an event, with it and without it (E55); or with and without one small herd spared at a cell (E56); or stop. */
@@ -496,6 +507,7 @@ export type FromWorker =
   | { type: 'languages'; lexicon: string[]; sayings: string[]; list: LanguageInfo[] }
   | { type: 'gallery'; paintings: PaintingInfo[]; movements: MovementInfo[] }
   | { type: 'legends'; list: LegendInfo[] }
+  | { type: 'market'; market: MarketInfo }
   | { type: 'site'; detail: SiteDetail }
   | { type: 'memory'; answer: MemoryAnswer }
   | { type: 'whatif'; state: WhatIfState | null; maps?: WhatIfMaps; problem?: string }

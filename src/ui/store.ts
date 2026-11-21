@@ -1,7 +1,7 @@
 // Tiny observable store shared by the Preact UI and the app.
 import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
-import type { DynastyDetail, LanguageInfo, LegendInfo, MovementInfo, PaintingInfo, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
+import type { DynastyDetail, LanguageInfo, LegendInfo, MarketInfo, MovementInfo, PaintingInfo, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 import type { Nation } from '../render/gfx/nations';
 import type { GoalRecord, GoalState } from '../game/goals';
 import type { CosmosInfo } from '../sim/cosmos';
@@ -18,7 +18,7 @@ import type { AnchorState, Battle, CitizenLife, Museum, Witness } from '../sim/g
 import type { Vision } from '../sim/senses';
 import type { WhatIfMaps, WhatIfState } from '../sim/whatif';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'tongues' | 'gallery' | 'legends' | 'goals' | 'system' | 'microscope' | 'archive' | 'ground';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'tongues' | 'gallery' | 'legends' | 'market' | 'goals' | 'system' | 'microscope' | 'archive' | 'ground';
 export type GroundTab = 'citizen' | 'anchor' | 'witness' | 'museum' | 'battle' | 'senses' | 'explore';
 export type MemoryTab = 'archive' | 'atlas' | 'braid' | 'records' | 'ancestry' | 'chronoscope' | 'forecasts' | 'whatif' | 'film';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
@@ -114,6 +114,8 @@ export interface UIState {
   /** The gallery, when it has arrived (system E26), and the painting being looked at (its id, or -1 for the newest). */
   gallery: { paintings: PaintingInfo[]; movements: MovementInfo[] } | null;
   painting: number;
+  /** The world's market, when it has arrived (system E32). */
+  market: MarketInfo | null;
   /** The stories told about old bones, when they have arrived (system E28). */
   legends: LegendInfo[] | null;
   /** Whose map of the world the map panel shows (system E29): a nation's id, or -1 for the true world; and that map in a sentence. */
@@ -206,6 +208,7 @@ export const state: UIState = {
   mapOf: -1,
   mapNote: '',
   legends: null,
+  market: null,
   gallery: null,
   painting: -1,
   siteDetail: null,
@@ -355,6 +358,8 @@ export const actions = {
   listen: (_id: number) => {},
   /** Fly out to a nation and show the lights of one of its festivals for a while, whatever the day (by nation id and festival id). */
   showFestival: (_nation: number, _festival: number) => {},
+  /** Open the world's market: prices and panics. */
+  openMarket: () => {},
   /** Open the stories told about old bones. */
   openLegends: () => {},
   /** Open the gallery of paintings. */

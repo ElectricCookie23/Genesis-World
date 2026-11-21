@@ -10,6 +10,7 @@ import { DynastyPanel } from './dynasty';
 import { LanguagesPanel } from './tongues';
 import { GalleryPanel } from './gallery';
 import { LegendsPanel } from './legends';
+import { MarketPanel } from './market';
 import { SitePanel } from './site';
 import { Chronicle, CreatureCard, CrossSection, Designer, FlatMap, Experiments, Graphs, Guide, Futures, Help, NationLabels, NationPanel, Num, Peoples, Settings, SpeciesCard, TimelineStrip, Tree, Why } from './panels';
 import css from './ui.module.css';
@@ -68,6 +69,7 @@ export function App() {
           {s.panel === 'tongues' && <LanguagesPanel />}
           {s.panel === 'gallery' && <GalleryPanel />}
           {s.panel === 'legends' && <LegendsPanel />}
+          {s.panel === 'market' && <MarketPanel />}
           {s.panel === 'site' && <SitePanel />}
           {s.panel === 'graphs' && <Graphs />}
           {s.panel === 'goals' && <Goals />}

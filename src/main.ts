@@ -303,6 +303,7 @@ async function boot(): Promise<void> {
     scene.civ.setFeasts(feasts);
   }, 500);
   actions.showFestival = (nation, festival) => { shownFeast = { nation, festival, until: performance.now() + 20000 }; const r = state.realms.find((x) => x.id === nation); const cap = r ? state.settlements.find((t) => t.id === r.capital) : undefined; if (cap) { update({ panel: 'none' }); scene.cam.flyTo(grid.lon[cap.cell]!, grid.lat[cap.cell]!, 1.1); } };
+  actions.openMarket = () => { update({ panel: 'market' }); send({ type: 'requestMarket' }); };
   actions.openLegends = () => { update({ panel: 'legends' }); send({ type: 'requestLegends' }); };
   actions.openGallery = () => { update({ panel: 'gallery' }); send({ type: 'requestGallery' }); };
   actions.openLanguages = (name) => {
@@ -1187,6 +1188,9 @@ async function boot(): Promise<void> {
         } else if (a.what === 'place' && state.chrono && a.data && a.data.id === state.chrono.id) { update({ memPlace: a.data }); scene.setSettlements(withPast(state.settlements), state.realms); }
         break;
       }
+      case 'market':
+        update({ market: msg.market });
+        break;
       case 'legends':
         update({ legends: msg.list });
         break;

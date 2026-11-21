@@ -626,6 +626,9 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
           post({ type: 'memory', answer });
         }
         break;
+      case 'requestMarket':
+        if (sim) { const s = sim, h = s.civ.h, m = h.market; post({ type: 'market', market: { goods: [...GOODS], years: m ? m.years : [], prices: m ? m.prices : GOODS.map(() => []), bubble: m && m.bubble ? { good: GOODS[m.bubble.good]!, nation: h.nations[m.bubble.nation]?.name ?? '', since: m.bubble.since, froth: m.bubble.froth } : undefined, panics: s.events.events.filter((e) => e.type === 'panic').slice(-30).reverse().map((e) => ({ year: e.simYear, title: e.title, eventId: e.id, good: String(e.data?.good ?? '') })) } }); }
+        break;
       case 'requestLegends':
         if (sim) { const s = sim, h = s.civ.h; post({ type: 'legends', list: (h.legends ?? []).slice(-80).reverse().map((L) => ({ id: L.id, year: L.year, nation: h.nations[L.nation]?.name ?? '', town: s.civ.settlements[L.settlement]?.name ?? '', cell: s.civ.settlements[L.settlement]?.cell ?? -1, species: L.species, speciesName: s.creatures.species[L.species]?.name ?? '', extinctYear: s.creatures.species[L.species]?.extinctYear ?? -1, kind: L.kind, own: L.own, means: L.means, found: L.found, tale: L.tale, eventId: L.eventId, known: L.known ? { year: L.known.year, nation: h.nations[L.known.nation]?.name ?? '', text: L.known.text, eventId: L.known.eventId } : undefined })) }); }
         break;

@@ -1038,6 +1038,7 @@ describe('golden ages (E10)', () => {
 import { NETWORKS, WONDER_KINDS } from '../src/sim/history/model';
 import { ART_STYLES, SUBJECTS, against, compose, describePainting, styleOfEra, subjectOf, type Movement } from '../src/sim/history/art';
 import { galleryList } from '../src/sim/history/gallery';
+import { pricePath } from '../src/ui/market';
 import { GOODS, GOOD_COLOUR, bestTrade, describeMarket, prices, type Economy, type Good } from '../src/sim/history/trade';
 import { FESTIVAL_KINDS, daysUntil, describeFestival, feastOf, festivalOn, lightOf, type Festival, type FestivalLight } from '../src/sim/history/festival';
 import { buildLayers, deriveNations, type Unrest } from '../src/render/gfx/nations';
@@ -1603,18 +1604,15 @@ describe('generated languages (E21)', () => {
         pairs++;
         let sum = 0, close = 0, same = 0;
         for (const m of LEXICON) { const d = wordDistance(word(a, m), word(b, m)); sum += d; if (d <= 0.5) close++; if (d === 0) same++; }
-        // How alike two sisters are depends on how long ago they parted (when the earlier of their two branches
-        // left the common stock). Lately parted: most words are plainly the same word. Parted thousands of years
-        // ago: still nothing like strangers (who score about 0.92), but a traveller would need a teacher.
-        const chain = (l: Language): Language[] => { const out = [l]; while (out[out.length - 1]!.parent >= 0) out.push(h.languages[out[out.length - 1]!.parent]!); return out; };
-        const ca = chain(a), cb = chain(b);
-        const common = ca.find((x) => cb.includes(x))!;
-        const branch = [ca[ca.indexOf(common) - 1], cb[cb.indexOf(common) - 1]].filter((x): x is Language => !!x).map((x) => x.bornYear);
-        const apartYears = sim.simYear - Math.min(...branch);
+        // How alike two sisters are depends on how many changes of sound lie between them: those each has been through
+        // since they were one speech. (Years apart is a poor guide: successor states can part several times in a year.)
+        let shared = 0;
+        while (shared < a.changes.length && shared < b.changes.length && a.changes[shared]!.year === b.changes[shared]!.year && a.changes[shared]!.note === b.changes[shared]!.note) shared++;
+        const between = a.changes.length + b.changes.length - 2 * shared;
+        // (measured over these five worlds, 94 pairs: 33 to 36 words of 36 with up to four changes between them, 26 or more
+        // with up to eight, 18 or more with up to twelve, 14 or more with up to eighteen, 8 to 20 beyond; the bars sit under those)
         expect(sum / LEXICON.length).toBeLessThan(0.8);
-        // (measured over these five worlds: 31 to 36 words of 36 within a thousand years of parting, 28 to 33 at two
-        // thousand, 10 to 25 beyond; the bars sit under those with room to spare)
-        expect(close).toBeGreaterThanOrEqual(LEXICON.length * (apartYears < 1000 ? 0.7 : apartYears < 2200 ? 0.5 : 0.2));
+        expect(close).toBeGreaterThanOrEqual(between <= 4 ? 30 : between <= 8 ? 22 : between <= 12 ? 14 : between <= 18 ? 10 : 4);
         if (close >= LEXICON.length * 0.6) plain++;
         expect(same).toBeLessThan(LEXICON.length);
         expect(grammarOf(a)).toEqual(grammarOf(b));
@@ -2294,5 +2292,55 @@ describe('resources and trade goods (E31)', () => {
     }
     expect(routes).toBeGreaterThan(10);
     expect(shifts).toBeGreaterThan(0);
+  });
+});
+
+describe('markets and crashes (E32)', () => {
+  it('a market crash causes measurable instability', () => {
+    const runs = fiveHistories();
+    let panics = 0;
+    for (const { sim } of runs) {
+      const h = sim.civ.h, ev = sim.events.events, m = h.market!;
+      // the price of every good is on record, the same number of samples for each, in order, never free and never past the dearest
+      expect(m.years.length).toBeGreaterThan(20);
+      expect(m.years.length).toBeLessThanOrEqual(161);
+      expect(m.prices.length).toBe(GOODS.length);
+      for (let i = 1; i < m.years.length; i++) expect(m.years[i]!).toBeGreaterThan(m.years[i - 1]!);
+      for (const list of m.prices) { expect(list.length).toBe(m.years.length); for (const p of list) { expect(p).toBeGreaterThan(0); expect(p).toBeLessThan(8 * 20); } }
+      // (the samples reach back through most of the history, however long it is)
+      expect(m.years[m.years.length - 1]! - m.years[0]!).toBeGreaterThan((sim.simYear - h.began) * 0.5);
+      for (const e of ev) {
+        if (e.type !== 'panic') continue;
+        panics++;
+        // caused by the bubble that swelled in the same country, in the same good, for some years, well above its worth
+        const bubble = ev[e.causes[0]!]!;
+        expect(bubble.type).toBe('bubble');
+        expect(bubble.data!.nation).toBe(e.data!.nation);
+        expect(bubble.data!.good).toBe(e.data!.good);
+        expect(e.simYear - bubble.simYear).toBeGreaterThanOrEqual(8);
+        expect(Number(e.data!.froth)).toBeGreaterThan(1.5);
+        // and the country is measurably less steady after it than before
+        expect(Number(e.data!.before) - Number(e.data!.after)).toBeGreaterThanOrEqual(Math.min(0.14, Number(e.data!.before)) - 1e-9);
+        expect(Number(e.data!.caught)).toBeGreaterThanOrEqual(1);
+        const n = h.nations[Number(e.data!.nation)]!;
+        expect(n.slump).toBeGreaterThanOrEqual(e.simYear + 12);
+      }
+      // at most one bubble at a time: every panic follows a different bubble
+      const causes = ev.filter((e) => e.type === 'panic').map((e) => e.causes[0]);
+      expect(new Set(causes).size).toBe(causes.length);
+    }
+    expect(panics).toBeGreaterThan(2);
+  });
+
+  it('a price line can be drawn for any history of prices', () => {
+    expect(pricePath([], 2, 300, 46)).toBe('');
+    expect(pricePath([1], 2, 300, 46)).toBe('');
+    const flat = pricePath([1, 1, 1], 2, 300, 46), spike = pricePath([1, 6, 0.7], 6, 300, 46);
+    expect(flat).toMatch(/^M0\.0 [\d.]+L150\.0 [\d.]+L300\.0 [\d.]+$/);
+    // the spike reaches the top of the box and falls back below where it began
+    const ys = [...spike.matchAll(/ ([\d.]+)(?=L|$)/g)].map((x) => Number(x[1]));
+    expect(ys[1]!).toBeLessThan(ys[0]!);
+    expect(ys[2]!).toBeGreaterThan(ys[0]!);
+    expect(ys[1]!).toBeCloseTo(3, 0);
   });
 });

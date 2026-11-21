@@ -167,6 +167,8 @@ export interface Nation {
   woes: { kind: string; eventId: number; year: number }[];
   /** Its building laws, each made after a calamity in one of its towns (system E20). */
   codes?: Codes;
+  /** The year until which it is in a slump after a crash (system E32): learning and building are slow meanwhile. */
+  slump?: number;
   /** Its chief trade (system E31): which good (an index into GOODS) it sells to which country, since when, and the event that recorded it. */
   trade?: { good: number; to: number; since: number; eventId: number };
   /** Something it has lately found or learned to make that changes what it has to sell: the good, the event of the finding (-1 until one is recorded), the year. */
@@ -226,6 +228,13 @@ export interface HistoryState {
   movements?: Movement[];
   firstStyles?: number[];
   paintingSeq?: number;
+  /**
+   * The world's market (system E32): the price of each good over time (one sample every few years, the oldest
+   * dropped), the years of the samples, and the bubble now swelling, if there is one: the good, the country it
+   * began in, since when, how far above its worth the price has been bid (1 is its worth), when it will burst,
+   * and its event. After a burst the price sits below its worth for a while (`hangover`: the good, the factor, until when).
+   */
+  market?: { years: number[]; prices: number[][]; sampled: number; every?: number; bubble?: { good: number; nation: number; since: number; froth: number; until: number; eventId: number }; hangover?: { good: number; factor: number; until: number }; firstPanic?: number };
   /** The events of the first trade route and of the first time a find turned a trade (system E31). */
   firstTrade?: number;
   firstShift?: number;

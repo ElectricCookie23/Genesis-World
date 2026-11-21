@@ -50,7 +50,8 @@ export function eventColor(type: string): string {
     case 'earthquake': case 'tsunami': case 'city-quake': case 'city-flood': case 'building-law': return '#c7b299';
     case 'plague': return '#b7d08a';
     case 'eclipse': case 'comet': return '#d9c8ff';
-    case 'painting': case 'tamed': case 'artwork': case 'art-movement': case 'script': case 'legend': case 'bones-named': case 'festival': case 'trade-route': case 'trade-shift': case 'discovery': return '#ffcf8a';
+    case 'painting': case 'tamed': case 'artwork': case 'art-movement': case 'script': case 'legend': case 'bones-named': case 'festival': case 'trade-route': case 'trade-shift': case 'discovery': case 'bubble': return '#ffcf8a';
+    case 'panic': return '#ff8a6a';
     case 'living-fossil': case 'convergence': return '#8fe3a0';
     case 'orbital-shift': return '#d9c8ff';
     default: return type.startsWith('tool-') ? '#fff1c9' : '#e9e4d8';
@@ -80,6 +81,7 @@ export function eventGlyph(type: string): string {
     case 'legend': case 'bones-named': return '☗';
     case 'festival': return '✺';
     case 'trade-route': case 'trade-shift': case 'discovery': return '⇄';
+    case 'bubble': case 'panic': return '▼';
     case 'artwork': case 'art-movement': return '◩';
     case 'contact': return '⇄';
     case 'migration': return '➳';

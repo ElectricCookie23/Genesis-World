@@ -348,7 +348,7 @@ export class Civilization {
       const reach = Math.min(4, towns.length - 1) * 0.08;
       const quick = 1 + 6 * sat((n.tech - 0.7) / 0.3) ** 2;
       // (learning gathers where the people are: a country much smaller than the greatest of its day works more slowly)
-      const rate = 6.5e-5 * (n.golden ? 1.45 : 1) * (0.5 + 0.5 * Math.min(1, towns.length / Math.max(1, 0.5 * most))) * (0.45 + Math.log10(1 + pop) / 3) * (0.6 + sp.ref[G.Intelligence]!) * (1 + reach) * quick * (0.6 + 0.4 * n.stability) * (0.9 + 0.2 * (ruler ? ruler.wise : 0.5));
+      const rate = 6.5e-5 * (n.golden ? 1.45 : 1) * ((n.slump ?? -1) > year ? 0.6 : 1) * (0.5 + 0.5 * Math.min(1, towns.length / Math.max(1, 0.5 * most))) * (0.45 + Math.log10(1 + pop) / 3) * (0.6 + sp.ref[G.Intelligence]!) * (1 + reach) * quick * (0.6 + 0.4 * n.stability) * (0.9 + 0.2 * (ruler ? ruler.wise : 0.5));
       this.research(sim, rng, n, towns, rate * y, year, y);
       // ---- a library burns (system E5): likelier in troubled times, and only once there is writing to burn
       if (n.know.way[SLOT_INDEX.get('write')!]! >= 0 && rng.chance(1 - Math.exp(-y * (0.4 + 1.6 * (1 - n.stability) + n.fatigue) / 2600))) {
@@ -405,6 +405,8 @@ export class Civilization {
       // ---- its towns
       for (const st of towns) this.town(sim, rng, n, st, st.id === n.capital, y, year);
     }
+    // ---- the world's market: prices, a bubble now and then, and the panic when it bursts (system E32)
+    this.market(sim, y, year);
     // industry: burning the buried forests of older ages warms the whole world
     let living = 0, maxTech = 0;
     for (const st of this.settlements) { if (st.ruined < 0) { living++; if (st.tech > maxTech) maxTech = st.tech; } }
@@ -1334,8 +1336,9 @@ export class Civilization {
     const ruler = h.people[n.ruler];
     const cap = this.settlements[n.capital]!;
     const who = this.person(rng, n, 'reformer', year, this.lifespan(sim, n.species) * (0.25 + rng.next() * 0.3), -1, -1);
-    const after = woe.kind === 'plague' ? 'After the plague' : woe.kind === 'war' ? 'After the war' : woe.kind === 'disaster' ? 'After the disaster' : 'In the quarrel over who should rule';
-    const says = woe.kind === 'plague' ? rng.pick(['that the rich fled and left the poor to nurse the sick', 'that the dead are owed more than a pit', 'that the sickness came by the wells, and the wells must be kept clean'])
+    const after = woe.kind === 'crash' ? 'After the crash' : woe.kind === 'plague' ? 'After the plague' : woe.kind === 'war' ? 'After the war' : woe.kind === 'disaster' ? 'After the disaster' : 'In the quarrel over who should rule';
+    const says = woe.kind === 'crash' ? rng.pick(['that no one should grow rich by selling what he does not have', 'that those who lent the money should bear the loss', 'that a thing is worth what it is good for and no more'])
+      : woe.kind === 'plague' ? rng.pick(['that the rich fled and left the poor to nurse the sick', 'that the dead are owed more than a pit', 'that the sickness came by the wells, and the wells must be kept clean'])
       : woe.kind === 'war' ? rng.pick(['that no more children should be sent to the wars', 'that the dead of both sides lie in the same ground', 'that the war was lost by those who ordered it'])
         : woe.kind === 'disaster' ? rng.pick(['that the town should never have been built where it was', 'that what fell was built too quickly and too cheaply', 'that it will come again, and next time they must be ready'])
           : rng.pick(['that no house rules by right', 'that the crown belongs to whoever is just', 'that rulers answer to the ruled']);
@@ -1539,7 +1542,7 @@ export class Civilization {
     }
     // how it ends
     const struck = woe && woe.year > g.since && year - woe.year < 12 ? woe : undefined;
-    const reason = struck ? (struck.kind === 'war' ? 'war reached it' : struck.kind === 'plague' ? 'plague emptied its workshops' : struck.kind === 'disaster' ? 'the land itself turned on it' : 'its ruling house was shaken')
+    const reason = struck ? (struck.kind === 'war' ? 'war reached it' : struck.kind === 'crash' ? 'its markets failed' : struck.kind === 'plague' ? 'plague emptied its workshops' : struck.kind === 'disaster' ? 'the land itself turned on it' : 'its ruling house was shaken')
       : n.stability < 0.45 ? 'the country had grown unsteady' : partners === 0 ? 'its trading partners were gone' : n.inequality > 0.82 ? 'its wealth had gathered in too few hands' : towns.length < 3 ? 'too little of the country was left' : '';
     if (reason) this.endGolden(sim, n, year, reason, struck ? struck.eventId : -1);
   }
@@ -2142,6 +2145,94 @@ export class Civilization {
         });
         if (first && ev.id >= 0) h.firstTongue = ev.id;
       }
+    }
+  }
+
+  /**
+   * Markets and crashes (system E32). The world price of each good is what it costs across the countries, weighted
+   * by their people, and is written down every few years. Now and then, in a country that has coin and something
+   * scarce to deal in, a price starts to be bid up for no reason but that it is rising: a bubble. It swells for
+   * years, and then one morning there are no buyers. The panic is an event caused by the bubble; the country it
+   * began in and those it trades with lose their steadiness, the poor lose most, and for a decade or two little
+   * is learned or built. (The luck in it comes from the year, not from the stream that decides wars.)
+   */
+  private market(sim: Simulation, y: number, year: number): void {
+    const h = this.h, ev = sim.events.events;
+    const m = (h.market ??= { years: [], prices: GOODS.map(() => []), sampled: -1e9 });
+    const luck = (k: number): number => (hash32(this.seedNum, Math.floor(year), k, 0xb0b) % 100000) / 100000;
+    const knows = (n: Nation, slot: string): boolean => { const i = SLOT_INDEX.get(slot); return i !== undefined && n.know.way[i]! >= 0; };
+    // ---- a bubble swells, and bursts
+    const b = m.bubble;
+    if (b) {
+      b.froth *= Math.pow(1.07, Math.min(y, 6));
+      const centre = h.nations[b.nation];
+      if (year >= b.until || !centre || centre.ended >= 0) {
+        m.bubble = undefined;
+        m.hangover = { good: b.good, factor: 0.7, until: year + 20 };
+        if (centre && centre.ended < 0) {
+          const good = GOODS[b.good]!;
+          const cap = this.settlements[centre.capital]!;
+          // who is caught: the country it began in, and every country with coin that it trades with or is in touch with
+          const caught = [centre, ...centre.contacts.map((id) => h.nations[id]).filter((o): o is Nation => !!o && o.ended < 0 && knows(o, 'coin'))];
+          const depth = Math.min(1, (b.froth - 1) / 3);
+          const before = centre.stability;
+          const first = m.firstPanic === undefined;
+          const e = sim.emit({
+            type: 'panic', year, cellId: cap.cell, title: first ? `The first panic: ${good} in ${cap.name}` : `Panic in ${cap.name}: the price of ${good} collapses`,
+            description: `For ${Math.round(year - b.since)} years everyone in ${cap.name} with money to spare has bought ${good} to sell it dearer, until it cost ${b.froth.toFixed(1)} times what it was worth. This year there are sellers and no buyers. The price falls by ${Math.round((1 - 0.7 / b.froth) * 100)} parts in a hundred in a week, the lenders call in what they are owed, and no one can pay. ${caught.length > 1 ? `It reaches ${caught.length - 1} other ${caught.length === 2 ? 'country' : 'countries'} through the ports.` : 'It stops at the border: no one else had bought.'}`,
+            causes: [b.eventId, centre.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: first ? 2 : 1, speciesIds: [centre.species],
+            data: { nation: centre.id, good, froth: Math.round(b.froth * 100) / 100, before: Math.round(before * 1000) / 1000, after: 0, caught: caught.length },
+          });
+          caught.forEach((n, k) => {
+            const cost = (k === 0 ? 0.14 + 0.12 * depth : 0.06 + 0.06 * depth);
+            this.woe(n, 'crash', e.id, year, cost);
+            n.inequality = sat(n.inequality + 0.05);
+            n.slump = year + 12 + Math.round(10 * depth);
+          });
+          if (e.data) e.data.after = Math.round(centre.stability * 1000) / 1000;
+          if (first && e.id >= 0) m.firstPanic = e.id;
+          this.credit(sim, null, centre, e.id, 'It was the reign of {name}.');
+        }
+      }
+    } else if (!m.hangover || year > m.hangover.until) {
+      // ---- one begins: in a country with coin (likelier with banks) that deals in something its buyers find dear
+      const dealers = h.nations.filter((n) => n.ended < 0 && n.trade && knows(n, 'coin') && n.stability > 0.45);
+      if (dealers.length && luck(1) < 1 - Math.exp(-y / 70)) {
+        const n = dealers[hash32(this.seedNum, Math.floor(year), 0xb0c) % dealers.length]!;
+        if (luck(2) < (knows(n, 'bank') ? 0.9 : 0.4)) {
+          const good = n.trade!.good, cap = this.settlements[n.capital]!;
+          const e = sim.emit({
+            type: 'bubble', year, cellId: cap.cell, title: `${capital(GOODS[good]!)} fever in ${cap.name}`,
+            description: `In ${cap.name} the price of ${GOODS[good]} has gone up every month for a year, and people who have never dealt in it are borrowing to buy it. Everyone agrees it cannot fall.`,
+            causes: [n.trade!.eventId, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: 0, speciesIds: [n.species], data: { nation: n.id, good: GOODS[good]! },
+          });
+          m.bubble = { good, nation: n.id, since: year, froth: 1.1, until: year + 8 + (hash32(this.seedNum, Math.floor(year), 0xb0d) % 26), eventId: e.id };
+        }
+      }
+    }
+    // ---- the price of each good, written down every five years
+    if (year - m.sampled < (m.every ?? 5)) return;
+    m.sampled = year;
+    const sum = GOODS.map(() => 0);
+    let weight = 0;
+    for (const n of h.nations) {
+      if (n.ended >= 0 || n.era < 1) continue;
+      const p = prices(this.economyOf(n));
+      for (let i = 0; i < p.length; i++) sum[i] = sum[i]! + p[i]! * n.pop;
+      weight += n.pop;
+    }
+    if (weight <= 0) return;
+    m.years.push(year);
+    for (let i = 0; i < GOODS.length; i++) {
+      const froth = m.bubble && m.bubble.good === i ? m.bubble.froth : m.hangover && m.hangover.good === i && year <= m.hangover.until ? m.hangover.factor + (1 - m.hangover.factor) * (1 - (m.hangover.until - year) / 20) : 1;
+      m.prices[i]!.push(Math.round((sum[i]! / weight) * froth * 1000) / 1000);
+    }
+    // (the page holds the whole of history: when it is full, every other sample goes and the rest are taken half as often)
+    if (m.years.length > 160) {
+      const keep = (_: number, i: number): boolean => i % 2 === 1;
+      m.years = m.years.filter(keep);
+      m.prices = m.prices.map((list) => list.filter(keep));
+      m.every = (m.every ?? 5) * 2;
     }
   }
 
