@@ -146,6 +146,20 @@ export interface PlantInfo {
   cover: number;
 }
 
+/** A script as the page sees it (system E23): enough to draw any of its signs in any year. */
+export interface ScriptInfo {
+  id: number;
+  /** The script it was learned from (-1 if begun from pictures) and that script's name. */
+  parent: number; parentName: string;
+  name: string;
+  /** The year it began, how worn its teacher's signs were when it was taken from them (0..1), and whether it is drawn (1) or cut (0). */
+  born: number; from: number; hand: number;
+  /** What its writers look like, for the signs that are pictures of them. */
+  body: { legs: number; neck: number; horn: number; wings: number; tail: number };
+  /** The script in a sentence or two. */
+  about: string;
+}
+
 /** A language as the page sees it (system E21): where it stands in its family, who speaks it, and how it sounds. */
 export interface LanguageInfo {
   id: number;
@@ -164,6 +178,8 @@ export interface LanguageInfo {
   changes: { year: number; note: string }[];
   /** The same few sentences said in it: the words, and under each what it means. */
   samples: { text: string; gloss: string }[];
+  /** The script its speakers write it in, if they write (system E23). */
+  script?: ScriptInfo;
 }
 
 /** A wonder as the page sees it (system E19): what it is, who raised it and when, and the event that inspired it. */
@@ -234,6 +250,8 @@ export interface NationInfo {
   ruler: string; rulerSince: number; house: string; houseReigns: number;
   /** Id of the ruling house, or -1. */
   houseId: number;
+  /** The script it writes in, if it writes, and the meanings its name is written with (system E23). */
+  script?: ScriptInfo; signs?: string[];
   /** The kinds of network its towns are joined by (system E15), as a list of kind numbers in the order it first built them. */
   networks: number[];
   /** Its culture's number, the culture it borrows its building fashions from (-1 if none) and how much it borrows, 0..1 (system E14). */

@@ -111,6 +111,8 @@ export interface UIState {
   /** The languages of the world, when they have arrived (system E21), and the one being looked at (its id, or -1 for the most spoken). */
   languages: { lexicon: string[]; sayings: string[]; list: LanguageInfo[] } | null;
   tongue: number;
+  /** The Rosetta (system E23): when on, writing in the peoples' own scripts is shown with what each sign means. */
+  rosetta: boolean;
   timeline: TimelinePoint[];
   /** Set while two futures run side by side. */
   other: OtherFuture | null;
@@ -192,6 +194,7 @@ export const state: UIState = {
   dynastyDetail: null,
   languages: null,
   tongue: -1,
+  rosetta: true,
   siteDetail: null,
   memTab: 'archive',
   memIndex: null,

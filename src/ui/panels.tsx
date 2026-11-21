@@ -8,6 +8,7 @@ import type { NationInfo, PersonInfo, SettlementInfo, SpeciesInfo, WonderInfo } 
 import { dateIn } from '../sim/history/calendar';
 import { describeRuin } from '../sim/history/decay';
 import { CALAMITIES, REBUILDS, describeScar } from '../sim/history/calamity';
+import { Written, wearAt } from './glyphs';
 import { actions, state, update, useStore, type Relative, type UIState } from './store';
 import { bigNumber, eventColor, eventGlyph, formatYear, hsl, metres, shortYear } from './format';
 import { Strata } from './strange';
@@ -780,6 +781,7 @@ export function NationPanel() {
             {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}){realm.ended >= 0 ? ' (the nation is gone)' : ''}. {realm.calendar && realm.ended < 0 ? `${dateIn({ name: realm.calendar, epoch: realm.calendarEpoch }, year)} (sim year ${Math.floor(year).toLocaleString('en-US')}). ` : ''}{d.tech.filter((t) => t.state === 1).length} of {d.tech.filter((t) => t.state !== 2).length} things its land allows are known.
             {' '}Its land offers {d.land.length ? d.land.join(', ') : 'little'}{d.land.includes('ore') ? '' : '; no ore, so no metal'}.
             {' '}Its people are the {realm.culture} and speak <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openLanguages(realm.language)}>{realm.language}</button>.
+            {realm.script && realm.signs && <>{' '}In the {realm.script.name} its name is written <Written meanings={realm.signs} script={realm.script} wear={wearAt(realm.script, year)} size={20} rosetta={s.rosetta} />.</>}
           </p>
         )}
         {d && ERA_NAMES.map((era, e) => {

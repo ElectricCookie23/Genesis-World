@@ -2,6 +2,7 @@
 // chosen its sounds, its grammar, how its sounds have changed, and its words laid beside those of its nearest
 // relative and of the language least like it.
 import type { LanguageInfo } from '../shared/protocol';
+import { Sign, Written, signsOf, wearAt } from './glyphs';
 import { update, useStore } from './store';
 import css from './ui.module.css';
 
@@ -134,6 +135,42 @@ export function LanguagesPanel() {
                   <div class={css.when} style={{ color: '#cfc9bd' }}>{data!.sayings[i]}{near ? ` In ${near.name}: ${near.samples[i]?.text ?? ''}` : ''}</div>
                 </div>
               ))}
+              {chosen.script && (() => {
+                const sc = chosen.script, now = wearAt(sc, year);
+                // the same sign three times over: as its first writers drew it, half way, and as it is written today
+                const shown = ['water', 'sun', 'moon', 'fire', 'hill', 'forest', 'people', 'herd', 'town', 'king', 'eye', 'star', 'three', 'go'];
+                return (
+                  <>
+                    <div class={css.sub} style={{ margin: '10px 0 4px', letterSpacing: '0.08em', display: 'flex', gap: '10px', alignItems: 'baseline' }}>
+                      <span>HOW IT IS WRITTEN: THE {sc.name.toUpperCase()}</span>
+                      <button class={css.link} style={{ marginRight: 0, letterSpacing: 0 }} title="Show or hide what each sign means" onClick={() => update({ rosetta: !s.rosetta })}>Rosetta {s.rosetta ? 'on' : 'off'}</button>
+                    </div>
+                    <div class={css.when} style={{ color: '#cfc9bd', margin: '0 0 6px' }}>{sc.about} It has been written for {Math.max(1, Math.round(year - sc.born)).toLocaleString('en-US')} years.</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(92px, 1fr))', gap: '6px 10px', margin: '0 0 8px' }}>
+                      {shown.map((m) => (
+                        <div key={m} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px 2px', border: '1px solid #ffffff14', borderRadius: '5px' }}>
+                          <span style={{ display: 'inline-flex', gap: '3px', alignItems: 'center' }}>
+                            <Sign meaning={m} script={sc} wear={0} size={26} colour="#b9a48c" title="as first drawn" />
+                            <span style={{ color: '#6f695f', fontSize: '10px' }}>→</span>
+                            <Sign meaning={m} script={sc} wear={now * 0.5} size={26} colour="#d8cdb8" title="half way" />
+                            <span style={{ color: '#6f695f', fontSize: '10px' }}>→</span>
+                            <Sign meaning={m} script={sc} wear={now} size={26} title="as written now" />
+                          </span>
+                          {s.rosetta && <span style={{ font: '400 10px/1.3 system-ui, sans-serif', color: '#8f887c' }}>{m}</span>}
+                        </div>
+                      ))}
+                    </div>
+                    <p class={css.sub} style={{ margin: '0 0 6px' }}>Each sign as its first writers drew it, half way, and as it is written now.</p>
+                    {chosen.samples.map((x, i) => (
+                      <div key={`w${i}`} style={{ margin: '0 0 6px' }}>
+                        <Written meanings={signsOf(x.gloss)} script={sc} wear={now} size={24} rosetta={s.rosetta} />
+                        {s.rosetta && <div class={css.when} style={{ color: '#cfc9bd' }}>{x.text} ({data!.sayings[i]})</div>}
+                      </div>
+                    ))}
+                  </>
+                );
+              })()}
+              {!chosen.script && chosen.speakers && <p class={css.sub} style={{ margin: '8px 0' }}>No one writes it yet.</p>}
               {chosen.changes.length > 0 && <div class={css.sub} style={{ margin: '8px 0 4px', letterSpacing: '0.08em' }}>HOW ITS SOUNDS HAVE CHANGED</div>}
               {chosen.changes.slice().reverse().map((c, i) => <div key={i} class={css.when} style={{ color: '#cfc9bd' }}>{Math.max(0, Math.round(year - c.year)).toLocaleString('en-US')} years ago, {c.note}.</div>)}
             </div>

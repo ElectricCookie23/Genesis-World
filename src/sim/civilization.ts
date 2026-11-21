@@ -18,6 +18,7 @@ import { hash32 } from './history/hash';
 import { capital, compound, makeLanguage, personName, placeMeanings, soundChange, splitLanguage, word, type Language } from './history/language';
 import { clearedCover } from './plants';
 import { driftSpan } from './history/syntax';
+import { wearOf, type Script } from './history/script';
 import { stillCleared } from './history/decay';
 import { answer, damage, hazards, type CalamityKind, type Ground, type Rebuild, type Scar } from './history/calamity';
 import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role, type Wonder, type WonderKind } from './history/model';
@@ -341,6 +342,8 @@ export class Civilization {
       this.network(sim, rng, n, towns, y, year);
       // ---- golden ages begin, raise their monuments and end (system E10)
       this.flourish(sim, rng, n, towns, y, year);
+      // ---- once it can write, it writes in some script: its own, or one it learned (system E23)
+      if (n.script === undefined) this.writing(sim, n, year);
       // ---- now and then it raises a wonder, because of something that happened (system E19)
       this.wonder(sim, rng, n, towns, y, year);
       // ---- a people that charts the stars fixes its count of years (system E8)
@@ -2102,6 +2105,44 @@ export class Civilization {
     }
   }
 
+  /**
+   * Writing systems (system E23). A country that has learned to write writes in some script. If a country it is
+   * in touch with already writes, it takes that script and bends it to its own tongue: a daughter script, which
+   * starts as worn as its teacher's is and then wears its own way. Otherwise it begins its own, from pictures.
+   * A country that comes out of one that writes keeps its script.
+   */
+  private writing(sim: Simulation, n: Nation, year: number): void {
+    const h = this.h;
+    if (n.know.way[SLOT_INDEX.get('write')!]! < 0) return;
+    const scripts = (h.scripts ??= []);
+    let teacher: Nation | undefined;
+    for (const id of n.contacts) {
+      const o = h.nations[id];
+      if (o && o.script !== undefined && (!teacher || scripts[o.script]!.born < scripts[teacher.script!]!.born)) teacher = o;
+    }
+    const from = teacher ? scripts[teacher.script!]! : undefined;
+    const people = h.cultures[n.culture]!;
+    const first = !scripts.length;
+    const cap = this.settlements[n.capital]!;
+    const paper = n.know.way[SLOT_INDEX.get('paper')!]! >= 0;
+    const sc: Script = {
+      id: scripts.length, parent: from ? from.id : -1, nation: n.id, born: year, from: from ? wearOf(from, year) : 0, eventId: -1,
+      hand: paper || hash32(this.seedNum, scripts.length, 0x5c2) % 3 === 0 ? 1 : 0, name: `${people.name} script`,
+    };
+    const ev = sim.emit({
+      type: 'script', year, cellId: cap.cell, title: first ? `The first writing: the ${sc.name}` : from ? `${n.name} takes up writing` : `${n.name} begins to write`,
+      description: from
+        ? `${n.name} has taken the writing of ${teacher!.name} and bent it to its own tongue. The signs are those of the ${from.name}, ${sc.hand ? 'drawn now with a brush' : 'cut now with a blade'}; within a few lifetimes no one from ${teacher!.name} will read them easily.`
+        : `In ${n.name} the tallies kept at ${cap.name} have become pictures, and the pictures have begun to stand for words: three waves for water, a ring with rays for the sun, the outline of one of themselves for "people". ${sc.hand ? 'They are drawn with a brush.' : 'They are cut and pressed, in straight strokes.'} Anything that can be said can now be kept.`,
+      causes: [from ? from.eventId : -1, n.eventId].filter((x, i, a) => x >= 0 && sim.events.events[x] && a.indexOf(x) === i), importance: first ? 2 : 0, speciesIds: [n.species],
+      data: { nation: n.id, script: sc.id, parent: sc.parent },
+    });
+    sc.eventId = ev.id;
+    scripts.push(sc);
+    n.script = sc.id;
+    this.credit(sim, null, n, ev.id, 'It was the reign of {name}.');
+  }
+
   /** Does language `id` come down from language `ancestor` (or is it the same)? */
   private descends(id: number, ancestor: number): boolean {
     for (let l = this.h.languages[id]; l; l = this.h.languages[l.parent]) if (l.id === ancestor) return true;
@@ -2459,6 +2500,9 @@ export class Civilization {
       ruler: -1, dynasty: -1, stability: 0.7, tech: st.tech, era: eraOf(st.tech), hue: (culture.hue + ((hash32(this.seedNum, h.nations.length, 7) % 1000) / 1000) * 0.3 + 0.85) % 1, eventId: -1, pop: st.pop, towns: 1,
       know: newKnowledge(), land: [], surveyed: -1e9, contacts: [], inequality: from ? from.inequality * 0.5 : 0.05, fatigue: 0, woes: [], peakYear: year, peakTowns: 1,
     };
+    // (a country that comes out of one that writes keeps its script; its name is written with the signs for what it means)
+    if (from && from.script !== undefined) n.script = from.script;
+    n.signs = ['land', st.modifier || st.head];
     // settlers carry what the old country knew; what their new land cannot support they will have to relearn another way
     if (from) {
       copyKnowledge(from.know, n.know); n.land = from.land.slice();

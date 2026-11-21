@@ -1,5 +1,6 @@
 // The languages of the world as the page is told of them (system E21).
-import type { LanguageInfo } from '../../shared/protocol';
+import type { LanguageInfo, ScriptInfo } from '../../shared/protocol';
+import { describeScript, type Body } from './script';
 import { word } from './language';
 import type { HistoryState } from './model';
 import { LEXICON, SAYINGS, describeGrammar, describeSounds, say } from './syntax';
@@ -8,14 +9,28 @@ import { LEXICON, SAYINGS, describeGrammar, describeSounds, say } from './syntax
  * The languages of the world (system E21): every language still spoken and every ancestor of one, so that the
  * family tree is whole. When there are very many, the most spoken are kept.
  */
-export function languageList(h: HistoryState): LanguageInfo[] {
-  const spoken = new Map<number, { names: string[]; people: number }>();
+/** A script with what the page needs to draw it. `bodyOf` says what a species looks like. */
+export function scriptInfo(h: HistoryState, id: number | undefined, species: number, year: number, bodyOf: (species: number) => Body): ScriptInfo | undefined {
+  const sc = id !== undefined ? h.scripts?.[id] : undefined;
+  if (!sc) return undefined;
+  const parent = sc.parent >= 0 ? h.scripts![sc.parent] : undefined;
+  // (the pictures are of the people who first drew them: a script learned from another kind keeps their shape)
+  let root = sc;
+  while (root.parent >= 0 && h.scripts![root.parent]) root = h.scripts![root.parent]!;
+  const first = h.nations[root.nation];
+  return { id: sc.id, parent: sc.parent, parentName: parent ? parent.name : '', name: sc.name, born: sc.born, from: sc.from, hand: sc.hand, body: bodyOf(first ? first.species : species), about: describeScript(sc, parent ? parent.name : '', year) };
+}
+
+export function languageList(h: HistoryState, year = 0, bodyOf?: (species: number) => Body): LanguageInfo[] {
+  const spoken = new Map<number, { names: string[]; people: number; script?: number; species: number; most: number }>();
   for (const n of h.nations) {
     if (n.ended >= 0) continue;
     const id = h.cultures[n.culture]!.language;
     let e = spoken.get(id);
-    if (!e) spoken.set(id, (e = { names: [], people: 0 }));
+    if (!e) spoken.set(id, (e = { names: [], people: 0, species: n.species, most: -1 }));
     e.names.push(n.name); e.people += n.pop;
+    // (written as its largest country that writes writes it)
+    if (n.script !== undefined && n.pop > e.most) { e.most = n.pop; e.script = n.script; e.species = n.species; }
   }
   let living = [...spoken.keys()].sort((a, b) => spoken.get(b)!.people - spoken.get(a)!.people);
   // (no one left to speak any of them: the last that were spoken)
@@ -43,6 +58,7 @@ export function languageList(h: HistoryState): LanguageInfo[] {
       words: LEXICON.map((m) => word(lang, m)),
       changes: lang.changes.slice(-10).map((c) => ({ year: c.year, note: c.note })),
       samples: SAYINGS.map((x) => say(lang, x)),
+      script: who && bodyOf ? scriptInfo(h, who.script, who.species, year, bodyOf) : undefined,
     });
   }
   return out;

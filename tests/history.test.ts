@@ -1036,6 +1036,7 @@ describe('golden ages (E10)', () => {
 });
 
 import { NETWORKS, WONDER_KINDS } from '../src/sim/history/model';
+import { describeScript, glyphDistance, glyphOf, glyphPath, picture, wearOf, type Body, type Glyph, type Script } from '../src/sim/history/script';
 import { LEXICON, SAYINGS, describeGrammar, describeSounds, driftSpan, grammarOf, say } from '../src/sim/history/syntax';
 import { CALAMITIES, REBUILDS, answer, brittle, damage, describeScar, hazards, plotFate, rebuildYears, woodShare, type Ground, type Scar } from '../src/sim/history/calamity';
 
@@ -1595,7 +1596,8 @@ describe('generated languages (E21)', () => {
         for (const m of LEXICON) { const d = wordDistance(word(a, m), word(b, m)); sum += d; if (d <= 0.5) close++; if (d === 0) same++; }
         // sisters: most words still plainly the same word, but not the same language
         expect(sum / LEXICON.length).toBeLessThan(0.62);
-        expect(close).toBeGreaterThanOrEqual(LEXICON.length * 0.4);
+        // (a third of the list at the least, for sisters that parted thousands of years ago; far more for those that parted lately)
+        expect(close).toBeGreaterThanOrEqual(LEXICON.length / 3);
         expect(same).toBeLessThan(LEXICON.length);
         expect(grammarOf(a)).toEqual(grammarOf(b));
       }
@@ -1678,5 +1680,95 @@ describe('place name drift (E22)', () => {
     // the same meaning in a stranger's tongue is another word altogether
     const other = makeLanguage(1, 90210, small, 0);
     expect(wordDistance(compound(other, m.head, m.modifier).toLowerCase(), seen[seen.length - 1]!.toLowerCase())).toBeGreaterThan(0.6);
+  });
+});
+
+describe('writing systems (E23)', () => {
+  const body: Body = { legs: 2, neck: 0.5, horn: 0.7, wings: 0, tail: 0.6 };
+  const script = (id: number, born = 0, from = 0, parent = -1): Script => ({ id, parent, nation: 0, born, from, eventId: -1, hand: 0, name: 'test script' });
+
+  it('early and late glyphs for the same word are visibly related', () => {
+    const sc = script(3);
+    let nearest = 0, kin = 0, total = 0;
+    for (const m of LEXICON) {
+      const first = glyphOf(m, body, sc, 0), mid = glyphOf(m, body, sc, 800), late = glyphOf(m, body, sc, 6000);
+      // a picture to begin with: exactly what the first writers drew
+      expect(first).toEqual(picture(m, body));
+      expect(first.length).toBeGreaterThan(0);
+      // it only ever loses strokes and points, never gains them
+      const points = (g: Glyph) => g.reduce((a, s) => a + s.length / 2, 0);
+      expect(mid.length).toBeLessThanOrEqual(first.length);
+      expect(late.length).toBeLessThanOrEqual(mid.length);
+      expect(points(late)).toBeLessThanOrEqual(points(mid));
+      expect(points(mid)).toBeLessThanOrEqual(points(first));
+      expect(late.length).toBeGreaterThanOrEqual(Math.min(2, first.length));
+      for (const s of late) { expect(s.length).toBeGreaterThanOrEqual(4); for (const v of s) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(1); } }
+      // each step is a small one: the sign half way is close to the picture, and the last sign close to that
+      expect(glyphDistance(first, mid)).toBeLessThan(0.09);
+      expect(glyphDistance(mid, late)).toBeLessThan(0.11);
+      // and the late sign is still more like its own picture than like the pictures of other words
+      const own = glyphDistance(first, late);
+      const others = LEXICON.filter((o) => o !== m).map((o) => glyphDistance(picture(o, body), late)).sort((a, b) => a - b);
+      if (own < others[Math.floor(others.length / 4)]!) nearest++;
+      if (own < others[Math.floor(others.length / 2)]!) kin++;
+      total++;
+    }
+    // (at the very end a few strokes on a grid are all that is left, and plain shapes end alike: even so nearly every
+    // sign is nearer its own picture than to most others, and most are nearer than to three pictures in four)
+    expect(kin / total).toBeGreaterThan(0.9);
+    expect(nearest / total).toBeGreaterThan(0.7);
+    // the pictures themselves are all different, and the worn signs still are
+    const late = LEXICON.map((m) => JSON.stringify(glyphOf(m, body, sc, 6000)));
+    expect(new Set(late).size).toBeGreaterThanOrEqual(LEXICON.length - 2);
+  });
+
+  it('wear is fast at first and never finished; a script learned from another starts as worn as its teacher', () => {
+    const sc = script(1, 100);
+    expect(wearOf(sc, 100)).toBe(0);
+    expect(wearOf(sc, 600)).toBeGreaterThan(0.3);
+    expect(wearOf(sc, 600) - wearOf(sc, 100)).toBeGreaterThan(wearOf(sc, 5600) - wearOf(sc, 5100));
+    expect(wearOf(sc, 1e6)).toBeLessThan(1);
+    const daughter = script(2, 1500, wearOf(sc, 1500), 1);
+    expect(wearOf(daughter, 1500)).toBeCloseTo(wearOf(sc, 1500), 6);
+    // mother and daughter began with the same pictures and end with signs that are cousins: alike, not the same
+    let same = 0, close = 0;
+    for (const m of LEXICON) {
+      const a = glyphOf(m, body, sc, 4000), b = glyphOf(m, body, daughter, 4000);
+      if (JSON.stringify(a) === JSON.stringify(b)) same++;
+      if (glyphDistance(a, b) < 0.08) close++;
+    }
+    expect(same).toBeLessThan(LEXICON.length);
+    expect(close).toBeGreaterThan(LEXICON.length * 0.8);
+    // the people in the pictures are the writers' own kind: another body draws another sign for "people", the same sign for "sun"
+    const winged: Body = { legs: 1, neck: 0.9, horn: 0, wings: 1, tail: 0.1 };
+    expect(picture('people', winged)).not.toEqual(picture('people', body));
+    expect(picture('sun', winged)).toEqual(picture('sun', body));
+    expect(glyphPath(glyphOf('water', body, sc, 3000), 24, true)).toMatch(/^M[\d. ]+/);
+    expect(describeScript(sc, '', 150)).not.toBe(describeScript(sc, '', 5000));
+  });
+
+  it('in five histories every country that can write has a script, its own or one it learned', () => {
+    const runs = fiveHistories();
+    let own = 0, learned = 0;
+    for (const { sim } of runs) {
+      const h = sim.civ.h, ev = sim.events.events, scripts = h.scripts ?? [];
+      const write = SLOT_INDEX.get('write')!;
+      for (const sc of scripts) {
+        if (sc.parent >= 0) { learned++; expect(scripts[sc.parent]!.born).toBeLessThanOrEqual(sc.born); expect(sc.from).toBeGreaterThan(0); } else { own++; expect(sc.from).toBe(0); }
+        const e = ev[sc.eventId]!;
+        expect(e.type).toBe('script');
+        expect(e.data!.script).toBe(sc.id);
+        if (sc.parent >= 0 && scripts[sc.parent]!.eventId >= 0) expect(e.causes).toContain(scripts[sc.parent]!.eventId);
+        expect(wearOf(sc, sim.simYear)).toBeGreaterThan(0);
+      }
+      for (const n of h.nations) {
+        if (n.ended >= 0) continue;
+        // (a country founded this very year has not had its turn yet)
+        if (n.know.way[write]! >= 0 && n.founded < sim.simYear - 2) expect(n.script, `${n.name} writes`).toBeDefined();
+        if (n.script !== undefined) expect(scripts[n.script]).toBeTruthy();
+      }
+    }
+    expect(own).toBeGreaterThan(0);
+    expect(own + learned).toBeGreaterThan(3);
   });
 });
