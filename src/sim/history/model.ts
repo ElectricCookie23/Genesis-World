@@ -167,6 +167,12 @@ export interface Nation {
   woes: { kind: string; eventId: number; year: number }[];
   /** Its building laws, each made after a calamity in one of its towns (system E20). */
   codes?: Codes;
+  /** Its chief trade (system E31): which good (an index into GOODS) it sells to which country, since when, and the event that recorded it. */
+  trade?: { good: number; to: number; since: number; eventId: number };
+  /** Something it has lately found or learned to make that changes what it has to sell: the good, the event of the finding (-1 until one is recorded), the year. */
+  found?: { good: number; eventId: number; year: number; what: string };
+  /** How many of its towns work a mine (kept for its neighbours' reckoning of its trade). */
+  mines?: number;
   /** The days it keeps (system E30): at most four, each tied to the event it remembers. */
   festivals?: Festival[];
   /** The movement its painters follow (system E26), the year they took it up, and the last age it has a painting of. */
@@ -220,6 +226,9 @@ export interface HistoryState {
   movements?: Movement[];
   firstStyles?: number[];
   paintingSeq?: number;
+  /** The events of the first trade route and of the first time a find turned a trade (system E31). */
+  firstTrade?: number;
+  firstShift?: number;
   /** How many festivals have ever been begun, and the event of the first (system E30). */
   festivalSeq?: number;
   firstFestival?: number;

@@ -22,6 +22,7 @@ import { wearOf, type Script } from './history/script';
 import { ART_STYLES, against, styleOfEra, subjectOf, type Movement, type Painting } from './history/art';
 import { legendKind, legendName, tale, trueAnimal, type Legend } from './history/legend';
 import { lightOf, type Festival, type FestivalKind } from './history/festival';
+import { GOODS, bestTrade, prices, type Economy } from './history/trade';
 import { stillCleared } from './history/decay';
 import { answer, damage, hazards, type CalamityKind, type Ground, type Rebuild, type Scar } from './history/calamity';
 import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role, type Wonder, type WonderKind } from './history/model';
@@ -125,6 +126,10 @@ const LONGEST_HISTORY = 40000;
 const sat = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
 /** What a people may call its golden age: two meanings for its own tongue, and the same in plain words. */
 /** What schools of painters name themselves for: something painters look at, and a way of looking at it. */
+/** What newly found land gives a country to sell, and what a newly learned craft does (system E31). */
+const LAND_GOOD: Record<string, (typeof GOODS)[number] | undefined> = { ore: 'ore', coal: 'coal', forest: 'timber', beasts: 'hides', coast: 'fish', sand: 'glass' };
+const CRAFT_GOOD: Record<string, (typeof GOODS)[number] | undefined> = { salt: 'salt', dye: 'dye', glass: 'glass', engine: 'coal', edge: 'ore' };
+
 const ART_HEADS = ['eye', 'hand', 'river', 'hill', 'stone', 'wind', 'sun', 'land', 'fire', 'star', 'sea', 'town', 'moon', 'forest'];
 const ART_MODS = ['new', 'old', 'bright', 'red', 'white', 'low', 'green', 'cold', 'high', 'long', 'black', 'great'];
 
@@ -358,6 +363,8 @@ export class Civilization {
       this.network(sim, rng, n, towns, y, year);
       // ---- golden ages begin, raise their monuments and end (system E10)
       this.flourish(sim, rng, n, towns, y, year);
+      // ---- what it sells, and to whom: its merchants follow the best price (system E31)
+      this.commerce(sim, n, towns, year);
       // ---- the days it keeps: its founding, the harvest, a victory, a night of remembrance, the comet's year (system E30)
       this.feasts(sim, n, year);
       // ---- its diggers find old bones and tell stories about them; its anatomists, later, say what they were (system E28)
@@ -1376,6 +1383,12 @@ export class Civilization {
    */
   private research(sim: Simulation, rng: RNG, n: Nation, towns: Settlement[], gain: number, year: number, y: number): void {
     const h = this.h;
+    if (year - n.surveyed > 60) {
+      // (what the surveyors find that the country did not have before changes what it has to sell: system E31)
+      const before = n.land;
+      const now = this.survey(sim, n, towns);
+      if (before.length) { const gain = now.find((x) => !before.includes(x) && LAND_GOOD[x] !== undefined); if (gain) n.found = { good: GOODS.indexOf(LAND_GOOD[gain]!), eventId: -1, year, what: gain === 'ore' ? 'ore in the hills' : gain === 'coal' ? 'coal under its fields' : gain === 'forest' ? 'forest within its borders' : gain === 'beasts' ? 'herds of its own' : gain === 'coast' ? 'a coast of its own' : 'sand fit for the furnace' }; }
+    }
     if (year - n.surveyed > 60) { n.land = this.survey(sim, n, towns); n.contacts = this.contactsOf(sim, n, towns); n.surveyed = year; this.meetings(sim, rng, n, year); }
     const land = new Set(n.land);
     let possible = 0;
@@ -1411,6 +1424,8 @@ export class Civilization {
       if (n.know.saved < cost) break;
       n.know.saved -= cost;
       n.know.way[i] = k; n.know.year[i] = year;
+      // (a craft that makes something to sell: system E31)
+      if (CRAFT_GOOD[slot.id] !== undefined) n.found = { good: GOODS.indexOf(CRAFT_GOOD[slot.id]!), eventId: -1, year, what: `how to make ${way.name}` };
       if (n.know.lost[i]! > 0) {
         const gone = Math.round(year - n.know.lost[i]!);
         const capTown = this.settlements[n.capital]!;
@@ -1627,6 +1642,7 @@ export class Civilization {
         if (site >= 0) {
           st.mine = site;
           const first = firsts.mine === undefined;
+          const opened = sim.events.events.length;
           const ev = sim.emit({
             type: 'landscape', year, cellId: site, title: first ? 'The first mine' : `A mine in the hills of ${st.name}`,
             description: first
@@ -1634,6 +1650,8 @@ export class Civilization {
               : `${n.name} has opened a mine above ${st.name}. The hillside below it is bare spoil.`,
             causes: [st.eventId, n.eventId].filter((x) => x >= 0), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, settlement: st.id, work: 'mine' },
           });
+          // (ore to sell: system E31)
+          n.found = { good: GOODS.indexOf('ore'), eventId: sim.events.events.length > opened ? opened : -1, year, what: `the mine above ${st.name}` };
           if (first && ev.id >= 0) firsts.mine = ev.id;
           this.credit(sim, rng, n, ev.id, 'The first to go underground was {name}.', 'explorer', year);
         }
@@ -2125,6 +2143,72 @@ export class Civilization {
         if (first && ev.id >= 0) h.firstTongue = ev.id;
       }
     }
+  }
+
+  /** What a country's economy rests on (system E31). */
+  private economyOf(n: Nation): Economy {
+    return { land: n.land, tech: n.tech, pop: n.pop, towns: Math.max(1, n.towns), mines: n.mines ?? 0, felled: n.felled !== undefined ? 0.7 : 0, knows: (slot) => { const i = SLOT_INDEX.get(slot); return i !== undefined && n.know.way[i]! >= 0; } };
+  }
+
+  /**
+   * Resources and trade goods (system E31). Every few years a country's merchants look again at what is cheap
+   * at home and dear among the countries they can reach, and carry whichever good to whichever country turns
+   * the best profit: that is its chief trade. The first is an event. When the chief trade changes because the
+   * country has found something or learned to make something (a mine, coal, glass), that is an event too,
+   * caused by the finding, and it names what the trade was before.
+   */
+  private commerce(sim: Simulation, n: Nation, towns: Settlement[], year: number): void {
+    let mines = 0;
+    for (const st of towns) if (st.mine !== undefined) mines++;
+    n.mines = mines;
+    const found = n.found && year - n.found.year < 40 ? n.found : undefined;
+    // (looked at again every few years, and at once when something has been found)
+    if (!found && (Math.floor(year) + n.id) % 6 !== 0) return;
+    if (n.trade && !found && year - n.trade.since < 20) return;
+    const h = this.h, ev = sim.events.events;
+    const mine = this.economyOf(n);
+    let best: { good: number; gain: number; to: Nation } | null = null;
+    for (const id of n.contacts) {
+      const o = h.nations[id];
+      if (!o || o.ended >= 0) continue;
+      const t = bestTrade(mine, this.economyOf(o));
+      // (a trade already running is not dropped for one a little better)
+      if (t && (!best || t.gain > best.gain)) best = { ...t, to: o };
+    }
+    const was = n.trade;
+    if (!best) { if (was && (h.nations[was.to]?.ended ?? 0) >= 0) n.trade = undefined; return; }
+    if (was && was.good === best.good && was.to === best.to.id) { if (found && found.good === best.good) n.found = undefined; return; }
+    // only a find, or a clearly better price, turns a trade that is running
+    const old = was ? h.nations[was.to] : undefined;
+    if (was && old && old.ended < 0 && !found) {
+      const now = bestTrade(mine, this.economyOf(old));
+      if (now && now.good === was.good && best.gain < now.gain * 1.3) return;
+    }
+    const cap = this.settlements[n.capital]!;
+    const good = GOODS[best.good]!;
+    const dear = prices(this.economyOf(best.to))[best.good]!, cheap = prices(mine)[best.good]!;
+    const because = found && found.good === best.good ? found : undefined;
+    let cause = because ? because.eventId : -1;
+    if (because && cause < 0) {
+      // the finding itself goes on record, so that the turn in trade has something to be caused by
+      const e = sim.emit({ type: 'discovery', year: because.year, cellId: cap.cell, title: `${n.name} finds ${because.what}`, description: `${n.name} has ${because.what.startsWith('how') ? 'learned ' : 'found '}${because.what}. There will be ${good} to sell.`, causes: [n.eventId].filter((x) => x >= 0 && ev[x]), importance: 0, speciesIds: [n.species], data: { nation: n.id, good } });
+      cause = e.id;
+    }
+    const shift = !!was && !!because;
+    const first = shift ? h.firstShift === undefined : h.firstTrade === undefined && !was;
+    const times = `${dear / cheap >= 3 ? 'many times' : 'twice'} what it fetches at home`;
+    const e = sim.emit({
+      type: shift ? 'trade-shift' : 'trade-route', year, cellId: cap.cell,
+      title: shift ? (first ? `A find turns a trade: ${good} from ${n.name}` : `${capital(good)} from ${n.name}: its trade turns`) : first ? `The first trade route: ${good} from ${n.name} to ${best.to.name}` : `${n.name} sells ${good} to ${best.to.name}`,
+      description: shift
+        ? `Since ${n.name} found ${because!.what} it has more ${good} than it can use, and in ${best.to.name} ${good} fetches ${times}. Its merchants, who used to carry ${GOODS[was!.good]} to ${old ? old.name : 'a country now gone'}, now load ${good} for ${best.to.name}.`
+        : `In ${best.to.name} ${good} fetches ${times} in ${n.name}, which has more than it needs. ${was ? `The merchants of ${cap.name} give up carrying ${GOODS[was.good]} to ${old ? old.name : 'a country now gone'} and take that road instead.` : `The merchants of ${cap.name} begin to carry it there.`}`,
+      causes: [cause, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: first ? 2 : shift ? 1 : 0, speciesIds: [n.species],
+      data: { nation: n.id, to: best.to.id, good, was: was ? GOODS[was.good]! : '', wasTo: was ? was.to : -1 },
+    });
+    if (first && e.id >= 0) { if (shift) h.firstShift = e.id; else h.firstTrade = e.id; }
+    n.trade = { good: best.good, to: best.to.id, since: year, eventId: e.id };
+    if (because) n.found = undefined;
   }
 
   /**

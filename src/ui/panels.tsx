@@ -465,11 +465,12 @@ export function FlatMap() {
     <div class={`${css.panel} ${css.side} ${css.wide}`} style={{ bottom: 'auto' }}>
       <div class={css.head}><h2>{whose ? `The world as ${whose.name} believes it to be` : 'Map of the world'}</h2><span class={css.sub}>click to fly there</span><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
       <div style={{ padding: '0 14px 14px' }}>
-        {makers.length > 0 && (
+        {(makers.length > 0 || s.realms.some((r) => r.ended < 0 && r.trade)) && (
           <div class={css.sub} style={{ margin: '0 0 8px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <span>Show</span>
-            <select value={String(whose ? whose.id : -1)} onChange={(e) => update({ mapOf: Number((e.target as HTMLSelectElement).value), mapNote: '' })} style={{ background: '#1b1f2a', color: '#ece7db', border: '1px solid #ffffff2a', borderRadius: '5px', padding: '3px 6px', font: '400 12.5px system-ui, sans-serif' }}>
+            <select value={String(whose ? whose.id : s.mapOf === -2 ? -2 : -1)} onChange={(e) => update({ mapOf: Number((e.target as HTMLSelectElement).value), mapNote: '' })} style={{ background: '#1b1f2a', color: '#ece7db', border: '1px solid #ffffff2a', borderRadius: '5px', padding: '3px 6px', font: '400 12.5px system-ui, sans-serif' }}>
               <option value="-1">the true world</option>
+              <option value="-2">trade routes, coloured by what they carry</option>
               {makers.map((r) => <option key={r.id} value={String(r.id)}>the world as {r.name} believes it to be ({r.eraName})</option>)}
             </select>
           </div>
@@ -477,8 +478,9 @@ export function FlatMap() {
         <div style={{ position: 'relative' }}>
           <canvas ref={ref} width={720} height={360} style={{ width: '100%', borderRadius: '8px', cursor: 'crosshair', display: 'block' }}
             onClick={(e) => { const r = (e.target as HTMLCanvasElement).getBoundingClientRect(); actions.mapClick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); }} />
-          {!whose && <MigrationArrows />}
+          {!whose && s.mapOf !== -2 && <MigrationArrows />}
         </div>
+        {s.mapOf === -2 && <div class={css.when} style={{ color: '#ece7db', margin: '8px 0 0' }}>{s.mapNote}</div>}
         {whose && <div class={css.when} style={{ color: '#ece7db', margin: '8px 0 0' }}>{s.mapNote} Their own country is in the middle. Filled marks are their towns, hollow ones towns they have heard of; blank paper is what they have never seen{(whose.monsters ?? []).length ? `; in the sea are the great animals their sailors have met (${(whose.monsters ?? []).map((m) => m.name).join(', ')})` : ''}.</div>}
         {recentMigrations(s.events).length > 0 && <div class={css.sub} style={{ margin: '6px 0 0' }}>Arrows: peoples on the move (<span style={{ color: MOVE_COLOUR.ice }}>driven by ice</span>, <span style={{ color: MOVE_COLOUR.sea }}>by the sea</span>, <span style={{ color: MOVE_COLOUR.famine }}>by hunger</span>). Click one to see why.</div>}
       </div>
@@ -796,6 +798,8 @@ export function NationPanel() {
             {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}){realm.ended >= 0 ? ' (the nation is gone)' : ''}. {realm.calendar && realm.ended < 0 ? `${dateIn({ name: realm.calendar, epoch: realm.calendarEpoch }, year)} (sim year ${Math.floor(year).toLocaleString('en-US')}). ` : ''}{d.tech.filter((t) => t.state === 1).length} of {d.tech.filter((t) => t.state !== 2).length} things its land allows are known.
             {' '}Its land offers {d.land.length ? d.land.join(', ') : 'little'}{d.land.includes('ore') ? '' : '; no ore, so no metal'}.
             {' '}Its people are the {realm.culture} and speak <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openLanguages(realm.language)}>{realm.language}</button>.
+            {realm.market && <>{' '}{realm.market}</>}
+            {realm.trade && <>{' '}Its merchants carry {realm.trade.good} to <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openNation(realm.trade!.to)}>{realm.trade.toName}</button>, and have for {Math.max(1, Math.round(year - realm.trade.since)).toLocaleString('en-US')} years. <button class={css.link} style={{ marginRight: 0 }} title="Why this trade" onClick={() => update({ whyEvent: realm.trade!.eventId })}>why</button></>}
             {realm.festivals && realm.festivals.map((f) => (
               <span key={f.id} style={{ display: 'block', margin: '3px 0 0' }}>
                 {describeFestival(f, year)}{' '}

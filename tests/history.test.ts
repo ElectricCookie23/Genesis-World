@@ -1038,6 +1038,7 @@ describe('golden ages (E10)', () => {
 import { NETWORKS, WONDER_KINDS } from '../src/sim/history/model';
 import { ART_STYLES, SUBJECTS, against, compose, describePainting, styleOfEra, subjectOf, type Movement } from '../src/sim/history/art';
 import { galleryList } from '../src/sim/history/gallery';
+import { GOODS, GOOD_COLOUR, bestTrade, describeMarket, prices, type Economy, type Good } from '../src/sim/history/trade';
 import { FESTIVAL_KINDS, daysUntil, describeFestival, feastOf, festivalOn, lightOf, type Festival, type FestivalLight } from '../src/sim/history/festival';
 import { buildLayers, deriveNations, type Unrest } from '../src/render/gfx/nations';
 import type { CellSnapshot } from '../src/shared/protocol';
@@ -2223,5 +2224,75 @@ describe('holidays and festivals (E30)', () => {
     }
     expect(total).toBeGreaterThan(10);
     expect(kinds.size).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('resources and trade goods (E31)', () => {
+  const knowing = (...slots: string[]) => (slot: string): boolean => slots.includes(slot);
+  const eco = (over: Partial<Economy>): Economy => ({ land: ['river', 'forest'], tech: 0.5, pop: 400, towns: 4, mines: 0, felled: 0, knows: knowing('plough', 'edge', 'salt'), ...over });
+  const at = (g: Good): number => GOODS.indexOf(g);
+
+  it('scarcity makes value, and merchants carry each thing from where it is cheap to where it is dear', () => {
+    const hills = eco({ land: ['ore', 'cold'], mines: 1 }), plain = eco({ land: ['river', 'forest'] });
+    // ore is cheap where it is mined and dear where there is none; grain the other way about
+    expect(prices(plain)[at('ore')]!).toBeGreaterThan(prices(hills)[at('ore')]! * 3);
+    expect(prices(hills)[at('grain')]!).toBeGreaterThan(prices(plain)[at('grain')]!);
+    // a second mine makes ore cheaper still at home
+    expect(prices(eco({ land: ['ore', 'cold'], mines: 2 }))[at('ore')]!).toBeLessThan(prices(hills)[at('ore')]!);
+    // felling the forest makes timber dear
+    expect(prices(eco({ felled: 0.9 }))[at('timber')]!).toBeGreaterThan(prices(plain)[at('timber')]! * 2);
+    for (const e of [hills, plain]) for (const p of prices(e)) { expect(p).toBeGreaterThanOrEqual(0.15); expect(p).toBeLessThanOrEqual(8); }
+    // so the hill country sells ore to the plain, and the plain sells what the hills lack
+    expect(GOODS[bestTrade(hills, plain)!.good]).toBe('ore');
+    expect(['grain', 'timber', 'spice']).toContain(GOODS[bestTrade(plain, hills)!.good]);
+    // nothing is carried to a people who have no use for it: coal before there are engines
+    const pit = eco({ land: ['coal'], knows: knowing('engine') });
+    expect(bestTrade(pit, plain)?.good).not.toBe(at('coal'));
+    expect(GOODS[bestTrade(pit, eco({ tech: 0.9 }))!.good]).toBe('coal');
+    // two countries with the same land and the same crafts have nothing to sell each other
+    expect(bestTrade(plain, eco({}))).toBeNull();
+    expect(describeMarket(plain)).toMatch(/ore/i);
+    expect(describeMarket(hills)).not.toBe(describeMarket(plain));
+    expect(Object.keys(GOOD_COLOUR).sort()).toEqual([...GOODS].sort());
+  });
+
+  it('a resource discovery shifts a trade route, and the record says so', () => {
+    // on paper first: a forest country sells timber to its neighbour; then it opens mines, and ore is what it sells
+    const buyer = eco({ land: ['coast', 'sand'], knows: knowing('plough', 'edge', 'salt') });
+    const before = eco({ land: ['forest', 'ore'], mines: 0 }), after = eco({ land: ['forest', 'ore'], mines: 2 });
+    expect(GOODS[bestTrade(before, buyer)!.good]).toBe('timber');
+    expect(GOODS[bestTrade(after, buyer)!.good]).toBe('ore');
+    // and in five lived histories
+    const runs = fiveHistories();
+    let routes = 0, shifts = 0;
+    for (const { sim } of runs) {
+      const h = sim.civ.h, ev = sim.events.events;
+      for (const e of ev) {
+        if (e.type !== 'trade-route' && e.type !== 'trade-shift') continue;
+        const from = h.nations[Number(e.data!.nation)]!, to = h.nations[Number(e.data!.to)]!;
+        expect(from).toBeTruthy(); expect(to).toBeTruthy();
+        expect(from.id).not.toBe(to.id);
+        expect(GOODS).toContain(e.data!.good);
+        if (e.type === 'trade-route') { routes++; continue; }
+        shifts++;
+        // a trade that turned: caused by the finding (a mine, a survey, a craft), which came first; and it names what the trade was
+        const find = ev[e.causes[0]!]!;
+        expect(find.type).toMatch(/landscape|discovery|invention/);
+        expect(find.simYear).toBeLessThanOrEqual(e.simYear);
+        expect(GOODS).toContain(e.data!.was);
+        expect(e.data!.was !== e.data!.good || e.data!.wasTo !== e.data!.to).toBe(true);
+        expect(e.description).toContain(String(e.data!.good));
+      }
+      // what each living country is recorded as selling is what its last trade event says
+      for (const n of h.nations) {
+        if (n.ended >= 0 || !n.trade) continue;
+        expect(h.nations[n.trade.to]).toBeTruthy();
+        expect(n.trade.good).toBeGreaterThanOrEqual(0);
+        expect(n.trade.good).toBeLessThan(GOODS.length);
+        if (n.trade.eventId >= 0) { const e = ev[n.trade.eventId]!; expect(e.data!.nation).toBe(n.id); expect(e.data!.to).toBe(n.trade.to); expect(e.data!.good).toBe(GOODS[n.trade.good]); }
+      }
+    }
+    expect(routes).toBeGreaterThan(10);
+    expect(shifts).toBeGreaterThan(0);
   });
 });

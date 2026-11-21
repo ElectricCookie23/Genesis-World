@@ -23,6 +23,7 @@ import { del, get, set } from 'idb-keyval';
 import { Music } from './audio/music';
 import { believedSpot, describeMap, knownAt } from './sim/history/worldmap';
 import { feastOf, festivalOn } from './sim/history/festival';
+import { GOOD_COLOUR } from './sim/history/trade';
 import type { SlotInfo, UIState } from './ui/store';
 import { GOALS, emptyRecord, evaluateGoals, type GoalRecord } from './game/goals';
 import { planFilm, shotAt, type Shot } from './game/film';
@@ -595,6 +596,39 @@ async function boot(): Promise<void> {
     }
     ctx.putImageData(img, 0, 0);
     if (bare) return;
+    // ---- trade routes, coloured by what they carry (system E31): from each country's capital to its buyer's
+    if (state.mapOf === -2) {
+      ctx.fillStyle = 'rgba(6, 8, 14, 0.45)'; ctx.fillRect(0, 0, W, H);
+      const capOf = (id: number) => { const r = state.realms.find((x) => x.id === id); return r ? state.settlements.find((t) => t.id === r.capital) : undefined; };
+      ctx.lineCap = 'round';
+      const used = new Set<string>();
+      for (const r of state.realms) {
+        if (r.ended >= 0 || !r.trade) continue;
+        const a = capOf(r.id), b = capOf(r.trade.to);
+        if (!a || !b) continue;
+        used.add(r.trade.good);
+        // the short way round the globe, as a curve of a dozen steps (a route that crosses the edge of the map is drawn in two pieces)
+        const pa = [grid.pos[a.cell * 3]!, grid.pos[a.cell * 3 + 1]!, grid.pos[a.cell * 3 + 2]!], pb = [grid.pos[b.cell * 3]!, grid.pos[b.cell * 3 + 1]!, grid.pos[b.cell * 3 + 2]!];
+        ctx.strokeStyle = GOOD_COLOUR[r.trade.good as keyof typeof GOOD_COLOUR] ?? '#fff'; ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        let last = -1;
+        for (let k = 0; k <= 14; k++) {
+          const t = k / 14, x = pa[0]! + (pb[0]! - pa[0]!) * t, y = pa[1]! + (pb[1]! - pa[1]!) * t, z = pa[2]! + (pb[2]! - pa[2]!) * t, l = Math.hypot(x, y, z) || 1;
+          const u = ((Math.atan2(z / l, x / l) + Math.PI) / (Math.PI * 2)) * W, v = (0.5 - Math.asin(y / l) / Math.PI) * H;
+          if (last < 0 || Math.abs(u - last) > W / 2) ctx.moveTo(u, v); else ctx.lineTo(u, v);
+          last = u;
+        }
+        ctx.stroke();
+        // an arrowhead at the buyer's end
+        const ux = ((grid.lon[b.cell]! + Math.PI) / (Math.PI * 2)) * W, uy = (0.5 - grid.lat[b.cell]! / Math.PI) * H;
+        ctx.fillStyle = ctx.strokeStyle; ctx.beginPath(); ctx.arc(ux, uy, 3.2, 0, Math.PI * 2); ctx.fill();
+      }
+      // the key: one swatch for each good being carried
+      let kx = 10;
+      ctx.font = '11px system-ui, sans-serif';
+      for (const good of used) { ctx.fillStyle = GOOD_COLOUR[good as keyof typeof GOOD_COLOUR] ?? '#fff'; ctx.fillRect(kx, H - 18, 12, 8); ctx.fillStyle = '#ece7db'; ctx.fillText(good, kx + 16, H - 10); kx += 22 + ctx.measureText(good).width + 10; }
+      update({ mapNote: used.size ? `${state.realms.filter((r) => r.ended < 0 && r.trade).length} countries have a chief trade. Each line runs from the seller's capital to the buyer's, in the colour of what is carried.` : 'No country is selling anything to another yet.' });
+    }
     // settlements as warm dots
     ctx.fillStyle = '#ffd27a';
     for (const st of state.settlements) {

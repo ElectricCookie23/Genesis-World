@@ -296,6 +296,9 @@ export interface NationInfo {
   houseId: number;
   /** The days it keeps (system E30). */
   festivals?: Festival[];
+  /** Its chief trade (system E31): the good, the country it goes to (id and name), since when, the event that recorded it; and its market in a sentence. */
+  trade?: { good: string; to: number; toName: string; since: number; eventId: number };
+  market?: string;
   /** What its mapmakers have to go on (system E29), the countries it is in touch with (their ids), and the great sea animals its sailors have met (a species id, its name, where it lives and its size gene). */
   charting?: Charting; contacts?: number[]; monsters?: { species: number; name: string; cell: number; size: number }[];
   /** Its people's music in its present age (system E27): everything needed to play it, and the music in a sentence. Absent before a people makes music. */
