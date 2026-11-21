@@ -1,0 +1,82 @@
+# Findings still open
+
+Date: 2026-11-21, written by the Mac session at the owner's request. Either session may edit it: move an item when its status changes, with the date. This is a short, prioritised list of what the GPU review found and what is still open, taken from `docs/GPU_REVIEW.md` (newest notes first), `HANDOFF.md` ("GPU review: fixed and still open" and the build session's notes), the top of `docs/FIX_SESSION_HANDOFF.md` and `docs/PERFORMANCE.md`. A finding is listed as open only if no later note says it was fixed or confirmed. Things fixed in code but not yet seen on the Mac's GPU have their own heading, and anything that could not be settled from the files is under "Status unclear". Unless a seed is named, the seed is `amber-reef-101` on WebGPU at High.
+
+## 1. Breaks a promise of the game or blocks play
+
+1. Three of the four animal sense views cannot be reached in a normal world. On six seeds no species finds its way by echoes or by the electric sense, none has sharp sight, and only one (on `ember-tide-314`) senses warmth. [GPU_REVIEW.md note 5]
+2. After history begins, the same seed still gives a different history depending on when the player changes speed or presses anything. Before history, a slow look of more than two thousand years or any Experiment also changes the world for good; the build session calls both "by design", so this needs the owner's ruling. [HANDOFF.md "one seed is one world until its history begins"; GPU_REVIEW.md notes 3 and 6]
+3. A skip to an age never ends by itself if the people die out or never reach that age. It runs until the player stops it (the cap is 1.5 billion years). [GPU_REVIEW.md note 1, open point (c)]
+
+## 2. Looks wrong on screen
+
+4. The second sun casts shadows only on the terrain, and it makes no glint on the water. Buildings and animals lit by the second sun alone have not been looked at. Seen on `ember-tide-314`. [GPU_REVIEW.md note 3, `retest16-companion-sun-light.jpg`]
+5. In the warmth and electric sense views the animal does not stand out: plants and ground are as bright as it is. The electric view also has diagonal stripes across the whole picture that look like a fault. [GPU_REVIEW.md note 5, `retest20-sense-filters.jpg`]
+6. Animals are far too big beside towns: one is as tall as a six-storey block, another stands on the rooftops and is as long as several buildings. The fix session left this as it is (animals are drawn larger than life near the camera, towns are not). The owner has raised the same thing and parked it for later. [GPU_REVIEW.md "First GPU look at Sections 5 and 6" item 4 and "Check of commit 841782b" new observation 4; `retest11-webgpu-sheet.jpg`, `retest10-webgpu-hunt-1.jpg`]
+7. Towns on sloping ground look broken: roofs are huge flat green slabs tilted at steep angles, paving slabs lie tilted, tower blocks have one side well above the ground, and houses by the peace hall are tilted and touching. [GPU_REVIEW.md "Check of commit 841782b" new observation 2; "First GPU look at Sections 5 and 6" item 5 and second run item 6; `retest10-webgpu-hunt-1.jpg`, `retest12-webgpu-sheet.jpg`]
+8. The town "Rari", on a cell almost surrounded by sea, is drawn as one tower on three thin poles in open water, with its real island empty behind it. [GPU_REVIEW.md "Check of commit f958025" part C item 1, `retest9-webgpu-island-town-0.006.jpg`]
+9. Buildings are plain: houses are large barrack-like blocks with three rows of windows, and large towns are white boxes with window grids and flat shading. [GPU_REVIEW.md "Check of commit 4424753" new item 5 and "Check of commit 6dddd2d" new observation 2; HANDOFF.md "Check of 4424753 on the GPU"]
+10. The camera can go inside things. In any dense forest the ground view ends up inside a tree crown and shows only flat shapes, and at height 0.0025 over a town centre the view went inside a roof. [GPU_REVIEW.md "Motion review, first pass" finding 4; "First GPU look at Sections 5 and 6" second run item 5; `retest12-webgpu-sheet.jpg`]
+11. Trees in motion: close to the camera the leaves thrash, in a different place every frame. From far out (distance about 1.4) the trees on a landmass show as a regular grid of dots. [GPU_REVIEW.md "Motion review, first pass" findings 3 and 5, `motion-webgpu-*.jpg`]
+12. The waterline does not move. Over two seconds the foam line and the water at a beach are identical, so nothing laps the shore. [GPU_REVIEW.md "Motion review, first pass" finding 1]
+13. Under water the view looking down is flat: one ripple pattern, no light shafts and no animals. A single frame also flashed solid dark blue during a swim sequence. [GPU_REVIEW.md "Third pass" under water items 2 and 4, `retest3-webgpu-8-underwater.jpg`; "Motion review, first pass" finding 2; HANDOFF.md "Still open, for whoever gets to it"]
+14. A designed glowing sea animal shows nothing at all. The night close-up under water is a black frame although 30 of them were there. [GPU_REVIEW.md "Check of commit 841782b" item 7, `retest10-webgpu-designed-sea-glow-night.jpg`]
+15. Nothing casts a shadow on the ground, so trees, animals and buildings look placed on a model railway. [GPU_REVIEW.md "Third pass" forests item 4 and "Re-test of commit 29ea8ad" civilization item 5; PERFORMANCE.md section B item 3]
+16. In the saved film, a white area with stepped, cell-shaped edges covers much of the globe in the impact shot. The fix session noted it and did not change it. [GPU_REVIEW.md "First GPU look at Sections 5 and 6" item 1, `retest11-webgpu-documentary-frames.jpg`]
+17. Marks on the sea: from low height the sun's glint is a field of hard white speckles that may shimmer in motion, and a ragged dark blue blotch sat on turquoise shallows and was never explained. [GPU_REVIEW.md note 4, `retest18-no-figures-look.jpg`; "Check of commit 841782b" new observation 1, `retest10-webgpu-beach-0.006.jpg`]
+
+## 3. Performance
+
+18. At High with step-downs off, every view below orbit in a late world is under the target of 50: 38 to 47 frames a second, and running time costs another 3 to 7. The normal page hides this by lowering quality. [GPU_REVIEW.md note 7]
+19. The frame cost is mostly per pixel (clouds, air, ambient shading), not models. Of the savings suggested, only two are reported done (no multisampling fallback, no aurora by day); rendering fewer pixels and cheaper clouds are still to do. [PERFORMANCE.md "Summary" and "Suggestions" section A; HANDOFF.md "Check of f958025 on the GPU"]
+20. Ultra runs at 17 to 20 frames a second with step-downs off, and with them on it ends up at High's settings or lower. [PERFORMANCE.md "Presets on WebGPU with step-downs off"; GPU_REVIEW.md "Re-test of commit 29ea8ad" frame rate; HANDOFF.md "Still open, for whoever gets to it"]
+21. About 5 MB of data is sent to the graphics card every frame in about 220 writes, even when nothing has changed. Removing it does not raise the frame rate on this Mac, but it wastes work and battery and will matter on slower machines. [PERFORMANCE.md "Answer to the script-time question" and "Measured: dropping the uploads"]
+
+## 4. Simulation balance
+
+22. After a hundred million years most animals are eyeless and cold-blooded, and the thinking species that builds towns sees poorly or not at all. Either the sense genes are not rewarded or they start too low and drift too slowly. [GPU_REVIEW.md note 5]
+23. History runs very fast: camps to engines takes about 4,850 years, and Engines to the Age Beyond took 600 years. [GPU_REVIEW.md note 1 open point (e), note 3 and note 6]
+24. The sky varies less than it looks: the kind of star changes nothing in the climate and automatic exposure hides most of its brightness, a world never has more than two moons, and old saves keep their moon count while the moon's size and path now follow the seed. [GPU_REVIEW.md note 2, open points (b), (c) and (e)]
+25. A world skipped to a late age has had no campaigns, plagues, secrets or alliance wars, because those only run while the years are watched. [HANDOFF.md "Build session, 2026-11-21", open item (6)]
+26. Powered flight is rare, and cold seeds can lose their land animals. [HANDOFF.md "Known issues"]
+
+## 5. Interface
+
+27. The "skip to" list makes the time bar wider, which works against the phone-portrait fit. Before history its entries are not always in the order things happen (a thinking animal came before the first forests). [GPU_REVIEW.md note 1 follow-up and note 3]
+28. On the Night Map a country's name can start outside the planet's edge with its flag off the disc ("Shezaros"). [GPU_REVIEW.md "Check of commit f958025" item 4, `retest9-webgpu-night-map-0.jpg`]
+29. Portrait heads all have nearly the same outline, and one of twelve is drawn in a different style (a pale line drawing). In the tools panel a moon drifts behind the text and shows through it. [GPU_REVIEW.md note 6, `retest19-portraits-2.png`; "Motion pass 2", `retest10-webgl-sky-tools-panel.jpg`]
+
+## 6. Smaller things
+
+30. The console shows "Max polyphony exceeded. Note dropped." from the music (6 to 42 times a run) and one or two 404 errors on most loads. [GPU_REVIEW.md "First GPU look at Sections 5 and 6" item 7; HANDOFF.md "From the GPU check of 6dddd2d"]
+31. On the night side from orbit a white dot with a dark centre sits on the cloud belt. [GPU_REVIEW.md "Check of commit 841782b" item 1, `retest10-webgpu-orbit-night.jpg`]
+32. The gamma-ray burst flash is barely visible: it fades within a second and the picture's brightness does not change. [GPU_REVIEW.md "Check of commit f958025" item 7a]
+33. Small picture faults never followed up: a white fog smudge over tree lines (not reproduced by the fix session) and a crater wall lit evenly with no shading at 5 km. After a preset change the picture is dim with a dark vignette for a second or two. [GPU_REVIEW.md "Check of commit 6766d4a" items 4 and 5 and "Re-test of commit 5bbe93a" new problem 12; HANDOFF.md "Still open"]
+34. One test, `generated languages (E21) > two related languages share visibly similar words`, fails on the Mac and passes in CI. [GPU_REVIEW.md, "Changes made by the Mac session" at the top]
+
+## Fixed in code, not yet confirmed on a GPU
+
+37. Phone and panels: the portrait toolbar ran off the screen, the stats box was missing, the picture was soft, and goals showed as reached in a new world. All were changed and seen only in the software renderer; the nation panel's long block of grey text is now labelled lines, also unseen. [GPU_REVIEW.md "Phone and tablet screen shapes" items 1, 2, 4 and 5 and note 4; FIX_SESSION_HANDOFF.md "Done 2026-11-20 (F24)"; HANDOFF.md "Build session, 2026-11-21"]
+38. A page that grew to 7 GB and stopped answering in a crowded late world (235 countries). Kept copies of the world are now limited and the worker waits for the page; not rechecked on the Mac. [HANDOFF.md "Done, after running section 4 on the real page"]
+39. Shoreline and waders: the hard straight foam rim is now broken along its length, and water now clouds the legs of a wading animal that read as standing on the sea. Neither has been judged at a real beach. [GPU_REVIEW.md "Check of commit 4424753" item 6 and "Follow-up on WebGL2", `retest7-webgl-wader-close.jpg`; HANDOFF.md "Check of 4424753 on the GPU"]
+40. Animals, second sculpting pass: the cup-shaped head, wings like boards, saw-tooth backs, beaded bodies, stilt legs, one flat colour, and a body that stays rigid while walking were all reworked. An older report of loose parts and blocky fur was never rechecked either. [GPU_REVIEW.md "Check of commit 841782b, completed items" item 5 and "Motion pass 2" item 4; FIX_SESSION_HANDOFF.md "Animal sculpting, second pass"; HANDOFF.md "Still open, nothing started"]
+41. Trees and plants: plain trunks with square-cut stubs, flat single-colour leaves and tube-like reef plants were reworked, and then nine plant forms were swapped for made models in the asset pass. The fix session asks for a forest look with and without `&noassets`, and for a listen to the new sound loops, whose levels were set without hearing them. [GPU_REVIEW.md "Check of commit 4424753" item 9 and "Third pass"; FIX_SESSION_HANDOFF.md "Needs a GPU look and a listen"]
+42. The older look list: stars showing by day at 5 km and over a town, snow that reads as gravel, a diamond grid on the sea from mid height, Night Map borders stepping along hexagons, a river running over hills, and land not told from sea on the night side from orbit. All changed, software-checked only. [GPU_REVIEW.md "Check of commit 4424753", "Follow-up on WebGL2", "Third pass", "Re-test of commit 29ea8ad" and "Check of commit 841782b" item 1; HANDOFF.md "Still open, for whoever gets to it" and "Check of 841782b on the GPU"]
+43. Film: the first four shots were all the whole planet from the same distance with the sun's glare in the middle, and captions faded too early to read. Changed, not seen again. [GPU_REVIEW.md "First GPU look at Sections 5 and 6" items 2 and 3]
+44. Nothing human, nothing "god": builders became handcarts and the colossus a great bell, but neither has been seen on a GPU, and the last capture of the tools panel still had the title "God tools" (renamed "Experiments" in code since). [GPU_REVIEW.md note 4 and "Motion pass 2"; HANDOFF.md "Owner's decision, 2026-11-21"]
+45. Hunters: the behaviour is in the data, but a chase has never been seen by eye. Nest mounds are the right size by the numbers only. [GPU_REVIEW.md "Check of commit 841782b" item 4 and "Check of commit f958025" item 3]
+
+## Confirmed fixed since this list was written
+
+- **One seed after time at 1x** (was 35). 2026-11-22, live site, WebGPU: history began at 121.230 My with 2 towns and 41 species in all four ways of getting there, including 25 seconds at 1x first. Item 2 (differences after history begins) stays open.
+- **Hitches with time at 1x** (was 36). 2026-11-22: in the largest town over 20 s, 15 frames over 33 ms where there were 87, 99th percentile 58 ms where it was 84, worst 67 ms where it was 117, none over 100 ms. Running time now costs 0 to 3 fps where it cost 3 to 7. The frame rates themselves (item 18) are unchanged.
+
+## Status unclear
+
+46. Town ground and streets. One check found hummocks of bare ground as tall as houses between the buildings, and the motion review found streets as broken strips ending in mid-air; the newest look (note 4) saw one harbour town sitting well with slab streets and no hummocks, but no note says what changed. [GPU_REVIEW.md "First GPU look at Sections 5 and 6" second run item 4; "Motion review, first pass" finding 6; note 4]
+47. Far-tree pictures for jungle and umbrella trees. The upside-down bake was fixed and confirmed for conifers only; the jungle spot was open sea on the re-test, and the umbrella tree's near and far versions still did not match in the third pass. Plant models have changed since. [GPU_REVIEW.md "C5", "Re-test of commit 29ea8ad" table, "Third pass" village item 2]
+48. Hard straight coastlines seen from mid height. Listed as open in HANDOFF.md and never mentioned again. [GPU_REVIEW.md "The eight views" 5, item 4; HANDOFF.md "Still open, nothing started"]
+49. Worlds differ between WebGPU and WebGL2 for the same seed (history began at 59.03 My on one, 81.70 My on the other). The stepping fix may cover it, but it was not rechecked across the two. [GPU_REVIEW.md "Follow-up on WebGL2" and "Third pass" reproducibility]
+50. A single fast-forward of 200 My sent before history begins ended with no towns at all in a software run, where other ways of getting there have about 1,290. Left "for the build session to judge", with no answer on file. [HANDOFF.md "One thing for the build session to judge"]
+51. Holes through the land with coloured lines across the sea were seen once and not reproduced; closed until seen again. [GPU_REVIEW.md "Check of commit 6249d6c" new visual problem, `retest5-webgpu-broadleaf-0.06.jpg`; HANDOFF.md "Check of 6dddd2d on the GPU"]
+52. Never tested at all, so no status: a real phone, touch gestures, Firefox and Safari, four-legged walking, swimming and flight in motion. [GPU_REVIEW.md "Phone and tablet screen shapes" item 7, "Motion pass 2", "Third pass" still not covered]
