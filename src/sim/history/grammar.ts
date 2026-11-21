@@ -1,4 +1,4 @@
-// Template text. Every chronicle line, biography, newspaper and scripture is written by filling
+// Template text. Every chronicle line, biography and newspaper is written by filling
 // templates from tables of phrasing with facts from the simulation. No outside service is used.
 //
 //   #rule#        one of the alternatives listed under `rule`, chosen by the random stream, expanded in turn

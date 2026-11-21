@@ -754,7 +754,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
             : a.what === 'citizen' ? { what: 'citizen', data: citizenLife(sim, a.town, a.index) }
             : a.what === 'anchor' ? { what: 'anchor', data: anchor(sim, a.cell) }
             : a.what === 'witness' ? { what: 'witness', data: witness(sim, a.eventId) }
-            : a.what === 'museum' ? { what: 'museum', data: museum(sim, a.id), asked: a.id }
+            : a.what === 'museum' ? { what: 'museum', data: museum(sim, a.id, bodyOf(sim)), asked: a.id }
             : a.what === 'battle' ? { what: 'battle', data: battle(sim, a.eventId) }
             : { what: 'place', data: placeAt(sim, a.id, a.year) };
           post({ type: 'memory', answer });

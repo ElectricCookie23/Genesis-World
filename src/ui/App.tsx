@@ -22,7 +22,7 @@ const ERA: Record<string, string> = { none: '', ice: 'ice age', warm: 'warm era'
 const HINTS = [
   ['Look around', 'Drag to orbit. Scroll or pinch to fly from space down to the ground.'],
   ['Follow the story', 'Open the chronicle and click any line to see what caused it.'],
-  ['Change the pace', 'Keys 1 to 6 set the speed. Epoch runs a whole history in half an hour.'],
+  ['Change the pace', 'Keys 1 to 7 set the speed. Epoch runs a whole history in half an hour.'],
 ];
 
 export function App() {

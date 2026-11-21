@@ -878,7 +878,7 @@ export class Civilization {
     const count = Math.max(1, Math.round(people));
     const ev = sim.emit({
       type: 'migration', year, cellId: target.cell, title: `The ${n.name} migration`,
-      description: `${push} From ${from}${towns > 1 ? ` and ${towns - 1} other ${towns - 1 === 1 ? 'town' : 'towns'}` : ''} some ${count.toLocaleString('en-US')} thousand of ${sp.name} take what they can carry and go. They settle ${where}${host ? ', bringing their speech, their gods and their crafts with them' : ''}.`,
+      description: `${push} From ${from}${towns > 1 ? ` and ${towns - 1} other ${towns - 1 === 1 ? 'town' : 'towns'}` : ''} some ${count.toLocaleString('en-US')} thousand of ${sp.name} take what they can carry and go. They settle ${where}${host ? ', bringing their speech, their stories and their crafts with them' : ''}.`,
       causes: [cause, n.eventId].filter((x, i, a) => x >= 0 && a.indexOf(x) === i), importance: why === 'famine' ? 1 : 2, speciesIds: [n.species],
       data: host ? { nation: n.id, cause: why, from: origin.cell, to: target.cell, people: count, host: host.id } : { nation: n.id, cause: why, from: origin.cell, to: target.cell, people: count },
     });

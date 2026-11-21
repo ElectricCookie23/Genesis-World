@@ -21,6 +21,9 @@ import { say, type Saying } from './history/syntax';
 import { sizeClass, type Settlement } from './civilization';
 import { generationYears, placeAt, type Ref } from './memory';
 import { vision } from './senses';
+import { galleryList } from './history/gallery';
+import type { Body } from './history/script';
+import type { PaintingInfo } from '../shared/protocol';
 export { vision, type Vision } from './senses';
 import type { Language } from './history/language';
 
@@ -339,6 +342,8 @@ export interface Exhibit {
   eventId?: number;
   /** For bones: the genes of the animal, so it can be drawn. */
   genes?: number[];
+  /** For a painting of the country's own (system E26): the painting, to be drawn as the gallery draws it. */
+  painting?: PaintingInfo;
 }
 export interface Museum {
   nation: number;
@@ -357,7 +362,7 @@ export const MUSEUM_TECH = 0.72;
  * this world: animals that died out in its lands, what earlier nations left there, the oldest map of its country,
  * and pictures of what its towns tell stories about.
  */
-export function museum(sim: Simulation, nation: number): Museum | null {
+export function museum(sim: Simulation, nation: number, bodyOf?: (species: number) => Body): Museum | null {
   const h = sim.civ.h, ev = sim.events.events;
   const n = h.nations[nation];
   if (!n || n.ended >= 0 || n.tech < MUSEUM_TECH) return null;
@@ -375,6 +380,14 @@ export function museum(sim: Simulation, nation: number): Museum | null {
   const bones: Exhibit[] = [];
   const gone = sim.creatures.species.filter((s) => s.extinctYear >= 0 && nearby(sim.regions.centre[s.home]!, 0.7)).sort((a, b) => b.peakPop - a.peakPop).slice(0, 6);
   for (const s of gone) bones.push({ kind: 'bones', title: s.name, label: `${sim.describeSpecies(s).replace(/^a /, 'A ')}. It lived here for ${Math.max(1, Math.round((s.extinctYear - s.bornYear) / 1e5) / 10)} million years, and the last of them died ${Math.max(1, Math.round((sim.simYear - s.extinctYear) / 1e5) / 10)} million years before this hall was built.`, ...heading({ s: 'people', v: 'see', o: 'stone', oAdj: 'old', english: '' }), ref: { kind: 'species', id: s.id }, eventId: sim.extinctEventOf.get(s.id), genes: Array.from(s.ref) });
+  // what was told of those bones before anyone knew what they were (system E28), and what was found out
+  for (const x of bones) {
+    const sp = gone.find((g) => g.name === x.title);
+    const L = sp ? (h.legends ?? []).find((l) => l.species === sp.id && (l.nation === n.id || h.nations[l.nation]?.culture === n.culture)) : undefined;
+    if (!L) continue;
+    x.label += ` When its bones were first found ${L.found}, the people there called it ${L.own} ("${L.means}"), and the story went: ${L.tale}${L.known ? ` It was ${Math.round(sim.simYear - L.known.year).toLocaleString('en-US')} years ago that someone worked out what it had really been.` : ' Nobody has yet worked out what it really was.'}`;
+    x.eventId = L.eventId;
+  }
   if (bones.length) rooms.push({ title: 'The hall of bones', about: 'Animals dug out of this country\'s own hills. None of them is alive anywhere now.', exhibits: bones });
 
   // those who were here before: nations that ended in this land, records that were dug up, things made in ways now forgotten
@@ -396,6 +409,18 @@ export function museum(sim: Simulation, nation: number): Museum | null {
   const told = new Set<number>();
   for (const st of mine) if (ev[st.lore] && !told.has(st.lore) && told.size < 4) { told.add(st.lore); own.push({ kind: 'picture', title: ev[st.lore]!.title, label: `A painting of the story ${st.name} tells of itself. ${ev[st.lore]!.description}`, ...heading({ s: 'people', v: 'see', past: true, o: 'fire', oAdj: 'great', english: '' }), eventId: st.lore, ref: { kind: 'place', id: st.id } }); }
   for (const w of (h.wonders ?? []).filter((x) => x.nation === n.id).slice(-2)) own.push({ kind: 'picture', title: `A model of ${w.name}`, label: `${w.what}. ${w.why}`, ...heading({ s: 'hand', sMany: true, v: 'give', past: true, o: 'hill', oAdj: 'new', english: '' }), eventId: ev[w.eventId] ? w.eventId : undefined });
+  // the picture room: paintings that were really painted in this country (system E26), the oldest and the latest
+  if (bodyOf) {
+    const ours = new Set((h.paintings ?? []).filter((p) => p.nation === n.id).map((p) => p.id));
+    const mine2 = ours.size ? galleryList(h, ev, sim.civ.settlements, bodyOf, 100000).paintings.filter((p) => ours.has(p.id)).sort((a, b) => a.year - b.year) : [];
+    const hung = [...new Set([mine2[0], ...mine2.slice(-3)].filter((p): p is PaintingInfo => !!p))];
+    const walls: Exhibit[] = hung.map((p) => ({
+      kind: 'picture' as const, title: p.title, painting: p, eventId: p.eventId,
+      label: `${p.caption} Painted${p.painter ? ` by ${p.painter}` : ''} at ${p.town}, ${Math.max(1, Math.round(sim.simYear - p.year)).toLocaleString('en-US')} years ago, in the ${p.styleName} manner${p.movementName ? ` of ${p.movementName}` : ''}. It shows ${p.eventTitle}.`,
+      ...heading({ s: 'hand', v: 'give', past: true, o: 'fire', oAdj: 'great', english: '' }),
+    }));
+    if (walls.length) rooms.push({ title: 'The picture room', about: `Paintings made in ${n.name}, each of something that happened. The oldest hangs first.`, exhibits: walls });
+  }
   rooms.push({ title: `The story of ${n.name}`, about: 'What this country says of itself, and the things it says it with.', exhibits: own });
   return { nation: n.id, name: `The House of Old Things at ${cap.name}`, town: cap.id, townName: cap.name, since, rooms };
 }
@@ -416,6 +441,15 @@ export interface Battle {
   phases: string[];
   /** A number the picture of it is drawn from, so it is the same battle every time. */
   seed: number;
+  /** Who had the better of the field, where the campaign's own record of the fight exists (system E33). */
+  won?: 'attacker' | 'defender';
+  /** From that record: what kind of fight it was, what decided it, and what each side lost. */
+  kind?: string; decided?: string; lost?: [number, number];
+  /**
+   * Every battle of the same war, in order, from the campaign's record. `eventId` opens that battle on the field, or is -1
+   * where it has no event of its own (a war's first fight shares the event of the war). `shown` marks the one this is.
+   */
+  campaign?: { eventId: number; year: number; town: string; kind: string; won: 'attacker' | 'defender'; taken: boolean; shown: boolean }[];
 }
 
 /** What a host carries and how it stands, by what its people know. */
@@ -433,8 +467,41 @@ function arms(tech: number): [string, string] {
  */
 export function battle(sim: Simulation, eventId: number): Battle | null {
   const ev = sim.events.events, e = ev[eventId];
-  if (!e || (e.type !== 'war' && e.type !== 'civil-war')) return null;
+  if (!e || (e.type !== 'war' && e.type !== 'civil-war' && e.type !== 'battle')) return null;
   const h = sim.civ.h, towns = sim.civ.settlements;
+  // Where the war was fought as a campaign (system E33), its own record of each battle is what is shown: the numbers
+  // each side brought, who won, what decided it and what it cost.
+  const war = (h.wars ?? []).find((w) => (e.type === 'battle' ? w.battles.some((x) => x.eventId === eventId) : w.eventId === eventId));
+  if (war && war.battles.length) {
+    // (a war is shown by the fight that settled it: the one in which a town changed hands, or else the largest)
+    const fought = e.type === 'battle' ? war.battles.find((x) => x.eventId === eventId)!
+      : war.battles.find((x) => x.taken) ?? war.battles.reduce((m, x) => (x.sizes[0] + x.sizes[1] > m.sizes[0] + m.sizes[1] ? x : m), war.battles[0]!);
+    const town = towns[fought.settlement];
+    if (town) {
+      const an = h.nations[war.a], bn = h.nations[war.b];
+      const side = (nat: typeof an, men: number, mine: boolean): Host & { tech: number } => {
+        const then = mine ? placeAt(sim, town.id, fought.year) : null;
+        const tech = (mine ? then?.tech : undefined) ?? nat?.tech ?? town.tech;
+        const [carries, stands] = arms(tech);
+        return { name: nat?.name ?? (mine ? town.name : 'the attackers'), town: mine ? town.name : (towns[nat?.capital ?? -1]?.name ?? town.name), men: Math.max(40, Math.round(men * 1000)), arms: carries, formation: stands, hue: nat?.hue ?? unit(hash32(eventId, mine ? 3 : 7)), tech };
+      };
+      const attacker = side(an, fought.sizes[0], false), defender = side(bn, fought.sizes[1], true);
+      defender.town = town.name;
+      const won = fought.winner === 0 ? 'attacker' : 'defender';
+      const what = fought.kind === 'siege' ? 'sits down before' : fought.kind === 'storm' ? 'goes straight at the walls of' : fought.kind === 'raid' ? 'comes to burn' : 'meets its enemy in the open near';
+      const lostA = Math.round(fought.lost[0] * 1000), lostB = Math.round(fought.lost[1] * 1000);
+      const phases = [
+        `${attacker.name} ${what} ${town.name} with ${attacker.men.toLocaleString('en-US')}, in ${attacker.formation}, carrying ${attacker.arms}.`,
+        `${defender.name} has ${defender.men.toLocaleString('en-US')} there, in ${defender.formation}, with ${defender.arms}.`,
+        `What decided it: ${fought.decided}.`,
+        `${attacker.name} loses ${lostA.toLocaleString('en-US')}; ${defender.name} loses ${lostB.toLocaleString('en-US')}.`,
+        fought.taken ? `${town.name} has a new flag over it by evening.` : won === 'attacker' ? `The field is the attackers', but ${town.name} still stands.` : `${town.name} still stands.`,
+      ];
+      const campaign = war.battles.map((x) => ({ eventId: x.eventId === war.eventId && x !== fought ? -1 : x.eventId, shown: x === fought, year: x.year, town: towns[x.settlement]?.name ?? 'a town', kind: x.kind, won: (x.winner === 0 ? 'attacker' : 'defender') as 'attacker' | 'defender', taken: x.taken }));
+      return { eventId, title: ev[fought.eventId]?.title ?? e.title, year: fought.year, cell: town.cell, attacker, defender, result: fought.taken ? 'taken' : 'held', phases, seed: hash32(hashText(sim.seed), fought.eventId >= 0 ? fought.eventId : eventId, 0xba77), won, kind: fought.kind, decided: fought.decided, lost: [lostA, lostB], campaign };
+    }
+  }
+  if (e.type === 'battle') return null;
   const d = e.data ?? {};
   const a = towns[num(d.town)], b = towns[num(d.other)] ?? towns.find((s) => s.cell === e.cellId);
   if (!b) return null;

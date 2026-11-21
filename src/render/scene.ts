@@ -1020,7 +1020,7 @@ export class GenesisScene {
       // (only from close by: from further off these were big bright hoops hanging in the sky)
       if (this.particles && this.cam.dist < 0.03 && Math.random() < dt * 1.5) for (const e of this.creatures.echoers(1)) this.particles.ripple(e.pos, e.size * 3);
       // depth of field while following a creature
-      this.post.setFocus(this.following !== null, this.cam.dist);
+      this.post.setFocus(this.following !== null || this.cinematic, this.cam.dist);
       if (this.following !== null) {
         const ind = this.creatures.byKey(this.following);
         if (ind) {

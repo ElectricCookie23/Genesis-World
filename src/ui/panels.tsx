@@ -304,7 +304,7 @@ function renderTree(s: UIState) {
 export function Help() {
   const keys: [string, string][] = [
     ['drag', 'orbit the planet'], ['scroll / pinch', 'zoom, from deep space to the ground'], ['right-drag', 'turn and tilt near the surface'],
-    ['Space', 'pause or play'], ['1 – 6', 'time speed'], ['C', 'chronicle'], ['T', 'tree of life'], ['G', 'experiments'], ['J', 'goals, if you want some'], ['S', 'the star system'], ['N', 'the microscope'], ['A', 'the record'], ['B', 'on the ground'],
+    ['Space', 'pause or play'], ['1 – 7', 'time speed'], ['C', 'chronicle'], ['T', 'tree of life'], ['G', 'experiments'], ['J', 'goals, if you want some'], ['S', 'the star system'], ['N', 'the microscope'], ['A', 'the record'], ['B', 'on the ground'],
     ['M', 'flat map'], ['X', 'cross-section'], ['U', 'dive under water'], ['V', 'first-person view while following'], ['O', 'overlays'], ['F', 'follow the selected creature'], ['P', 'postcard mode'], ['H', 'hide the interface'], ['Esc', 'close panels'], ['?', 'this list'],
   ];
   return (

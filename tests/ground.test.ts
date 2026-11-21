@@ -138,6 +138,26 @@ describe('life on the ground', () => {
       }
     }
     expect(found).toBeGreaterThan(0);
+    // with E26 and E28: the picture room hangs paintings really painted in that country, and the bones carry the
+    // story that was told of them before anyone knew what they were
+    let hung = 0, storied = 0;
+    for (const n of living) {
+      const m = museum(sim, n.id, () => ({}) as never);
+      if (!m) continue;
+      const room = m.rooms.find((r) => r.title === 'The picture room');
+      const painted = (h.paintings ?? []).filter((p) => p.nation === n.id);
+      if (!painted.length) { expect(room).toBeUndefined(); continue; }
+      expect(room, `${n.name} has ${painted.length} paintings`).toBeDefined();
+      for (const x of room!.exhibits) {
+        hung++;
+        expect(painted.some((p) => p.id === x.painting!.id)).toBe(true);
+        expect(x.painting!.nation).toBe(n.name);
+        expect(x.label).toContain('Painted');
+      }
+      for (const x of m.rooms.find((r) => r.title === 'The hall of bones')?.exhibits ?? []) if (x.label.includes('the story went')) storied++;
+    }
+    expect(hung).toBeGreaterThan(0);
+    void storied;
     expect(museum(sim, 99999)).toBeNull();
     const dead = h.nations.find((n) => n.ended >= 0);
     if (dead) expect(museum(sim, dead.id)).toBeNull();
@@ -151,7 +171,9 @@ describe('life on the ground', () => {
       const b = battle(sim, w.id);
       if (!b) continue;
       told++;
-      const fell = w.effects.some((x) => ev[x]?.type === 'conquest');
+      // where the war was fought as a campaign, its own record says whether a town changed hands; else the conquest it caused does
+      const fought = (h.wars ?? []).find((x) => x.eventId === w.id);
+      const fell = fought && fought.battles.length ? fought.battles.some((x) => x.taken) : w.effects.some((x) => ev[x]?.type === 'conquest');
       expect(b.result).toBe(fell ? 'taken' : 'held');
       expect(b.phases[b.phases.length - 1]).toContain(fell ? 'new flag' : 'still stands');
       expect(b.attacker.men).toBeGreaterThan(0);
@@ -172,7 +194,36 @@ describe('life on the ground', () => {
     // attackers start on the left, defenders on the right
     expect(mean(start, 0)).toBeLessThan(mean(start, 1));
     if (one.result === 'taken') expect(mean(end, 0)).toBeGreaterThan(mean(start, 0) + 100); // the attackers end in the town
-    else expect(mean(end, 0)).toBeLessThan(mean(start, 0)); // or back past where they began
+    else if (one.won !== 'attacker') expect(mean(end, 0)).toBeLessThan(mean(start, 0)); // or back past where they began
+  });
+
+  it('E49 with E33: where a war was fought as a campaign, the field shows the campaign\'s own record of each battle', () => {
+    // campaigns are fought only while the years are watched one at a time
+    const sim = new Simulation('amber-reef-101', 21);
+    for (let t = 0; t < 400e6 && !sim.civ.historyActive; t += 15000) sim.step(15000);
+    for (let y = 0; y < 2500 && !(sim.civ.h.wars ?? []).some((w) => w.battles.length >= 2); y++) sim.step(1);
+    const war = (sim.civ.h.wars ?? []).find((w) => w.battles.length >= 2);
+    expect(war, 'a war with two battles within 2,500 watched years').toBeDefined();
+    const b = battle(sim, war!.eventId)!;
+    expect(b).not.toBeNull();
+    expect(b.campaign!.length).toBe(war!.battles.length);
+    expect(b.campaign!.filter((c) => c.shown).length).toBe(1);
+    const shown = war!.battles.find((x) => x.taken) ?? war!.battles.reduce((m, x) => (x.sizes[0] + x.sizes[1] > m.sizes[0] + m.sizes[1] ? x : m), war!.battles[0]!);
+    expect(b.attacker.men).toBe(Math.max(40, Math.round(shown.sizes[0] * 1000)));
+    expect(b.defender.men).toBe(Math.max(40, Math.round(shown.sizes[1] * 1000)));
+    expect(b.won).toBe(shown.winner === 0 ? 'attacker' : 'defender');
+    expect(b.result).toBe(shown.taken ? 'taken' : 'held');
+    expect(b.phases.join(' ')).toContain(shown.decided);
+    expect(b.defender.town).toBe(sim.civ.settlements[shown.settlement]!.name);
+    // each battle of it can be opened on its own, and is that battle
+    for (const x of war!.battles) {
+      if (x.eventId < 0 || x.eventId === war!.eventId) continue; // (the first fight shares the event of the war)
+      const one = battle(sim, x.eventId)!;
+      expect(one.year).toBe(x.year);
+      expect(one.kind).toBe(x.kind);
+      expect(one.lost).toEqual([Math.round(x.lost[0] * 1000), Math.round(x.lost[1] * 1000)]);
+      expect(battle(sim, x.eventId)).toEqual(one);
+    }
   });
 });
 

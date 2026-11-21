@@ -2,7 +2,7 @@
 
 **Live site:** https://electriccookie23.github.io/Genesis-World/
 
-Genesis is a 3D web experience of a small planet where geology, climate, life and eventually civilization evolve on their own in real time. It is a living simulation you watch and poke at, not a game with goals.
+Genesis is a 3D web experience of a small planet where geology, climate, life and eventually civilization evolve on their own in real time. It is a living simulation you watch and poke at; there is a list of goals for those who want one, and nothing depends on it.
 
 Nothing is scripted. Every species, extinction and forest emerges from the simulation, and every event records what caused it, so you can click anything in the chronicle and trace its story back to the root.
 

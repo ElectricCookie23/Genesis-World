@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { actions, update, useStore, type GroundTab } from './store';
 import { formatYear, hsl } from './format';
 import { CreatureSketch } from './sketch';
+import { Picture } from './art';
 import type { AnchorState, Battle, Place } from '../sim/ground';
 import css from './ui.module.css';
 
@@ -242,6 +243,7 @@ function MuseumView() {
               <div class={css.toolGroup}><b>{room.title}</b><span class={css.sub}>{room.about}</span></div>
               {room.exhibits.map((x, i) => (
                 <div key={i} class={css.exhibit}>
+                  {x.painting && <div style={{ flex: 'none' }}><Picture p={x.painting} width={150} /></div>}
                   {x.genes && <div style={{ background: '#e9e1cf', borderRadius: '6px', padding: '4px', width: 'fit-content', flex: 'none' }}><CreatureSketch genes={Float32Array.from(x.genes)} width={120} seed={i + 3} /></div>}
                   <div>
                     <div class={css.sub} style={{ letterSpacing: '0.06em' }}>{english ? x.gloss : x.own}</div>
@@ -271,7 +273,7 @@ export function battleDots(b: Battle, t: number): { x: number; y: number; side: 
   [b.attacker, b.defender].forEach((host, side) => {
     const n = count(host.men), cols = Math.ceil(Math.sqrt(n * 2.2));
     const loose = host.formation.includes('crowd') || host.formation.includes('no line') ? 1 : 0.25;
-    const wins = (b.result === 'taken') === (side === 0);
+    const wins = (b.won ? b.won === 'attacker' : b.result === 'taken') === (side === 0);
     for (let i = 0; i < n; i++) {
       const col = i % cols, row = Math.floor(i / cols);
       const fx = (side === 0 ? 30 : 270) + (side === 0 ? -1 : 1) * row * 7, fy = 20 + (col + 0.5) * (90 / cols);
@@ -300,7 +302,7 @@ function BattleView() {
   const phase = b ? Math.min(b.phases.length - 1, Math.floor(t * b.phases.length)) : 0;
   return (
     <div>
-      <p class={css.sub} style={{ marginTop: 0 }}>A war from the record, laid out on the field: the numbers from the two towns as they were that year, the weapons from what each side knew. The ending is the one the record holds. This is a plan of the field, not a view from inside it.</p>
+      <p class={css.sub} style={{ marginTop: 0 }}>A war from the record, laid out on the field. Where the war was fought as a campaign, each battle is shown from the campaign's own record: how many each side brought, who won, what decided it and what it cost. For older wars the numbers come from the two towns as they were that year. The weapons are what each side knew. This is a plan of the field, not a view from inside it.</p>
       {b && (
         <div class={css.goal}>
           <div class={css.goalTitle}><b>{b.title}</b><span class={css.sub}><Ago year={b.year} /></span></div>
@@ -314,7 +316,18 @@ function BattleView() {
             <div><b style={{ color: hsl(b.defender.hue, 80, 62) }}>{b.defender.name}</b><div class={css.sub}>{b.defender.men.toLocaleString('en-US')}, {b.defender.arms}, in {b.defender.formation}</div></div>
           </div>
           {b.phases.slice(0, phase + 1).map((p, i) => <div key={i} class={css.article} style={{ margin: '0 0 3px', opacity: i === phase ? 1 : 0.7 }}>{p}</div>)}
-          {t >= 1 && <div style={{ marginTop: '4px' }}><b>{b.result === 'taken' ? `${b.defender.town} fell.` : `${b.defender.town} held.`}</b> <span class={css.sub}>That is what the record says, and what the map shows after it.</span></div>}
+          {t >= 1 && <div style={{ marginTop: '4px' }}><b>{b.result === 'taken' ? `${b.defender.town} fell.` : `${b.defender.town} held.`}</b> <span class={css.sub}>{b.campaign ? 'The numbers, the winner and what decided it are the campaign\'s own record of this fight.' : 'That is what the record says, and what the map shows after it.'}</span></div>}
+          {b.campaign && b.campaign.length > 1 && (
+            <div style={{ margin: '6px 0' }}>
+              <div class={css.sub}>The battles of this war, in order:</div>
+              {b.campaign.map((c) => (
+                <div class={css.row} key={c.year + c.town + c.kind} style={{ opacity: c.shown ? 1 : 0.8 }}>
+                  <span>{c.kind === 'field' ? 'In the field near' : c.kind === 'siege' ? 'The siege of' : c.kind === 'storm' ? 'The storming of' : 'The raid on'} {c.town}<br /><span class={css.sub}><Ago year={c.year} />, {c.taken ? 'the town was taken' : c.won === 'attacker' ? 'the attackers had the field' : 'the defenders held'}</span></span>
+                  {c.shown ? <span class={css.sub}>shown above</span> : c.eventId >= 0 && <button class={css.btn} onClick={() => actions.openBattle(c.eventId)}>on the field</button>}
+                </div>
+              ))}
+            </div>
+          )}
           <button class={css.link} onClick={() => actions.openBattle(b.eventId)}>again</button>
           <button class={css.link} onClick={() => actions.eyewitness(b.eventId)}>someone who was there</button>
           <button class={css.link} onClick={() => actions.openArticle({ kind: 'war', id: b.eventId })}>its article</button>

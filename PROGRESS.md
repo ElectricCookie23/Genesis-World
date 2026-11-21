@@ -138,10 +138,10 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 96 | Solar eclipses that make creatures go quiet. | done | when the moon passes between the star and the planet its shadow falls on ground, sea, cloud, plants and animals as a dark spot with a soft edge (`gfx/eclipse.ts`); day animals under it settle as if night had come; peoples still witness eclipses as events |
 | 97 | Comets that return on a long cycle and become myths. | done | a seeded comet returns on a fixed period, each return linked to the last, and becomes myth |
 | 98 | Meteor showers that trigger mutation bursts. | done | meteor showers raise mutation rates for a while |
-| 99 | A rare captured second moon. | done | rare capture of a second, smaller moon (event, omen, drawn in the sky) |
+| 99 | A rare captured second moon. | done | rare capture of a second, smaller moon (event, drawn in the sky) |
 | 100 | Shattering the moon into a ring system. | done | the "Break up the moon" tool breaks the moon into a ring **Audit fix:** the tool had no button; "Shatter the moon" is now in the sky tools. |
 | 101 | Ring shadow creating a cold stripe biome. | done | the ring cools and darkens a band along the equator **Audit fix:** reachable now that 100 has a button. |
-| 102 | A nearby supernova with a radiation spike. | done | rare supernova: radiation kill on land and a mutation burst; peoples take it as an omen |
+| 102 | A nearby supernova with a radiation spike. | done | rare supernova: radiation kill on land and a mutation burst; peoples record it |
 | 103 | The sun brightening over the far future. | done | after 380 My the star slowly brightens and warms the world |
 | 104 | Constellations named after extinct species. | done | villages name constellations after extinct species whose bones they find |
 | 105 | Binary-sun seeds with double shadows. | done | 14% of seeds have a second sun that adds its own light, and mountains cast a second set of shadows from it |
@@ -163,7 +163,7 @@ Rules for this phase (owner's direction): full techniques on WebGL2, not simplif
 | 121 | Civilizations burning ancient swamp coal and warming the planet. | done | cities past a technology level add greenhouse forcing in proportion to their number |
 | 122 | Plagues traveling along trade routes. | done | plagues strike large towns and spread to neighbouring settlements |
 | 123 | Trade boats crossing the seas. | done | sea lanes between ports are routed over open water; boats with a sail and a stern lamp sail back and forth along them, and from orbit the lanes show as moving ship lights; first-ships event |
-| 124 | Tribal wars and borders. | done | neighbouring settlements of different peoples or faiths go to war; nations, their territories and borders are drawn on the Night Map, and war makes the lights flicker |
+| 124 | Tribal wars and borders. | done | neighbouring settlements of different peoples go to war; nations, their territories and borders are drawn on the Night Map, and war makes the lights flicker |
 | 125 | A space age with satellites and a radio signal. | done | space age milestone; satellites circle the planet as points of light once technology passes 0.9, and the narration mentions the radio signal |
 | 126 | Possible nuclear winter. | done | after the space age a war can become nuclear: winter, dieback, most people and knowledge lost |
 | 127 | Departure: a civilization leaves the planet as a light rising into space. | done | after 25 My of space age the people depart (milestone), and a point of light climbs out of the air from their greatest city on a long bright trail |
