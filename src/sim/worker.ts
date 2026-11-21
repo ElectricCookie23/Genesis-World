@@ -19,6 +19,7 @@ import { languageList, scriptInfo } from './history/tongues';
 import { galleryList } from './history/gallery';
 import { describeMusic, lineOf, tradition } from './history/music';
 import { describeColony } from './history/colony';
+import { describePandemic } from './history/plague';
 import { chartingOf } from './history/worldmap';
 import { GOODS, describeMarket } from './history/trade';
 import { GRUDGE_YEARS, web } from './history/diplomacy';
@@ -528,7 +529,7 @@ function tick(): void {
     if (s.civ.settlements.length) {
       const joins = linksByTown(s);
       const great = wondersByTown(s);
-      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, lore: t.lore, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, farms: t.farms, monuments: t.monuments ?? 0, wonders: great.get(t.id), means: t.modifier ? `${t.modifier} ${t.head}` : t.head, names: t.names && t.names.length > 1 ? t.names : undefined, scars: t.scars && t.scars.length ? t.scars.flatMap((x) => [x.year, CALAMITIES.indexOf(x.kind), x.share, REBUILDS.indexOf(x.rebuilt), x.toward ?? -1]) : undefined, codes: codeYears(s, t.nation), walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas, links: joins.get(t.id), dam: t.dam !== undefined, mine: t.mine !== undefined, layers: (t.strata ? t.strata.length : 1) + (t.over !== undefined ? 1 : 0), peak: t.peak, feral: t.feral !== undefined ? s.creatures.species[t.feral]?.name ?? '' : '', nesting: t.nesting !== undefined ? s.creatures.species[t.nesting]?.name ?? '' : '' })) , nations: nationList(s), armies: (s.civ.h.wars ?? []).filter((w) => w.ended < 0).map((w) => { const t = s.civ.settlements[w.route[Math.min(w.at, w.route.length - 1)]!]; return { cell: t ? t.cell : -1, size: w.army[0].size }; }).filter((a) => a.cell >= 0) });
+      post({ type: 'settlements', settlements: shownSettlements(s).map((t) => ({ id: t.id, name: t.name, cell: t.cell, species: t.species, pop: t.pop, tech: t.tech, founded: t.founded, lore: t.lore, eventId: t.eventId, nation: t.nation, relic: t.relic >= 0 ? WEB[t.relic]!.ways[0]!.name : undefined, ruined: t.ruined, farms: t.farms, monuments: t.monuments ?? 0, wonders: great.get(t.id), means: t.modifier ? `${t.modifier} ${t.head}` : t.head, names: t.names && t.names.length > 1 ? t.names : undefined, scars: t.scars && t.scars.length ? t.scars.flatMap((x) => [x.year, CALAMITIES.indexOf(x.kind), x.share, REBUILDS.indexOf(x.rebuilt), x.toward ?? -1]) : undefined, codes: codeYears(s, t.nation), cordon: t.cordon ? { year: t.cordon.year, name: (s.civ.h.plagues ?? []).find((p) => p.id === t.cordon!.plague)?.name ?? 'a sickness' } : undefined, walls: t.walls && t.walls.length ? t.walls.flatMap((w) => [w.pop, w.tech]) : undefined, overseas: t.overseas, links: joins.get(t.id), dam: t.dam !== undefined, mine: t.mine !== undefined, layers: (t.strata ? t.strata.length : 1) + (t.over !== undefined ? 1 : 0), peak: t.peak, feral: t.feral !== undefined ? s.creatures.species[t.feral]?.name ?? '' : '', nesting: t.nesting !== undefined ? s.creatures.species[t.nesting]?.name ?? '' : '' })) , nations: nationList(s), armies: (s.civ.h.wars ?? []).filter((w) => w.ended < 0).map((w) => { const t = s.civ.settlements[w.route[Math.min(w.at, w.route.length - 1)]!]; return { cell: t ? t.cell : -1, size: w.army[0].size }; }).filter((a) => a.cell >= 0) });
     }
     speciesVersion = s.creatures.version;
     if (s.plants.version !== plantVersion) {
@@ -657,6 +658,16 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
             ties: web(h, s.simYear),
             betrayals: living.flatMap((n) => (n.grudges ?? []).filter((x) => s.simYear - x.year < GRUDGE_YEARS).map((x) => ({ by: h.nations[x.against]?.name ?? '', against: n.name, year: x.year, eventId: x.eventId, avenged: x.avenged ?? -1 }))).sort((a, b) => b.year - a.year).slice(0, 30),
           } });
+        }
+        break;
+      case 'requestPlagues':
+        if (sim) {
+          const s = sim, h = s.civ.h, towns = s.civ.settlements, live = towns.filter((t) => t.ruined < 0).length;
+          post({
+            type: 'plagues',
+            list: (h.plagues ?? []).slice().reverse().map((p) => ({ id: p.id, name: p.name, own: p.own, began: p.began, ended: p.ended, eventId: p.eventId, text: describePandemic(p, live, s.simYear), steps: p.reached.map((r) => ({ cell: towns[r.town]!.cell, from: r.from >= 0 ? towns[r.from]!.cell : -1, town: towns[r.town]!.name, year: r.year, via: r.via, dead: r.dead, shut: r.shut, eventId: r.eventId })) })),
+            ways: s.civ.tradeEdges(s).map((e) => ({ a: towns[e.a]!.cell, b: towns[e.b]!.cell, via: e.via })),
+          });
         }
         break;
       case 'requestWars':

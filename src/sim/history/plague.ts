@@ -98,5 +98,5 @@ export function describePandemic(p: Pandemic, towns: number, year: number): stri
   const share = Math.round(alongTrade(p) * 100);
   const dead = p.reached.length ? Math.round((p.reached.reduce((a, r) => a + r.dead, 0) / p.reached.length) * 100) : 0;
   const span = Math.max(1, Math.round((p.ended >= 0 ? p.ended : year) - p.began));
-  return `${p.name} ${p.ended >= 0 ? 'ran' : 'has run'} for ${span} ${span === 1 ? 'year' : 'years'} and reached ${p.reached.length} of ${towns} towns; about ${dead} in a hundred died where it came. ${share} in a hundred of the towns it reached, it reached along a way that trade travels.`;
+  return `${p.name.charAt(0).toUpperCase()}${p.name.slice(1)} ${p.ended >= 0 ? 'ran' : 'has run'} for ${span} ${span === 1 ? 'year' : 'years'} and reached ${p.reached.length} of ${towns} towns; about ${dead} in a hundred died where it came. ${share} in a hundred of the towns it reached, it reached along a way that trade travels.`;
 }

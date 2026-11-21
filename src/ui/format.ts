@@ -48,7 +48,7 @@ export function eventColor(type: string): string {
     case 'ruin': return '#b9a48c';
     case 'storm': return '#b5c4de';
     case 'earthquake': case 'tsunami': case 'city-quake': case 'city-flood': case 'building-law': return '#c7b299';
-    case 'plague': return '#b7d08a';
+    case 'plague': case 'plague-ends': return '#b7d08a';
     case 'eclipse': case 'comet': return '#d9c8ff';
     case 'painting': case 'tamed': case 'artwork': case 'art-movement': case 'script': case 'legend': case 'bones-named': case 'festival': case 'trade-route': case 'trade-shift': case 'discovery': case 'bubble': return '#ffcf8a';
     case 'panic': case 'betrayal': case 'revolution': return '#ff8a6a';
@@ -113,7 +113,7 @@ export function eventGlyph(type: string): string {
     case 'earthquake': case 'city-quake': return '≋';
     case 'building-law': return '▤';
     case 'tsunami': case 'city-flood': return '≈';
-    case 'plague': return '✚';
+    case 'plague': case 'plague-ends': return '✚';
     case 'eclipse': return '◐';
     case 'comet': return '☄';
     case 'painting': return '✎';

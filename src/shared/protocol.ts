@@ -173,6 +173,17 @@ export interface WarInfo {
   battles: { year: number; cell: number; town: string; kind: string; winner: number; sizes: [number, number]; decided: string; taken: boolean; eventId: number; text: string }[];
 }
 
+/** A pandemic as the page sees it (system E37): each town it reached, in order, with where it came from and how. */
+export interface PlagueInfo {
+  id: number;
+  name: string; own: string;
+  began: number; ended: number;
+  eventId: number;
+  /** In a sentence: how long, how many towns, how many died, how far it kept to the ways of trade. */
+  text: string;
+  steps: { cell: number; from: number; town: string; year: number; via: string; dead: number; shut: boolean; eventId: number }[];
+}
+
 /** The world's market as the page sees it (system E32): the price of each good over time, the bubble now swelling, and the panics on record. */
 export interface MarketInfo {
   goods: string[];
@@ -290,6 +301,8 @@ export interface SettlementInfo {
    * as before, stone, braced, raised, moved) and the cell the harm came from (-1 if none).
    */
   scars?: number[];
+  /** The last time it shut its gates against a sickness (system E37): the year, and the sickness's name. */
+  cordon?: { year: number; name: string };
   /** The years its country's building laws were made: fire, earthquake, flood (-1 for none). */
   codes?: number[];
   /** Its walls, oldest first, as pairs: the people it held (thousands) and what it knew when each was built. */
@@ -523,6 +536,7 @@ export type ToWorker =
   | { type: 'requestLegends' }
   | { type: 'requestMarket' }
   | { type: 'requestWars' }
+  | { type: 'requestPlagues' }
   | { type: 'requestDiplomacy' }
   | { type: 'requestSite'; id: number }
   | { type: 'requestMemory'; ask: MemoryAsk }
@@ -551,6 +565,7 @@ export type FromWorker =
   | { type: 'legends'; list: LegendInfo[] }
   | { type: 'market'; market: MarketInfo }
   | { type: 'wars'; list: WarInfo[] }
+  | { type: 'plagues'; list: PlagueInfo[]; ways: { a: number; b: number; via: string }[] }
   | { type: 'diplomacy'; web: DiplomacyInfo }
   | { type: 'site'; detail: SiteDetail }
   | { type: 'memory'; answer: MemoryAnswer }

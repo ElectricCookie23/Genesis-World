@@ -458,7 +458,7 @@ export function FlatMap() {
     draw();
     const t = window.setInterval(draw, 1500);
     return () => window.clearInterval(t);
-  }, [s.overlay, s.mapOf, s.warShown, s.wars]);
+  }, [s.overlay, s.mapOf, s.warShown, s.wars, s.plagueShown, s.plagues]);
   const war = s.mapOf === -3 ? (s.wars ?? []).find((w) => w.id === s.warShown) : undefined;
   // the countries whose own map can be shown: the living ones that have begun to farm, largest first
   const makers = s.realms.filter((r) => r.ended < 0 && r.charting).sort((a, b) => b.pop - a.pop).slice(0, 40);
@@ -470,12 +470,13 @@ export function FlatMap() {
         {(makers.length > 0 || s.mapOf < -1 || s.realms.some((r) => r.ended < 0 && r.trade)) && (
           <div class={css.sub} style={{ margin: '0 0 8px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <span>Show</span>
-            <select value={String(whose ? whose.id : s.mapOf < -1 ? s.mapOf : -1)} onChange={(e) => { const v = Number((e.target as HTMLSelectElement).value); if (v === -3) actions.openWars(); else update({ mapOf: v, mapNote: '' }); }} style={{ background: '#1b1f2a', color: '#ece7db', border: '1px solid #ffffff2a', borderRadius: '5px', padding: '3px 6px', font: '400 12.5px system-ui, sans-serif' }}>
+            <select value={String(whose ? whose.id : s.mapOf < -1 ? s.mapOf : -1)} onChange={(e) => { const v = Number((e.target as HTMLSelectElement).value); if (v === -3) actions.openWars(); else if (v === -6) actions.openPlagues(); else update({ mapOf: v, mapNote: '' }); }} style={{ background: '#1b1f2a', color: '#ece7db', border: '1px solid #ffffff2a', borderRadius: '5px', padding: '3px 6px', font: '400 12.5px system-ui, sans-serif' }}>
               <option value="-1">the true world</option>
               <option value="-2">trade routes, coloured by what they carry</option>
               <option value="-3">the wars, battle by battle</option>
               <option value="-4">ideas of how to rule, and where they hold</option>
               <option value="-5">colonies overseas, and the countries born of them</option>
+              <option value="-6">the plagues, town by town</option>
               {makers.map((r) => <option key={r.id} value={String(r.id)}>the world as {r.name} believes it to be ({r.eraName})</option>)}
             </select>
           </div>
@@ -486,6 +487,34 @@ export function FlatMap() {
           {!whose && s.mapOf >= -1 && <MigrationArrows />}
         </div>
         {(s.mapOf === -2 || s.mapOf === -4 || s.mapOf === -5) && <div class={css.when} style={{ color: '#ece7db', margin: '8px 0 0' }}>{s.mapNote}</div>}
+        {s.mapOf === -6 && (
+          <div style={{ margin: '8px 0 0', maxHeight: '38vh', overflowY: 'auto' }}>
+            {!s.plagues && <p class={css.sub}>Asking the chroniclers.</p>}
+            {s.plagues && s.plagues.length === 0 && <p class={css.sub}>No sickness has yet travelled from town to town. A plague is followed while time runs at the pace of history or slower.</p>}
+            {s.plagues && s.plagues.length > 0 && (
+              <div class={css.sub} style={{ margin: '0 0 6px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span>Plague</span>
+                <select value={String(s.plagueShown)} onChange={(e) => update({ plagueShown: Number((e.target as HTMLSelectElement).value) })} style={{ background: '#1b1f2a', color: '#ece7db', border: '1px solid #ffffff2a', borderRadius: '5px', padding: '3px 6px', font: '400 12.5px system-ui, sans-serif' }}>
+                  {s.plagues.map((p) => <option key={p.id} value={String(p.id)}>{p.name} ({p.own}), {Math.max(0, Math.round((s.stats?.simYear ?? 0) - p.began)).toLocaleString('en-US')} years ago{p.ended < 0 ? ' (still abroad)' : ''}</option>)}
+                </select>
+              </div>
+            )}
+            {(() => {
+              const p = (s.plagues ?? []).find((x) => x.id === s.plagueShown);
+              if (!p) return null;
+              return (
+                <>
+                  <div class={css.when} style={{ color: '#ece7db', margin: '0 0 6px' }}>{p.text} {p.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} title="Why this plague" onClick={() => update({ whyEvent: p.eventId })}>why</button>}</div>
+                  {p.steps.map((st, i) => (
+                    <div key={i} class={css.when} style={{ color: '#ece7db', margin: '0 0 3px' }}>
+                      <span style={{ color: '#9aa3b5' }}>{st.from < 0 ? 'year 1' : `year ${Math.max(1, Math.round(st.year - p.began) + 1)}`}</span> {st.town}: {st.via === 'origin' ? 'it began here' : st.via === 'road' ? 'along the made road' : st.via === 'sea' ? 'by the sea lane' : st.via === 'trade' ? 'with the merchants' : 'on foot from the next valley'}{st.shut ? '; the gates were shut' : ''}; about {Math.max(1, Math.round(st.dead * 100))} in a hundred died. {st.eventId >= 0 && <button class={css.link} style={{ marginRight: 0 }} onClick={() => update({ whyEvent: st.eventId })}>why</button>}
+                    </div>
+                  ))}
+                </>
+              );
+            })()}
+          </div>
+        )}
         {s.mapOf === -3 && (
           <div style={{ margin: '8px 0 0', maxHeight: '38vh', overflowY: 'auto' }}>
             {!s.wars && <p class={css.sub}>Asking the chroniclers.</p>}
@@ -917,7 +946,7 @@ export function Peoples() {
         {(s.stats?.longPeace ?? -1) >= 0 && s.nations.length > 0 && (
           <p class={css.sub} style={{ margin: '0 0 8px' }}>The long peace, {Math.max(0, Math.round((s.stats?.simYear ?? 0) - (s.stats?.longPeace ?? 0))).toLocaleString('en-US')} years old. History is no longer made here: these nations and their towns live on as they are, by custom, until the planet disturbs them.</p>
         )}
-        {s.realms.some((r) => r.ended < 0) && <p class={css.sub} style={{ margin: '0 0 6px' }}><button class={css.link} title="The family tree of the languages spoken now, and their words side by side" onClick={() => actions.openLanguages()}>the languages they speak</button><button class={css.link} title="Paintings of things that happened, in the manner of each age" onClick={() => actions.openGallery()}>what they have painted</button><button class={css.link} title="Stories told about the bones of animals that died out long ago" onClick={() => actions.openLegends()}>old bones</button><button class={css.link} title="What each good has cost over the years, and the panics" onClick={() => actions.openMarket()}>markets</button><button class={css.link} title="Each war on the map, battle by battle" onClick={() => actions.openWars()}>wars</button><button class={css.link} title="Who is allied with whom, who trades, who is at war, and what is remembered" onClick={() => actions.openDiplomacy()}>diplomacy</button></p>}
+        {s.realms.some((r) => r.ended < 0) && <p class={css.sub} style={{ margin: '0 0 6px' }}><button class={css.link} title="The family tree of the languages spoken now, and their words side by side" onClick={() => actions.openLanguages()}>the languages they speak</button><button class={css.link} title="Paintings of things that happened, in the manner of each age" onClick={() => actions.openGallery()}>what they have painted</button><button class={css.link} title="Stories told about the bones of animals that died out long ago" onClick={() => actions.openLegends()}>old bones</button><button class={css.link} title="What each good has cost over the years, and the panics" onClick={() => actions.openMarket()}>markets</button><button class={css.link} title="Each war on the map, battle by battle" onClick={() => actions.openWars()}>wars</button><button class={css.link} title="Each plague on the map, town by town, over the ways trade travels" onClick={() => actions.openPlagues()}>plagues</button><button class={css.link} title="Who is allied with whom, who trades, who is at war, and what is remembered" onClick={() => actions.openDiplomacy()}>diplomacy</button></p>}
         {s.nations.length > 0 && <div class={css.sub} style={{ margin: '4px 0 6px' }}>NATIONS</div>}
         {[...s.nations].sort((a, b) => b.pop - a.pop).slice(0, 24).map((n) => {
           const cap = s.settlements.find((x) => x.id === n.capital);
@@ -977,6 +1006,7 @@ export function Peoples() {
                 </div>
               ))}
               {(st.means || st.names) && <div class={css.when} style={{ color: '#cfc9bd' }}>{st.means ? `Its name means "${st.means}". ` : ''}{nameLine(st, s.stats?.simYear ?? 0)}</div>}
+              {st.cordon && <div class={css.when} style={{ color: '#e8b49a' }}>It shut its gates against {st.cordon.name} {Math.max(0, Math.round((s.stats?.simYear ?? 0) - st.cordon.year)).toLocaleString('en-US')} years ago.</div>}
               {scarLines(st, s.stats?.simYear ?? 0).map((line, i) => <div key={`scar${i}`} class={css.when} style={{ color: '#e8b49a' }}>{line}</div>)}
               <WonderLines st={st} year={s.stats?.simYear ?? 0} />
               {(st.monuments ?? 0) > 0 && <div class={css.when} style={{ color: '#ffd76a' }}>{st.monuments} great {st.monuments === 1 ? 'work stands' : 'works stand'} here from a golden age.</div>}

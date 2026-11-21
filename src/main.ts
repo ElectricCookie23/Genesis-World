@@ -306,6 +306,7 @@ async function boot(): Promise<void> {
   actions.showFestival = (nation, festival) => { shownFeast = { nation, festival, until: performance.now() + 20000 }; const r = state.realms.find((x) => x.id === nation); const cap = r ? state.settlements.find((t) => t.id === r.capital) : undefined; if (cap) { update({ panel: 'none' }); scene.cam.flyTo(grid.lon[cap.cell]!, grid.lat[cap.cell]!, 1.1); } };
   actions.openDiplomacy = () => { update({ panel: 'diplomacy' }); send({ type: 'requestDiplomacy' }); };
   actions.openWars = () => { update({ panel: 'map', mapOf: -3 }); send({ type: 'requestWars' }); };
+  actions.openPlagues = () => { update({ panel: 'map', mapOf: -6 }); send({ type: 'requestPlagues' }); };
   actions.openMarket = () => { update({ panel: 'market' }); send({ type: 'requestMarket' }); };
   actions.openLegends = () => { update({ panel: 'legends' }); send({ type: 'requestLegends' }); };
   actions.openGallery = () => { update({ panel: 'gallery' }); send({ type: 'requestGallery' }); };
@@ -676,6 +677,48 @@ async function boot(): Promise<void> {
       ctx.font = '11px system-ui, sans-serif';
       for (const k of used) { ctx.fillStyle = IDEA_COLOUR[k]; ctx.fillRect(kx, H - 18, 12, 8); ctx.fillStyle = '#ece7db'; ctx.fillText(IDEA_LABEL[k], kx + 16, H - 10); kx += 22 + ctx.measureText(IDEA_LABEL[k]).width + 10; }
       update({ mapNote: ruled + rising ? `${ruled} ${ruled === 1 ? 'country is' : 'countries are'} governed by an idea its people rose for (filled). In ${rising} an idea is gaining ground (a ring, wider as more hold it). The colour is what the idea wants: who should rule.` : 'No one has yet had an idea of how a country should be run, other than the way it is.' });
+    }
+    // ---- a plague, town by town (system E37): the ways trade travels drawn faintly, and over them the way the sickness
+    // went, from each town to the next, redder the earlier it was reached
+    if (state.mapOf === -6) {
+      ctx.fillStyle = 'rgba(6, 8, 14, 0.5)'; ctx.fillRect(0, 0, W, H);
+      const at = (cell: number): [number, number] => [((grid.lon[cell]! + Math.PI) / (Math.PI * 2)) * W, (0.5 - grid.lat[cell]! / Math.PI) * H];
+      const seg = (a: number, b: number): void => {
+        const pa = [grid.pos[a * 3]!, grid.pos[a * 3 + 1]!, grid.pos[a * 3 + 2]!], pb = [grid.pos[b * 3]!, grid.pos[b * 3 + 1]!, grid.pos[b * 3 + 2]!];
+        ctx.beginPath();
+        let last = -1;
+        for (let k = 0; k <= 10; k++) {
+          const t = k / 10, x = pa[0]! + (pb[0]! - pa[0]!) * t, y = pa[1]! + (pb[1]! - pa[1]!) * t, z = pa[2]! + (pb[2]! - pa[2]!) * t, l = Math.hypot(x, y, z) || 1;
+          const u = ((Math.atan2(z / l, x / l) + Math.PI) / (Math.PI * 2)) * W, v = (0.5 - Math.asin(y / l) / Math.PI) * H;
+          if (last < 0 || Math.abs(u - last) > W / 2) ctx.moveTo(u, v); else ctx.lineTo(u, v);
+          last = u;
+        }
+        ctx.stroke();
+      };
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(236, 231, 219, 0.28)'; ctx.lineWidth = 1;
+      for (const w of state.plagueWays) seg(w.a, w.b);
+      const plague = (state.plagues ?? []).find((p) => p.id === state.plagueShown);
+      if (plague && plague.steps.length) {
+        const y0 = plague.began, y1 = Math.max(y0 + 1, ...plague.steps.map((x) => x.year));
+        const colour = (year: number): string => { const t = (year - y0) / (y1 - y0); return `rgb(${Math.round(232 - 30 * t)}, ${Math.round(70 + 130 * t)}, ${Math.round(58 + 110 * t)})`; };
+        for (const st of plague.steps) {
+          if (st.from < 0) continue;
+          ctx.strokeStyle = colour(st.year); ctx.lineWidth = st.via === 'foot' ? 1 : 2.2; ctx.setLineDash(st.via === 'foot' ? [2, 3] : []);
+          seg(st.from, st.cell);
+        }
+        ctx.setLineDash([]);
+        for (const st of plague.steps) {
+          const [x, y] = at(st.cell);
+          ctx.fillStyle = colour(st.year); ctx.beginPath(); ctx.arc(x, y, st.from < 0 ? 6 : 2.5 + 6 * st.dead, 0, Math.PI * 2); ctx.fill();
+          if (st.shut) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4; ctx.strokeRect(x - 6, y - 6, 12, 12); }
+          if (st.from < 0) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, y, 8.5, 0, Math.PI * 2); ctx.stroke(); }
+        }
+        let kx = 10;
+        ctx.font = '11px system-ui, sans-serif';
+        for (const [c, label] of [[colour(y0), 'reached first'], [colour(y1), 'reached last'], ['rgba(236, 231, 219, 0.5)', 'a way trade travels']] as const) { ctx.fillStyle = c; ctx.fillRect(kx, H - 18, 12, 8); ctx.fillStyle = '#ece7db'; ctx.fillText(label, kx + 16, H - 10); kx += 22 + ctx.measureText(label).width + 10; }
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4; ctx.strokeRect(kx, H - 19, 10, 10); ctx.fillStyle = '#ece7db'; ctx.fillText('gates shut', kx + 15, H - 10);
+      }
     }
     // ---- colonies overseas, and the countries born of them (system E36): a line from the mother country's capital to
     // each colony's chief town, dashed while it is held, red while it is fought over, solid once it is a country
@@ -1277,6 +1320,9 @@ async function boot(): Promise<void> {
       }
       case 'diplomacy':
         update({ diplomacy: msg.web });
+        break;
+      case 'plagues':
+        update({ plagues: msg.list, plagueWays: msg.ways, plagueShown: msg.list.some((p) => p.id === state.plagueShown) ? state.plagueShown : msg.list[0]?.id ?? -1 });
         break;
       case 'wars':
         update({ wars: msg.list, warShown: msg.list.some((w) => w.id === state.warShown) ? state.warShown : msg.list[0]?.id ?? -1 });

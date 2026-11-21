@@ -1,7 +1,7 @@
 // Tiny observable store shared by the Preact UI and the app.
 import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
-import type { DynastyDetail, DiplomacyInfo, LanguageInfo, LegendInfo, MarketInfo, WarInfo, MovementInfo, PaintingInfo, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
+import type { DynastyDetail, DiplomacyInfo, LanguageInfo, LegendInfo, MarketInfo, WarInfo, PlagueInfo, MovementInfo, PaintingInfo, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 import type { Nation } from '../render/gfx/nations';
 import type { GoalRecord, GoalState } from '../game/goals';
 import type { CosmosInfo } from '../sim/cosmos';
@@ -119,6 +119,10 @@ export interface UIState {
   /** The wars on record, when they have arrived (system E33), and the one shown on the map (its id). */
   wars: WarInfo[] | null;
   warShown: number;
+  /** The plagues on record, when they have arrived (system E37), the ways trade travels, and the plague shown on the map (its id). */
+  plagues: PlagueInfo[] | null;
+  plagueWays: { a: number; b: number; via: string }[];
+  plagueShown: number;
   /** The world's market, when it has arrived (system E32). */
   market: MarketInfo | null;
   /** The stories told about old bones, when they have arrived (system E28). */
@@ -217,6 +221,9 @@ export const state: UIState = {
   wars: null,
   diplomacy: null,
   warShown: -1,
+  plagues: null,
+  plagueWays: [],
+  plagueShown: -1,
   gallery: null,
   painting: -1,
   siteDetail: null,
@@ -370,6 +377,8 @@ export const actions = {
   openDiplomacy: () => {},
   /** Open the map on the wars, battle by battle. */
   openWars: () => {},
+  /** Open the map on the plagues, town by town. */
+  openPlagues: () => {},
   /** Open the world's market: prices and panics. */
   openMarket: () => {},
   /** Open the stories told about old bones. */

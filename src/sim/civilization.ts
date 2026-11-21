@@ -27,6 +27,7 @@ import { clash, describeBattle, siegeYears, type Army, type Battle, type BattleK
 import { GRUDGE_YEARS, pactBetween, type Treaty, type TreatyKind } from './history/diplomacy';
 import { growsApart, odds, ready, shipped, waits, type Colony, type Standing } from './history/colony';
 import { ordinal } from './history/grammar';
+import { CATCHING_YEARS, carried, describePandemic, describeVia, plagueName, shuts, toll, type Edge, type Pandemic, type Reach, type Via } from './history/plague';
 import { IDEA_GOVERNMENT, IDEA_SAYS, drift, governedAs, ideaName, pressure, ripest, type Conditions, type Ideology } from './history/ideology';
 import { stillCleared } from './history/decay';
 import { answer, damage, hazards, type CalamityKind, type Ground, type Rebuild, type Scar } from './history/calamity';
@@ -92,6 +93,8 @@ export interface Settlement {
   overseas?: boolean;
   /** The colony it belongs to or began in (system E36): a colony's id. */
   colony?: number;
+  /** The last time it shut its gates against a sickness (system E37): the year, and the pandemic's id. */
+  cordon?: { year: number; plague: number };
   /** The most people it ever held (thousands): how large its ruin is (system E18). */
   peak?: number;
   /** After it was left: the tame animals that run wild in it, and the animals that nest in its towers (species ids). */
@@ -420,6 +423,8 @@ export class Civilization {
     }
     // ---- the wars now being fought: each army marches, is fed or is not, and meets the other (system E33)
     if (this.fine) this.warfare(sim, y, year);
+    // ---- a sickness abroad: it goes where trade goes, town by town (system E37)
+    if (this.fine) this.pandemics(sim, year);
     // ---- the world's market: prices, a bubble now and then, and the panic when it bursts (system E32)
     this.market(sim, y, year);
     // industry: burning the buried forests of older ages warms the whole world
@@ -509,7 +514,7 @@ export class Civilization {
         const pact = o.nation >= 0 && o.nation !== n.id ? pactBetween(this.h, n.id, o.nation, year) : undefined;
         if (pact && hash32(this.seedNum, st.id, Math.floor(year), 0xd1b) % 100 < 35) continue;
         // (a country that has been betrayed does not let kinship stay its hand)
-        const sore = o.nation >= 0 ? (n.grudges ?? []).find((g) => g.against === o.nation && g.avenged === undefined && year - g.year < GRUDGE_YEARS) : undefined;
+        const sore = o.nation >= 0 ? (n.grudges ?? []).find((g) => g.against === o.nation && g.avenged === undefined && year - g.year >= 20 && year - g.year < GRUDGE_YEARS) : undefined;
         if (!sore && o.species === st.species && (o.lore === st.lore || o.lore < 0 || st.lore < 0) && !rng.chance(0.35)) continue;
         st.pop *= 0.7; o.pop *= 0.65; st.tech = Math.max(0.03, st.tech - 0.02); o.tech = Math.max(0.03, o.tech - 0.02);
         n.fatigue = sat(n.fatigue + 0.22);
@@ -571,6 +576,8 @@ export class Civilization {
       sim.civEvent('city-plague', st.species, st.cell, st.id);
       if (sim.events.events.length > plagueAt) this.credit(sim, rng, n, plagueAt, '{name}, a healer, stayed to tend the sick when others fled.', 'scholar', year);
       this.woe(n, 'plague', sim.events.events.length > plagueAt ? plagueAt : -1, year, 0.14);
+      // a town on a road or a merchants' route does not keep its sickness to itself (system E37)
+      if (this.fine && sim.events.events.length > plagueAt) this.outbreak(sim, n, st, plagueAt, year);
       // when the few who knew a craft die together, the craft dies with them
       if (isCapital && rng.chance(0.35)) this.loseKnowledge(sim, rng, n, [st], 1 + rng.int(2), year, `The plague in ${st.name} took the last who knew how.`, sim.events.events.length > plagueAt ? plagueAt : -1);
       for (let j = 0; j < reg.grid.ncount[st.region]!; j++) {
@@ -2177,6 +2184,150 @@ export class Civilization {
         if (first && ev.id >= 0) h.firstTongue = ev.id;
       }
     }
+  }
+
+  /**
+   * The ways trade travels between towns (system E37): the made roads, canals and railways (system E15), and
+   * each country's chief trade route, from its capital to its buyer's (system E31), by sea where water lies between.
+   */
+  tradeEdges(sim: Simulation): Edge[] {
+    const h = this.h, out: Edge[] = [];
+    const live = (id: number): boolean => { const st = this.settlements[id]; return !!st && st.ruined < 0; };
+    for (const l of h.links ?? []) {
+      const k = NETWORKS[l.kind];
+      if (!k || (k.id !== 'road' && k.id !== 'canal' && k.id !== 'rail') || !live(l.a) || !live(l.b)) continue;
+      out.push({ a: l.a, b: l.b, via: 'road', eventId: -1 });
+    }
+    for (const n of h.nations) {
+      if (n.ended >= 0 || !n.trade) continue;
+      const o = h.nations[n.trade.to];
+      if (!o || o.ended >= 0 || !live(n.capital) || !live(o.capital) || n.capital === o.capital) continue;
+      const a = this.settlements[n.capital]!, b = this.settlements[o.capital]!;
+      out.push({ a: a.id, b: b.id, via: a.overseas !== b.overseas || this.seaBetween(sim, a.cell, b.cell) ? 'sea' : 'trade', eventId: n.trade.eventId });
+    }
+    return out;
+  }
+
+  /**
+   * A pandemic begins (system E37). A sickness has broken out in a town (the engine's ordinary town plague). If
+   * that town is on a road or a merchants' route, and no other sickness is abroad or lately spent, it will not
+   * stay there: it gets a name in the town's tongue, the strain it came from is on record as its cause, and
+   * `pandemics` carries it onward from the next year.
+   */
+  private outbreak(sim: Simulation, n: Nation, st: Settlement, eventId: number, year: number): void {
+    const h = this.h, list = (h.plagues ??= []), ev = sim.events.events;
+    if (list.some((p) => p.ended < 0)) return;
+    const last = list[list.length - 1];
+    if (last && year - last.ended < 150) return;
+    const edge = this.tradeEdges(sim).find((e) => e.a === st.id || e.b === st.id);
+    if (!edge) return;
+    const id = (h.plagueSeq = (h.plagueSeq ?? 0) + 1);
+    const r = (k: number): number => (hash32(this.seedNum, id, Math.floor(year), k) % 10000) / 10000;
+    let head = '', modifier = '', name = '';
+    for (let k = 0; k < 8; k++) { [head, modifier, name] = plagueName(hash32(this.seedNum, id, 0xf1) + k); if (!list.some((x) => x.name === name)) break; }
+    if (list.some((x) => x.name === name)) name = `${name} of ${st.name}`;
+    const strain = sim.strange.strainFor(sim, st.region);
+    const p: Pandemic = {
+      id, name, own: compound(this.languageOf(n), head, modifier, year), began: year, ended: -1, origin: st.id, eventId, strain, endEvent: -1,
+      catching: 0.5 + 0.5 * r(1), deadly: 0.12 + 0.25 * r(2), reached: [{ town: st.id, year, from: -1, via: 'origin', dead: 0.5, shut: false, eventId }],
+    };
+    const e = ev[eventId];
+    if (e) {
+      e.title = `${name} begins at ${st.name}`;
+      e.description += ` They call it ${p.own}, ${name}. ${st.name} stands on ${edge.via === 'road' ? 'a made road' : edge.via === 'sea' ? 'a sea lane' : 'a merchants\' route'}, and the sickness will not stay here.`;
+      if (strain >= 0 && ev[strain] && !e.causes.includes(strain)) { e.causes.push(strain); e.causeWeights.push(1); ev[strain]!.effects.push(e.id); }
+      e.data = { ...e.data, pandemic: id, town: st.id };
+    }
+    list.push(p);
+    if (list.length > 24) { const k = list.findIndex((x) => x.ended >= 0); if (k >= 0) list.splice(k, 1); }
+  }
+
+  /**
+   * The sickness abroad (system E37), a year at a time. Every town that caught it within the last two years
+   * may give it to each town a way of trade joins it to (`carried`), and now and then to the next valley on
+   * foot. A country that knows enough and is steady enough shuts its gates (`shuts`): fewer catch it, fewer
+   * die, and a wall goes up across the road. Each town reached is an event caused by the town it came from.
+   * When no town has it any more it is spent, and the countries it emptied are changed (`spent`).
+   * (The luck in it comes from the sickness, the towns and the year, not from the stream that decides other things.)
+   */
+  private pandemics(sim: Simulation, year: number): void {
+    const h = this.h, ev = sim.events.events, reg = sim.regions;
+    for (const p of [...(h.plagues ?? [])]) {
+      if (p.ended >= 0) continue;
+      const edges = this.tradeEdges(sim);
+      const has = new Set<number>(p.reached.map((r) => r.town));
+      const hot = p.reached.filter((r) => year > r.year && year - r.year <= CATCHING_YEARS && this.settlements[r.town]!.ruined < 0);
+      const luck = (a: number, b: number, k: number): number => (hash32(this.seedNum, p.id * 131 + a, b * 7 + Math.floor(year), k) % 10000) / 10000;
+      const fresh: Reach[] = [];
+      const reach = (to: Settlement | undefined, from: Reach, via: Via, edgeEvent: number): void => {
+        if (!to || has.has(to.id) || to.ruined >= 0 || to.nation < 0 || p.reached.length + fresh.length >= 90) return;
+        const n = h.nations[to.nation];
+        if (!n || n.ended >= 0) return;
+        const shut = shuts(n.tech, n.stability, year - p.began);
+        if (luck(from.town, to.id, 1) >= carried(via, p.catching, shut)) return;
+        const dead = toll(p.deadly, n.tech, shut, luck(to.id, 0, 2));
+        to.pop *= 1 - dead;
+        let walled = false;
+        if (shut) {
+          to.cordon = { year, plague: p.id };
+          // (the wall thrown up across the road stays: a town's walls are a record of what it has feared)
+          const walls = (to.walls ??= []);
+          if (to.tech >= 0.3 && walls.length < 4 && !walls.some((w) => year - w.year < 30)) { walls.push({ pop: to.pop, tech: to.tech, year }); walled = true; }
+        }
+        const firstHere = !p.reached.some((r) => this.settlements[r.town]!.nation === n.id) && !fresh.some((r) => this.settlements[r.town]!.nation === n.id);
+        const src = this.settlements[from.town]!;
+        const e = sim.emit({
+          type: 'plague', year, cellId: to.cell, title: `${p.name} reaches ${to.name}`,
+          description: `${p.own}, ${p.name}, comes to ${to.name} ${describeVia(via)}, from ${src.name}. ${shut ? `The gates had been shut${walled ? ' and a wall thrown up across the road' : ''}; even so about` : 'About'} ${Math.max(1, Math.round(dead * 100))} in a hundred of its people die.`,
+          causes: [from.eventId, edgeEvent].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: firstHere && to.id === n.capital ? 1 : 0, speciesIds: [to.species],
+          data: { pandemic: p.id, town: to.id, from: from.town, via, shut: shut ? 1 : 0 },
+        });
+        const r: Reach = { town: to.id, year, from: from.town, via, dead, shut, eventId: e.id >= 0 ? e.id : from.eventId };
+        fresh.push(r); has.add(to.id);
+        if (firstHere) this.woe(n, 'plague', r.eventId, year, shut ? 0.04 : 0.09);
+      };
+      for (const r of hot) {
+        for (const e of edges) { const other = e.a === r.town ? e.b : e.b === r.town ? e.a : -1; if (other >= 0) reach(this.settlements[other], r, e.via, e.eventId); }
+        const st = this.settlements[r.town]!;
+        for (let j = 0; j < reg.grid.ncount[st.region]!; j++) { const oid = this.occupied.get(reg.grid.neighbors[st.region * 6 + j]!); if (oid !== undefined) reach(this.settlements[oid], r, 'foot', -1); }
+      }
+      for (const r of fresh) p.reached.push(r);
+      // (the first sickness to reach five towns is the first great plague: it is remembered as that)
+      if (h.firstPandemic === undefined && p.reached.length >= 5) {
+        const e = ev[p.eventId];
+        h.firstPandemic = p.eventId;
+        if (e) { e.title = `The first great plague: ${p.name}`; e.importance = Math.max(e.importance, 2); }
+      }
+      if (!p.reached.some((r) => year - r.year <= CATCHING_YEARS) || year - p.began > 30) this.spent(sim, p, year);
+    }
+  }
+
+  /** A pandemic is over (system E37): what it took, and what is different in the countries it emptied. */
+  private spent(sim: Simulation, p: Pandemic, year: number): void {
+    const h = this.h, ev = sim.events.events;
+    p.ended = year;
+    // (a sickness that never left the town it began in was a town's plague, not the world's)
+    if (p.reached.length < 2) { const at = (h.plagues ?? []).indexOf(p); if (at >= 0) h.plagues!.splice(at, 1); return; }
+    // what each country lost: the towns it reached there, against all its towns
+    const hit = new Map<number, number>();
+    for (const r of p.reached) { const st = this.settlements[r.town]!; if (st.nation >= 0) hit.set(st.nation, (hit.get(st.nation) ?? 0) + r.dead); }
+    const emptied: string[] = [];
+    for (const [id, dead] of hit) {
+      const n = h.nations[id];
+      if (!n || n.ended >= 0) continue;
+      const lost = dead / Math.max(1, n.towns);
+      // hands are scarce: those who are left ask more for their work, and get it
+      if (lost >= 0.1) { n.inequality = sat(n.inequality * (1 - Math.min(0.4, lost))); emptied.push(n.name); }
+    }
+    const last = p.reached[p.reached.length - 1]!;
+    const where = this.settlements[last.town]!;
+    const live = this.settlements.filter((st) => st.ruined < 0).length;
+    const e = sim.emit({
+      type: 'plague-ends', year, cellId: where.cell, title: `${p.name} is spent`,
+      description: `${describePandemic(p, live, year)}${emptied.length ? ` In ${emptied.length > 1 ? `${emptied.slice(0, 3).slice(0, -1).join(', ')} and ${emptied.slice(0, 3).pop()}` : emptied[0]} there are not hands enough for the fields. Those who are left ask more for their work, and get it.` : ''}`,
+      causes: [last.eventId, p.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: p.reached.length >= 8 ? 1 : 0, speciesIds: [where.species], data: { pandemic: p.id, towns: p.reached.length },
+    });
+    p.endEvent = e.id;
   }
 
   /** How a colony stands with its mother country (system E36). */

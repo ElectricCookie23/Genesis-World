@@ -7,6 +7,7 @@ import type { War } from './war';
 import type { Grudge, Treaty } from './diplomacy';
 import type { Ideology } from './ideology';
 import type { Colony } from './colony';
+import type { Pandemic } from './plague';
 // The entities of history. All of them are plain data, so the whole of history saves, loads and
 // rewinds with the rest of the simulation.
 import type { Calendar } from './calendar';
@@ -242,6 +243,10 @@ export interface HistoryState {
   movements?: Movement[];
   firstStyles?: number[];
   paintingSeq?: number;
+  /** The plagues that have travelled the trade routes (system E37): the one abroad now and the last two dozen spent; and the event of the first. */
+  plagues?: Pandemic[];
+  plagueSeq?: number;
+  firstPandemic?: number;
   /** Colonies planted overseas (system E36), and the events of the first colony and the first independence. */
   colonies?: Colony[];
   firstColony?: number;
