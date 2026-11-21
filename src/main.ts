@@ -590,18 +590,55 @@ async function boot(): Promise<void> {
     const img = ctx.createImageData(W, H);
     const sea = state.stats?.seaLevel ?? 0;
     const elev = scene.planet!.elevation;
-    for (let i = 0; i < W * H; i++) {
-      const c = mapCells[i]!;
+    // (the colour of one cell on a flat map, written into an image at pixel i)
+    const paint = (data: Uint8ClampedArray, i: number, c: number): void => {
       const wet = elev[c]! <= sea && state.overlay === 'none';
       // linear to display, with the sea drawn in blue by depth
       const r = wet ? 0.02 : colors[c * 3]!, g = wet ? 0.1 + Math.max(0, 0.25 + elev[c]! * 0.06) : colors[c * 3 + 1]!, b = wet ? 0.3 + Math.max(0, 0.3 + elev[c]! * 0.06) : colors[c * 3 + 2]!;
-      img.data[i * 4] = Math.pow(Math.min(1, r), 0.45) * 255;
-      img.data[i * 4 + 1] = Math.pow(Math.min(1, g), 0.45) * 255;
-      img.data[i * 4 + 2] = Math.pow(Math.min(1, b), 0.45) * 255;
-      img.data[i * 4 + 3] = 255;
-    }
+      data[i * 4] = Math.pow(Math.min(1, r), 0.45) * 255;
+      data[i * 4 + 1] = Math.pow(Math.min(1, g), 0.45) * 255;
+      data[i * 4 + 2] = Math.pow(Math.min(1, b), 0.45) * 255;
+      data[i * 4 + 3] = 255;
+    };
+    for (let i = 0; i < W * H; i++) paint(img.data, i, mapCells[i]!);
     ctx.putImageData(img, 0, 0);
     if (bare) return;
+    /**
+     * A close look at one part of the world, drawn in a box on the map: the land within `radius` radians of the middle
+     * of the given cells, with the towns there as dots. Returns where a cell falls in the box (or null if outside), so
+     * that whatever the view is about can be drawn on it.
+     */
+    const closeLook = (cells: number[], radius: number, bx: number, by: number, bw: number, bh: number): ((cell: number) => [number, number] | null) => {
+      let cx = 0, cy = 0, cz = 0;
+      for (const c of cells) { cx += grid.pos[c * 3]!; cy += grid.pos[c * 3 + 1]!; cz += grid.pos[c * 3 + 2]!; }
+      const cl = Math.hypot(cx, cy, cz) || 1; cx /= cl; cy /= cl; cz /= cl;
+      // east and north at the middle
+      let ex = -cz, ey = 0, ez = cx; const el = Math.hypot(ex, ey, ez) || 1; ex /= el; ey /= el; ez /= el;
+      const nx = cy * ez - cz * ey, ny = cz * ex - cx * ez, nz = cx * ey - cy * ex;
+      const k = Math.tan(radius), half = bw / 2;
+      const box = ctx.createImageData(bw, bh);
+      let hint = cells[0] ?? 0;
+      for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+        const u = ((x + 0.5 - half) / half) * k, v = ((bh / 2 - y - 0.5) / half) * k;
+        const dx = cx + u * ex + v * nx, dy = cy + u * ey + v * ny, dz = cz + u * ez + v * nz, dl = Math.hypot(dx, dy, dz);
+        hint = nearestCell(grid, dx / dl, dy / dl, dz / dl, hint);
+        paint(box.data, y * bw + x, hint);
+      }
+      ctx.putImageData(box, bx, by);
+      ctx.fillStyle = 'rgba(6, 8, 14, 0.35)'; ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeStyle = '#ffffffcc'; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+      const project = (cell: number): [number, number] | null => {
+        const px = grid.pos[cell * 3]!, py = grid.pos[cell * 3 + 1]!, pz = grid.pos[cell * 3 + 2]!;
+        const d = px * cx + py * cy + pz * cz;
+        if (d <= 0.2) return null;
+        const u = (px * ex + py * ey + pz * ez) / d / k, v = (px * nx + py * ny + pz * nz) / d / k;
+        const x = bx + half + u * half, y = by + bh / 2 - v * half;
+        return x < bx + 3 || x > bx + bw - 3 || y < by + 3 || y > by + bh - 3 ? null : [x, y];
+      };
+      ctx.fillStyle = '#ffd27a';
+      for (const st of state.settlements) { if (st.ruined >= 0) continue; const q = project(st.cell); if (q) ctx.fillRect(q[0] - 1.5, q[1] - 1.5, 3, 3); }
+      return project;
+    };
     // ---- trade routes, coloured by what they carry (system E31): from each country's capital to its buyer's
     if (state.mapOf === -2) {
       ctx.fillStyle = 'rgba(6, 8, 14, 0.45)'; ctx.fillRect(0, 0, W, H);
@@ -640,20 +677,36 @@ async function boot(): Promise<void> {
       ctx.fillStyle = 'rgba(6, 8, 14, 0.45)'; ctx.fillRect(0, 0, W, H);
       const war = (state.wars ?? []).find((w) => w.id === state.warShown);
       if (war) {
-        const at = war.battles.filter((b) => b.cell >= 0).map((b) => ({ b, x: ((grid.lon[b.cell]! + Math.PI) / (Math.PI * 2)) * W, y: (0.5 - grid.lat[b.cell]! / Math.PI) * H }));
-        // (meetings at the same town are fanned out a little so that each number can be read)
-        const seen = new Map<number, number>();
-        for (const p of at) { const k = seen.get(p.b.cell) ?? 0; seen.set(p.b.cell, k + 1); p.x += k * 9; p.y -= k * 5; }
-        ctx.strokeStyle = '#ffffffaa'; ctx.lineWidth = 1.2; ctx.setLineDash([4, 3]); ctx.beginPath();
-        at.forEach((p, i) => { if (i === 0 || Math.abs(p.x - at[i - 1]!.x) > W / 2) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
-        ctx.stroke(); ctx.setLineDash([]);
-        ctx.font = '600 10px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        at.forEach((p, i) => {
-          ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
-          ctx.fillStyle = p.b.winner === 0 ? '#e0563a' : '#4f8fe0'; ctx.fill();
-          ctx.strokeStyle = p.b.taken ? '#fff' : '#00000088'; ctx.lineWidth = p.b.taken ? 1.8 : 1; ctx.stroke();
-          ctx.fillStyle = '#fff'; ctx.fillText(String(i + 1), p.x, p.y + 0.5);
-        });
+        const fought = war.battles.filter((b) => b.cell >= 0);
+        // how far apart the meetings lie: at the size of a real world a whole war is often one dot on the map of everything
+        let spread = 0;
+        for (const a of fought) for (const b of fought) { const d = Math.acos(Math.max(-1, Math.min(1, grid.pos[a.cell * 3]! * grid.pos[b.cell * 3]! + grid.pos[a.cell * 3 + 1]! * grid.pos[b.cell * 3 + 1]! + grid.pos[a.cell * 3 + 2]! * grid.pos[b.cell * 3 + 2]!))); if (d > spread) spread = d; }
+        const marks = (place: (cell: number) => [number, number] | null, wrap: boolean): void => {
+          const at = fought.map((b) => ({ b, p: place(b.cell) })).filter((x): x is { b: typeof x.b; p: [number, number] } => !!x.p).map(({ b, p }) => ({ b, x: p[0], y: p[1] }));
+          // (meetings at the same town are fanned out a little so that each number can be read)
+          const seen = new Map<number, number>();
+          for (const p of at) { const k = seen.get(p.b.cell) ?? 0; seen.set(p.b.cell, k + 1); p.x += k * 9; p.y -= k * 5; }
+          ctx.strokeStyle = '#ffffffaa'; ctx.lineWidth = 1.2; ctx.setLineDash([4, 3]); ctx.beginPath();
+          at.forEach((p, i) => { if (i === 0 || (wrap && Math.abs(p.x - at[i - 1]!.x) > W / 2)) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+          ctx.stroke(); ctx.setLineDash([]);
+          ctx.font = '600 10px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          at.forEach((p) => {
+            ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+            ctx.fillStyle = p.b.winner === 0 ? '#e0563a' : '#4f8fe0'; ctx.fill();
+            ctx.strokeStyle = p.b.taken ? '#fff' : '#00000088'; ctx.lineWidth = p.b.taken ? 1.8 : 1; ctx.stroke();
+            ctx.fillStyle = '#fff'; ctx.fillText(String(war.battles.indexOf(p.b) + 1), p.x, p.y + 0.5);
+          });
+          ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+        };
+        const world = (cell: number): [number, number] => [((grid.lon[cell]! + Math.PI) / (Math.PI * 2)) * W, (0.5 - grid.lat[cell]! / Math.PI) * H];
+        if (fought.length && spread < 0.9) {
+          // one ring on the map of the world where it was fought, and a close look beside it
+          const [wx, wy] = world(fought[0]!.cell);
+          const bw = Math.round(W * 0.42), bh = Math.round(H * 0.62), bx = wx < W / 2 ? W - bw - 8 : 8, by = 8;
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(wx, wy, 9, 0, Math.PI * 2); ctx.stroke();
+          ctx.strokeStyle = '#ffffff88'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(wx + (bx > wx ? 9 : -9), wy); ctx.lineTo(bx > wx ? bx : bx + bw, by + bh / 2); ctx.stroke();
+          marks(closeLook(fought.map((b) => b.cell), Math.max(0.05, spread * 0.7 + 0.03), bx, by, bw, bh), false);
+        } else marks(world, true);
         ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
       }
     }

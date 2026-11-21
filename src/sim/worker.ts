@@ -21,6 +21,7 @@ import { describeMusic, lineOf, tradition } from './history/music';
 import { describeColony } from './history/colony';
 import { describePandemic } from './history/plague';
 import { describeGreatWar } from './history/greatwar';
+import { describeBattle } from './history/war';
 import { chartingOf } from './history/worldmap';
 import { GOODS, describeMarket } from './history/trade';
 import { GRUDGE_YEARS, secretTies, web } from './history/diplomacy';
@@ -720,7 +721,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         pageHas = true;
         break;
       case 'requestWars':
-        if (sim) { const s = sim, h = s.civ.h; post({ type: 'wars', list: (h.wars ?? []).slice(-30).reverse().map((w) => ({ id: w.id, attacker: h.nations[w.a]?.name ?? '', defender: h.nations[w.b]?.name ?? '', year: w.year, ended: w.ended, outcome: w.outcome, eventId: w.eventId, peaceEvent: w.peaceEvent, battles: w.battles.map((b) => { const t = s.civ.settlements[b.settlement]; return { year: b.year, cell: t ? t.cell : -1, town: t ? t.name : '', kind: b.kind, winner: b.winner, sizes: b.sizes, decided: b.decided, taken: b.taken, eventId: b.eventId, text: s.events.events[b.eventId]?.description ?? '' }; }) })) }); }
+        if (sim) { const s = sim, h = s.civ.h; post({ type: 'wars', list: (h.wars ?? []).slice(-30).reverse().map((w) => ({ id: w.id, attacker: h.nations[w.a]?.name ?? '', defender: h.nations[w.b]?.name ?? '', year: w.year, ended: w.ended, outcome: w.outcome, eventId: w.eventId, peaceEvent: w.peaceEvent, battles: w.battles.map((b, i) => { const t = s.civ.settlements[b.settlement]; return { year: b.year, cell: t ? t.cell : -1, town: t ? t.name : '', kind: b.kind, winner: b.winner, sizes: b.sizes, decided: b.decided, taken: b.taken, eventId: b.eventId, text: (i > 0 && b.eventId === w.eventId) || !s.events.events[b.eventId] ? describeBattle(b, t ? t.name : 'a town', h.nations[w.a]?.name ?? '', h.nations[w.b]?.name ?? '') : s.events.events[b.eventId]!.description }; }) })) }); }
         break;
       case 'requestMarket':
         if (sim) { const s = sim, h = s.civ.h, m = h.market; post({ type: 'market', market: { goods: [...GOODS], years: m ? m.years : [], prices: m ? m.prices : GOODS.map(() => []), bubble: m && m.bubble ? { good: GOODS[m.bubble.good]!, nation: h.nations[m.bubble.nation]?.name ?? '', since: m.bubble.since, froth: m.bubble.froth } : undefined, panics: s.events.events.filter((e) => e.type === 'panic').slice(-30).reverse().map((e) => ({ year: e.simYear, title: e.title, eventId: e.id, good: String(e.data?.good ?? '') })) } }); }

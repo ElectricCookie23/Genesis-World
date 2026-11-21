@@ -579,7 +579,7 @@ export function FlatMap() {
           </div>
         )}
         {whose && <div class={css.when} style={{ color: '#ece7db', margin: '8px 0 0' }}>{s.mapNote} Their own country is in the middle. Filled marks are their towns, hollow ones towns they have heard of; blank paper is what they have never seen{(whose.monsters ?? []).length ? `; in the sea are the great animals their sailors have met (${(whose.monsters ?? []).map((m) => m.name).join(', ')})` : ''}.</div>}
-        {recentMigrations(s.events).length > 0 && <div class={css.sub} style={{ margin: '6px 0 0' }}>Arrows: peoples on the move (<span style={{ color: MOVE_COLOUR.ice }}>driven by ice</span>, <span style={{ color: MOVE_COLOUR.sea }}>by the sea</span>, <span style={{ color: MOVE_COLOUR.famine }}>by hunger</span>). Click one to see why.</div>}
+        {!whose && s.mapOf >= -1 && recentMigrations(s.events).length > 0 && <div class={css.sub} style={{ margin: '6px 0 0' }}>Arrows: peoples on the move (<span style={{ color: MOVE_COLOUR.ice }}>driven by ice</span>, <span style={{ color: MOVE_COLOUR.sea }}>by the sea</span>, <span style={{ color: MOVE_COLOUR.famine }}>by hunger</span>). Click one to see why.</div>}
       </div>
     </div>
   );
