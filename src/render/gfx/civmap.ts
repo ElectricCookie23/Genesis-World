@@ -62,6 +62,15 @@ export class CivMap {
     this.lastBuild = -1e9;
   }
 
+  /** Armies in the field (system E33): where each is camped and how large it is. */
+  private camps: { cell: number; size: number }[] = [];
+  setCamps(list: { cell: number; size: number }[]): void {
+    const key = (l: { cell: number; size: number }[]) => l.map((c) => `${c.cell}:${Math.round(c.size)}`).join(',');
+    if (key(list) === key(this.camps)) return;
+    this.camps = list;
+    this.dirty = true;
+  }
+
   /** A war or a plague at a settlement: its lights flicker or go dark for a while. */
   disturb(cell: number, kind: 'war' | 'plague'): void {
     for (const s of this.settlements) {
@@ -90,7 +99,7 @@ export class CivMap {
       lights = new Map(this.unrest);
       for (const st of this.settlements) { const f = st.nation !== undefined ? this.feasts.get(st.nation) : undefined; if (f && st.ruined < 0) lights.set(st.id, { war: lights.get(st.id)?.war ?? 0, dark: lights.get(st.id)?.dark ?? 0, feast: f }); }
     }
-    this.layers = buildLayers(this.grid, cells, this.settlements, this.nations, lights, this.layers);
+    this.layers = buildLayers(this.grid, cells, this.settlements, this.nations, lights, this.layers, this.camps);
     const L = this.layers, b = this.bake;
     b.fill(this.a, 0, L.r); b.fill(this.a, 1, L.g); b.fill(this.a, 2, L.b); b.fill(this.a, 3, L.glow);
     b.commit(this.a);

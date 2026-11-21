@@ -82,6 +82,8 @@ export function eventGlyph(type: string): string {
     case 'festival': return '✺';
     case 'trade-route': case 'trade-shift': case 'discovery': return '⇄';
     case 'bubble': case 'panic': return '▼';
+    case 'battle': return '⚔';
+    case 'peace': return '☮';
     case 'artwork': case 'art-movement': return '◩';
     case 'contact': return '⇄';
     case 'migration': return '➳';

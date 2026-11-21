@@ -23,6 +23,7 @@ import { ART_STYLES, against, styleOfEra, subjectOf, type Movement, type Paintin
 import { legendKind, legendName, tale, trueAnimal, type Legend } from './history/legend';
 import { lightOf, type Festival, type FestivalKind } from './history/festival';
 import { GOODS, bestTrade, prices, type Economy } from './history/trade';
+import { clash, describeBattle, siegeYears, type Army, type Battle, type BattleKind, type War } from './history/war';
 import { stillCleared } from './history/decay';
 import { answer, damage, hazards, type CalamityKind, type Ground, type Rebuild, type Scar } from './history/calamity';
 import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role, type Wonder, type WonderKind } from './history/model';
@@ -405,6 +406,8 @@ export class Civilization {
       // ---- its towns
       for (const st of towns) this.town(sim, rng, n, st, st.id === n.capital, y, year);
     }
+    // ---- the wars now being fought: each army marches, is fed or is not, and meets the other (system E33)
+    if (this.fine) this.warfare(sim, y, year);
     // ---- the world's market: prices, a bubble now and then, and the panic when it bursts (system E32)
     this.market(sim, y, year);
     // industry: burning the buried forests of older ages warms the whole world
@@ -532,6 +535,8 @@ export class Civilization {
               if (this.rename(o, this.languageOf(n), year, `renamed by ${n.name}, who took it from ${foe.name}`, taken.id, true)) taken.description += ` Its new masters call it ${o.name}, which means in their tongue what ${was} meant in the old one.`;
             }
           }
+          // what follows the first blow is a campaign (system E33), while the years are being watched
+          if (this.fine && warEvent >= 0) this.campaign(sim, n, foe, st, o, warEvent, year, general ? general.name : '', other ? other.name : '');
         }
         // with the atom in hand, a war can end the age
         // (only between nations that hold the sky, rarely, and never while the last one is remembered)
@@ -2144,6 +2149,147 @@ export class Civilization {
           causes: [n.eventId].filter((x) => x >= 0 && sim.events.events[x]), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, culture: c.id, parent: old.id },
         });
         if (first && ev.id >= 0) h.firstTongue = ev.id;
+      }
+    }
+  }
+
+  /**
+   * A campaign begins (system E33). The first blow has fallen on a town (and may have taken it). The attacker
+   * raises an army and means to go on: toward the nearest towns of its enemy, and the capital if it is near
+   * enough. The defender raises one too. From here `warfare` moves them, a year at a time.
+   */
+  private campaign(sim: Simulation, n: Nation, foe: Nation, base: Settlement, first: Settlement, warEvent: number, year: number, general: string, other: string): void {
+    const h = this.h, wars = (h.wars ??= []);
+    if (wars.some((w) => w.ended < 0 && ((w.a === n.id && w.b === foe.id) || (w.a === foe.id && w.b === n.id)))) return;
+    const p = sim.grid.pos, c = base.cell;
+    const near = (st: Settlement): number => p[c * 3]! * p[st.cell * 3]! + p[c * 3 + 1]! * p[st.cell * 3 + 1]! + p[c * 3 + 2]! * p[st.cell * 3 + 2]!;
+    const theirs = this.settlements.filter((st) => st.ruined < 0 && st.nation === foe.id).sort((x, y) => near(y) - near(x));
+    const took = first.nation === n.id;
+    const route = theirs.slice(0, 3).map((st) => st.id);
+    const seat = theirs.findIndex((st) => st.id === foe.capital);
+    if (seat >= 3 && seat < 6) route.push(foe.capital);
+    if (!route.length) return;
+    const warlike = h.cultures[n.culture]!.war;
+    const lead = (x: Nation): number => { const r = h.people[x.ruler]; return r ? 0.5 * r.bold + 0.5 * r.wise : 0.5; };
+    const army = (x: Nation, share: number, morale: number, leader: string): Army => { const size = Math.max(0.5, x.pop * share); return { size, raised: size, tech: x.tech, morale, supply: 1, lead: lead(x), leader: leader || h.people[x.ruler]?.name || `the captains of ${x.name}` }; };
+    const id = (h.warSeq = (h.warSeq ?? 0) + 1);
+    const a = army(n, 0.03 * (0.7 + 0.6 * warlike), 0.65 + 0.2 * lead(n), general), d = army(foe, 0.026, 0.7, other);
+    const war: War = { id, a: n.id, b: foe.id, year, ended: -1, eventId: warEvent, peaceEvent: -1, conquest: took || warlike > 0.55, route, at: 0, sieging: 0, army: [a, d], battles: [], outcome: '', taken: took ? [first.id] : [] };
+    // the first blow is the first entry in the war's record
+    war.battles.push({ year, settlement: first.id, kind: took ? 'storm' : 'raid', winner: 0, sizes: [a.size, d.size * 0.4], lost: [a.size * 0.05, d.size * 0.1], decided: 'surprise', taken: took, eventId: warEvent });
+    a.size *= 0.95; d.size *= 0.9;
+    wars.push(war);
+    if (wars.length > 80) { const k = wars.findIndex((w) => w.ended >= 0); if (k >= 0) wars.splice(k, 1); }
+  }
+
+  /**
+   * The wars being fought (system E33), a year at a time. An army marches on the next town it means to take.
+   * Its food runs down the further it goes from home, faster where no road leads. The defenders come out and
+   * meet it in the field, or stay behind their walls; walls must be sat before for a year or more (less with
+   * gunpowder), and then stormed, or the town gives in. A town taken in a war of conquest changes hands. The
+   * war ends when the attacker has what it came for, when its army is broken or starving, or after ten years
+   * of getting nowhere. Every meeting is an event caused by the one before it; the peace is caused by the last.
+   * (The luck in each comes from the war and the year, not from the stream that decides whether wars begin.)
+   */
+  private warfare(sim: Simulation, y: number, year: number): void {
+    const h = this.h, ev = sim.events.events, w = sim.world;
+    for (const war of h.wars ?? []) {
+      if (war.ended >= 0) continue;
+      const A = h.nations[war.a]!, B = h.nations[war.b]!;
+      const [a, d] = war.army;
+      const end = (outcome: War['outcome']): void => {
+        war.ended = year; war.outcome = outcome;
+        const last = war.battles[war.battles.length - 1];
+        const cap = this.settlements[(outcome === 'defender' ? B : A).capital] ?? this.settlements[A.capital]!;
+        const kept = war.taken.filter((id) => this.settlements[id]!.nation === war.a).map((id) => this.settlements[id]!.name);
+        const e = sim.emit({
+          type: 'peace', year, cellId: cap.cell, title: `Peace between ${A.name} and ${B.name}`,
+          description: outcome === 'attacker'
+            ? `After ${war.battles.length} ${war.battles.length === 1 ? 'meeting' : 'meetings'} in ${Math.max(1, Math.round(year - war.year))} ${Math.round(year - war.year) <= 1 ? 'year' : 'years'}, ${B.name} asks for terms. ${kept.length ? `${A.name} keeps ${kept.length > 1 ? `${kept.slice(0, -1).join(', ')} and ${kept[kept.length - 1]}` : kept[0]}.` : `${A.name} takes its plunder home.`}`
+            : outcome === 'defender'
+              ? `The army ${A.name} sent against ${B.name} comes home ${a.size < a.raised * 0.5 ? 'at less than half its strength' : 'beaten'}. ${kept.length ? `It keeps ${kept[0]}, and nothing else it wanted.` : 'It holds nothing it did not hold before.'}`
+              : `Neither ${A.name} nor ${B.name} can end it, and after ${Math.max(1, Math.round(year - war.year))} years both stop trying. ${kept.length ? `${kept[0]} stays with ${A.name}.` : 'The border is where it was.'}`,
+          causes: [last ? last.eventId : -1, war.eventId].filter((x, i, arr) => x >= 0 && ev[x] && arr.indexOf(x) === i), importance: kept.length >= 2 ? 1 : 0, speciesIds: [A.species],
+          data: { war: war.id, a: war.a, b: war.b, outcome, taken: kept.length, battles: war.battles.length },
+        });
+        war.peaceEvent = e.id;
+        const [winner, loser] = outcome === 'attacker' ? [A, B] : outcome === 'defender' ? [B, A] : [undefined, undefined];
+        if (winner && winner.ended < 0) winner.stability = sat(winner.stability + 0.04);
+        if (loser && loser.ended < 0) this.woe(loser, 'war', e.id >= 0 ? e.id : war.eventId, year, 0.06);
+        for (const x of [A, B]) if (x.ended < 0) x.fatigue = sat(x.fatigue + 0.08);
+      };
+      if (A.ended >= 0 || B.ended >= 0) { end(A.ended >= 0 ? 'defender' : 'attacker'); continue; }
+      if (year - war.year > 10) { end('stalemate'); continue; }
+      // (one step of the campaign for each year that has passed, two at most in one go)
+      for (let step = 0; step < Math.min(2, Math.max(1, Math.round(y))) && war.ended < 0; step++) {
+        let T = this.settlements[war.route[war.at]!];
+        while (T && (T.ruined >= 0 || T.nation !== war.b)) { war.at++; war.sieging = 0; T = this.settlements[war.route[war.at]!]; }
+        if (!T) { end(war.taken.length || !war.conquest ? 'attacker' : 'stalemate'); break; }
+        const luck = (k: number): number => (hash32(this.seedNum, war.id, Math.floor(year) * 7 + step, k) % 10000) / 10000;
+        const home = this.settlements[A.capital]!;
+        const joined = (h.links ?? []).some((l) => (l.a === T!.id || l.b === T!.id));
+        a.supply = Math.max(0.12, a.supply - 0.07 - (joined ? 0 : 0.05) + (war.taken.length ? 0.03 : 0));
+        d.supply = Math.max(0.5, Math.min(1, d.supply + 0.05));
+        const ground = Math.max(0, Math.min(0.6, (w.elevation[T.cell]! - w.elevation[home.cell]!) * 1.5)) + (w.flow[T.cell]! > 3 ? 0.3 : 0);
+        const walls = T.walls ? T.walls.length : 0;
+        const record = (kind: BattleKind, r: { winner: 0 | 1; lost: [number, number]; decided: string }, sizes: [number, number], taken: boolean): Battle => {
+          const prev = war.battles[war.battles.length - 1];
+          const b: Battle = { year, settlement: T!.id, kind, winner: r.winner, sizes, lost: r.lost, decided: r.decided, taken, eventId: -1 };
+          const e = sim.emit({
+            type: 'battle', year, cellId: T!.cell, title: kind === 'field' ? `The battle of ${T!.name}` : kind === 'siege' ? `The siege of ${T!.name}` : kind === 'storm' ? `${T!.name} is stormed` : `The burning of ${T!.name}`,
+            description: describeBattle(b, T!.name, A.name, B.name),
+            causes: [prev ? prev.eventId : -1, war.eventId].filter((x, i, arr) => x >= 0 && ev[x] && arr.indexOf(x) === i).slice(0, 1), importance: taken && T!.id === B.capital ? 1 : 0, speciesIds: [A.species],
+            data: { war: war.id, a: war.a, b: war.b, kind, winner: r.winner, settlement: T!.id, taken: taken ? 1 : 0 },
+          });
+          b.eventId = e.id >= 0 ? e.id : war.eventId;
+          war.battles.push(b);
+          if (war.battles.length > 14) war.battles.splice(1, 1);
+          return b;
+        };
+        const broken = (): boolean => a.morale < 0.3 || a.size < 0.4 * a.raised;
+        // ---- the defenders come out, if they are enough and willing
+        if (d.size > 0.25 * a.size && d.morale > 0.3 && war.sieging === 0 && luck(1) < 0.6) {
+          const sizes: [number, number] = [a.size, d.size];
+          const r = clash(a, d, { ground: ground * 0.5, walls: 0 }, 'field', luck(2));
+          a.size = Math.max(0.1, a.size - r.lost[0]); d.size = Math.max(0.1, d.size - r.lost[1]);
+          if (r.winner === 0) { a.morale = sat(a.morale + 0.05); d.morale = sat(d.morale - 0.2); } else { d.morale = sat(d.morale + 0.05); a.morale = sat(a.morale - 0.2); }
+          record('field', r, sizes, false);
+          if (r.winner === 1 && broken()) end('defender');
+          continue;
+        }
+        // ---- before the walls: a year or more of sitting, unless hunger ends it first
+        const need = siegeYears(walls, a.tech);
+        if (war.sieging < need) {
+          war.sieging++;
+          if (a.supply < 0.3) { record('siege', { winner: 1, lost: [a.size * 0.15, 0], decided: 'hunger in the other camp' }, [a.size, d.size], false); a.size *= 0.85; end(war.taken.length ? 'attacker' : 'defender'); }
+          continue;
+        }
+        // ---- the town gives in, or is stormed (or, in a raid, burned)
+        const militia: Army = { ...d, size: d.size + T.pop * 0.012 };
+        const sizes: [number, number] = [a.size, militia.size];
+        const yields = need > 0 && luck(3) < 0.35 && d.morale < 0.6;
+        const kind: BattleKind = yields ? 'siege' : war.conquest ? 'storm' : 'raid';
+        const r = yields ? { winner: 0 as const, lost: [a.size * 0.03, d.size * 0.1] as [number, number], decided: 'full wagons' } : clash(a, militia, { ground, walls }, 'storm', luck(4));
+        a.size = Math.max(0.1, a.size - r.lost[0]); d.size = Math.max(0.1, d.size - Math.min(d.size * 0.6, r.lost[1]));
+        if (r.winner === 0) {
+          a.morale = sat(a.morale + 0.05); d.morale = sat(d.morale - 0.15);
+          const taken = war.conquest;
+          if (taken) {
+            T.nation = war.a; T.pop *= 0.88;
+            sim.cellLog.note(T.cell, year, Log.Owner, war.a);
+            war.taken.push(T.id);
+          } else T.pop *= 0.85;
+          if (T.tech >= 0.3) this.layer(T, year, 'burnt', war.eventId, 120);
+          this.fortify(T, year);
+          const b = record(kind, r, sizes, taken);
+          if (taken && (hash32(this.seedNum, T.id, Math.floor(year), 0x4e3a) % 1000) / 1000 < 0.3 + 0.5 * h.cultures[A.culture]!.war) { const was = T.name; if (this.rename(T, this.languageOf(A), year, `renamed by ${A.name}, who took it from ${B.name}`, b.eventId, true) && ev[b.eventId] && ev[b.eventId]!.type === 'battle') ev[b.eventId]!.description += ` Its new masters call it ${T.name}, which means in their tongue what ${was} meant in the old one.`; }
+          war.at++; war.sieging = 0;
+          if (T.id === B.capital || war.at >= war.route.length || !war.conquest) end('attacker');
+        } else {
+          a.morale = sat(a.morale - 0.2); d.morale = sat(d.morale + 0.05);
+          record(kind, r, sizes, false);
+          if (broken()) end(war.taken.length ? 'stalemate' : 'defender');
+        }
       }
     }
   }

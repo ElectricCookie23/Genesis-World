@@ -205,7 +205,7 @@ export interface CivLayers {
 /** What is happening to a town's lights: war (flicker), darkness (plague, collapse), and a festival night (system E30: brighter or dark, wider, in its own colour). */
 export interface Unrest { war: number; dark: number; feast?: { glow: number; spread: number; flicker: number; dark: number; colour: readonly number[] | null } }
 
-export function buildLayers(grid: Grid, cells: CellSnapshot, settlements: SettlementInfo[], nations: Nation[], unrest: Map<number, Unrest>, out?: CivLayers): CivLayers {
+export function buildLayers(grid: Grid, cells: CellSnapshot, settlements: SettlementInfo[], nations: Nation[], unrest: Map<number, Unrest>, out?: CivLayers, camps: readonly { cell: number; size: number }[] = []): CivLayers {
   const n = grid.count;
   const L: CivLayers = out ?? {
     owner: new Int16Array(n), edge: new Float32Array(n), glow: new Float32Array(n), claim: new Float32Array(n),
@@ -287,6 +287,17 @@ export function buildLayers(grid: Grid, cells: CellSnapshot, settlements: Settle
       if (d > radius + 0.03) continue;
       for (let k = 0; k < ncount[cell]!; k++) { const nb = neighbors[cell * 6 + k]!; if (seen[nb] !== s.id) { seen[nb] = s.id; queue.push(nb); } }
     }
+  }
+  // ---- armies in the field (system E33): the fires of a camp, a small flickering light on the ground beside the town it has marched on
+  for (const camp of camps) {
+    const glow = Math.min(0.7, 0.25 + 0.03 * camp.size);
+    for (let k = 0; k < ncount[camp.cell]!; k++) {
+      const nb = neighbors[camp.cell * 6 + k]!;
+      if (elevation[nb]! <= seaLevel) continue;
+      if (glow > L.glow[nb]!) { L.glow[nb] = glow; L.r[nb] = 1; L.g[nb] = 0.45; L.b[nb] = 0.12; }
+      L.war[nb] = Math.max(L.war[nb]!, 0.9);
+    }
+    L.war[camp.cell] = Math.max(L.war[camp.cell]!, 0.9);
   }
   return L;
 }

@@ -457,7 +457,8 @@ export function FlatMap() {
     draw();
     const t = window.setInterval(draw, 1500);
     return () => window.clearInterval(t);
-  }, [s.overlay, s.mapOf]);
+  }, [s.overlay, s.mapOf, s.warShown, s.wars]);
+  const war = s.mapOf === -3 ? (s.wars ?? []).find((w) => w.id === s.warShown) : undefined;
   // the countries whose own map can be shown: the living ones that have begun to farm, largest first
   const makers = s.realms.filter((r) => r.ended < 0 && r.charting).sort((a, b) => b.pop - a.pop).slice(0, 40);
   const whose = makers.find((r) => r.id === s.mapOf);
@@ -465,12 +466,13 @@ export function FlatMap() {
     <div class={`${css.panel} ${css.side} ${css.wide}`} style={{ bottom: 'auto' }}>
       <div class={css.head}><h2>{whose ? `The world as ${whose.name} believes it to be` : 'Map of the world'}</h2><span class={css.sub}>click to fly there</span><button class={css.close} onClick={() => update({ panel: 'none' })}>✕</button></div>
       <div style={{ padding: '0 14px 14px' }}>
-        {(makers.length > 0 || s.realms.some((r) => r.ended < 0 && r.trade)) && (
+        {(makers.length > 0 || s.mapOf < -1 || s.realms.some((r) => r.ended < 0 && r.trade)) && (
           <div class={css.sub} style={{ margin: '0 0 8px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <span>Show</span>
-            <select value={String(whose ? whose.id : s.mapOf === -2 ? -2 : -1)} onChange={(e) => update({ mapOf: Number((e.target as HTMLSelectElement).value), mapNote: '' })} style={{ background: '#1b1f2a', color: '#ece7db', border: '1px solid #ffffff2a', borderRadius: '5px', padding: '3px 6px', font: '400 12.5px system-ui, sans-serif' }}>
+            <select value={String(whose ? whose.id : s.mapOf === -2 || s.mapOf === -3 ? s.mapOf : -1)} onChange={(e) => { const v = Number((e.target as HTMLSelectElement).value); if (v === -3) actions.openWars(); else update({ mapOf: v, mapNote: '' }); }} style={{ background: '#1b1f2a', color: '#ece7db', border: '1px solid #ffffff2a', borderRadius: '5px', padding: '3px 6px', font: '400 12.5px system-ui, sans-serif' }}>
               <option value="-1">the true world</option>
               <option value="-2">trade routes, coloured by what they carry</option>
+              <option value="-3">the wars, battle by battle</option>
               {makers.map((r) => <option key={r.id} value={String(r.id)}>the world as {r.name} believes it to be ({r.eraName})</option>)}
             </select>
           </div>
@@ -478,9 +480,32 @@ export function FlatMap() {
         <div style={{ position: 'relative' }}>
           <canvas ref={ref} width={720} height={360} style={{ width: '100%', borderRadius: '8px', cursor: 'crosshair', display: 'block' }}
             onClick={(e) => { const r = (e.target as HTMLCanvasElement).getBoundingClientRect(); actions.mapClick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); }} />
-          {!whose && s.mapOf !== -2 && <MigrationArrows />}
+          {!whose && s.mapOf !== -2 && s.mapOf !== -3 && <MigrationArrows />}
         </div>
         {s.mapOf === -2 && <div class={css.when} style={{ color: '#ece7db', margin: '8px 0 0' }}>{s.mapNote}</div>}
+        {s.mapOf === -3 && (
+          <div style={{ margin: '8px 0 0', maxHeight: '38vh', overflowY: 'auto' }}>
+            {!s.wars && <p class={css.sub}>Asking the chroniclers.</p>}
+            {s.wars && s.wars.length === 0 && <p class={css.sub}>No war has been followed yet. Campaigns are recorded while time runs at the pace of history or slower.</p>}
+            {s.wars && s.wars.length > 0 && (
+              <div class={css.sub} style={{ margin: '0 0 6px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span>War</span>
+                <select value={String(s.warShown)} onChange={(e) => update({ warShown: Number((e.target as HTMLSelectElement).value) })} style={{ background: '#1b1f2a', color: '#ece7db', border: '1px solid #ffffff2a', borderRadius: '5px', padding: '3px 6px', font: '400 12.5px system-ui, sans-serif' }}>
+                  {s.wars.map((w) => <option key={w.id} value={String(w.id)}>{w.attacker} against {w.defender}, {Math.max(0, Math.round((s.stats?.simYear ?? 0) - w.year)).toLocaleString('en-US')} years ago{w.ended < 0 ? ' (still being fought)' : ''}</option>)}
+                </select>
+                <span><span style={{ color: '#e0563a' }}>●</span> the attacker won <span style={{ color: '#4f8fe0' }}>●</span> the defender won; a white ring: the town changed hands</span>
+              </div>
+            )}
+            {war && war.battles.map((b, i) => (
+              <div key={i} class={css.when} style={{ color: '#ece7db', margin: '0 0 4px' }}>
+                <b style={{ fontWeight: 600 }}>{i + 1}.</b> {b.text || `${b.kind} at ${b.town}`}{' '}
+                <button class={css.link} style={{ marginRight: '8px' }} onClick={() => update({ whyEvent: b.eventId })}>its place in the story</button>
+                {b.cell >= 0 && <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.flyToCell(b.cell, 0.4)}>go there</button>}
+              </div>
+            ))}
+            {war && <div class={css.when} style={{ color: '#cfc9bd' }}>{war.ended < 0 ? 'It is still being fought.' : war.outcome === 'attacker' ? `${war.attacker} had what it came for.` : war.outcome === 'defender' ? `${war.defender} threw the invaders back.` : 'Neither side could end it.'}{war.peaceEvent >= 0 && <> <button class={css.link} style={{ marginRight: 0 }} onClick={() => update({ whyEvent: war.peaceEvent })}>the peace</button></>}</div>}
+          </div>
+        )}
         {whose && <div class={css.when} style={{ color: '#ece7db', margin: '8px 0 0' }}>{s.mapNote} Their own country is in the middle. Filled marks are their towns, hollow ones towns they have heard of; blank paper is what they have never seen{(whose.monsters ?? []).length ? `; in the sea are the great animals their sailors have met (${(whose.monsters ?? []).map((m) => m.name).join(', ')})` : ''}.</div>}
         {recentMigrations(s.events).length > 0 && <div class={css.sub} style={{ margin: '6px 0 0' }}>Arrows: peoples on the move (<span style={{ color: MOVE_COLOUR.ice }}>driven by ice</span>, <span style={{ color: MOVE_COLOUR.sea }}>by the sea</span>, <span style={{ color: MOVE_COLOUR.famine }}>by hunger</span>). Click one to see why.</div>}
       </div>
@@ -881,7 +906,7 @@ export function Peoples() {
         {(s.stats?.longPeace ?? -1) >= 0 && s.nations.length > 0 && (
           <p class={css.sub} style={{ margin: '0 0 8px' }}>The long peace, {Math.max(0, Math.round((s.stats?.simYear ?? 0) - (s.stats?.longPeace ?? 0))).toLocaleString('en-US')} years old. History is no longer made here: these nations and their towns live on as they are, by custom, until the planet disturbs them.</p>
         )}
-        {s.realms.some((r) => r.ended < 0) && <p class={css.sub} style={{ margin: '0 0 6px' }}><button class={css.link} title="The family tree of the languages spoken now, and their words side by side" onClick={() => actions.openLanguages()}>the languages they speak</button><button class={css.link} title="Paintings of things that happened, in the manner of each age" onClick={() => actions.openGallery()}>what they have painted</button><button class={css.link} title="Stories told about the bones of animals that died out long ago" onClick={() => actions.openLegends()}>old bones</button><button class={css.link} title="What each good has cost over the years, and the panics" onClick={() => actions.openMarket()}>markets</button></p>}
+        {s.realms.some((r) => r.ended < 0) && <p class={css.sub} style={{ margin: '0 0 6px' }}><button class={css.link} title="The family tree of the languages spoken now, and their words side by side" onClick={() => actions.openLanguages()}>the languages they speak</button><button class={css.link} title="Paintings of things that happened, in the manner of each age" onClick={() => actions.openGallery()}>what they have painted</button><button class={css.link} title="Stories told about the bones of animals that died out long ago" onClick={() => actions.openLegends()}>old bones</button><button class={css.link} title="What each good has cost over the years, and the panics" onClick={() => actions.openMarket()}>markets</button><button class={css.link} title="Each war on the map, battle by battle" onClick={() => actions.openWars()}>wars</button></p>}
         {s.nations.length > 0 && <div class={css.sub} style={{ margin: '4px 0 6px' }}>NATIONS</div>}
         {[...s.nations].sort((a, b) => b.pop - a.pop).slice(0, 24).map((n) => {
           const cap = s.settlements.find((x) => x.id === n.capital);

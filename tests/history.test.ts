@@ -1038,6 +1038,7 @@ describe('golden ages (E10)', () => {
 import { NETWORKS, WONDER_KINDS } from '../src/sim/history/model';
 import { ART_STYLES, SUBJECTS, against, compose, describePainting, styleOfEra, subjectOf, type Movement } from '../src/sim/history/art';
 import { galleryList } from '../src/sim/history/gallery';
+import { BATTLE_KINDS, clash, describeBattle, siegeYears, strength, type Army, type Battle, type Field } from '../src/sim/history/war';
 import { pricePath } from '../src/ui/market';
 import { GOODS, GOOD_COLOUR, bestTrade, describeMarket, prices, type Economy, type Good } from '../src/sim/history/trade';
 import { FESTIVAL_KINDS, daysUntil, describeFestival, feastOf, festivalOn, lightOf, type Festival, type FestivalLight } from '../src/sim/history/festival';
@@ -1370,7 +1371,7 @@ describe('wonders (E19)', () => {
         expect(w.done).toBeGreaterThan(w.year + 5);
         expect(w.why.length).toBeGreaterThan(20);
         // the kind answers the kind of event
-        const fits: Record<string, RegExp> = { observatory: /comet/, sungate: /eclipse/, 'crater-stair': /impact/, 'fire-watch': /erupt|volcan/, 'first-tower': /milestone/, tomb: /./, victory: /war/, lighthouse: /settlement/, memorial: /./, 'great-bell': /golden-age/, 'peace-hall': /long-peace/ };
+        const fits: Record<string, RegExp> = { observatory: /comet/, sungate: /eclipse/, 'crater-stair': /impact/, 'fire-watch': /erupt|volcan/, 'first-tower': /milestone/, tomb: /./, victory: /war|peace/, lighthouse: /settlement/, memorial: /./, 'great-bell': /golden-age/, 'peace-hall': /long-peace/ };
         expect(cause!.type).toMatch(fits[w.kind]!);
         if (w.kind === 'crater-stair' || w.kind === 'fire-watch') expect(w.toward).toBe(cause!.cellId);
         if (w.kind === 'observatory') expect(Number.isFinite(w.bearing)).toBe(true);
@@ -1665,7 +1666,7 @@ describe('place name drift (E22)', () => {
             // a conqueror's name: the event of the conquest says so
             renamed++;
             const taken = ev[now.eventId!]!;
-            expect(taken.type).toBe('conquest');
+            expect(taken.type).toMatch(/^(conquest|battle)$/);
             expect(taken.description).toContain(now.name);
             expect(taken.simYear).toBe(now.year);
           } else parted++;
@@ -2204,7 +2205,7 @@ describe('holidays and festivals (E30)', () => {
           expect(f.day).toBeGreaterThanOrEqual(0);
           expect(f.day).toBeLessThan(1);
           expect(f.light).toBe(lightOf(f.kind));
-          const fits: Record<string, RegExp> = { founding: /nation|milestone|secession|civil-war|union|dynasty/, harvest: /settlement|nation|milestone/, victory: /war|conquest/, remembrance: /./, comet: /comet/, eclipse: /eclipse/ };
+          const fits: Record<string, RegExp> = { founding: /nation|milestone|secession|civil-war|union|dynasty/, harvest: /settlement|nation|milestone/, victory: /war|conquest|peace/, remembrance: /./, comet: /comet/, eclipse: /eclipse/ };
           expect(origin.type).toMatch(fits[f.kind]!);
           if (f.kind === 'comet') expect(f.every).toBe(h.visitor!.period);
           // on its own day of some year it is on; half a year away it is not (the comet's is on in its own year)
@@ -2342,5 +2343,102 @@ describe('markets and crashes (E32)', () => {
     expect(ys[1]!).toBeLessThan(ys[0]!);
     expect(ys[2]!).toBeGreaterThan(ys[0]!);
     expect(ys[1]!).toBeCloseTo(3, 0);
+  });
+});
+
+describe('wars with campaigns (E33)', () => {
+  const army = (over: Partial<Army>): Army => ({ size: 10, raised: 10, tech: 0.5, morale: 0.7, supply: 1, lead: 0.5, leader: 'Noku', ...over });
+  const open: Field = { ground: 0, walls: 0 };
+
+  it('a clash is decided by numbers, arms, will, food, ground and leading before luck', () => {
+    // with everything else equal each advantage wins, whatever the luck short of the extremes
+    for (const luck of [0.3, 0.5, 0.7]) {
+      expect(clash(army({ size: 20 }), army({}), open, 'field', luck).winner).toBe(0);
+      expect(clash(army({}), army({ size: 20 }), open, 'field', luck).winner).toBe(1);
+      expect(clash(army({ tech: 0.9 }), army({ tech: 0.4 }), open, 'field', luck).winner).toBe(0);
+      expect(clash(army({ supply: 0.2 }), army({}), open, 'field', luck).winner).toBe(1);
+      expect(clash(army({ morale: 0.2 }), army({}), open, 'field', luck).winner).toBe(1);
+    }
+    // what decided it is named
+    expect(clash(army({ size: 30 }), army({}), open, 'field', 0.5).decided).toBe('numbers');
+    expect(clash(army({ tech: 1.1 }), army({ tech: 0.3 }), open, 'field', 0.5).decided).toBe('better arms');
+    expect(clash(army({}), army({ supply: 0.15 }), open, 'field', 0.5).decided).toBe('hunger in the other camp');
+    expect(clash(army({ lead: 1, leader: 'Amdika' }), army({ lead: 0 }), open, 'field', 0.5).decided).toMatch(/Amdika/);
+    // walls: an army that would win in the open is thrown back from them, unless it has powder
+    const big = army({ size: 14 });
+    expect(clash(big, army({}), open, 'storm', 0.5).winner).toBe(0);
+    expect(clash(big, army({}), { ground: 0.3, walls: 2 }, 'storm', 0.5).winner).toBe(1);
+    expect(clash(big, army({}), { ground: 0.3, walls: 2 }, 'storm', 0.5).decided).toBe('the walls');
+    expect(clash(army({ size: 14, tech: 0.7 }), army({ tech: 0.7 }), { ground: 0, walls: 2 }, 'storm', 0.5).winner).toBe(0);
+    expect(siegeYears(0, 0.5)).toBe(0);
+    expect(siegeYears(2, 0.5)).toBe(3);
+    expect(siegeYears(2, 0.7)).toBe(1);
+    // the loser of a rout loses more than the loser of a close fight, and the winner less
+    const close = clash(army({ size: 11 }), army({}), open, 'field', 0.5), rout = clash(army({ size: 40 }), army({}), open, 'field', 0.5);
+    expect(rout.lost[1] / 10).toBeGreaterThan(close.lost[1] / 10);
+    expect(rout.lost[0] / 40).toBeLessThan(close.lost[0] / 11);
+    expect(strength(army({ size: 20 }))).toBeCloseTo(2 * strength(army({})), 6);
+    const b: Battle = { year: 5, settlement: 0, kind: 'storm', winner: 0, sizes: [12, 4], lost: [1, 2], decided: 'numbers', taken: true, eventId: -1 };
+    expect(describeBattle(b, 'Ka', 'Kekaka', 'Farahot')).toMatch(/Kekaka stormed Ka with 12,000 against 4,000.*Ka changed hands/);
+  });
+
+  it('a war can be followed battle by battle', () => {
+    const runs = fiveHistories();
+    let wars = 0, battles = 0, taken = 0, ended = 0;
+    const outcomes = new Set<string>();
+    for (const { sim } of runs) {
+      const h = sim.civ.h, ev = sim.events.events;
+      const active = new Set<string>();
+      for (const w of h.wars ?? []) {
+        wars++;
+        expect(h.nations[w.a]).toBeTruthy(); expect(h.nations[w.b]).toBeTruthy();
+        expect(w.a).not.toBe(w.b);
+        expect(ev[w.eventId]!.type).toBe('war');
+        expect(w.battles.length).toBeGreaterThanOrEqual(1);
+        expect(w.battles.length).toBeLessThanOrEqual(14);
+        for (let i = 0; i < w.battles.length; i++) {
+          const b = w.battles[i]!;
+          battles++;
+          // each meeting has a year, a place on the map, and an event; they come in order
+          const town = sim.civ.settlements[b.settlement]!;
+          expect(town).toBeTruthy();
+          expect(town.cell).toBeGreaterThanOrEqual(0);
+          if (i > 0) expect(b.year).toBeGreaterThanOrEqual(w.battles[i - 1]!.year);
+          expect(b.year).toBeGreaterThanOrEqual(w.year);
+          expect(BATTLE_KINDS).toContain(b.kind);
+          expect(b.sizes[0]).toBeGreaterThan(0);
+          const e = ev[b.eventId]!;
+          expect(e).toBeTruthy();
+          if (e.type === 'battle') {
+            expect(e.cellId).toBe(town.cell);
+            expect(e.data!.war).toBe(w.id);
+            // caused by the meeting before it (or, for the first after the opening blow, by the war itself)
+            expect(e.causes.length).toBe(1);
+            expect(ev[e.causes[0]!]!.simYear).toBeLessThanOrEqual(e.simYear);
+            expect(['battle', 'war']).toContain(ev[e.causes[0]!]!.type);
+          } else expect(e.id).toBe(w.eventId);
+          if (b.taken) taken++;
+        }
+        for (const x of w.army) { expect(x.size).toBeGreaterThan(0); expect(x.size).toBeLessThanOrEqual(x.raised + 1e-9); expect(x.supply).toBeGreaterThan(0); }
+        if (w.ended >= 0) {
+          ended++;
+          outcomes.add(w.outcome);
+          expect(['attacker', 'defender', 'stalemate']).toContain(w.outcome);
+          expect(w.ended - w.year).toBeLessThanOrEqual(12);
+          // the peace is on record and follows from the last meeting
+          const peace = ev[w.peaceEvent]!;
+          expect(peace.type).toBe('peace');
+          expect(peace.data!.war).toBe(w.id);
+          expect(peace.causes.length).toBeGreaterThan(0);
+        } else {
+          const key = [w.a, w.b].sort().join('-');
+          expect(active.has(key)).toBe(false);
+          active.add(key);
+        }
+      }
+    }
+    expect(wars).toBeGreaterThan(2);
+    expect(battles).toBeGreaterThan(wars);
+    expect(ended).toBeGreaterThan(1);
   });
 });

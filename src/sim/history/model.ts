@@ -3,6 +3,7 @@ import type { Script } from './script';
 import type { Movement, Painting } from './art';
 import type { Legend } from './legend';
 import type { Festival } from './festival';
+import type { War } from './war';
 // The entities of history. All of them are plain data, so the whole of history saves, loads and
 // rewinds with the rest of the simulation.
 import type { Calendar } from './calendar';
@@ -228,6 +229,9 @@ export interface HistoryState {
   movements?: Movement[];
   firstStyles?: number[];
   paintingSeq?: number;
+  /** The wars fought as campaigns (system E33): those going on and the last few dozen ended. */
+  wars?: War[];
+  warSeq?: number;
   /**
    * The world's market (system E32): the price of each good over time (one sample every few years, the oldest
    * dropped), the years of the samples, and the bubble now swelling, if there is one: the good, the country it

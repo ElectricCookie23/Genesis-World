@@ -303,6 +303,7 @@ async function boot(): Promise<void> {
     scene.civ.setFeasts(feasts);
   }, 500);
   actions.showFestival = (nation, festival) => { shownFeast = { nation, festival, until: performance.now() + 20000 }; const r = state.realms.find((x) => x.id === nation); const cap = r ? state.settlements.find((t) => t.id === r.capital) : undefined; if (cap) { update({ panel: 'none' }); scene.cam.flyTo(grid.lon[cap.cell]!, grid.lat[cap.cell]!, 1.1); } };
+  actions.openWars = () => { update({ panel: 'map', mapOf: -3 }); send({ type: 'requestWars' }); };
   actions.openMarket = () => { update({ panel: 'market' }); send({ type: 'requestMarket' }); };
   actions.openLegends = () => { update({ panel: 'legends' }); send({ type: 'requestLegends' }); };
   actions.openGallery = () => { update({ panel: 'gallery' }); send({ type: 'requestGallery' }); };
@@ -629,6 +630,28 @@ async function boot(): Promise<void> {
       ctx.font = '11px system-ui, sans-serif';
       for (const good of used) { ctx.fillStyle = GOOD_COLOUR[good as keyof typeof GOOD_COLOUR] ?? '#fff'; ctx.fillRect(kx, H - 18, 12, 8); ctx.fillStyle = '#ece7db'; ctx.fillText(good, kx + 16, H - 10); kx += 22 + ctx.measureText(good).width + 10; }
       update({ mapNote: used.size ? `${state.realms.filter((r) => r.ended < 0 && r.trade).length} countries have a chief trade. Each line runs from the seller's capital to the buyer's, in the colour of what is carried.` : 'No country is selling anything to another yet.' });
+    }
+    // ---- a war, battle by battle (system E33): each meeting numbered where it was fought, joined in order
+    if (state.mapOf === -3) {
+      ctx.fillStyle = 'rgba(6, 8, 14, 0.45)'; ctx.fillRect(0, 0, W, H);
+      const war = (state.wars ?? []).find((w) => w.id === state.warShown);
+      if (war) {
+        const at = war.battles.filter((b) => b.cell >= 0).map((b) => ({ b, x: ((grid.lon[b.cell]! + Math.PI) / (Math.PI * 2)) * W, y: (0.5 - grid.lat[b.cell]! / Math.PI) * H }));
+        // (meetings at the same town are fanned out a little so that each number can be read)
+        const seen = new Map<number, number>();
+        for (const p of at) { const k = seen.get(p.b.cell) ?? 0; seen.set(p.b.cell, k + 1); p.x += k * 9; p.y -= k * 5; }
+        ctx.strokeStyle = '#ffffffaa'; ctx.lineWidth = 1.2; ctx.setLineDash([4, 3]); ctx.beginPath();
+        at.forEach((p, i) => { if (i === 0 || Math.abs(p.x - at[i - 1]!.x) > W / 2) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+        ctx.stroke(); ctx.setLineDash([]);
+        ctx.font = '600 10px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        at.forEach((p, i) => {
+          ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+          ctx.fillStyle = p.b.winner === 0 ? '#e0563a' : '#4f8fe0'; ctx.fill();
+          ctx.strokeStyle = p.b.taken ? '#fff' : '#00000088'; ctx.lineWidth = p.b.taken ? 1.8 : 1; ctx.stroke();
+          ctx.fillStyle = '#fff'; ctx.fillText(String(i + 1), p.x, p.y + 0.5);
+        });
+        ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+      }
     }
     // settlements as warm dots
     ctx.fillStyle = '#ffd27a';
@@ -1145,6 +1168,8 @@ async function boot(): Promise<void> {
       }
       case 'settlements':
         scene.setSettlements(withPast(msg.settlements), msg.nations);
+        // (armies in the field show as camp fires on the night side: system E33)
+        scene.civ?.setCamps(msg.armies ?? []);
         update({ settlements: msg.settlements, realms: msg.nations ?? state.realms });
         break;
       case 'timeline':
@@ -1188,6 +1213,9 @@ async function boot(): Promise<void> {
         } else if (a.what === 'place' && state.chrono && a.data && a.data.id === state.chrono.id) { update({ memPlace: a.data }); scene.setSettlements(withPast(state.settlements), state.realms); }
         break;
       }
+      case 'wars':
+        update({ wars: msg.list, warShown: msg.list.some((w) => w.id === state.warShown) ? state.warShown : msg.list[0]?.id ?? -1 });
+        break;
       case 'market':
         update({ market: msg.market });
         break;

@@ -151,6 +151,17 @@ export interface PlantInfo {
   cover: number;
 }
 
+/** A war as the page sees it (system E33): who against whom, how it went, and every battle in order with where it was fought. */
+export interface WarInfo {
+  id: number;
+  attacker: string; defender: string;
+  year: number; ended: number;
+  outcome: string;
+  /** The event that began it and the event of the peace (-1 while it goes on). */
+  eventId: number; peaceEvent: number;
+  battles: { year: number; cell: number; town: string; kind: string; winner: number; sizes: [number, number]; decided: string; taken: boolean; eventId: number; text: string }[];
+}
+
 /** The world's market as the page sees it (system E32): the price of each good over time, the bubble now swelling, and the panics on record. */
 export interface MarketInfo {
   goods: string[];
@@ -482,6 +493,7 @@ export type ToWorker =
   | { type: 'requestGallery' }
   | { type: 'requestLegends' }
   | { type: 'requestMarket' }
+  | { type: 'requestWars' }
   | { type: 'requestSite'; id: number }
   | { type: 'requestMemory'; ask: MemoryAsk }
   /** Run the world twice from before an event, with it and without it (E55); or with and without one small herd spared at a cell (E56); or stop. */
@@ -508,10 +520,11 @@ export type FromWorker =
   | { type: 'gallery'; paintings: PaintingInfo[]; movements: MovementInfo[] }
   | { type: 'legends'; list: LegendInfo[] }
   | { type: 'market'; market: MarketInfo }
+  | { type: 'wars'; list: WarInfo[] }
   | { type: 'site'; detail: SiteDetail }
   | { type: 'memory'; answer: MemoryAnswer }
   | { type: 'whatif'; state: WhatIfState | null; maps?: WhatIfMaps; problem?: string }
-  | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[] }
+  | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[]; armies?: { cell: number; size: number }[] }
   | { type: 'timeline'; points: TimelinePoint[] }
   | { type: 'cosmos'; cosmos: CosmosInfo; messages: StarMessage[]; archives: Archive[]; link?: LinkInfo; strange: StrangeInfo; future: FutureInfo; industry: IndustryInfo }
   | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }

@@ -1,7 +1,7 @@
 // Tiny observable store shared by the Preact UI and the app.
 import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
-import type { DynastyDetail, LanguageInfo, LegendInfo, MarketInfo, MovementInfo, PaintingInfo, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
+import type { DynastyDetail, LanguageInfo, LegendInfo, MarketInfo, WarInfo, MovementInfo, PaintingInfo, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 import type { Nation } from '../render/gfx/nations';
 import type { GoalRecord, GoalState } from '../game/goals';
 import type { CosmosInfo } from '../sim/cosmos';
@@ -114,6 +114,9 @@ export interface UIState {
   /** The gallery, when it has arrived (system E26), and the painting being looked at (its id, or -1 for the newest). */
   gallery: { paintings: PaintingInfo[]; movements: MovementInfo[] } | null;
   painting: number;
+  /** The wars on record, when they have arrived (system E33), and the one shown on the map (its id). */
+  wars: WarInfo[] | null;
+  warShown: number;
   /** The world's market, when it has arrived (system E32). */
   market: MarketInfo | null;
   /** The stories told about old bones, when they have arrived (system E28). */
@@ -209,6 +212,8 @@ export const state: UIState = {
   mapNote: '',
   legends: null,
   market: null,
+  wars: null,
+  warShown: -1,
   gallery: null,
   painting: -1,
   siteDetail: null,
@@ -358,6 +363,8 @@ export const actions = {
   listen: (_id: number) => {},
   /** Fly out to a nation and show the lights of one of its festivals for a while, whatever the day (by nation id and festival id). */
   showFestival: (_nation: number, _festival: number) => {},
+  /** Open the map on the wars, battle by battle. */
+  openWars: () => {},
   /** Open the world's market: prices and panics. */
   openMarket: () => {},
   /** Open the stories told about old bones. */
