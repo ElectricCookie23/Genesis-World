@@ -274,6 +274,7 @@ async function boot(): Promise<void> {
   actions.cellDir = (cell) => { const p = grid.pos; return [p[cell * 3]!, p[cell * 3 + 1]!, p[cell * 3 + 2]!]; };
   actions.timelapse = (id, cell) => { actions.flyToCell(cell, 0.045); update({ panel: 'none' }); window.setTimeout(() => scene.timelapse(id), 1800); };
   actions.openSite = (id) => { update({ panel: 'site', siteDetail: state.siteDetail?.id === id ? state.siteDetail : null }); send({ type: 'requestSite', id }); };
+  actions.openGallery = () => { update({ panel: 'gallery' }); send({ type: 'requestGallery' }); };
   actions.openLanguages = (name) => {
     const known = name ? state.languages?.list.find((l) => l.name === name) : undefined;
     pendingTongue = known || !name ? '' : name;
@@ -1004,6 +1005,9 @@ async function boot(): Promise<void> {
         } else if (a.what === 'place' && state.chrono && a.data && a.data.id === state.chrono.id) { update({ memPlace: a.data }); scene.setSettlements(withPast(state.settlements), state.realms); }
         break;
       }
+      case 'gallery':
+        update({ gallery: { paintings: msg.paintings, movements: msg.movements } });
+        break;
       case 'languages': {
         const want = pendingTongue ? msg.list.find((l) => l.name === pendingTongue) : undefined;
         pendingTongue = '';

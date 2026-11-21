@@ -1,5 +1,6 @@
 import type { Codes } from './calamity';
 import type { Script } from './script';
+import type { Movement, Painting } from './art';
 // The entities of history. All of them are plain data, so the whole of history saves, loads and
 // rewinds with the rest of the simulation.
 import type { Calendar } from './calendar';
@@ -164,6 +165,8 @@ export interface Nation {
   woes: { kind: string; eventId: number; year: number }[];
   /** Its building laws, each made after a calamity in one of its towns (system E20). */
   codes?: Codes;
+  /** The movement its painters follow (system E26), the year they took it up, and the last age it has a painting of. */
+  movement?: number; movedArt?: number; paintedEra?: number;
   /** The script it writes in (system E23), once it writes. */
   script?: number;
   /** The two meanings its name is built from (system E23: a name is written with the signs for what it means). */
@@ -208,6 +211,11 @@ export interface HistoryState {
   peacePop?: number;
   /** The year the leading nation reached the top of knowledge, or -1. */
   topSince?: number;
+  /** Paintings and the movements painters have followed (system E26); the event of the first painting in each manner. */
+  paintings?: Painting[];
+  movements?: Movement[];
+  firstStyles?: number[];
+  paintingSeq?: number;
   /** The scripts of the world (system E23). */
   scripts?: Script[];
   /** The event of the first time a people was found to speak a language of its own (system E21), if it has happened. */

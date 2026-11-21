@@ -1036,6 +1036,8 @@ describe('golden ages (E10)', () => {
 });
 
 import { NETWORKS, WONDER_KINDS } from '../src/sim/history/model';
+import { ART_STYLES, SUBJECTS, against, compose, describePainting, styleOfEra, subjectOf, type Movement } from '../src/sim/history/art';
+import { galleryList } from '../src/sim/history/gallery';
 import { describeScript, glyphDistance, glyphOf, glyphPath, picture, wearOf, type Body, type Glyph, type Script } from '../src/sim/history/script';
 import { LEXICON, SAYINGS, describeGrammar, describeSounds, driftSpan, grammarOf, say } from '../src/sim/history/syntax';
 import { CALAMITIES, REBUILDS, answer, brittle, damage, describeScar, hazards, plotFate, rebuildYears, woodShare, type Ground, type Scar } from '../src/sim/history/calamity';
@@ -1572,7 +1574,7 @@ describe('generated languages (E21)', () => {
 
   it('two related languages share visibly similar words for the same things', () => {
     const runs = fiveHistories();
-    let pairs = 0, partings = 0;
+    let pairs = 0, partings = 0, plain = 0;
     for (const { sim } of runs) {
       const h = sim.civ.h, ev = sim.events.events;
       const spoken = [...new Set(h.nations.filter((n) => n.ended < 0).map((n) => h.cultures[n.culture]!.language))].map((id) => h.languages[id]!);
@@ -1594,10 +1596,19 @@ describe('generated languages (E21)', () => {
         pairs++;
         let sum = 0, close = 0, same = 0;
         for (const m of LEXICON) { const d = wordDistance(word(a, m), word(b, m)); sum += d; if (d <= 0.5) close++; if (d === 0) same++; }
-        // sisters: most words still plainly the same word, but not the same language
-        expect(sum / LEXICON.length).toBeLessThan(0.62);
-        // (a third of the list at the least, for sisters that parted thousands of years ago; far more for those that parted lately)
-        expect(close).toBeGreaterThanOrEqual(LEXICON.length / 3);
+        // How alike two sisters are depends on how long ago they parted (when the earlier of their two branches
+        // left the common stock). Lately parted: most words are plainly the same word. Parted thousands of years
+        // ago: still nothing like strangers (who score about 0.92), but a traveller would need a teacher.
+        const chain = (l: Language): Language[] => { const out = [l]; while (out[out.length - 1]!.parent >= 0) out.push(h.languages[out[out.length - 1]!.parent]!); return out; };
+        const ca = chain(a), cb = chain(b);
+        const common = ca.find((x) => cb.includes(x))!;
+        const branch = [ca[ca.indexOf(common) - 1], cb[cb.indexOf(common) - 1]].filter((x): x is Language => !!x).map((x) => x.bornYear);
+        const apartYears = sim.simYear - Math.min(...branch);
+        expect(sum / LEXICON.length).toBeLessThan(0.8);
+        // (measured over these five worlds: 31 to 36 words of 36 within a thousand years of parting, 28 to 33 at two
+        // thousand, 10 to 25 beyond; the bars sit under those with room to spare)
+        expect(close).toBeGreaterThanOrEqual(LEXICON.length * (apartYears < 1000 ? 0.7 : apartYears < 2200 ? 0.5 : 0.2));
+        if (close >= LEXICON.length * 0.6) plain++;
         expect(same).toBeLessThan(LEXICON.length);
         expect(grammarOf(a)).toEqual(grammarOf(b));
       }
@@ -1612,6 +1623,8 @@ describe('generated languages (E21)', () => {
       }
     }
     expect(pairs).toBeGreaterThan(3);
+    // and some pairs are sisters anyone could hear: six words in ten plainly the same
+    expect(plain).toBeGreaterThan(0);
     expect(partings).toBeGreaterThan(0);
   });
 });
@@ -1770,5 +1783,87 @@ describe('writing systems (E23)', () => {
     }
     expect(own).toBeGreaterThan(0);
     expect(own + learned).toBeGreaterThan(3);
+  });
+});
+
+describe('art movements (E26)', () => {
+  it('a picture is composed from what it shows, the same whatever manner it is painted in', () => {
+    expect(ART_STYLES.length).toBe(5);
+    let last = 0;
+    for (let era = 0; era <= 9; era++) { const s = styleOfEra(era); expect(s).toBeGreaterThanOrEqual(last); expect(s).toBeLessThan(5); last = s; }
+    expect(new Set([0, 2, 4, 6, 8].map(styleOfEra)).size).toBe(5);
+    // what an event makes a picture of
+    expect(subjectOf('war')).toBe('battle');
+    expect(subjectOf('city-fire')).toBe('fire');
+    expect(subjectOf('comet')).toBe('sky');
+    expect(subjectOf('wonder')).toBe('wonder');
+    expect(subjectOf('dynasty')).toBe('ruler');
+    expect(subjectOf('extinction')).toBeNull();
+    for (const subject of SUBJECTS) {
+      const a = compose({ subject, seed: 7, night: false, detail: subject === 'sky' ? 'comet' : '' });
+      expect(a).toEqual(compose({ subject, seed: 7, night: false, detail: subject === 'sky' ? 'comet' : '' }));
+      expect(a.length).toBeGreaterThanOrEqual(5);
+      for (const x of a) { expect(x.x).toBeGreaterThanOrEqual(0); expect(x.x).toBeLessThanOrEqual(1); expect(x.depth).toBeGreaterThanOrEqual(0); expect(x.depth).toBeLessThanOrEqual(1); expect(x.size).toBeGreaterThan(0); }
+      // something is in the sky of every picture, and another seed arranges the same things differently
+      expect(a.some((x) => ['sun', 'moon', 'comet', 'dark-sun', 'star'].includes(x.kind))).toBe(true);
+      expect(compose({ subject, seed: 8, night: false, detail: '' })).not.toEqual(a);
+      expect(describePainting({ subject, style: 2 })).toMatch(/in depth\.$/);
+    }
+    const battle = compose({ subject: 'battle', seed: 3, night: false, detail: '' });
+    expect(battle.filter((x) => x.kind === 'person' && x.side === 0).length).toBeGreaterThanOrEqual(4);
+    expect(battle.filter((x) => x.kind === 'person' && x.side === 1).length).toBeGreaterThanOrEqual(4);
+    expect(compose({ subject: 'sky', seed: 3, night: true, detail: 'eclipse' }).some((x) => x.kind === 'dark-sun')).toBe(true);
+    expect(compose({ subject: 'fire', seed: 3, night: true, detail: '' }).some((x) => x.kind === 'flame')).toBe(true);
+    expect(compose({ subject: 'fire', seed: 3, night: true, detail: '' }).some((x) => x.kind === 'moon')).toBe(true);
+    // a movement begun against another uses colour the other way
+    const old = { turn: 0.2, loud: 0.8 } as Movement;
+    const young = against(old, 5);
+    expect(young.turn).toBeLessThan(0);
+    expect(young.loud).toBeLessThan(0.5);
+    expect(against(young as Movement, 5).loud).toBeGreaterThan(0.5);
+  });
+
+  it('a painting of a real event exists for every era', () => {
+    const runs = fiveHistories();
+    let schools = 0, reactions = 0, spread = 0;
+    for (const { sim } of runs) {
+      const h = sim.civ.h, ev = sim.events.events, ps = h.paintings ?? [], ms = h.movements ?? [];
+      const byEra = new Map<number, number>();
+      for (const p of ps) {
+        byEra.set(p.era, (byEra.get(p.era) ?? 0) + 1);
+        // what it shows really happened, before it was painted, and is the kind of thing its subject says
+        const what = ev[p.eventId]!;
+        expect(what, p.title).toBeTruthy();
+        expect(what.simYear).toBeLessThanOrEqual(p.year + 1e-6);
+        expect(subjectOf(what.type)).toBe(p.subject);
+        expect(p.title).toBe(what.title);
+        // it is in the manner of its makers' age
+        expect(p.style).toBe(styleOfEra(p.era));
+        if (p.movement >= 0) expect(ms[p.movement]!.style).toBe(p.style);
+        if (p.nation >= 0) expect(h.nations[p.nation]).toBeTruthy(); else expect(p.era).toBe(0);
+      }
+      // every age anyone has lived through has its painting: from the first country to the highest age reached
+      // (an age entered in the very last year may not have been painted yet)
+      const top = Math.max(...h.nations.map((n) => n.era));
+      for (let era = 1; era < top; era++) expect(byEra.get(era) ?? 0, `age ${era} of ${top}`).toBeGreaterThan(0);
+      expect(Math.max(...byEra.keys())).toBeGreaterThanOrEqual(top - 1);
+      expect(ps.length).toBeLessThanOrEqual(261);
+      // the gallery hangs the earliest of every age, whatever else it has room for
+      const hung = galleryList(h, ev, sim.civ.settlements, () => ({ legs: 2, neck: 0.5, horn: 0.5, wings: 0, tail: 0.5 }), 40).paintings;
+      for (const era of byEra.keys()) expect(hung.some((p) => p.era === era)).toBe(true);
+      for (const p of hung) { expect(p.eventTitle.length).toBeGreaterThan(0); expect(p.caption.length).toBeGreaterThan(10); }
+      // schools of painters: each an event, begun in the age of flat figures or later, some of them against another
+      for (const m of ms) {
+        schools++;
+        expect(m.style).toBeGreaterThanOrEqual(1);
+        expect(ev[m.eventId]!.type).toBe('art-movement');
+        expect(ms.filter((o) => o.name === m.name).length).toBe(1);
+        if (m.against >= 0) { reactions++; const old = ms[m.against]!; expect(old.born).toBeLessThanOrEqual(m.born); expect(Math.abs(m.loud - old.loud)).toBeGreaterThan(0.4); expect(ev[m.eventId]!.causes).toContain(old.eventId); }
+      }
+      for (const n of h.nations) if (n.movement !== undefined) { expect(ms[n.movement]).toBeTruthy(); if (ms[n.movement]!.nation !== n.id) spread++; }
+    }
+    expect(schools).toBeGreaterThan(5);
+    expect(reactions).toBeGreaterThan(2);
+    expect(spread).toBeGreaterThan(0);
   });
 });

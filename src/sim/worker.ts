@@ -16,6 +16,7 @@ import { ERAS, earthNote, eraOf } from './history/eras';
 import { CALAMITIES, REBUILDS } from './history/calamity';
 import { LEXICON, SAYINGS } from './history/syntax';
 import { languageList, scriptInfo } from './history/tongues';
+import { galleryList } from './history/gallery';
 import { bodyFrom, type Body } from './history/script';
 import { compound } from './history/language';
 import { WEB, wayFor } from './history/tech';
@@ -568,6 +569,9 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
             : { what: 'place', data: placeAt(sim, a.id, a.year) };
           post({ type: 'memory', answer });
         }
+        break;
+      case 'requestGallery':
+        if (sim) post({ type: 'gallery', ...galleryList(sim.civ.h, sim.events.events, sim.civ.settlements, bodyOf(sim)) });
         break;
       case 'requestLanguages':
         if (sim) post({ type: 'languages', lexicon: [...LEXICON], sayings: SAYINGS.map((x) => x.english), list: languageList(sim.civ.h, sim.simYear, bodyOf(sim)) });

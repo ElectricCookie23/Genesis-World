@@ -1,7 +1,7 @@
 // Tiny observable store shared by the Preact UI and the app.
 import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
-import type { DynastyDetail, LanguageInfo, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
+import type { DynastyDetail, LanguageInfo, MovementInfo, PaintingInfo, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 import type { Nation } from '../render/gfx/nations';
 import type { GoalRecord, GoalState } from '../game/goals';
 import type { CosmosInfo } from '../sim/cosmos';
@@ -18,7 +18,7 @@ import type { AnchorState, Battle, CitizenLife, Museum, Witness } from '../sim/g
 import type { Vision } from '../sim/senses';
 import type { WhatIfMaps, WhatIfState } from '../sim/whatif';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'tongues' | 'goals' | 'system' | 'microscope' | 'archive' | 'ground';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'tongues' | 'gallery' | 'goals' | 'system' | 'microscope' | 'archive' | 'ground';
 export type GroundTab = 'citizen' | 'anchor' | 'witness' | 'museum' | 'battle' | 'senses' | 'explore';
 export type MemoryTab = 'archive' | 'atlas' | 'braid' | 'records' | 'ancestry' | 'chronoscope' | 'forecasts' | 'whatif' | 'film';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
@@ -111,6 +111,9 @@ export interface UIState {
   /** The languages of the world, when they have arrived (system E21), and the one being looked at (its id, or -1 for the most spoken). */
   languages: { lexicon: string[]; sayings: string[]; list: LanguageInfo[] } | null;
   tongue: number;
+  /** The gallery, when it has arrived (system E26), and the painting being looked at (its id, or -1 for the newest). */
+  gallery: { paintings: PaintingInfo[]; movements: MovementInfo[] } | null;
+  painting: number;
   /** The Rosetta (system E23): when on, writing in the peoples' own scripts is shown with what each sign means. */
   rosetta: boolean;
   timeline: TimelinePoint[];
@@ -195,6 +198,8 @@ export const state: UIState = {
   languages: null,
   tongue: -1,
   rosetta: true,
+  gallery: null,
+  painting: -1,
   siteDetail: null,
   memTab: 'archive',
   memIndex: null,
@@ -336,6 +341,8 @@ export const actions = {
   drawCellBytes: (_canvas: HTMLCanvasElement, _bytes: Uint8Array, _over?: Uint8Array) => {},
   /** The flat map of the present with no towns marked, for drawing the past over. */
   drawBareMap: (_canvas: HTMLCanvasElement) => {},
+  /** Open the gallery of paintings. */
+  openGallery: () => {},
   /** Open the languages of the world, at one of them if its name is given. */
   openLanguages: (_name?: string) => {},
   /** Open the dig view of a town's site. */

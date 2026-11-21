@@ -19,6 +19,7 @@ import { capital, compound, makeLanguage, personName, placeMeanings, soundChange
 import { clearedCover } from './plants';
 import { driftSpan } from './history/syntax';
 import { wearOf, type Script } from './history/script';
+import { ART_STYLES, against, styleOfEra, subjectOf, type Movement, type Painting } from './history/art';
 import { stillCleared } from './history/decay';
 import { answer, damage, hazards, type CalamityKind, type Ground, type Rebuild, type Scar } from './history/calamity';
 import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role, type Wonder, type WonderKind } from './history/model';
@@ -121,6 +122,10 @@ const LONGEST_HISTORY = 40000;
 
 const sat = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
 /** What a people may call its golden age: two meanings for its own tongue, and the same in plain words. */
+/** What schools of painters name themselves for: something painters look at, and a way of looking at it. */
+const ART_HEADS = ['eye', 'hand', 'river', 'hill', 'stone', 'wind', 'sun', 'land', 'fire', 'star', 'sea', 'town', 'moon', 'forest'];
+const ART_MODS = ['new', 'old', 'bright', 'red', 'white', 'low', 'green', 'cold', 'high', 'long', 'black', 'great'];
+
 const GOLDEN_NAMES: [string, string, string][] = [
   ['sun', 'great', 'the Great Sun'], ['star', 'new', 'the New Star'], ['king', 'old', 'the Old Kings'], ['land', 'green', 'the Green Land'], ['river', 'great', 'the Full River'],
   ['fire', 'new', 'the Bright Hearth'], ['hill', 'high', 'the High Hill'], ['sea', 'great', 'the Wide Sea'], ['people', 'great', 'the Great People'], ['town', 'new', 'the New Towns'],
@@ -217,7 +222,16 @@ export class Civilization {
         st.painted = true;
         // cave paintings show the animals these people really live among
         const prey = this.neighbourSpecies(sim, st, true);
-        if (prey >= 0) sim.civEvent('painting', st.species, st.cell, st.id, prey);
+        if (prey >= 0) {
+          const at = sim.events.events.length;
+          sim.civEvent('painting', st.species, st.cell, st.id, prey);
+          // the first pictures anyone made are kept in the gallery too (system E26): a hunt, in ochre, on rock
+          const old = (this.h.paintings ??= []);
+          if (sim.events.events.length > at && old.filter((p) => p.era === 0).length < 6) {
+            const id = (this.h.paintingSeq = (this.h.paintingSeq ?? 0) + 1);
+            old.push({ id, year: sim.simYear, nation: -1, species: st.species, settlement: st.id, eventId: at, subject: 'hunt', era: 0, style: 0, movement: -1, title: sim.events.events[at]!.title, painter: '', seed: hash32(this.seedNum, id, 0xa35), hueA: 0.05, hueB: 0.55, night: false, detail: '', first: !old.some((p) => p.era === 0) });
+          }
+        }
       }
       // bands split off and make new camps
       if (st.pop > capacity * 0.7 && rng.chance(Math.min(0.5, 0.05 * tau))) {
@@ -342,6 +356,8 @@ export class Civilization {
       this.network(sim, rng, n, towns, y, year);
       // ---- golden ages begin, raise their monuments and end (system E10)
       this.flourish(sim, rng, n, towns, y, year);
+      // ---- its painters paint what has happened, in the manner of their age and their school (system E26)
+      this.art(sim, n, y, year);
       // ---- once it can write, it writes in some script: its own, or one it learned (system E23)
       if (n.script === undefined) this.writing(sim, n, year);
       // ---- now and then it raises a wonder, because of something that happened (system E19)
@@ -2103,6 +2119,105 @@ export class Civilization {
         if (first && ev.id >= 0) h.firstTongue = ev.id;
       }
     }
+  }
+
+  /**
+   * Art movements (system E26). A country's painters paint real events: the first painting of each age it
+   * enters, and now and then, while its years are being watched, something that has just happened to it. From
+   * the age of flat figures on they belong to a movement: one begun at home, or one learned from a country they
+   * are in touch with whose painters are newer; and when a movement has been followed long enough, or the age
+   * has moved past it, the young painters begin another against it, which uses colour the other way.
+   * (The luck in all of it comes from the country and the year, not from the stream that decides wars.)
+   */
+  private art(sim: Simulation, n: Nation, y: number, year: number): void {
+    const h = this.h, ev = sim.events.events;
+    const style = styleOfEra(n.era);
+    const paintings = (h.paintings ??= []), movements = (h.movements ??= []);
+    const luck = (k: number): number => (hash32(this.seedNum, n.id, Math.floor(year), k) % 100000) / 100000;
+    const cap = this.settlements[n.capital]!;
+    const lang = this.languageOf(n);
+    // ---- the movement its painters follow
+    if (style >= 1) {
+      const mine = n.movement !== undefined ? movements[n.movement] : undefined;
+      let seen: Movement | undefined;
+      for (const id of n.contacts) {
+        const o = h.nations[id];
+        const m = o && o.ended < 0 && o.movement !== undefined ? movements[o.movement] : undefined;
+        if (m && m.style <= style && (!mine || m.born > mine.born) && (!seen || m.born > seen.born)) seen = m;
+      }
+      const tired = !mine || mine.style < style || year - (n.movedArt ?? mine.born) > 260 + (hash32(this.seedNum, n.id, movements.length, 0xa31) % 300);
+      if (seen && seen.id !== n.movement && luck(1) < 1 - Math.exp(-y / 120)) {
+        n.movement = seen.id; n.movedArt = year;
+        sim.emit({
+          type: 'art-movement', year, cellId: cap.cell, title: `${seen.name} reaches ${n.name}`,
+          description: `Painters who have seen the work of ${h.nations[seen.nation]?.name ?? 'another country'} come home to ${cap.name} and will paint no other way. ${mine ? `${mine.name} is suddenly what old people like.` : `It is the first school of painting ${n.name} has had.`}`,
+          causes: [seen.eventId, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: 0, speciesIds: [n.species], data: { nation: n.id, movement: seen.id },
+        });
+      } else if (tired && luck(2) < 1 - Math.exp(-y / 60)) {
+        // (a name no school has had: one of a dozen things painters look at, and one of a dozen ways of looking)
+        let head = '', modifier = '', plain = '';
+        for (let salt = 0; salt < 40; salt++) {
+          const k = hash32(this.seedNum, n.id, movements.length, 0xa32 + salt);
+          head = ART_HEADS[k % ART_HEADS.length]!; modifier = ART_MODS[(k >>> 8) % ART_MODS.length]!;
+          plain = `the ${capital(modifier)} ${capital(head)} ${['school', 'painters', 'manner'][(k >>> 16) % 3]}`;
+          if (!movements.some((m) => m.name === plain)) break;
+        }
+        const use = against(mine, hash32(this.seedNum, n.id, movements.length, 0xa33));
+        const first = !movements.length;
+        const m: Movement = { id: movements.length, name: plain, own: compound(lang, head, modifier, year), style, turn: use.turn, loud: use.loud, born: year, nation: n.id, parent: mine ? mine.id : -1, against: mine ? mine.id : -1, eventId: -1 };
+        const e = sim.emit({
+          type: 'art-movement', year, cellId: cap.cell, title: first ? `The first school of painters: ${plain}` : mine ? `${plain}: the painters of ${n.name} turn against ${mine.name}` : `${plain}: a school of painters in ${n.name}`,
+          description: mine
+            ? `The young painters of ${cap.name} have had enough of ${mine.name}. Where it was ${mine.loud > 0.5 ? 'loud' : 'muted'} they are ${use.loud > 0.5 ? 'loud' : 'muted'}; where it leaned ${mine.turn > 0 ? 'warm' : 'cool'} they lean ${use.turn > 0 ? 'warm' : 'cool'}${mine.style < style ? `; and they paint ${ART_STYLES[style]}, which no one did before` : ''}. They call themselves ${m.own}, ${plain}.`
+            : `In ${cap.name} those who paint have begun to agree on how it should be done: ${ART_STYLES[style]}, ${use.loud > 0.5 ? 'in strong colour' : 'in quiet colour'}. They call their way ${m.own}, ${plain}.`,
+          causes: [mine ? mine.eventId : -1, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, movement: m.id, against: m.against },
+        });
+        m.eventId = e.id;
+        movements.push(m);
+        n.movement = m.id; n.movedArt = year;
+      }
+    }
+    // ---- what they paint: the first painting of each age, and now and then something that has just happened
+    const firstOfAge = (n.paintedEra ?? -1) < n.era;
+    if (!firstOfAge && !(this.fine && luck(3) < 1 - Math.exp((-y * (n.golden ? 2 : 1)) / 45))) return;
+    const offered: number[] = [];
+    const woes = n.woes.slice(-3).reverse();
+    for (const w of woes) if (year - w.year < 60) offered.push(w.eventId);
+    for (const w of h.wonders ?? []) if (w.nation === n.id && year - w.year < 80) offered.push(w.eventId);
+    if (h.sign && year - h.sign.year < 40) offered.push(h.sign.eventId);
+    if (n.golden) offered.push(n.golden.eventId);
+    for (const c of [n.codes?.fire, n.codes?.quake, n.codes?.flood]) if (c && year - c.year < 60) offered.push(c.eventId);
+    const ruler = h.people[n.ruler];
+    if (ruler && ruler.events.length) offered.push(ruler.events[0]!);
+    if (n.script !== undefined && h.scripts?.[n.script] && year - h.scripts[n.script]!.born < 80) offered.push(h.scripts[n.script]!.eventId);
+    offered.push(cap.eventId, n.eventId, h.dawnEvent ?? -1);
+    const fresh = (id: number): boolean => id >= 0 && !!ev[id] && subjectOf(ev[id]!.type) !== null && !paintings.some((p) => p.nation === n.id && p.eventId === id && (!firstOfAge || p.era === n.era));
+    const pick = offered.find(fresh);
+    if (pick === undefined) return;
+    const what = ev[pick]!, subject = subjectOf(what.type)!;
+    const mine = n.movement !== undefined ? movements[n.movement] : undefined;
+    const wonder = subject === 'wonder' ? h.wonders?.find((w) => w.eventId === pick) : undefined;
+    const id = (h.paintingSeq = (h.paintingSeq ?? 0) + 1);
+    const p: Painting = {
+      id, year, nation: n.id, species: n.species, settlement: cap.id, eventId: pick, subject, era: n.era, style, movement: mine && mine.style === style ? mine.id : -1,
+      title: what.title, painter: this.fine ? personName(lang, hash32(this.seedNum, id, 0xa34), year) : '', seed: hash32(this.seedNum, id, 0xa35),
+      hueA: n.hue, hueB: (n.hue + 0.42 + ((hash32(this.seedNum, id, 0xa36) % 100) / 100) * 0.16) % 1,
+      night: subject !== 'sky' ? hash32(this.seedNum, id, 0xa37) % 5 === 0 : what.type !== 'eclipse', detail: wonder ? wonder.kind : subject === 'sky' ? what.type : '', first: firstOfAge,
+    };
+    paintings.push(p);
+    n.paintedEra = n.era;
+    // the first picture in each manner anywhere is remembered
+    const firsts = (h.firstStyles ??= []);
+    if (firsts[style] === undefined) {
+      const e = sim.emit({
+        type: 'artwork', year, cellId: cap.cell, title: `The first picture ${ART_STYLES[style]}`,
+        description: `At ${cap.name} someone has made a picture of "${what.title}" ${ART_STYLES[style]}${style === 0 ? ', on the wall of a shelter, in red earth and soot' : style === 1 ? ': every figure flat, in its own colour, inside a painted border' : style === 2 ? ': the far things small and the near things large, as the eye sees them' : style === 3 ? ': not the things themselves but the light on them, in dabs of colour that only join at a distance' : ': nothing in it is a thing at all, and those who were there say it is exactly how it was'}.${p.painter ? ` The painter was ${p.painter}.` : ''}`,
+        causes: [pick, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: 1, speciesIds: [n.species], data: { nation: n.id, painting: id, style },
+      });
+      firsts[style] = e.id;
+    }
+    // (the gallery is kept to a few rooms: the first to go are the oldest that are not the first of their age)
+    if (paintings.length > 260) { const k = paintings.findIndex((x) => !x.first); paintings.splice(k >= 0 ? k : 0, 1); }
   }
 
   /**

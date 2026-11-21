@@ -146,6 +146,33 @@ export interface PlantInfo {
   cover: number;
 }
 
+/** A painting as the page sees it (system E26): what it shows, in what manner, and everything needed to draw it. */
+export interface PaintingInfo {
+  id: number; year: number;
+  /** The country it was painted in, and the town. */
+  nation: string; town: string;
+  /** The event it shows, and that event's title. */
+  eventId: number; eventTitle: string;
+  subject: string;
+  era: number; style: number; styleName: string;
+  /** The movement its painter followed (-1 and '' for none), and how that movement uses colour. */
+  movement: number; movementName: string; turn: number; loud: number;
+  title: string; painter: string;
+  seed: number; hueA: number; hueB: number; night: boolean; detail: string;
+  /** Is it the first painting its country made in its age? */
+  first: boolean;
+  caption: string;
+  /** What its makers look like. */
+  body: { legs: number; neck: number; horn: number; wings: number; tail: number };
+}
+
+/** A movement in painting as the page sees it (system E26). */
+export interface MovementInfo {
+  id: number; name: string; own: string; style: number; styleName: string; turn: number; loud: number; born: number;
+  /** Where it began, the movement it was begun against (-1 and '' for none), its event, and the countries that follow it now. */
+  nation: string; against: number; againstName: string; eventId: number; followers: string[];
+}
+
 /** A script as the page sees it (system E23): enough to draw any of its signs in any year. */
 export interface ScriptInfo {
   id: number;
@@ -416,6 +443,7 @@ export type ToWorker =
   | { type: 'requestNation'; id: number }
   | { type: 'requestDynasty'; id: number }
   | { type: 'requestLanguages' }
+  | { type: 'requestGallery' }
   | { type: 'requestSite'; id: number }
   | { type: 'requestMemory'; ask: MemoryAsk }
   /** Run the world twice from before an event, with it and without it (E55); or with and without one small herd spared at a cell (E56); or stop. */
@@ -438,6 +466,7 @@ export type FromWorker =
   | { type: 'nation'; detail: NationDetail }
   | { type: 'dynasty'; detail: DynastyDetail }
   | { type: 'languages'; lexicon: string[]; sayings: string[]; list: LanguageInfo[] }
+  | { type: 'gallery'; paintings: PaintingInfo[]; movements: MovementInfo[] }
   | { type: 'site'; detail: SiteDetail }
   | { type: 'memory'; answer: MemoryAnswer }
   | { type: 'whatif'; state: WhatIfState | null; maps?: WhatIfMaps; problem?: string }
