@@ -254,4 +254,20 @@ describe('the record', () => {
     }
     expect(done).toBeGreaterThan(0);
   });
+
+  it('a disaster whose event was not kept (as in a fast-forwarded history) does not break the town it strikes', () => {
+    // Found by the review of 2026-11-21: a skip through history killed the worker at the first large eruption near a
+    // young town, because the town tried to take its story from an event that had not been recorded.
+    const civ = sim.civ as unknown as { occupied: Map<number, number> };
+    const [region, id] = [...civ.occupied.entries()].find(([, t]) => sim.civ.settlements[t]!.ruined < 0)!;
+    const st = sim.civ.settlements[id]!;
+    st.lore = -1; st.tech = Math.min(st.tech, 0.5);
+    expect(() => sim.civ.witness(sim, -1, [region], [0.5])).not.toThrow();
+    expect(st.lore).toBe(-1);
+    // with an event that is on record it takes its story from it, as before
+    const ev = sim.emit({ type: 'eruption', cellId: st.cell, title: 'The mountain opens', description: 'Ash falls for days.', importance: 3 });
+    expect(ev.id).toBeGreaterThanOrEqual(0);
+    sim.civ.witness(sim, ev.id, [region], [0.3]);
+    expect(st.lore).toBe(ev.id);
+  });
 });

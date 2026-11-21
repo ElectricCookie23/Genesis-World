@@ -4577,7 +4577,10 @@ export class Civilization {
         this.scar(sim, null, nation && nation.ended < 0 ? nation : undefined, st, kind, Math.min(0.9, kill[k]!), eventId, sim.simYear, kind === 'ash' && what && what.cellId >= 0 && what.cellId !== st.cell ? what.cellId : undefined);
       }
       if (nation && nation.ended < 0) this.woe(nation, 'disaster', eventId, sim.simYear, 0.06 + 0.2 * Math.min(0.9, kill[k]!) / Math.max(1, nation.towns));
-      if (st.lore < 0 && st.tech < 0.7) {
+      // (In a fast-forwarded history, and for the lesser countries of a crowded world, an ordinary event is not kept:
+      // `emit` hands back one with no id. A town cannot take its story from an event that is not on record; it used
+      // to try, and the worker died of it.)
+      if (st.lore < 0 && st.tech < 0.7 && eventId >= 0 && sim.events.get(eventId)) {
         st.lore = eventId;
         const at = sim.events.events.length;
         sim.civEvent('story', st.species, st.cell, st.id, eventId);

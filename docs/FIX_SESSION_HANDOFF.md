@@ -1,22 +1,30 @@
 # Fix session handoff (GPU review follow-up)
 
-## Where things stand (2026-11-21, evening): asset pass done, review under way
+## PAUSED 2026-11-21, late evening (owner asked for a pause). Read this first.
 
-**The asset pass is on `main`** (decisions F37, F38; pictures `docs/asset-previews/assetpass-*.jpg`).
-- Plants: nine forms drawn from made models (`render/gfx/assetroles.ts` `PLANT_MODELS`), chosen by eye on a sheet (`__genesis.plantPreview(file, form, how)` gives the converted model; `scratchpad/plantsheet.js` drew the sheet) and seen in the game. A form from a model is limited to 600,000 triangles on screen (`MODEL_TRIANGLES` in `flora.ts`).
-- Props: `render/gfx/props.ts` (camp fire and tents, crops and mill, boats by tech, wreck, rocks, desert pillars, bones), roles in `PROP_MODELS`; fetched the first time the camera comes within `uShow`. Seen in the game with made-up towns on a fresh world (`scratchpad/propcheck.js`: `sc.setSettlements(list, [])` with `species: 0`, then hold `sc.props.setTowns(list)` on a timer).
-- Sound: `audio/music.ts` `LOOPS` and `SHOTS`; `music.living(day, night, marsh, river)` from the half-second tick in `main.ts`. **Levels were reckoned, not heard: ask the owner for a listen on the Mac.**
-- `&noassets` turns all of it off. `tests/assets.test.ts` checks every named file is in the manifest and on disk and that none is of a kind the owner ruled out.
-- Offered to the build session in HANDOFF.md, not done: houses, towers and city blocks through `buildings.ts`.
-- Not used: spacecraft, the long bones and ribcage, skulls and the like (ruled out), eight of the sound loops (listed in `music.ts`).
+**Everything is committed and pushed.** `main` and `claude/sweet-keller-8gmglc` hold the same work. Nothing is half-done in the tree. No background job is running.
 
-**Needs a GPU look and a listen** (ask the owner first): a forest from the ground at about `dist` 0.012 with and without `&noassets` (do the model trees read better than the generated ones, and what does the frame time do); a camp at night, a farming town, a port with ships; the sound loops for level and for anything harsh.
+### What was done in this stretch
 
-**Queue, in order**
-1. Review (owner's request): where the game breaks, where it is slow, whether every feature works. `scratchpad/reviewsweep.js` opens every panel and uses every tool at three stages (barren, animals, history) and lists console and page errors by stage; `scripts/checks/soak.ts` runs five whole worlds headless. Write findings in `docs/REVIEW_2026-11.md`, fix what is mine, hand the rest on in HANDOFF.md.
-2. Compare against BRIEF.md and docs/EXPANSION_BRIEF.md; list what is not covered (in the same review file).
+1. **Asset pass, finished** (F37, F38; pictures `docs/asset-previews/assetpass-*.jpg`). Nine plant forms from made models, a props layer (`render/gfx/props.ts`: camp fire and tents, crops and mill, boats, wreck, rocks, desert pillars, bones), sound loops in `audio/music.ts`. `&noassets` turns all of it off. Roles in `render/gfx/assetroles.ts`.
+2. **A real crash found and fixed:** skipping through history killed the worker at the first large eruption near a young town (an unrecorded event, id -1, given to a town as its story). Fix in `civilization.ts` `witness` and `simulation.ts` `civEvent`; test in `tests/memory.test.ts`; check `scripts/checks/skipthrough.ts`. It explains item 50 of `docs/OPEN_FINDINGS.md`.
+3. **The review is written:** `docs/REVIEW_2026-11.md` (what breaks, what is slow, the full comparison with both briefs). Four findings in the build session's files are handed over at the top of HANDOFF.md.
+4. **Gaps to the briefs closed:** the battlefield shows the campaign's own battles (E49 from E33), the museum hangs real paintings and tells the stories of its bones (E48 from E26, E28), a vault holds the country's own written history (E100 from E54), postcard mode has its depth of field, "their gods" is gone and `tests/wording.test.ts` guards the ruled-out words, the help says keys 1 to 7.
 
-A scheduled task ("Genesis fix session: continue") sends "continue" to this session every hour at ten past (Qatar time).
+### Queue, in order, for when the owner says resume
+
+1. **Finish the page sweep** (stopped half-way by the pause). Build to a scratch folder and serve it on port 5204 (`npx vite build --outDir <scratch>/dist --emptyOutDir`, then `cd <scratch>/dist && python3 -I -m http.server 5204`), then run `node scripts/checks/reviewsweep.js <outdir>` (barren, then animals: about 10 minutes) and `node scripts/checks/reviewsweep-history.js <outdir>` (skips to history, then runs at the pace of history until three towns belong to countries: about 15 minutes). Both print each error as it happens with its stage. Done so far: the barren world, all 24 panels and 17 tools, no errors. **Do not run the test suite at the same time**: under that load the software renderer stalls. Put the result in part 2 of the review (the paragraph "World of animals and world in history: not finished").
+2. **Sense views cannot be reached in a normal world** (item 1 and 22 of OPEN_FINDINGS.md; my E50). `scripts/checks/sensestat.ts <seed...>` prints the sense genes of the living species at 100 My and which view each gets (it was started and stopped by the pause, so no numbers yet). Then either loosen the thresholds in `vision()` (`sim/senses.ts`: echo and electric need a gene over 0.5 and over the animal's sight) or note that the genes are not rewarded (the creatures code, shared).
+3. **Ask the owner for a GPU look and a listen on the Mac:** forest ground view with and without `&noassets` (looks and frame time), a camp at night, a farming town, a port; the sound loops for level (they were set by reckoning, never heard).
+4. **PROGRESS.md: twelve rows say "done" for things that are recorded but not drawn** (E52, E65, E67, E70, E77, E78, E80, E91, E92, E93, E94, E98). They are mine (sections 6 to 10). Either draw them or change the word to "simplified". Not changed yet.
+5. Rest of the Mac's list that is mine: animals too big beside towns (item 6), the camera ending inside a tree crown (item 10), leaves thrashing near the camera (item 11), the sense filters where the animal does not stand out (item 5).
+6. Larger, only if the owner wants it: the ground-level views as real 3D (E41, E43, E45), and the far future drawn on the globe (E61, E66 to E72, E76). These are the two places furthest from the briefs.
+
+### Useful to know
+
+- Check scripts added to the repo: `scripts/checks/reviewsweep.js`, `reviewsweep-history.js`, `skipthrough.ts`, `fullsize.ts` (step times and save sizes at full size), `sensestat.ts`, `propcheck.js` (four made-up coastal towns on a fresh world, to look at props in a minute), `plantsheet.js` (every candidate plant model drawn as the game would use it). The `.js` ones expect the built game on port 5204.
+- A long skip in a check: after it stops at the start of history the page is paused; call `__genesis.setSpeed(3)` to let history run.
+- A scheduled task ("Genesis fix session: continue") sends "continue" to this session every hour at ten past (Qatar time). **If it fires while the owner's pause stands, do nothing but say the session is paused.**
 
 ## Now (2026-11-21): the asset pass, then two reviews
 

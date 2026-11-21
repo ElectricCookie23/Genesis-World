@@ -1613,7 +1613,8 @@ export class Simulation {
       const ev = this.emit({ type: 'tamed', cellId: cell, title: `${tame.name} is tamed`, description: `The people of ${st!.name} keep ${tame.name} close, feed it, and choose which of its young will breed. It will not stay the animal it was.`, causes: [st!.eventId, tame.eventId].filter((x) => x >= 0), importance: 1, speciesIds: [speciesId, tame.id] });
       this.milestone('first-tame', 'First tamed animal', `${tame.name} now lives beside ${sp.name}, by choice or by fence.`, cell, [ev.id], [tame.id]);
     } else if (kind === 'story') {
-      const src = this.events.get(cause)!;
+      const src = this.events.get(cause);
+      if (!src) return;
       this.emit({
         type: 'story', cellId: cell, title: `A story takes root at ${st!.name}`,
         description: this.say('story', [
