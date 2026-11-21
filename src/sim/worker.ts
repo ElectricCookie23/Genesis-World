@@ -89,6 +89,7 @@ function warpSlice(): void {
   while (!done && performance.now() - t0 < 400) {
     // toward an age, history is walked in short steps: a whole age can pass in a century
     sim.step(Math.min(w.era >= 0 && sim.civ.historyLive ? 25 : 15000, w.end - sim.simYear));
+    keepEra(sim); // the ages passed on the way can be gone back to
     done = sim.simYear >= w.end
       || (w.era >= 0 ? sim.civ.historyLive && sim.civ.h.topEra >= w.era : !w.through && !w.had && sim.civ.historyLive);
   }
@@ -450,16 +451,8 @@ function plantList(s: Simulation): PlantInfo[] {
   return out;
 }
 
-function tick(): void {
-  const s = sim;
-  if (!s || warp) return;
-  const start = performance.now();
-  const yps = currentYps();
-  if (yps > 0) s.step(yps / TICK_HZ);
-  // history has begun (or ended): the hold on time starts afresh each time
-  const active = s.civ.historyLive;
-  if (active !== wasHistory) { wasHistory = active; historyOverride = false; }
-  // a whole copy of the world is kept at the start of every era, for replays and what-ifs
+/** A whole copy of the world is kept at the start of every era, for replays, what-ifs and going back to an age. */
+function keepEra(s: Simulation): void {
   if (s.civ.h.topEra < snapshotEra) snapshotEra = s.civ.h.topEra;
   if (s.civ.h.topEra > snapshotEra) {
     snapshotEra = s.civ.h.topEra;
@@ -471,6 +464,18 @@ function tick(): void {
     rewinds.sort((a, b) => a.simYear - b.simYear);
     post({ type: 'timeline', points: rewinds.map((r, index) => ({ index, simYear: r.simYear, title: r.title })) });
   }
+}
+
+function tick(): void {
+  const s = sim;
+  if (!s || warp) return;
+  const start = performance.now();
+  const yps = currentYps();
+  if (yps > 0) s.step(yps / TICK_HZ);
+  // history has begun (or ended): the hold on time starts afresh each time
+  const active = s.civ.historyLive;
+  if (active !== wasHistory) { wasHistory = active; historyOverride = false; }
+  keepEra(s);
   // slow time for a few seconds around big events so they can be seen
   if (slowOnEvents && s.bigEvent >= 2 && SPEEDS[speedIndex]!.yearsPerSecond > SLOW_YPS) slowUntil = start + (s.bigEvent >= 3 ? 5000 : 3000);
   const fresh = s.events.drainFresh();
