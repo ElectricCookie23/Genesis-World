@@ -10,6 +10,7 @@ import { describeRuin } from '../sim/history/decay';
 import { CALAMITIES, REBUILDS, describeScar } from '../sim/history/calamity';
 import { Written, wearAt } from './glyphs';
 import { actions, state, update, useStore, type Relative, type UIState } from './store';
+import { ERAS } from '../sim/history/eras';
 import { bigNumber, eventColor, eventGlyph, formatYear, hsl, metres, shortYear } from './format';
 import { Strata } from './strange';
 import { canUndo } from './memory';
@@ -1076,6 +1077,20 @@ export function Settings() {
         <div class={css.row}><span>Save a GIF<br /><span class={css.sub}>Three seconds of the view, looping.</span></span><button class={css.btn} onClick={() => actions.saveGif()}>save GIF</button></div>
         <div class={css.row}><span>History of this planet<br /><span class={css.sub}>An illustrated book, saved as a PDF.</span></span><button class={css.btn} onClick={() => actions.exportBook()}>make book</button></div>
         <div class={css.row}><span>Fork the timeline here<br /><span class={css.sub}>On a desktop this starts a second future running beside this one; you can compare them and cross over. It is also kept as a rewind point.</span></span><button class={css.btn} onClick={() => actions.fork()}>fork</button></div>
+        <div class={css.sub} style={{ margin: '12px 0 2px' }}>SKIP TO AN AGE</div>
+        {s.stats?.skipTo != null
+          ? <div class={css.row}><span>Skipping ahead to the {ERAS[s.stats.skipTo]!.name}<br /><span class={css.sub}>now at {formatYear(s.stats.simYear).toLowerCase()}</span></span><button class={css.btn} onClick={() => actions.skipTo(-1)}>stop</button></div>
+          : ERAS.map((e, i) => {
+            const here = !!s.stats?.history && (s.stats.topEra ?? 0) >= i;
+            const back = s.timeline.find((t) => t.title === `Start of the ${e.name}`);
+            return (
+              <div class={css.row} key={e.name}><span>{e.name}{i === 0 && <><br /><span class={css.sub}>the dawn of history: the first settled people</span></>}</span>
+                {!here ? <button class={css.btn} onClick={() => actions.skipTo(i)}>skip ahead</button>
+                  : back ? <button class={css.btn} onClick={() => { if (confirm(`Go back to the start of the ${e.name}? Everything after it will be lost.`)) actions.rewind(back.index); }}>go back</button>
+                    : <span class={css.sub}>{(s.stats?.topEra ?? 0) === i ? 'now' : 'passed'}</span>}
+              </div>
+            );
+          })}
         {s.timeline.length > 0 && <div class={css.sub} style={{ margin: '12px 0 2px' }}>REWIND TO</div>}
         {s.timeline.map((t) => (
           <div class={css.row} key={t.index}><span>{t.title}<br /><span class={css.sub}>{formatYear(t.simYear).toLowerCase()}</span></span><button class={css.btn} onClick={() => actions.rewind(t.index)}>rewind</button></div>

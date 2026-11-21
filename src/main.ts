@@ -433,6 +433,8 @@ async function boot(): Promise<void> {
     ctx.fillText('west', 8, 16); ctx.fillText('east', W - 38, 16); ctx.fillText('sea level', 8, yOf(cells.seaLevel) - 4);
   };
   actions.rewind = (index) => send({ type: 'rewind', index });
+  // far enough for any world to get there if it ever will; the worker stops at the age asked for
+  actions.skipTo = (era) => send(era < 0 ? { type: 'warp', stop: true } : { type: 'warp', years: 1.5e9, untilEra: era });
   update({ colorblind: store.get('genesis:cb') === '1', earthNotes: store.get('genesis:earth') === '1' });
   actions.setEarthNotes = (on) => { update({ earthNotes: on }); store.set('genesis:earth', on ? '1' : '0'); };
 

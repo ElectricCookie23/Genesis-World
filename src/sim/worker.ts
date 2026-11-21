@@ -74,6 +74,31 @@ let wasHistory = false;
 let snapshotEra = 0;
 /** How many rewind points to keep (each is a whole copy of the world). */
 let rewindLimit = 12;
+/** A jump through time under way: run in slices so that it can be stopped, and so the page hears how far it has got. */
+let warp: { end: number; through: boolean; had: boolean; era: number } | null = null;
+
+function warpSlice(): void {
+  const w = warp;
+  if (!w || !sim) return;
+  const t0 = performance.now();
+  let done = false;
+  while (!done && performance.now() - t0 < 400) {
+    // toward an age, history is walked in short steps: a whole age can pass in a century
+    sim.step(Math.min(w.era >= 0 && sim.civ.historyLive ? 25 : 15000, w.end - sim.simYear));
+    done = sim.simYear >= w.end
+      || (w.era >= 0 ? sim.civ.historyLive && sim.civ.h.topEra >= w.era : !w.through && !w.had && sim.civ.historyLive);
+  }
+  if (done) endWarp();
+  else { post({ type: 'stats', stats: stats(sim) }); setTimeout(warpSlice, 0); }
+}
+
+function endWarp(): void {
+  if (!warp || !sim) return;
+  warp = null;
+  wasHistory = sim.civ.historyLive;
+  cellsRequested = true;
+  post({ type: 'stats', stats: stats(sim) });
+}
 /** When there are too many, drop the one that sits closest in time to the point before it, so the rest stay spread over history. */
 function thinRewinds(): void {
   while (rewinds.filter((r) => !r.era).length > rewindLimit) {
@@ -330,6 +355,7 @@ function stats(s: Simulation): WorldStats {
     historyHeld: historyHeld(),
     historyBegan: s.civ.h.began,
     topEra: s.civ.h.topEra,
+    skipTo: warp && warp.era >= 0 ? warp.era : undefined,
     tickMs,
     stage: s.stage,
     era: s.era.kind,
@@ -397,7 +423,7 @@ function plantList(s: Simulation): PlantInfo[] {
 
 function tick(): void {
   const s = sim;
-  if (!s) return;
+  if (!s || warp) return;
   const start = performance.now();
   const yps = currentYps();
   if (yps > 0) s.step(yps / TICK_HZ);
@@ -476,6 +502,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
   try {
     switch (msg.type) {
       case 'init': {
+        warp = null;
         sim = new Simulation(msg.seed, msg.gridN);
         if (msg.neighbor) sim.link(msg.neighbor);
         sentExtinct.clear();
@@ -510,6 +537,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         if (sim) post({ type: 'saved', slot: msg.slot, save: saveSimulation(sim, msg.name) });
         break;
       case 'load': {
+        warp = null;
         const save = msg.save as SaveState;
         sim = new Simulation(save.seed, save.gridN);
         loadSimulation(sim, save);
@@ -595,6 +623,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
       case 'rewind': {
         const point = rewinds[msg.index];
         if (!point) break;
+        warp = null;
         sim = new Simulation(point.save.seed, point.save.gridN);
         loadSimulation(sim, point.save);
         snapshotEra = sim.civ.h.topEra; wasHistory = sim.civ.historyLive; historyOverride = false;
@@ -610,19 +639,12 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         break;
       }
       case 'warp':
-        if (sim) {
-          const end = sim.simYear + msg.years;
-          const had = sim.civ.historyLive;
-          // a jump through time stops where history begins (unless it began before the jump, or the caller asked to
-          // run through): that is the part worth watching. The page is told how far it has got twice a second.
-          let told = performance.now();
-          while (sim.simYear < end) {
-            sim.step(Math.min(15000, end - sim.simYear));
-            if (!msg.through && !had && sim.civ.historyLive) break;
-            if (performance.now() - told > 500) { told = performance.now(); post({ type: 'stats', stats: stats(sim) }); }
-          }
-          wasHistory = sim.civ.historyLive;
-          cellsRequested = true;
+        // a jump through time stops where history begins (unless it began before the jump, or the caller asked to
+        // run through), or at the age asked for: that is the part worth watching
+        if (msg.stop) endWarp();
+        else if (sim && !warp) {
+          warp = { end: sim.simYear + (msg.years ?? 0), through: !!msg.through, had: sim.civ.historyLive, era: msg.untilEra ?? -1 };
+          warpSlice();
         }
         break;
       case 'focus':

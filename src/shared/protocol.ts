@@ -75,6 +75,8 @@ export interface WorldStats {
   historyBegan?: number;
   /** Highest era any nation has reached. */
   topEra?: number;
+  /** The age a skip through time is heading for, while one is under way. */
+  skipTo?: number;
   /** Actual years per second being simulated (may be reduced around big events). */
   yearsPerSecond: number;
   tickMs: number;
@@ -423,7 +425,8 @@ export type ToWorker =
   | { type: 'rewindLimit'; count: number }
   /** Jump ahead by running the sim flat out (used by automated checks). */
   /** Jump ahead. It stops where a history begins, unless `through` is set (for scripts that need to reach a date). */
-  | { type: 'warp'; years: number; through?: boolean };
+  /** With `untilEra` it stops when any nation reaches that age (0 is the dawn of history); `stop` ends a jump under way. */
+  | { type: 'warp'; years?: number; through?: boolean; untilEra?: number; stop?: boolean };
 
 export type FromWorker =
   | { type: 'ready'; seed: string; gridN: number; tilt: number; cells: CellSnapshot; stats: WorldStats }
