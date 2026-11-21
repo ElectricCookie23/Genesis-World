@@ -1,10 +1,13 @@
 // Shared sun, sky and night lighting for small objects (plants, creatures).
 import { Fn, dot, float, max, mix, normalize, smoothstep, vec3 } from 'three/tsl';
-import { uSunDir } from './common';
+import { uSun2, uSun2Dir, uSunDir } from './common';
 import { uLook } from './gfx/look';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type N = any;
+
+/** Light from the companion sun, where the world has one, on a surface with normal n where the ground's up is `up`: its own colour. Add to the light that multiplies the albedo. */
+export const secondSun = (n: N, up: N): N => vec3(uLook.star2).mul(max(dot(n, uSun2Dir), 0).mul(0.8).add(0.2)).mul(smoothstep(-0.1, 0.25, dot(up, uSun2Dir))).mul(uSun2).mul(0.45);
 
 /** Light arriving at a surface point with normal n at world position p. Multiply by albedo. */
 export const surfaceLight = Fn(([n, p]: [N, N]) => {

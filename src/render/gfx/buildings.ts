@@ -14,6 +14,7 @@ import {
 import type { Grid } from '../../sim/world';
 import type { CellSnapshot, SettlementInfo } from '../../shared/protocol';
 import { EXAG, uHazeTint, uMoonDir, uSeaKm, uSunDir, uTime } from '../common';
+import { secondSun } from '../lighting';
 import { uLook } from './look';
 import { settlementSize, type Nation } from './nations';
 import { MAX_PLOTS, buildingSites, planCity, stageOf, watchable, type CityPlan, type CitySite, type District, type Site } from './cityplan';
@@ -562,7 +563,7 @@ export class Towns {
       const moon: N = vec3(uLook.moon).mul(0.05).mul(max(dot(nW, M), 0).mul(0.7).add(0.3)).mul(smoothstep(-0.1, 0.25, dot(up, M))).mul(night);
       const V: N = normalize(cameraPosition.sub(positionWorld));
       const glint = (max as any)(dot(V.add(L).normalize(), nW), 0).pow(60).mul(glass).mul(sunVis).mul(1.2);
-      let color: N = albedo.mul(sunColor.mul(max(dot(nW, L), 0).mul(0.85).add(0.15)).mul(sunVis).mul(1.1).add(sky).add(moon).add(vec3(0.012, 0.016, 0.022))).add(sunColor.mul(glint));
+      let color: N = albedo.mul(sunColor.mul(max(dot(nW, L), 0).mul(0.85).add(0.15)).mul(sunVis).mul(1.1).add(secondSun(nW, up)).add(sky).add(moon).add(vec3(0.012, 0.016, 0.022))).add(sunColor.mul(glint));
       // lamplight in the nation's colour; fires burn day and night
       const flicker = sin(uTime.mul(9).add(vData.y.mul(60))).mul(0.2).add(0.85);
       color = color.add(vLight.mul(litPane.mul(is(PART.windows))).mul(night).mul(1.8))

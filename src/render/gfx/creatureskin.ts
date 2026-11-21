@@ -8,6 +8,7 @@ import {
   pow, reflect, select, sin, smoothstep, sqrt, step, varying, vec2, vec3,
 } from 'three/tsl';
 import { uHazeTint, uMoonDir, uSunDir, uTime } from '../common';
+import { secondSun } from '../lighting';
 import { COVER, RIG, ZONE } from './creaturemesh';
 import { uLook } from './look';
 import type { PlanetData } from './planetdata';
@@ -175,7 +176,7 @@ export function makeCreatureMaterial(data: PlanetData, erosionTex: Texture, clou
   const fres = pow(float(1).sub(nv), 4);
   const sheen: N = vec3(uHazeTint).mul(day.mul(0.5).add(0.01)).mul(fres).mul(wet.mul(0.7).add(gloss.mul(0.2)));
   const velvet = pow(float(1).sub(nv), 3).mul(is(cover, COVER.fur).add(is(cover, COVER.feathers).mul(0.5))).mul(patterned).mul(0.3).mul(day);
-  let color: N = albedo.mul(sunColor.mul(diffuse).mul(sunVis).mul(1.1).add(sky).add(moon).add(vec3(0.012, 0.016, 0.022)))
+  let color: N = albedo.mul(sunColor.mul(diffuse).mul(sunVis).mul(1.1).add(secondSun(Nrm, up)).add(sky).add(moon).add(vec3(0.012, 0.016, 0.022)))
     .add(albedo.mul(sunColor).mul(through).mul(sunVis).mul(1.5))
     .add(sunColor.mul(spec)).add(sheen).add(albedo.mul(velvet));
   // living light: eyes of night animals, and markings that glow

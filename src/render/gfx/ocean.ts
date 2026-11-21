@@ -6,6 +6,7 @@ import {
   abs, sqrt, step, cameraPosition, cameraViewMatrix, dot, exp, float, frontFacing, length, log2, max, min, mix, normalize, positionView, positionWorld, pow, reflect,
   screenUV, select, sin, smoothstep, texture, vec2, vec3, vec4, viewportDepthTexture, viewportSharedTexture, cameraNear, cameraFar, perspectiveDepthToViewZ,
 } from 'three/tsl';
+import { secondSun } from '../lighting';
 import { EXAG, uHatch, uImpact, uOverlay, uHazeAmount, uHazeTint, uMoonDir, uOceanFill, uSeaGlow, uSeaKm, uSunDir, uTideKm, uTime, uUnderwater } from '../common';
 import { OceanFFT } from './fft';
 import { uLook } from './look';
@@ -162,7 +163,7 @@ export class OceanSurface {
     const night = float(1).sub(day);
     const moonAmb: N = vec3(uLook.moon).mul(0.05).mul(moonUp).mul(night);
     const ambient: N = mix(vec3(uHazeTint), vec3(0.6, 0.6, 0.6), 0.4).mul(0.3).mul(day).mul(eclipse.mul(0.75).add(0.25)).add(moonAmb.mul(0.6)).add(vec3(0.004, 0.007, 0.008));
-    const bodyLit: N = body.mul(sunColor.mul(sunVis).mul(max(dot(Nw, L), 0).mul(0.6).add(0.4)).mul(0.95).add(ambient));
+    const bodyLit: N = body.mul(sunColor.mul(sunVis).mul(max(dot(Nw, L), 0).mul(0.6).add(0.4)).mul(0.95).add(secondSun(Nw, dir)).add(ambient));
     let water: N = behind.mul(transmit).add(bodyLit.mul(vec3(1, 1, 1).sub(transmit)));
     // light glowing through the thin tops of waves, looking toward the star
     const crest = smoothstep(0.05, 0.5, fold.mul(state));
@@ -208,7 +209,7 @@ export class OceanSurface {
     const lace = smoothstep(0.25, 0.85, swash.mul(0.5).add(along.mul(0.38)).add(foamTex.mul(0.6)));
     const shoreFoam = shore.mul(smoothstep(0.55, 0.95, swash)).mul(0.6).add(edge.mul(lace).mul(0.55)).mul(smoothstep(-0.05, 0.02, depthKm));
     const foam = max(whitecaps, shoreFoam).clamp(0, 1);
-    const whiteLit: N = sunColor.mul(sunVis).mul(max(dot(dir, L), 0).mul(0.8).add(0.2)).add(ambient.mul(1.6));
+    const whiteLit: N = sunColor.mul(sunVis).mul(max(dot(dir, L), 0).mul(0.8).add(0.2)).add(secondSun(dir, dir)).add(ambient.mul(1.6));
     color = mix(color, vec3(0.94, 0.96, 0.97).mul(whiteLit), foam.mul(0.92));
     // glowing plankton, stirred by breaking waves at night
     // seen close, the glow sits in the foam and the wave tops; from far away it is only a faint, even tint

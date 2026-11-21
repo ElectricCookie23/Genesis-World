@@ -466,7 +466,7 @@ async function boot(): Promise<void> {
   };
   actions.rewind = (index) => send({ type: 'rewind', index });
   // far enough for any world to get there if it ever will; the worker stops at the age asked for
-  actions.skipTo = (era) => send(era < 0 ? { type: 'warp', stop: true } : { type: 'warp', years: 1.5e9, untilEra: era });
+  actions.skipTo = (to) => send(typeof to === 'string' ? { type: 'warp', years: 1.5e9, untilMark: to, through: true } : to < 0 ? { type: 'warp', stop: true } : { type: 'warp', years: 1.5e9, untilEra: to });
   update({ colorblind: store.get('genesis:cb') === '1', earthNotes: store.get('genesis:earth') === '1' });
   actions.setEarthNotes = (on) => { update({ earthNotes: on }); store.set('genesis:earth', on ? '1' : '0'); };
 

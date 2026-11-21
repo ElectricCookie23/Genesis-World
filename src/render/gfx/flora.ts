@@ -15,6 +15,7 @@ import type { Grid } from '../../sim/world';
 import type { CellSnapshot, PlantInfo, SettlementInfo } from '../../shared/protocol';
 import { PG } from '../../sim/genetics';
 import { EXAG, uDitherFrame, uMoonDir, uSunDir, uTime } from '../common';
+import { secondSun } from '../lighting';
 import { faceDirection } from './cubebake';
 import { Pass, makeTarget } from './gpu';
 import { uLook } from './look';
@@ -78,7 +79,7 @@ function plantLight(albedo: N, Nrm: N, P: N, thin: N, ao: N, shadow: N): N {
   const moonUp = smoothstep(-0.1, 0.25, dot(up, M));
   const moon: N = vec3(uLook.moon).mul(0.05).mul(max(dot(Nrm, M), 0).mul(0.7).add(0.3)).mul(moonUp).mul(float(1).sub(day));
   const fill = vec3(0.012, 0.016, 0.02);
-  return albedo.mul(sunColor.mul(front).mul(sunVis).mul(1.15).add(sky.add(moon).add(fill).mul(ao)))
+  return albedo.mul(sunColor.mul(front).mul(sunVis).mul(1.15).add(secondSun(Nrm, up).mul(shadow)).add(sky.add(moon).add(fill).mul(ao)))
     .add(albedo.mul(mix(vec3(1, 1, 1), albedo.div(max(max(albedo.x, albedo.y), albedo.z).max(0.05)), 0.6)).mul(sunColor).mul(through).mul(sunVis).mul(1.6));
 }
 
