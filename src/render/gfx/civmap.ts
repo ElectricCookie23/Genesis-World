@@ -49,6 +49,19 @@ export class CivMap {
   /** Nations as the simulation has them (empty before history begins). */
   private known: NationInfo[] = [];
 
+  /** Festival nights (system E30), by the simulation's nation id: what each does to the lights of that nation's towns. */
+  private feasts = new Map<number, NonNullable<Unrest['feast']>>();
+  private feastKey = '';
+  setFeasts(byNation: Map<number, NonNullable<Unrest['feast']>>): void {
+    const key = [...byNation.entries()].map(([id, f]) => `${id}:${f.glow}:${f.dark}:${f.flicker}:${f.colour ? f.colour.join('/') : ''}`).sort().join(',');
+    if (key === this.feastKey) return;
+    this.feastKey = key;
+    this.feasts = byNation;
+    // (a festival begins and ends on its day: the lights change at once)
+    this.dirty = true;
+    this.lastBuild = -1e9;
+  }
+
   /** A war or a plague at a settlement: its lights flicker or go dark for a while. */
   disturb(cell: number, kind: 'war' | 'plague'): void {
     for (const s of this.settlements) {
@@ -72,7 +85,12 @@ export class CivMap {
     this.lastBuild = now;
     this.dirty = false;
     this.nations = deriveNations(this.settlements, this.grid, species, this.known);
-    this.layers = buildLayers(this.grid, cells, this.settlements, this.nations, this.unrest, this.layers);
+    let lights = this.unrest;
+    if (this.feasts.size) {
+      lights = new Map(this.unrest);
+      for (const st of this.settlements) { const f = st.nation !== undefined ? this.feasts.get(st.nation) : undefined; if (f && st.ruined < 0) lights.set(st.id, { war: lights.get(st.id)?.war ?? 0, dark: lights.get(st.id)?.dark ?? 0, feast: f }); }
+    }
+    this.layers = buildLayers(this.grid, cells, this.settlements, this.nations, lights, this.layers);
     const L = this.layers, b = this.bake;
     b.fill(this.a, 0, L.r); b.fill(this.a, 1, L.g); b.fill(this.a, 2, L.b); b.fill(this.a, 3, L.glow);
     b.commit(this.a);

@@ -22,6 +22,7 @@ import { Vector3 } from 'three/webgpu';
 import { del, get, set } from 'idb-keyval';
 import { Music } from './audio/music';
 import { believedSpot, describeMap, knownAt } from './sim/history/worldmap';
+import { feastOf, festivalOn } from './sim/history/festival';
 import type { SlotInfo, UIState } from './ui/store';
 import { GOALS, emptyRecord, evaluateGoals, type GoalRecord } from './game/goals';
 import { planFilm, shotAt, type Shot } from './game/film';
@@ -103,6 +104,8 @@ async function boot(): Promise<void> {
   let pendingLoad: unknown = null;
   /** The name of a language the panel was asked to open before the list of languages had arrived. */
   let pendingTongue = '';
+  /** A festival asked for from a panel: whose, which, and until when (page clock) its lights are shown whatever the day. */
+  let shownFeast: { nation: number; festival: number; until: number } | null = null;
   /** Until when (page clock) a people's music asked for from a panel keeps playing whatever is in view. */
   let listening = 0;
   try {
@@ -281,6 +284,24 @@ async function boot(): Promise<void> {
   actions.timelapse = (id, cell) => { actions.flyToCell(cell, 0.045); update({ panel: 'none' }); window.setTimeout(() => scene.timelapse(id), 1800); };
   actions.openSite = (id) => { update({ panel: 'site', siteDetail: state.siteDetail?.id === id ? state.siteDetail : null }); send({ type: 'requestSite', id }); };
   actions.listen = (id) => { const r = state.realms.find((x) => x.id === id); if (!r || !r.music) return; void music.start().then(() => { music.setTownMusic(r.music!.tradition, r.era, 1); listening = performance.now() + 30000; }); };
+  // festival nights (system E30): the towns of a country keeping one of its days are lit differently. Days go by
+  // too fast to see above a day a second, so yearly festivals show only at that pace or slower; the comet's whole
+  // year shows up to a few years a second; one asked for from a panel shows for a while at any pace. (On the page's
+  // own clock, not when figures arrive from the simulation: a paused world sends few, and a festival asked for
+  // while paused must still light up.)
+  window.setInterval(() => {
+    const stats = state.stats;
+    if (!stats || !scene.civ) return;
+    const feasts = new Map<number, ReturnType<typeof feastOf>>();
+    const pace = stats.yearsPerSecond, year = stats.simYear, now = performance.now();
+    for (const r of state.realms) {
+      if (r.ended >= 0 || !r.festivals) continue;
+      const on = r.festivals.find((f) => shownFeast && shownFeast.nation === r.id && shownFeast.festival === f.id && now < shownFeast.until) ?? r.festivals.find((f) => festivalOn(f, year) && pace <= (f.every > 1 ? 3 : 0.02));
+      if (on) feasts.set(r.id, feastOf(on.light, r.hue));
+    }
+    scene.civ.setFeasts(feasts);
+  }, 500);
+  actions.showFestival = (nation, festival) => { shownFeast = { nation, festival, until: performance.now() + 20000 }; const r = state.realms.find((x) => x.id === nation); const cap = r ? state.settlements.find((t) => t.id === r.capital) : undefined; if (cap) { update({ panel: 'none' }); scene.cam.flyTo(grid.lon[cap.cell]!, grid.lat[cap.cell]!, 1.1); } };
   actions.openLegends = () => { update({ panel: 'legends' }); send({ type: 'requestLegends' }); };
   actions.openGallery = () => { update({ panel: 'gallery' }); send({ type: 'requestGallery' }); };
   actions.openLanguages = (name) => {

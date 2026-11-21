@@ -1038,6 +1038,9 @@ describe('golden ages (E10)', () => {
 import { NETWORKS, WONDER_KINDS } from '../src/sim/history/model';
 import { ART_STYLES, SUBJECTS, against, compose, describePainting, styleOfEra, subjectOf, type Movement } from '../src/sim/history/art';
 import { galleryList } from '../src/sim/history/gallery';
+import { FESTIVAL_KINDS, daysUntil, describeFestival, feastOf, festivalOn, lightOf, type Festival, type FestivalLight } from '../src/sim/history/festival';
+import { buildLayers, deriveNations, type Unrest } from '../src/render/gfx/nations';
+import type { CellSnapshot } from '../src/shared/protocol';
 import { believedSpot, chartingOf, describeMap, knownAt, mapError, type Charting } from '../src/sim/history/worldmap';
 import { LEGEND_KINDS, legendKind, legendName, tale, trueAnimal } from '../src/sim/history/legend';
 import { describeMusic, lineOf, musicDistance, phrase, tradition, type Players, type Tradition } from '../src/sim/history/music';
@@ -2106,5 +2109,119 @@ describe('their map of the world (E29)', () => {
       const top = charts.reduce((a, b) => (b.n.tech > a.n.tech ? b : a)), low = charts.reduce((a, b) => (b.n.tech < a.n.tech ? b : a));
       if (top.n.tech - low.n.tech > 0.15) expect(top.c.skill).toBeGreaterThanOrEqual(low.c.skill);
     }
+  });
+});
+
+describe('holidays and festivals (E30)', () => {
+  const fest = (over: Partial<Festival>): Festival => ({ id: 1, kind: 'founding', own: 'Yikonu', name: 'the Day of the Founding', eventId: 0, since: 100.4, day: 0.4, every: 1, days: 3, light: 'lanterns', ...over });
+
+  it('a festival comes round on its day, for its days, and changes the lights its own way', () => {
+    const f = fest({});
+    // on for three days from its day in every year since it was first kept, and at no other time
+    expect(festivalOn(f, 100.4)).toBe(true);
+    expect(festivalOn(f, 250.4 + 2 / 365)).toBe(true);
+    expect(festivalOn(f, 250.4 + 4 / 365)).toBe(false);
+    expect(festivalOn(f, 250.39)).toBe(false);
+    expect(festivalOn(f, 99.4)).toBe(false);
+    let on = 0;
+    for (let d = 0; d < 365; d++) if (festivalOn(f, 300 + (d + 0.5) / 365)) on++;
+    expect(on).toBe(3);
+    expect(daysUntil(f, 300.4)).toBe(0);
+    expect(daysUntil(f, 300.3)).toBeGreaterThan(30);
+    expect(daysUntil(f, 300.3)).toBeLessThan(40);
+    expect(daysUntil(f, 300.5)).toBeGreaterThan(300);
+    // the comet's festival is a whole year, once in every return
+    const comet = fest({ kind: 'comet', since: 1000, day: 0, every: 74, days: 365, light: 'floating' });
+    expect(festivalOn(comet, 1000.5)).toBe(true);
+    expect(festivalOn(comet, 1001.5)).toBe(false);
+    expect(festivalOn(comet, 1074.2)).toBe(true);
+    expect(festivalOn(comet, 1148.9)).toBe(true);
+    expect(daysUntil(comet, 1001)).toBe(73 * 365);
+    // what each does to the lights
+    expect(FESTIVAL_KINDS.map(lightOf)).toEqual(['lanterns', 'bonfires', 'bonfires', 'lights-out', 'floating', 'lanterns']);
+    const lanterns = feastOf('lanterns', 0.1), fires = feastOf('bonfires', 0.1), out = feastOf('lights-out', 0.1), afloat = feastOf('floating', 0.1);
+    expect(lanterns.glow).toBeGreaterThan(1.5);
+    expect(fires.flicker).toBeGreaterThan(0.5);
+    expect(out.dark).toBe(1);
+    expect(out.glow).toBeLessThan(0.3);
+    expect(afloat.spread).toBeGreaterThan(2);
+    expect(feastOf('lanterns', 0.6).colour).not.toEqual(lanterns.colour);
+    expect(new Set([f, comet, fest({ kind: 'remembrance', light: 'lights-out', days: 1 })].map((x) => describeFestival(x, 300.1))).size).toBe(3);
+    expect(describeFestival(f, 300.4)).toMatch(/being kept now/);
+  });
+
+  it('a festival is visible from orbit: the lights of a country keeping one are brighter, wider and another colour, or out', () => {
+    const sim = atDawn(0)!;
+    const g = sim.grid, w = sim.world;
+    const town = sim.civ.settlements.find((s) => s.ruined < 0)!;
+    const st = { id: town.id, name: town.name, cell: town.cell, species: town.species, pop: 300, tech: 0.7, founded: 0, lore: -1, eventId: -1, ruined: -1, nation: 0 };
+    const cells = { elevation: w.elevation, seaLevel: w.seaLevel } as unknown as CellSnapshot;
+    const nations = deriveNations([st], g, new Map(), []);
+    const lit = (unrest: Map<number, Unrest>) => {
+      const L = buildLayers(g, cells, [st], nations, unrest);
+      let glow = 0, count = 0, dark = 0, flicker = 0;
+      for (let i = 0; i < g.count; i++) { glow += L.glow[i]!; if (L.glow[i]! > 0.02) count++; dark += L.dark[i]!; flicker += L.war[i]!; }
+      return { glow, count, dark, flicker, colour: [L.r[st.cell]!, L.g[st.cell]!, L.b[st.cell]!] };
+    };
+    const plain = lit(new Map());
+    const night = (light: FestivalLight) => lit(new Map([[st.id, { war: 0, dark: 0, feast: feastOf(light, 0.6) }]]));
+    const lanterns = night('lanterns'), fires = night('bonfires'), out = night('lights-out'), afloat = night('floating');
+    expect(plain.glow).toBeGreaterThan(0);
+    // lanterns: more light over at least as much ground, in the festival's colour
+    // (on this small test planet a cell is the size of a country, so a wider glow seldom reaches a second one)
+    expect(lanterns.glow).toBeGreaterThan(plain.glow * 1.1);
+    expect(lanterns.count).toBeGreaterThanOrEqual(plain.count);
+    expect(lanterns.colour).not.toEqual(plain.colour);
+    // bonfires flicker and are the colour of fire; floating lights are pale blue; both reach at least as far as lamps do
+    expect(fires.flicker).toBeGreaterThan(plain.flicker + 0.5);
+    expect(fires.colour[0]!).toBeGreaterThan(fires.colour[2]! * 3);
+    expect(afloat.count).toBeGreaterThanOrEqual(plain.count);
+    expect(fires.count).toBeGreaterThanOrEqual(plain.count);
+    expect(afloat.colour[2]!).toBeGreaterThan(afloat.colour[0]!);
+    // a night of remembrance: the town all but disappears
+    expect(out.glow).toBeLessThan(plain.glow * 0.5);
+    expect(out.dark).toBeGreaterThan(plain.dark + 0.5);
+  });
+
+  it('every festival is linked to its origin event', () => {
+    const runs = fiveHistories();
+    let total = 0;
+    const kinds = new Set<string>();
+    for (const { sim } of runs) {
+      const h = sim.civ.h, ev = sim.events.events;
+      const ids = new Set<number>();
+      for (const n of h.nations) {
+        const list = n.festivals ?? [];
+        expect(list.length).toBeLessThanOrEqual(4);
+        expect(new Set(list.map((f) => f.kind)).size).toBe(list.length);
+        for (const f of list) {
+          total++; kinds.add(f.kind);
+          expect(ids.has(f.id)).toBe(false);
+          ids.add(f.id);
+          // what it remembers is on record and came first
+          const origin = ev[f.eventId]!;
+          expect(origin, f.name).toBeTruthy();
+          expect(origin.simYear).toBeLessThanOrEqual(f.since + 1e-6);
+          expect(f.day).toBeGreaterThanOrEqual(0);
+          expect(f.day).toBeLessThan(1);
+          expect(f.light).toBe(lightOf(f.kind));
+          const fits: Record<string, RegExp> = { founding: /nation|milestone|secession|civil-war|union|dynasty/, harvest: /settlement|nation|milestone/, victory: /war|conquest/, remembrance: /./, comet: /comet/, eclipse: /eclipse/ };
+          expect(origin.type).toMatch(fits[f.kind]!);
+          if (f.kind === 'comet') expect(f.every).toBe(h.visitor!.period);
+          // on its own day of some year it is on; half a year away it is not (the comet's is on in its own year)
+          if (f.every === 1) { const y = Math.floor(f.since) + 5 + f.day + 0.2 / 365; expect(festivalOn(f, y)).toBe(true); expect(festivalOn(f, y + 0.5)).toBe(false); }
+          else expect(festivalOn(f, Math.floor(f.since) + f.every * 2 + 0.5)).toBe(true);
+        }
+      }
+      // and keeping it is an event caused by what it remembers
+      for (const e of ev) {
+        if (e.type !== 'festival') continue;
+        const n = h.nations[Number(e.data!.nation)]!;
+        const f = (n.festivals ?? []).find((x) => x.id === e.data!.festival);
+        if (f) expect(e.causes).toContain(f.eventId);
+      }
+    }
+    expect(total).toBeGreaterThan(10);
+    expect(kinds.size).toBeGreaterThanOrEqual(3);
   });
 });

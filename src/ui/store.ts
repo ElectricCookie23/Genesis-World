@@ -353,6 +353,8 @@ export const actions = {
   drawBareMap: (_canvas: HTMLCanvasElement) => {},
   /** Play a nation's music for half a minute (by the simulation's nation id). */
   listen: (_id: number) => {},
+  /** Fly out to a nation and show the lights of one of its festivals for a while, whatever the day (by nation id and festival id). */
+  showFestival: (_nation: number, _festival: number) => {},
   /** Open the stories told about old bones. */
   openLegends: () => {},
   /** Open the gallery of paintings. */

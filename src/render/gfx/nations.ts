@@ -202,7 +202,8 @@ export interface CivLayers {
   dark: Float32Array;
 }
 
-export interface Unrest { war: number; dark: number; }
+/** What is happening to a town's lights: war (flicker), darkness (plague, collapse), and a festival night (system E30: brighter or dark, wider, in its own colour). */
+export interface Unrest { war: number; dark: number; feast?: { glow: number; spread: number; flicker: number; dark: number; colour: readonly number[] | null } }
 
 export function buildLayers(grid: Grid, cells: CellSnapshot, settlements: SettlementInfo[], nations: Nation[], unrest: Map<number, Unrest>, out?: CivLayers): CivLayers {
   const n = grid.count;
@@ -268,9 +269,11 @@ export function buildLayers(grid: Grid, cells: CellSnapshot, settlements: Settle
     const nat = nationOf.get(s.id);
     if (!nat || s.ruined >= 0) continue;
     const size = settlementSize(s.pop);
-    const core = Math.min(1, (0.3 + 0.7 * size * (0.35 + 0.65 * s.tech)) * (s.id === nat.capital ? 1.15 : 1));
-    const radius = 0.008 + 0.034 * size * (0.25 + 0.75 * s.tech);
     const u = unrest.get(s.id);
+    const feast = u?.feast;
+    // (on a festival night a town is brighter, or dark, and its light reaches further into the country round it)
+    const core = Math.min(1, (0.3 + 0.7 * size * (0.35 + 0.65 * s.tech)) * (s.id === nat.capital ? 1.15 : 1) * (feast ? feast.glow : 1));
+    const radius = (0.008 + 0.034 * size * (0.25 + 0.75 * s.tech)) * (feast ? feast.spread : 1);
     const cx = pos[s.cell * 3]!, cy = pos[s.cell * 3 + 1]!, cz = pos[s.cell * 3 + 2]!;
     queue.length = 0; queue.push(s.cell); seen[s.cell] = s.id;
     for (let q = 0; q < queue.length; q++) {
@@ -279,7 +282,8 @@ export function buildLayers(grid: Grid, cells: CellSnapshot, settlements: Settle
       const land = elevation[cell]! > seaLevel;
       const v = cell === s.cell ? core : core * Math.pow(Math.max(0, 1 - d / radius), 1.5) * (land ? 1 : 0);
       if (v > L.glow[cell]!) L.glow[cell] = v;
-      if (u) { const f = Math.max(0, 1 - d / (radius + 0.03)); L.war[cell] = Math.max(L.war[cell]!, u.war * f); L.dark[cell] = Math.max(L.dark[cell]!, u.dark * f); }
+      if (u) { const f = Math.max(0, 1 - d / (radius + 0.03)); L.war[cell] = Math.max(L.war[cell]!, Math.max(u.war, feast ? feast.flicker : 0) * f); L.dark[cell] = Math.max(L.dark[cell]!, Math.max(u.dark, feast ? feast.dark : 0) * f); }
+      if (feast && feast.colour && v > 0.01) { const m = Math.min(1, 0.4 + v); L.r[cell] = L.r[cell]! + (feast.colour[0]! - L.r[cell]!) * m; L.g[cell] = L.g[cell]! + (feast.colour[1]! - L.g[cell]!) * m; L.b[cell] = L.b[cell]! + (feast.colour[2]! - L.b[cell]!) * m; }
       if (d > radius + 0.03) continue;
       for (let k = 0; k < ncount[cell]!; k++) { const nb = neighbors[cell * 6 + k]!; if (seen[nb] !== s.id) { seen[nb] = s.id; queue.push(nb); } }
     }

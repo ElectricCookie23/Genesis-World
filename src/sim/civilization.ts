@@ -21,6 +21,7 @@ import { driftSpan } from './history/syntax';
 import { wearOf, type Script } from './history/script';
 import { ART_STYLES, against, styleOfEra, subjectOf, type Movement, type Painting } from './history/art';
 import { legendKind, legendName, tale, trueAnimal, type Legend } from './history/legend';
+import { lightOf, type Festival, type FestivalKind } from './history/festival';
 import { stillCleared } from './history/decay';
 import { answer, damage, hazards, type CalamityKind, type Ground, type Rebuild, type Scar } from './history/calamity';
 import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role, type Wonder, type WonderKind } from './history/model';
@@ -357,6 +358,8 @@ export class Civilization {
       this.network(sim, rng, n, towns, y, year);
       // ---- golden ages begin, raise their monuments and end (system E10)
       this.flourish(sim, rng, n, towns, y, year);
+      // ---- the days it keeps: its founding, the harvest, a victory, a night of remembrance, the comet's year (system E30)
+      this.feasts(sim, n, year);
       // ---- its diggers find old bones and tell stories about them; its anatomists, later, say what they were (system E28)
       this.bones(sim, n, towns, y, year);
       // ---- its painters paint what has happened, in the manner of their age and their school (system E26)
@@ -2122,6 +2125,57 @@ export class Civilization {
         if (first && ev.id >= 0) h.firstTongue = ev.id;
       }
     }
+  }
+
+  /**
+   * Holidays and festivals (system E30). A country that counts its years keeps days in them, each because of
+   * something in the record: the day it was founded, the harvest (from the day its first fields were sown), a
+   * war it came through, a night when a town burned or sickened, the day the sun went dark, the year the comet
+   * comes back. It keeps four at most; a new victory or a new grief takes the place of the old one of its kind.
+   * Keeping a festival is an event caused by what it remembers.
+   */
+  private feasts(sim: Simulation, n: Nation, year: number): void {
+    const h = this.h, ev = sim.events.events;
+    if (!this.calendarOf(n) || n.founded > year - 3) return;
+    const list = (n.festivals ??= []);
+    const lang = this.languageOf(n);
+    const cap = this.settlements[n.capital]!;
+    const real = (id: number | undefined): id is number => id !== undefined && id >= 0 && !!ev[id];
+    const keep = (kind: FestivalKind, eventId: number, name: string, head: string, modifier: string, day: number, every: number, days: number, why: string, since = year): void => {
+      const old = list.findIndex((f) => f.kind === kind);
+      if (old >= 0 && list[old]!.eventId === eventId) return;
+      const first = h.firstFestival === undefined;
+      const id = (h.festivalSeq = (h.festivalSeq ?? 0) + 1);
+      const f: Festival = { id, kind, own: compound(lang, head, modifier, year), name, eventId, since, day: ((day % 1) + 1) % 1, every, days, light: lightOf(kind) };
+      const e = sim.emit({
+        type: 'festival', year, cellId: cap.cell, title: first ? `The first festival: ${f.own}, ${name}` : `${n.name} keeps ${f.own}, ${name}`,
+        description: `${why} From this year ${n.name} keeps ${f.own}, ${name}: ${every > 1 ? `a whole year, once every ${Math.round(every)} years` : `${days} ${days === 1 ? 'day' : 'days'} in every year`}, when ${f.light === 'lights-out' ? 'no lamp is lit in any of its towns' : f.light === 'bonfires' ? 'fires are lit on the hills round every town' : f.light === 'floating' ? 'lights are set afloat on the water and hung along the roads' : 'a lantern is set in every window'}.${old >= 0 ? ` It takes the place of ${list[old]!.own}.` : ''}`,
+        causes: [eventId, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, festival: id, kind },
+      });
+      if (first && e.id >= 0) h.firstFestival = e.id;
+      if (old >= 0) list[old] = f; else list.push(f);
+      if (list.length > 4) list.splice(list.findIndex((x) => x.kind !== 'founding'), 1);
+    };
+    const dayOf = (y: number): number => y - Math.floor(y);
+    // (one new festival in a year at most, and each kind in its own time)
+    if (!list.some((f) => f.kind === 'founding') && real(n.eventId)) { keep('founding', n.eventId, 'the Day of the Founding', 'land', 'new', dayOf(n.founded), 1, 3, `${n.name} has counted its years long enough to know which day it began on.`); return; }
+    if (!list.some((f) => f.kind === 'harvest') && n.era >= 1 && real(n.eventId) && year - n.founded > 40) {
+      // (the harvest falls late in the warm season: a different time of year either side of the equator)
+      const north = sim.grid.lat[cap.cell]! >= 0;
+      keep('harvest', real(cap.eventId) ? cap.eventId : n.eventId, 'the Harvest Fires', 'fire', 'field', north ? 0.72 : 0.22, 1, 5, `When the last field round ${cap.name} is cut, the stubble is burned and no one works for five days.`);
+      return;
+    }
+    const woe = n.woes.length ? n.woes[n.woes.length - 1]! : undefined;
+    if (woe && real(woe.eventId) && year - woe.year > 2 && year - woe.year < 30) {
+      const what = ev[woe.eventId]!;
+      if (woe.kind === 'war' && n.stability > 0.5 && list.every((f) => f.eventId !== woe.eventId)) { keep('victory', woe.eventId, 'the Day of the Victory', 'king', 'great', dayOf(woe.year), 1, 2, `${n.name} came through "${what.title}" and means it to be remembered.`); return; }
+      if ((woe.kind === 'disaster' || woe.kind === 'plague') && list.every((f) => f.eventId !== woe.eventId)) { keep('remembrance', woe.eventId, 'the Night of Remembrance', 'moon', 'cold', dayOf(woe.year), 1, 1, `No one in ${n.name} was untouched by "${what.title}".`); return; }
+    }
+    const watches = n.know.way[SLOT_INDEX.get('sky1')!]! >= 0;
+    const v = h.visitor;
+    if (watches && v && real(v.last) && ev[v.last]!.causes.length && !list.some((f) => f.kind === 'comet')) { keep('comet', v.last, 'the Year of the Visitor', 'star', 'old', 0, v.period, 365, `The small comet came back when the count said it would, and ${n.name} has decided that its year belongs to no one's work.`, ev[v.last]!.simYear); return; }
+    const sign = h.sign;
+    if (watches && sign && sign.kind === 'eclipse' && real(sign.eventId) && year - sign.year < 40 && !list.some((f) => f.kind === 'eclipse') && ev[sign.eventId]!.data?.nation === n.id) keep('eclipse', sign.eventId, 'the Dark Noon', 'sun', 'black', dayOf(sign.year), 1, 1, `On the day the sun went dark over ${cap.name}, lamps were lit at noon. They are lit at noon on that day still.`);
   }
 
   /**

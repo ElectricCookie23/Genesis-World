@@ -9,6 +9,7 @@ import { dateIn } from '../sim/history/calendar';
 import { describeRuin } from '../sim/history/decay';
 import { CALAMITIES, REBUILDS, describeScar } from '../sim/history/calamity';
 import { Written, wearAt } from './glyphs';
+import { describeFestival } from '../sim/history/festival';
 import { actions, state, update, useStore, type Relative, type UIState } from './store';
 import { ERAS } from '../sim/history/eras';
 import { bigNumber, eventColor, eventGlyph, formatYear, hsl, metres, shortYear } from './format';
@@ -795,6 +796,13 @@ export function NationPanel() {
             {realm.eraName} ({realm.eraOwn}{s.earthNotes ? `; ${realm.earth}` : ''}){realm.ended >= 0 ? ' (the nation is gone)' : ''}. {realm.calendar && realm.ended < 0 ? `${dateIn({ name: realm.calendar, epoch: realm.calendarEpoch }, year)} (sim year ${Math.floor(year).toLocaleString('en-US')}). ` : ''}{d.tech.filter((t) => t.state === 1).length} of {d.tech.filter((t) => t.state !== 2).length} things its land allows are known.
             {' '}Its land offers {d.land.length ? d.land.join(', ') : 'little'}{d.land.includes('ore') ? '' : '; no ore, so no metal'}.
             {' '}Its people are the {realm.culture} and speak <button class={css.link} style={{ marginRight: 0 }} onClick={() => actions.openLanguages(realm.language)}>{realm.language}</button>.
+            {realm.festivals && realm.festivals.map((f) => (
+              <span key={f.id} style={{ display: 'block', margin: '3px 0 0' }}>
+                {describeFestival(f, year)}{' '}
+                <button class={css.link} style={{ marginRight: '8px' }} title="What it remembers" onClick={() => update({ whyEvent: f.eventId })}>why</button>
+                <button class={css.link} style={{ marginRight: 0 }} title="Fly out and see its towns lit as on that night" onClick={() => actions.showFestival(realm.id, f.id)}>see its lights</button>
+              </span>
+            ))}
             {realm.music && <>{' '}Their music: {realm.music.about.charAt(0).toLowerCase()}{realm.music.about.slice(1)} <button class={css.link} style={{ marginRight: 0 }} title="Play half a minute of it" onClick={() => actions.listen(realm.id)}>listen</button></>}
             {realm.script && realm.signs && <>{' '}In the {realm.script.name} its name is written <Written meanings={realm.signs} script={realm.script} wear={wearAt(realm.script, year)} size={20} rosetta={s.rosetta} />.</>}
           </p>

@@ -2,6 +2,7 @@ import type { Codes } from './calamity';
 import type { Script } from './script';
 import type { Movement, Painting } from './art';
 import type { Legend } from './legend';
+import type { Festival } from './festival';
 // The entities of history. All of them are plain data, so the whole of history saves, loads and
 // rewinds with the rest of the simulation.
 import type { Calendar } from './calendar';
@@ -166,6 +167,8 @@ export interface Nation {
   woes: { kind: string; eventId: number; year: number }[];
   /** Its building laws, each made after a calamity in one of its towns (system E20). */
   codes?: Codes;
+  /** The days it keeps (system E30): at most four, each tied to the event it remembers. */
+  festivals?: Festival[];
   /** The movement its painters follow (system E26), the year they took it up, and the last age it has a painting of. */
   movement?: number; movedArt?: number; paintedEra?: number;
   /** The script it writes in (system E23), once it writes. */
@@ -217,6 +220,9 @@ export interface HistoryState {
   movements?: Movement[];
   firstStyles?: number[];
   paintingSeq?: number;
+  /** How many festivals have ever been begun, and the event of the first (system E30). */
+  festivalSeq?: number;
+  firstFestival?: number;
   /** Stories told about old bones (system E28), and the events of the first story and the first true account. */
   legends?: Legend[];
   firstLegend?: number;
