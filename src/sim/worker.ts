@@ -163,7 +163,7 @@ function snapshotCells(s: Simulation): { cells: CellSnapshot; transfer: Transfer
     biome: w.biome.slice(),
     vegetation: w.vegetation.slice(),
     snow: w.snow.slice(),
-    cloud: w.cloud.slice(),
+    cloud: w.cloud.map((c, i) => Math.min(1, c * s.climate.cloudShow[i]!)),
     ash: w.ash.slice(),
     lava: w.lava.slice(),
     lights: w.lights.slice(),

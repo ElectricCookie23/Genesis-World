@@ -146,9 +146,10 @@ export function createSky(): Mesh {
   // the star's disc is as bright as it is; its wide glare is held back when the exposure opens up at night
   const glare = float(1).div(max(uExposure, 0.5));
   const sun = vec3(uLook.star).mul(smoothstep(edge, edge.add(0.00025), mu).mul(60).add(pow(max(mu, 0), float(900).div(uLook.starSize)).mul(3).mul(glare)).add(pow(max(mu, 0), 110).mul(0.04).mul(glare)));
-  // binary systems: a smaller, bluer companion sun
+  // binary systems: a companion sun of its own colour and size
   const mu2 = dot(dir, uSun2Dir);
-  const sun2 = vec3(0.75, 0.86, 1.0).mul(smoothstep(0.99975, 0.9999, mu2).mul(40).add(pow(max(mu2, 0), 1400).mul(2))).mul(uSun2);
+  const edge2 = float(1).sub(float(0.00045).mul(uLook.star2Size).mul(uLook.star2Size));
+  const sun2 = vec3(uLook.star2).mul(smoothstep(edge2, edge2.add(0.00025), mu2).mul(40).add(pow(max(mu2, 0), float(1400).div(uLook.star2Size)).mul(2).mul(glare))).mul(uSun2);
   // the other worlds of this system: steady points and one small disc, each its own colour
   let siblings: N = vec3(0, 0, 0);
   for (const sib of uSiblings) {

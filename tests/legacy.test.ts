@@ -104,7 +104,7 @@ describe('E99 a message to the stars', () => {
     expect(m.text).toContain(`around the star we call ${sim.cosmos.starName}`);
     const inner = sim.cosmos.bodies.filter((b) => b.au < sim.cosmos.au).length;
     expect(m.text).toContain(['first', 'second', 'third', 'fourth', 'fifth'][inner]!);
-    expect(m.text).toContain('It has one moon.');
+    expect(m.text).toContain(sim.moons === 0 ? 'It has no moon.' : sim.moons === 1 ? 'It has one moon.' : 'It has two moons.');
     expect(m.glyphs.length).toBe(m.text.split(' ').length);
     // it is aimed at no one: the nearest star is only where it passes first
     const near = sim.cosmos.stars.reduce((a, b) => (b.ly < a.ly ? b : a));

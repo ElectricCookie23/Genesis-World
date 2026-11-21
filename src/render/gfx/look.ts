@@ -4,7 +4,7 @@ import { Vector3 } from 'three/webgpu';
 import { uniform } from 'three/tsl';
 import { RNG, hashSeed } from '../../sim/rng';
 
-export type StarType = 'yellow' | 'orange' | 'blue-white';
+export type StarType = 'red' | 'orange' | 'yellow' | 'white' | 'blue-white';
 
 export interface WorldLook {
   star: StarType;
@@ -13,6 +13,20 @@ export interface WorldLook {
   starColor: [number, number, number];
   /** Angular size of the star's disc relative to the default. */
   starSize: number;
+  /** The companion sun, where the world has one: its colour, its size beside the main star, how far behind it trails
+   *  (radians: small is a close pair that sets together) and how far above or below its path it rides. */
+  star2Color: [number, number, number];
+  star2Size: number;
+  star2Angle: number;
+  star2Lift: number;
+  /** The moon: its size, the lean of its path, where on it the moon starts and how fast it goes round; and the same for a second moon. */
+  moonSize: number;
+  moonTilt: number;
+  moonStart: number;
+  moonPace: number;
+  moon2Size: number;
+  moon2Tilt: number;
+  moon2Pace: number;
   skyName: string;
   /** Rayleigh scattering colour: which wavelengths the air scatters most. This is the colour of the day sky. */
   skyColor: [number, number, number];
@@ -45,8 +59,23 @@ const jitter = (c: RGB, r: RNG, amount: number): RGB => [Math.max(0, c[0] * (1 +
 export function worldLook(seed: string): WorldLook {
   const r = new RNG(hashSeed(`look:${seed}`));
   const roll = r.next();
-  const star: StarType = roll < 0.42 ? 'orange' : roll < 0.78 ? 'yellow' : 'blue-white';
-  const starColor: RGB = star === 'orange' ? [1.0, 0.62, 0.36] : star === 'yellow' ? [1.0, 0.93, 0.78] : [0.78, 0.88, 1.0];
+  const star: StarType = roll < 0.13 ? 'red' : roll < 0.42 ? 'orange' : roll < 0.7 ? 'yellow' : roll < 0.84 ? 'white' : 'blue-white';
+  // colour, size of the disc, and strength of the light: a red dwarf is a huge dim ember, a blue-white star a small fierce point
+  const STARS: Record<StarType, { name: string; color: RGB; size: number; power: number }> = {
+    red: { name: 'a red dwarf', color: [1.0, 0.4, 0.22], size: 2.2, power: 0.78 },
+    orange: { name: 'an orange dwarf', color: [1.0, 0.62, 0.36], size: 1.5, power: 0.9 },
+    yellow: { name: 'a yellow star', color: [1.0, 0.93, 0.78], size: 1, power: 1 },
+    white: { name: 'a white star', color: [1.0, 0.98, 0.96], size: 0.85, power: 1.12 },
+    'blue-white': { name: 'a blue-white star', color: [0.78, 0.88, 1.0], size: 0.65, power: 1.22 },
+  };
+  const starColor = STARS[star].color;
+  // the sky's bodies are rolled on their own stream, so the colours of a world do not depend on them
+  const sk = new RNG(hashSeed(`sky:${seed}`));
+  const size = STARS[star].size * sk.range(0.85, 1.2), power = STARS[star].power * sk.range(0.9, 1.1);
+  const kinds = Object.keys(STARS) as StarType[];
+  const mate = STARS[kinds[sk.int(kinds.length)]!];
+  // half of all pairs are close, and rise and set together
+  const star2Angle = sk.chance(0.5) ? sk.range(0.1, 0.3) : sk.range(0.5, 1.4);
   // air: the gas mix decides which colours scatter
   const skies: { name: string; sky: RGB; dusk: RGB; density: [number, number] }[] = [
     { name: 'teal (methane-tinted air)', sky: [0.18, 0.72, 0.78], dusk: [1.0, 0.45, 0.6], density: [0.8, 1.3] },
@@ -73,7 +102,7 @@ export function worldLook(seed: string): WorldLook {
   const sand = jitter(mixRGB(rockA, [0.8, 0.7, 0.5], 0.55), r, 0.2);
   const soil = jitter(mixRGB(rockB, [0.22, 0.14, 0.1], 0.5), r, 0.2);
   // pigments follow the star: plants evolve to use the light there is
-  const pigments: Record<StarType, { name: string; a: RGB; b: RGB }[]> = {
+  const pigments: Record<'orange' | 'yellow' | 'blue-white', { name: string; a: RGB; b: RGB }[]> = {
     orange: [
       { name: 'deep crimson to near-black', a: [0.32, 0.03, 0.05], b: [0.06, 0.02, 0.05] },
       { name: 'purple to wine red', a: [0.22, 0.04, 0.26], b: [0.36, 0.05, 0.1] },
@@ -90,7 +119,7 @@ export function worldLook(seed: string): WorldLook {
       { name: 'silver-blue to amber', a: [0.34, 0.42, 0.5], b: [0.5, 0.3, 0.05] },
     ],
   };
-  const pg = pigments[star][r.int(3)]!;
+  const pg = pigments[star === 'red' ? 'orange' : star === 'white' ? 'yellow' : star][r.int(3)]!;
   const moons: { name: string; tint: RGB }[] = [
     { name: 'pale ochre', tint: [1.0, 0.88, 0.62] }, { name: 'rust', tint: [1.0, 0.62, 0.45] }, { name: 'bone white', tint: [0.96, 0.95, 0.9] },
     { name: 'blue-grey', tint: [0.72, 0.8, 0.95] },
@@ -99,8 +128,11 @@ export function worldLook(seed: string): WorldLook {
   // aurora colours come from the gases that glow: oxygen green and violet, or reds and pinks without it
   const oxygenRich = sky.name.includes('oxygen') || sky.name.includes('teal') || sky.name.includes('green');
   return {
-    star, starName: star === 'orange' ? 'an orange dwarf' : star === 'yellow' ? 'a yellow star' : 'a blue-white star',
-    starColor: jitter(starColor, r, 0.06), starSize: star === 'orange' ? 1.5 : star === 'yellow' ? 1 : 0.7,
+    star, starName: STARS[star].name,
+    starColor: jitter(starColor, r, 0.06).map((c) => c * power) as RGB, starSize: size,
+    star2Color: mate.color, star2Size: sk.range(0.5, 1.1) * Math.min(size, mate.size), star2Angle, star2Lift: sk.range(-0.12, 0.2),
+    moonSize: sk.range(0.55, 1.6), moonTilt: sk.range(0.03, 0.5), moonStart: sk.range(0, Math.PI * 2), moonPace: sk.range(0.6, 1.8),
+    moon2Size: sk.range(0.25, 0.7), moon2Tilt: sk.range(0.1, 0.7), moon2Pace: sk.range(1.6, 3.2),
     skyName: sky.name, skyColor: jitter(sky.sky, r, 0.12), duskColor: sky.dusk, airDensity: r.range(sky.density[0], sky.density[1]),
     oceanName: sea.name, oceanShallow: jitter(sea.shallow, r, 0.12), oceanDeep: sea.deep,
     rockA, rockB, rockC, sand, soil,
@@ -118,7 +150,7 @@ export const uLook = {
   oceanShallow: v([0.1, 0.5, 0.5]), oceanDeep: v([0, 0.03, 0.1]),
   rockA: v([0.4, 0.3, 0.25]), rockB: v([0.25, 0.25, 0.28]), rockC: v([0.5, 0.4, 0.3]), sand: v([0.7, 0.6, 0.4]), soil: v([0.25, 0.18, 0.12]),
   pigmentA: v([0.1, 0.3, 0.1]), pigmentB: v([0.3, 0.3, 0.05]), moon: v([1, 1, 1]), auroraLow: v([0.15, 1, 0.5]), auroraHigh: v([0.55, 0.25, 1]),
-  starSize: uniform(1),
+  starSize: uniform(1), star2: v([0.75, 0.86, 1]), star2Size: uniform(1),
 };
 
 export function applyLook(look: WorldLook): void {
@@ -130,4 +162,5 @@ export function applyLook(look: WorldLook): void {
   set(uLook.pigmentA, look.pigmentA); set(uLook.pigmentB, look.pigmentB); set(uLook.moon, look.moonTint);
   set(uLook.auroraLow, look.auroraLow); set(uLook.auroraHigh, look.auroraHigh);
   uLook.starSize.value = look.starSize;
+  set(uLook.star2, look.star2Color); uLook.star2Size.value = look.star2Size;
 }

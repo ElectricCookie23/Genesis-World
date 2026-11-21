@@ -125,6 +125,10 @@ export class Simulation {
   ring = false;
   /** This world circles two suns. */
   binary = false;
+  /** How many moons the world was born with (from its seed). */
+  bornMoons = 1;
+  /** Whether the wandering rock has already come (not saved: after a load it may come once more). */
+  private strayed = false;
   private bleachNoted = false;
   private notedOnce = new Set<string>();
   /** Fine cell of the oldest living forest, or -1. */
@@ -170,7 +174,10 @@ export class Simulation {
     this.nameRng = this.rng.fork('names');
     this.weatherRng = this.rng.fork('weather');
     this.eternalHome = this.weatherRng.int(this.grid.count);
-    this.binary = this.rng.fork('suns').chance(0.14);
+    this.binary = this.rng.fork('suns').chance(0.22);
+    // most worlds are born with one moon, a third with two, a few with none
+    const moonRoll = this.rng.fork('moons').next();
+    this.moons = this.bornMoons = moonRoll < 0.1 ? 0 : moonRoll < 0.65 ? 1 : 2;
     // hydrothermal vents: undersea volcanic sites
     for (const v of this.geology.volcanoes) if (this.world.elevation[v.cell]! < -0.5) this.plants.vents.add(this.regions.regionOf[v.cell]!);
     // every world has some: where no volcano stands deep enough (most worlds had none at all), the deep sea floor
@@ -869,9 +876,17 @@ export class Simulation {
     }
     const once = (key: string) => { if (this.notedOnce.has(key)) return false; this.notedOnce.add(key); return true; };
     // a wandering body is captured as a second moon
-    if (this.moons === 1 && r.chance(Math.min(0.05, 0.00018 * tau))) {
-      this.moons = 2;
-      const ev = this.emit({ type: 'second-moon', title: 'A second moon', description: 'A wandering lump of rock strays too close and cannot leave. From now on two moons cross the night, and the tides keep a more complicated time.', importance: 3 });
+    // Once in a world's life a wandering rock strays close. A world with one moon keeps it as a second; a world with
+    // none keeps it as its first; a world born with two watches it pass. (Every world rolls for it and tells its
+    // peoples, so that the histories of worlds run as they did when all were born with one moon.)
+    if (!this.strayed && (this.moons === this.bornMoons || this.bornMoons === 2) && r.chance(Math.min(0.05, 0.00018 * tau))) {
+      this.strayed = true;
+      const ev = this.moons === 1
+        ? this.emit({ type: 'second-moon', title: 'A second moon', description: 'A wandering lump of rock strays too close and cannot leave. From now on two moons cross the night, and the tides keep a more complicated time.', importance: 3 })
+        : this.moons === 0
+          ? this.emit({ type: 'second-moon', title: 'A moon at last', description: 'A wandering lump of rock strays too close and cannot leave. A world that never had a moon has one now, and its seas learn to keep time.', importance: 3 })
+          : this.emit({ type: 'second-moon', title: 'A wanderer passes', description: 'A wandering lump of rock comes between the moons, is pulled this way and that, and is thrown back into the dark.', importance: 3 });
+      if (this.moons < 2) this.moons++;
       this.civ.sighting(this, ev.id, this.civRng);
     }
     // coral bleaches when the water gets too hot
