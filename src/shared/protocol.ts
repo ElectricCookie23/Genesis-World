@@ -149,6 +149,18 @@ export interface PlantInfo {
   cover: number;
 }
 
+/** A story about old bones as the page sees it (system E28): the story, the real species it is about, and whether anyone has worked that out. */
+export interface LegendInfo {
+  id: number; year: number;
+  nation: string; town: string; cell: number;
+  /** The species whose bones they are (its id and name in the tree of life), and when it died out. */
+  species: number; speciesName: string; extinctYear: number;
+  kind: string; own: string; means: string; found: string; tale: string;
+  eventId: number;
+  /** What the animal really was, once someone has said so: when, by whom, in what words, and the event. */
+  known?: { year: number; nation: string; text: string; eventId: number };
+}
+
 /** A painting as the page sees it (system E26): what it shows, in what manner, and everything needed to draw it. */
 export interface PaintingInfo {
   id: number; year: number;
@@ -449,6 +461,7 @@ export type ToWorker =
   | { type: 'requestDynasty'; id: number }
   | { type: 'requestLanguages' }
   | { type: 'requestGallery' }
+  | { type: 'requestLegends' }
   | { type: 'requestSite'; id: number }
   | { type: 'requestMemory'; ask: MemoryAsk }
   /** Run the world twice from before an event, with it and without it (E55); or with and without one small herd spared at a cell (E56); or stop. */
@@ -473,6 +486,7 @@ export type FromWorker =
   | { type: 'dynasty'; detail: DynastyDetail }
   | { type: 'languages'; lexicon: string[]; sayings: string[]; list: LanguageInfo[] }
   | { type: 'gallery'; paintings: PaintingInfo[]; movements: MovementInfo[] }
+  | { type: 'legends'; list: LegendInfo[] }
   | { type: 'site'; detail: SiteDetail }
   | { type: 'memory'; answer: MemoryAnswer }
   | { type: 'whatif'; state: WhatIfState | null; maps?: WhatIfMaps; problem?: string }

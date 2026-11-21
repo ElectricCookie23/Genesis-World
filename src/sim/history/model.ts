@@ -1,6 +1,7 @@
 import type { Codes } from './calamity';
 import type { Script } from './script';
 import type { Movement, Painting } from './art';
+import type { Legend } from './legend';
 // The entities of history. All of them are plain data, so the whole of history saves, loads and
 // rewinds with the rest of the simulation.
 import type { Calendar } from './calendar';
@@ -216,6 +217,10 @@ export interface HistoryState {
   movements?: Movement[];
   firstStyles?: number[];
   paintingSeq?: number;
+  /** Stories told about old bones (system E28), and the events of the first story and the first true account. */
+  legends?: Legend[];
+  firstLegend?: number;
+  firstBones?: number;
   /** The scripts of the world (system E23). */
   scripts?: Script[];
   /** The event of the first time a people was found to speak a language of its own (system E21), if it has happened. */

@@ -1038,6 +1038,7 @@ describe('golden ages (E10)', () => {
 import { NETWORKS, WONDER_KINDS } from '../src/sim/history/model';
 import { ART_STYLES, SUBJECTS, against, compose, describePainting, styleOfEra, subjectOf, type Movement } from '../src/sim/history/art';
 import { galleryList } from '../src/sim/history/gallery';
+import { LEGEND_KINDS, legendKind, legendName, tale, trueAnimal } from '../src/sim/history/legend';
 import { describeMusic, lineOf, musicDistance, phrase, tradition, type Players, type Tradition } from '../src/sim/history/music';
 import { describeScript, glyphDistance, glyphOf, glyphPath, picture, wearOf, type Body, type Glyph, type Script } from '../src/sim/history/script';
 import { LEXICON, SAYINGS, describeGrammar, describeSounds, driftSpan, grammarOf, say } from '../src/sim/history/syntax';
@@ -1951,5 +1952,74 @@ describe('music of the world (E27)', () => {
       for (const t of list) expect(describeMusic(t).length).toBeGreaterThan(40);
     }
     expect(worlds).toBeGreaterThan(1);
+  });
+});
+
+describe('stories told about old bones (E28)', () => {
+  it('the story follows the skeleton, and the true account follows the animal', () => {
+    const genes = (over: Partial<Record<number, number>>): Float32Array => { const g = new Float32Array(GENE_COUNT).fill(0.4); for (const [k, v] of Object.entries(over)) g[Number(k)] = v!; return g; };
+    expect(legendKind(genes({ [G.Size]: 0.9, [G.LimbType]: 0.6 }))).toBe('giant');
+    expect(legendKind(genes({ [G.Water]: 0.9 }))).toBe('sea-beast');
+    expect(legendKind(genes({ [G.LimbType]: 0.3 }))).toBe('sea-beast');
+    expect(legendKind(genes({ [G.LimbType]: 0.9 }))).toBe('sky-beast');
+    expect(legendKind(genes({ [G.LimbType]: 0.6, [G.Horn]: 0.9 }))).toBe('horned');
+    expect(legendKind(genes({ [G.LimbType]: 0.6 }))).toBe('old-kin');
+    for (const kind of LEGEND_KINDS) {
+      const [head, modifier, means] = legendName(kind, 1);
+      expect(head.length * modifier.length * means.length).toBeGreaterThan(0);
+      expect(new Set([0, 1, 2].map((k) => legendName(kind, k)[2])).size).toBe(3);
+      const g = genes({ [G.Size]: 0.8, [G.LimbType]: 0.6 });
+      const a = tale(kind, g, 'Nanatko', means, 'the mine at Ka', 5);
+      expect(a).toBe(tale(kind, g, 'Nanatko', means, 'the mine at Ka', 5));
+      expect(a).toContain('Nanatko');
+      expect(a).toContain('the mine at Ka');
+      expect(a).not.toMatch(/\bgod|holy|sacred|worship|pray/i);
+    }
+    // the true account says how it moved, how big it was and what it ate
+    expect(trueAnimal(genes({ [G.Size]: 0.9, [G.LimbType]: 0.6, [G.LimbPairs]: 0.5, [G.Diet]: 0.1 }))).toMatch(/a walker on 4 legs, about \d+ metres long, that ate plants/);
+    expect(trueAnimal(genes({ [G.Size]: 0.2, [G.LimbType]: 0.9, [G.Diet]: 0.9 }))).toMatch(/a flier .* centimetres long, that ate other animals/);
+  });
+
+  it('a story links back to an actual species in the tree of life', () => {
+    const runs = fiveHistories();
+    let stories = 0, solved = 0;
+    for (const { sim } of runs) {
+      const h = sim.civ.h, ev = sim.events.events, cr = sim.creatures, list = h.legends ?? [];
+      expect(new Set(list.map((L) => L.own)).size).toBe(list.length);
+      for (const L of list) {
+        stories++;
+        // the bones are those of a real species: named, in the tree, extinct long before anyone could have seen it
+        const sp = cr.species[L.species]!;
+        expect(sp, L.own).toBeTruthy();
+        expect(sp.name.length).toBeGreaterThan(2);
+        expect(sp.extinctYear).toBeGreaterThanOrEqual(0);
+        expect(L.year - sp.extinctYear).toBeGreaterThanOrEqual(20000);
+        expect(L.kind).toBe(legendKind(sp.ref));
+        // the story is an event at the town where the bones were found, tied to that species
+        const e = ev[L.eventId]!;
+        expect(e.type).toBe('legend');
+        expect(e.speciesIds).toContain(sp.id);
+        expect(e.cellId).toBe(sim.civ.settlements[L.settlement]!.cell);
+        expect(e.description).toBe(L.tale);
+        expect(L.tale).toContain(L.own);
+        // where the species has its own events on record, the story is caused by one of them
+        const own = [sim.extinctEventOf.get(sp.id) ?? -1, sp.eventId].filter((x) => x >= 0 && ev[x]);
+        if (own.length) expect(e.causes.some((c) => own.includes(c))).toBe(true);
+        if (L.known) {
+          solved++;
+          const k = ev[L.known.eventId]!;
+          expect(k.type).toBe('bones-named');
+          expect(k.causes).toContain(L.eventId);
+          expect(k.speciesIds).toContain(sp.id);
+          expect(L.known.year).toBeGreaterThanOrEqual(L.year);
+          expect(L.known.text).toContain(trueAnimal(sp.ref));
+          expect(k.description).toContain(sp.name);
+        }
+      }
+      // no people is told the same animal's story twice
+      for (const a of list) for (const b of list) if (a.id < b.id && a.nation === b.nation) expect(a.species).not.toBe(b.species);
+    }
+    expect(stories).toBeGreaterThan(6);
+    expect(solved).toBeGreaterThan(0);
   });
 });

@@ -1,7 +1,7 @@
 // Tiny observable store shared by the Preact UI and the app.
 import { useEffect, useState } from 'preact/hooks';
 import type { SimEvent } from '../sim/events';
-import type { DynastyDetail, LanguageInfo, MovementInfo, PaintingInfo, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
+import type { DynastyDetail, LanguageInfo, LegendInfo, MovementInfo, PaintingInfo, SiteDetail, NationDetail, NationInfo, PlantInfo, SettlementInfo, SpeciesInfo, TimelinePoint, WorldStats } from '../shared/protocol';
 import type { Nation } from '../render/gfx/nations';
 import type { GoalRecord, GoalState } from '../game/goals';
 import type { CosmosInfo } from '../sim/cosmos';
@@ -18,7 +18,7 @@ import type { AnchorState, Battle, CitizenLife, Museum, Witness } from '../sim/g
 import type { Vision } from '../sim/senses';
 import type { WhatIfMaps, WhatIfState } from '../sim/whatif';
 
-export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'tongues' | 'gallery' | 'goals' | 'system' | 'microscope' | 'archive' | 'ground';
+export type Panel = 'none' | 'chronicle' | 'tree' | 'help' | 'tools' | 'settings' | 'guide' | 'peoples' | 'graphs' | 'designer' | 'map' | 'section' | 'nation' | 'dynasty' | 'site' | 'tongues' | 'gallery' | 'legends' | 'goals' | 'system' | 'microscope' | 'archive' | 'ground';
 export type GroundTab = 'citizen' | 'anchor' | 'witness' | 'museum' | 'battle' | 'senses' | 'explore';
 export type MemoryTab = 'archive' | 'atlas' | 'braid' | 'records' | 'ancestry' | 'chronoscope' | 'forecasts' | 'whatif' | 'film';
 export type Overlay = 'none' | 'temp' | 'rain' | 'life' | 'people' | 'fossils' | 'nations' | 'fungal' | 'diversity' | 'oxygen';
@@ -114,6 +114,8 @@ export interface UIState {
   /** The gallery, when it has arrived (system E26), and the painting being looked at (its id, or -1 for the newest). */
   gallery: { paintings: PaintingInfo[]; movements: MovementInfo[] } | null;
   painting: number;
+  /** The stories told about old bones, when they have arrived (system E28). */
+  legends: LegendInfo[] | null;
   /** The Rosetta (system E23): when on, writing in the peoples' own scripts is shown with what each sign means. */
   rosetta: boolean;
   timeline: TimelinePoint[];
@@ -198,6 +200,7 @@ export const state: UIState = {
   languages: null,
   tongue: -1,
   rosetta: true,
+  legends: null,
   gallery: null,
   painting: -1,
   siteDetail: null,
@@ -345,6 +348,8 @@ export const actions = {
   drawBareMap: (_canvas: HTMLCanvasElement) => {},
   /** Play a nation's music for half a minute (by the simulation's nation id). */
   listen: (_id: number) => {},
+  /** Open the stories told about old bones. */
+  openLegends: () => {},
   /** Open the gallery of paintings. */
   openGallery: () => {},
   /** Open the languages of the world, at one of them if its name is given. */

@@ -20,6 +20,7 @@ import { clearedCover } from './plants';
 import { driftSpan } from './history/syntax';
 import { wearOf, type Script } from './history/script';
 import { ART_STYLES, against, styleOfEra, subjectOf, type Movement, type Painting } from './history/art';
+import { legendKind, legendName, tale, trueAnimal, type Legend } from './history/legend';
 import { stillCleared } from './history/decay';
 import { answer, damage, hazards, type CalamityKind, type Ground, type Rebuild, type Scar } from './history/calamity';
 import { NETWORKS, emptyHistory, type Link, type Culture, type Dynasty, type HistoryState, type Nation, type Person, type Role, type Wonder, type WonderKind } from './history/model';
@@ -356,6 +357,8 @@ export class Civilization {
       this.network(sim, rng, n, towns, y, year);
       // ---- golden ages begin, raise their monuments and end (system E10)
       this.flourish(sim, rng, n, towns, y, year);
+      // ---- its diggers find old bones and tell stories about them; its anatomists, later, say what they were (system E28)
+      this.bones(sim, n, towns, y, year);
       // ---- its painters paint what has happened, in the manner of their age and their school (system E26)
       this.art(sim, n, y, year);
       // ---- once it can write, it writes in some script: its own, or one it learned (system E23)
@@ -2119,6 +2122,94 @@ export class Civilization {
         if (first && ev.id >= 0) h.firstTongue = ev.id;
       }
     }
+  }
+
+  /**
+   * Stories told about old bones (system E28). A country that digs (every farming country does a little; one
+   * with a mine far more) now and then turns up the bones of an animal that died out before there were people:
+   * one that really lived near there. Its people explain them with a story, which is an event tied to that
+   * species' own place in the record. Much later, a country that has learned anatomy lays the bones out in
+   * order and says what the animal was: another event, caused by the story.
+   * (The luck in it comes from the country and the year, not from the stream that decides wars.)
+   */
+  private bones(sim: Simulation, n: Nation, towns: Settlement[], y: number, year: number): void {
+    const h = this.h, cr = sim.creatures, ev = sim.events.events;
+    const legends = (h.legends ??= []);
+    const luck = (k: number): number => (hash32(this.seedNum, n.id, Math.floor(year), k) % 100000) / 100000;
+    const lang = this.languageOf(n);
+    // ---- what the bones really were: a country with anatomy takes the stories it knows one at a time
+    if (n.know.way[SLOT_INDEX.get('anatomy')!]! >= 0 && luck(0x51) < 1 - Math.exp(-y / 70)) {
+      const mine = h.cultures[n.culture]!;
+      const L = legends.find((x) => !x.known && (x.nation === n.id || h.nations[x.nation]?.culture === mine.id || n.contacts.includes(x.nation)));
+      const sp = L ? cr.species[L.species] : undefined;
+      if (L && sp) {
+        // its nearest living kin: the living species whose line parts from this one's most recently
+        const line: number[] = [];
+        for (let a: (typeof cr.species)[number] | undefined = sp; a && line.length < 400; a = a.parent >= 0 ? cr.species[a.parent] : undefined) line.push(a.id);
+        let kin: (typeof cr.species)[number] | undefined, depth = Infinity;
+        for (const x of cr.species) {
+          if (x.extinctYear >= 0 || !x.name) continue;
+          for (let a: (typeof cr.species)[number] | undefined = x, steps = 0; a && steps < 400; a = a.parent >= 0 ? cr.species[a.parent] : undefined, steps++) { const at = line.indexOf(a.id); if (at >= 0) { if (at < depth) { depth = at; kin = x; } break; } }
+        }
+        const first = h.firstBones === undefined;
+        const town = this.settlements[L.settlement]!;
+        const text = `It was not what the story says: it was an animal, ${trueAnimal(sp.ref)}. Nothing like it is alive${kin ? `; its nearest living kin, a long way off, is ${kin.name}` : ''}.`;
+        const e = sim.emit({
+          type: 'bones-named', year, cellId: this.settlements[n.capital]!.cell, title: first ? `The first old bones understood: ${L.own}` : `${n.name} says what ${L.own} were`,
+          description: `The anatomists of ${n.name} have laid the bones from ${town.name}, the ones called ${L.own}, out in order on a floor, every joint against its neighbour. ${text} What the story got right is that it lived here, long before anyone. It is given a place in their books beside the living animals; this record knows it as ${sp.name}.`,
+          causes: [L.eventId, n.eventId].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: first ? 2 : 0, speciesIds: [sp.id, n.species], data: { nation: n.id, legend: L.id, species: sp.id },
+        });
+        L.known = { year, nation: n.id, text, eventId: e.id };
+        if (first) h.firstBones = e.id;
+      }
+    }
+    // ---- a find: more likely with a mine; no country keeps more than three stories, and the world a hundred and fifty
+    if (n.era < 1 || legends.length >= 150) return;
+    let mine = 0, dug: Settlement | undefined;
+    for (const st of towns) if (st.mine !== undefined) { mine++; dug ??= st; }
+    if (luck(0x52) >= 1 - Math.exp((-y * (1 + 2 * Math.min(2, mine))) / 1500)) return;
+    let have = 0;
+    for (const L of legends) if (L.nation === n.id) have++;
+    if (have >= 3) return;
+    const site = dug ?? towns[hash32(this.seedNum, n.id, Math.floor(year), 0x53) % towns.length]!;
+    // an animal that really lived near here, and died out long before anyone could have seen it
+    const p = sim.grid.pos, c = site.cell;
+    let best: (typeof cr.species)[number] | undefined, bestScore = -Infinity;
+    for (const sp of cr.species) {
+      if (sp.extinctYear < 0 || !sp.name || sp.peakRegions < 3 || year - sp.extinctYear < 20000) continue;
+      // (a story already told by this people, their kin or those they trade with is not told again as new)
+      if (legends.some((L) => L.species === sp.id && (L.nation === n.id || h.nations[L.nation]?.culture === n.culture || n.contacts.includes(L.nation)))) continue;
+      const home = sim.regions.centre[sp.home];
+      if (home === undefined) continue;
+      const near = p[c * 3]! * p[home * 3]! + p[c * 3 + 1]! * p[home * 3 + 1]! + p[c * 3 + 2]! * p[home * 3 + 2]!;
+      if (near < 0.8) continue;
+      // (the nearest, the most widespread in its day, and a little luck)
+      // (and the larger it was: big bones are the ones that get stories)
+      const score = near * 3 + Math.min(1, sp.peakRegions / 40) + 1.2 * sp.ref[G.Size]! + ((hash32(this.seedNum, n.id, sp.id, 0x54) % 1000) / 1000) * 0.6;
+      if (score > bestScore) { bestScore = score; best = sp; }
+    }
+    if (!best) return;
+    const kind = legendKind(best.ref);
+    // (a name no other story has: the first its kind allows that is free, then "of" the place)
+    let [head, modifier, means] = legendName(kind, hash32(this.seedNum, best.id, 0x57));
+    let own = compound(lang, head, modifier, year);
+    for (let k = 1; k < 4 && legends.some((L) => L.own === own); k++) { [head, modifier, means] = legendName(kind, hash32(this.seedNum, best.id, 0x57) + k); own = compound(lang, head, modifier, year); }
+    if (legends.some((L) => L.own === own)) own = `${own} of ${site.name}`;
+    const base = own;
+    for (let k = 2; k < 30 && legends.some((L) => L.own === own); k++) own = `${base}, the ${['second', 'third', 'fourth', 'fifth', 'sixth'][k - 2] ?? `${k}th`} of that name`;
+    const found = site.mine !== undefined ? `the mine at ${site.name}` : ['a well being sunk at', 'a field newly broken at', 'the clay pits of', 'a riverbank that fell in at'][hash32(this.seedNum, n.id, best.id, 0x55) % 4]! + ` ${site.name}`;
+    const id = legends.length;
+    const story = tale(kind, best.ref, own, means, found, hash32(this.seedNum, id, 0x56));
+    const first = h.firstLegend === undefined;
+    const gone = sim.extinctEventOf.get(best.id);
+    const e = sim.emit({
+      type: 'legend', year, cellId: site.cell, title: first ? `The first story of old bones: ${own}` : `${own}: a story of old bones at ${site.name}`,
+      description: story,
+      causes: [gone ?? -1, best.eventId, site.eventId, n.eventId].filter((x, i, a) => x !== undefined && x >= 0 && ev[x] && a.indexOf(x) === i).slice(0, 3), importance: first ? 2 : 0, speciesIds: [best.id, n.species], data: { nation: n.id, legend: id, species: best.id, kind },
+    });
+    const L: Legend = { id, year, nation: n.id, settlement: site.id, species: best.id, kind, own, means, found, tale: story, eventId: e.id };
+    legends.push(L);
+    if (first) h.firstLegend = e.id;
   }
 
   /**

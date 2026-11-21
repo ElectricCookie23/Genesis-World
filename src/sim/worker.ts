@@ -609,6 +609,9 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
           post({ type: 'memory', answer });
         }
         break;
+      case 'requestLegends':
+        if (sim) { const s = sim, h = s.civ.h; post({ type: 'legends', list: (h.legends ?? []).slice(-80).reverse().map((L) => ({ id: L.id, year: L.year, nation: h.nations[L.nation]?.name ?? '', town: s.civ.settlements[L.settlement]?.name ?? '', cell: s.civ.settlements[L.settlement]?.cell ?? -1, species: L.species, speciesName: s.creatures.species[L.species]?.name ?? '', extinctYear: s.creatures.species[L.species]?.extinctYear ?? -1, kind: L.kind, own: L.own, means: L.means, found: L.found, tale: L.tale, eventId: L.eventId, known: L.known ? { year: L.known.year, nation: h.nations[L.known.nation]?.name ?? '', text: L.known.text, eventId: L.known.eventId } : undefined })) }); }
+        break;
       case 'requestGallery':
         if (sim) post({ type: 'gallery', ...galleryList(sim.civ.h, sim.events.events, sim.civ.settlements, bodyOf(sim)) });
         break;
