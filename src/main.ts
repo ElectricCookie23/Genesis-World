@@ -307,6 +307,7 @@ async function boot(): Promise<void> {
       if (on) feasts.set(r.id, feastOf(on.light, r.hue));
     }
     scene.civ.setFeasts(feasts);
+    scene.towns?.setFeasts(feasts);
   }, 500);
   actions.showFestival = (nation, festival) => { shownFeast = { nation, festival, until: performance.now() + 20000 }; const r = state.realms.find((x) => x.id === nation); const cap = r ? state.settlements.find((t) => t.id === r.capital) : undefined; if (cap) { update({ panel: 'none' }); scene.cam.flyTo(grid.lon[cap.cell]!, grid.lat[cap.cell]!, 1.1); } };
   actions.openDiplomacy = () => { update({ panel: 'diplomacy' }); send({ type: 'requestDiplomacy' }); };

@@ -1,7 +1,8 @@
 // Cities (expansion section 2): the plan of a town, and what is built on it.
 import { describe, expect, it } from 'vitest';
 import { MAX_PLOTS, planCity, planShape, type CitySite } from '../src/render/gfx/cityplan';
-import { buildingFor, townPlots } from '../src/render/gfx/buildings';
+import { buildingFor, feastLit, townPlots } from '../src/render/gfx/buildings';
+import { feastOf } from '../src/sim/history/festival';
 
 const crossroads: CitySite = { seed: 11, roads: [0.3, 2.2, 3.9, 5.2], coast: 0, shore: Infinity, uphill: 1.2, slope: 0.05, school: false, port: false, capital: true, walls: [] };
 const harbour: CitySite = { seed: 23, roads: [2.6, 4.4], coast: 0.4, shore: 5, uphill: 3.3, slope: 0.5, school: true, port: true, capital: false, walls: [30, 140] };
@@ -45,6 +46,23 @@ describe('a town planted as a colony (E36)', () => {
     expect(skew(inland, crossroads.roads[0]!)).toBeLessThan(1e-6);
     // and a town that was not planted is laid out exactly as before
     expect(JSON.stringify(planCity({ ...harbour, planted: false }).plots)).toBe(JSON.stringify(planCity(harbour).plots));
+  });
+});
+
+describe('festival lights in a town seen from close by (E30)', () => {
+  it('a festival of lights burns brighter than an ordinary night, never more than fully lit, and the night of no lamps is nearly dark', () => {
+    for (const usual of [0.15, 0.37, 0.55]) {
+      expect(feastLit(usual)).toBe(usual);
+      for (const kind of ['lanterns', 'bonfires', 'floating'] as const) {
+        const lit = feastLit(usual, feastOf(kind, 0.3));
+        expect(lit).toBeGreaterThan(usual * 1.3);
+        expect(lit).toBeLessThanOrEqual(1);
+      }
+      expect(feastLit(usual, feastOf('lights-out', 0.3))).toBeLessThan(usual * 0.1);
+    }
+    // each kind of festival has a light of its own colour, and the dark one has none
+    expect(feastOf('bonfires', 0.3).colour).not.toEqual(feastOf('floating', 0.3).colour);
+    expect(feastOf('lights-out', 0.3).colour).toBeNull();
   });
 });
 

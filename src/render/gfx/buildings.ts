@@ -16,7 +16,7 @@ import type { CellSnapshot, SettlementInfo } from '../../shared/protocol';
 import { EXAG, uHazeTint, uMoonDir, uSeaKm, uSunDir, uTime } from '../common';
 import { secondSun } from '../lighting';
 import { uLook } from './look';
-import { settlementSize, type Nation } from './nations';
+import { settlementSize, type Nation, type Unrest } from './nations';
 import { MAX_PLOTS, buildingSites, planCity, stageOf, watchable, type CityPlan, type CitySite, type District, type Site } from './cityplan';
 import type { PlanetData } from './planetdata';
 import type { GroundSampler } from './ground';
@@ -72,6 +72,14 @@ export const CORDON_SHOWN = 6;
 /** The barriers are of rough dark timber whatever the town is built of, and the watch huts burn a plain yellow lamp. */
 const CORDON_TIMBER: readonly number[] = [0.3, 0.22, 0.15];
 const CORDON_LAMP: readonly number[] = [1.0, 0.82, 0.4];
+/**
+ * How brightly a town's windows burn while its country keeps a festival (system E30): brighter for a festival of
+ * lights (never more than fully lit), and almost dark on the night when no lamp is lit. Without a festival, as usual.
+ */
+export function feastLit(usual: number, feast?: { glow: number; dark: number }): number {
+  if (!feast) return usual;
+  return Math.max(0, Math.min(1, usual * feast.glow)) * (1 - 0.9 * feast.dark);
+}
 export type Building = (typeof BUILDINGS)[number];
 
 type V3 = [number, number, number];
@@ -849,6 +857,17 @@ export class Towns {
     return made;
   }
 
+  /** The festivals being kept now, by country (system E30). */
+  private feasts = new Map<number, NonNullable<Unrest['feast']>>();
+  private feastKey = '';
+  setFeasts(byNation: Map<number, NonNullable<Unrest['feast']>>): void {
+    const key = [...byNation.entries()].map(([id, f]) => `${id}:${f.glow}:${f.dark}:${f.colour ? f.colour.join('/') : ''}`).sort().join(',');
+    if (key === this.feastKey) return;
+    this.feastKey = key;
+    this.feasts = byNation;
+    this.dirty = true;
+  }
+
   /** Settlements, the nations they belong to, and the sea lanes (chains of cells) boats follow. */
   setTowns(settlements: TownInfo[], nations: Nation[], lanes: number[][]): void {
     this.settlements = settlements;
@@ -944,12 +963,16 @@ export class Towns {
         if (c.dot(focus) < reachCos) continue;
         const nat = this.nationOf.get(st.id);
         const tint = nat ? nat.signature : [0.6, 0.4, 0.3];
-        const light = nat ? nat.color : [1.0, 0.5, 0.14];
+        const festival = st.ruined < 0 && st.nation !== undefined && st.nation >= 0 ? this.feasts.get(st.nation) : undefined;
+        const light = festival && festival.colour ? festival.colour : nat ? nat.color : [1.0, 0.5, 0.14];
         const size = settlementSize(left ? st.peak ?? st.pop : st.pop);
         east.set(-c.z, 0, c.x).normalize();
         north.crossVectors(c, east);
         // about half the windows at most: with four in five lit and bright, every tower wore a wide pink halo at night
-        const lit = left ? 0 : st.tech < 0.3 ? 0.15 : Math.min(0.55, 0.22 + 0.3 * st.tech);
+        // (system E30) a town of a country keeping a festival is lit for it from close by as well as from orbit: its
+        // windows burn brighter and in the festival's colour, or on the night of no lamps hardly at all
+        const feast = left ? undefined : festival;
+        const lit = left ? 0 : feastLit(st.tech < 0.3 ? 0.15 : Math.min(0.55, 0.22 + 0.3 * st.tech), feast);
         // What gets built follows how many people there are as well as what they know: a few hundred farmers with
         // advanced neighbours do not raise tower blocks and domes. (Seen on a real GPU: a town of 503 drawn as a
         // modern skyline.) Small places stay huts, houses and a hall whatever the age.
