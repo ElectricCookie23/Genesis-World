@@ -4,7 +4,6 @@ Date: 2026-11-21, written by the Mac session at the owner's request. Either sess
 
 ## 1. Breaks a promise of the game or blocks play
 
-1. Three of the four animal sense views cannot be reached in a normal world. On six seeds no species finds its way by echoes or by the electric sense, none has sharp sight, and only one (on `ember-tide-314`) senses warmth. [GPU_REVIEW.md note 5]
 2. After history begins, the same seed still gives a different history depending on when the player changes speed or presses anything. Before history, a slow look of more than two thousand years or any Experiment also changes the world for good; the build session calls both "by design", so this needs the owner's ruling. [HANDOFF.md "one seed is one world until its history begins"; GPU_REVIEW.md notes 3 and 6]
 
 ## 2. Looks wrong on screen
@@ -33,7 +32,6 @@ Date: 2026-11-21, written by the Mac session at the owner's request. Either sess
 
 ## 4. Simulation balance
 
-22. After a hundred million years most animals are eyeless and cold-blooded, and the thinking species that builds towns sees poorly or not at all. Either the sense genes are not rewarded or they start too low and drift too slowly. [GPU_REVIEW.md note 5]
 23. History runs very fast: camps to engines takes about 4,850 years, and Engines to the Age Beyond took 600 years. [GPU_REVIEW.md note 1 open point (e), note 3 and note 6] Build session, 2026-11-28: the length of a history is as decided (DECISIONS 79: farming to orbit in five to seven thousand years, about four minutes at the History speed; at 10x, one year a second, the same history takes over an hour). Making it longer means retuning every rate in the history engine and its tests; it needs the owner to ask for it.
 24. The sky varies less than it looks: the kind of star changes nothing in the climate and automatic exposure hides most of its brightness, a world never has more than two moons, and old saves keep their moon count while the moon's size and path now follow the seed. [GPU_REVIEW.md note 2, open points (b), (c) and (e)]
 25. A history run through at Epoch speed with the hold lifted (15,000 years a step) has no campaigns, plagues, secrets or alliance wars: the whole of history is one step there, and only its turning points are kept. (Corrected 2026-11-28 by the build session: this item used to say the same of a skip to an age, which was wrong. A skip to an age walks history in 25-year steps, taken a year at a time, and has all of them: measured, see HANDOFF.md "The build session's answer".) [HANDOFF.md "Build session, 2026-11-21", open item (6)]
@@ -55,6 +53,8 @@ Date: 2026-11-21, written by the Mac session at the owner's request. Either sess
 
 ## Fixed in code, not yet confirmed on a GPU
 
+- **The sense views and eyeless worlds** (were 1 and 22). 2026-11-28, build session (DECISIONS 206): eyes and warm blood now come by degrees and pay for themselves, and which sense an animal lives by depends on how it lives. Over sixteen world-runs in node (`scripts/senses.ts`): eyes nearly universal, sharp sight in fourteen worlds, the town builders sharp- or fair-sighted in eleven, echo and electric animals in about half the worlds, warm-blooded species in all. **Still not reached: the warmth view** (no cold-blooded night hunter with weak eyes in sixteen runs). Every seed's world has changed with this. To check on the Mac: on a few seeds at the dawn of history, look through the eyes of the builders and of two or three other animals, and say whether sharp sight, echoes and the electric sense each turn up without the designer.
+
 - **A skip to an age that never ended** (was 3). 2026-11-28, build session: the skip now stops by itself when the people die out, settle into the long peace short of the age, or have had forty thousand years of history without reaching it, and a notice says which (DECISIONS 201). To check on the Mac: skip to the Age Beyond on a few seeds and see that each either arrives or stops with a sentence.
 - **A 200 My fast-forward that ended with no towns** (was 50). The fix session found the cause on 2026-11-21 (the worker died at the first large eruption near a young town during a skip through history, and the world started again from nothing) and fixed it; the build session agrees that this was it and found no other place with the same fault.
 
@@ -70,7 +70,7 @@ Date: 2026-11-21, written by the Mac session at the owner's request. Either sess
 
 ## Confirmed fixed since this list was written
 
-- **One seed after time at 1x** (was 35). 2026-11-22, live site, WebGPU: history began at 121.230 My with 2 towns and 41 species in all four ways of getting there, including 25 seconds at 1x first. Item 2 (differences after history begins) stays open.
+- **One seed after time at 1x** (was 35). (The year below is the old world's: every seed's world changed on 2026-11-28 with the senses rebalance, DECISIONS 206. The stepping that makes one seed one world was not touched by it.) 2026-11-22, live site, WebGPU: history began at 121.230 My with 2 towns and 41 species in all four ways of getting there, including 25 seconds at 1x first. Item 2 (differences after history begins) stays open.
 - **Hitches with time at 1x** (was 36). 2026-11-22: in the largest town over 20 s, 15 frames over 33 ms where there were 87, 99th percentile 58 ms where it was 84, worst 67 ms where it was 117, none over 100 ms. Running time now costs 0 to 3 fps where it cost 3 to 7. The frame rates themselves (item 18) are unchanged.
 
 ## Status unclear

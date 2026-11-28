@@ -1283,7 +1283,7 @@ export class Simulation {
       const r = this.lifeRng;
       for (let i = 0; i < GENE_COUNT; i++) g[i] = 0.12 + r.next() * 0.16;
       g[G.Size] = 0.08; g[G.LimbType] = 0.3; g[G.LimbPairs] = 0.2; g[G.LimbLength] = 0.2; g[G.Tail] = 0.5; g[G.Head] = 0.45;
-      g[G.Diet] = 0.03; g[G.Water] = 1; g[G.WarmBlood] = 0.05; g[G.Metabolism] = 0.3; g[G.EyeCount] = 0; g[G.EyeSize] = 0.05; g[G.Sight] = 0.05;
+      g[G.Diet] = 0.03; g[G.Water] = 1; g[G.WarmBlood] = 0.05; g[G.Metabolism] = 0.3; g[G.EyeCount] = 0.06; g[G.EyeSize] = 0.1; g[G.Sight] = 0.1;
       g[G.Offspring] = 0.85; g[G.Care] = 0.02; g[G.Lifespan] = 0.2; g[G.Maturity] = 0.1; g[G.HeatTol] = 0.5; g[G.ColdTol] = 0.5;
       g[G.Intelligence] = 0.02; g[G.Armor] = 0.02; g[G.Horn] = 0; g[G.Glow] = 0.03; g[G.Echo] = 0.05; g[G.Electric] = 0.05; g[G.Venom] = 0.02;
       g[G.Toxicity] = 0.03; g[G.Insulation] = 0; g[G.Aggression] = 0.1; g[G.Hue] = r.next(); g[G.Hue2] = r.next();

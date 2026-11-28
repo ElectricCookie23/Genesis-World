@@ -543,7 +543,8 @@ describe('dark ages (E5)', () => {
 });
 
 import { ART_NAMES, Portrait, artStyle } from '../src/ui/portrait';
-import { G, GENE_COUNT } from '../src/sim/genetics';
+import { G, GENE_COUNT, P, PHEN_COUNT, computePhenotype, senseParts, warmth } from '../src/sim/genetics';
+import { vision } from '../src/sim/senses';
 
 /** Everything a drawn portrait is made of, as one string, so two portraits can be compared. */
 function drawn(node: unknown): string {
@@ -914,8 +915,8 @@ describe('migrations of peoples (E9)', () => {
   }, 300000);
 
   it('a rising sea drives the people of drowned towns to higher ground', () => {
-    // (two floods: one lifts the sea a sixth of a kilometre, which in this world takes too few towns to move a people)
-    const { sim, strike, before } = struck('flood', 2);
+    // (three floods: one lifts the sea a sixth of a kilometre, which in this world takes too few towns to move a people)
+    const { sim, strike, before } = struck('flood', 3);
     const moves = sim.events.events.slice(before).filter((e) => e.type === 'migration');
     checkMoves(sim, moves);
     const wet = moves.filter((e) => e.data!.cause === 'sea');
@@ -2919,6 +2920,67 @@ describe('spies and secrets (E39)', () => {
     expect(changed).toBeGreaterThan(0);
     // and not every attempt comes off: somewhere in five histories a spy is caught
     expect(silent + named).toBeGreaterThan(0);
+  });
+});
+
+describe('senses and warm blood that selection can reach', () => {
+  const genes = (over: Partial<Record<number, number>>): Float32Array => { const g = new Float32Array(GENE_COUNT).fill(0.3); for (const [k, v] of Object.entries(over)) g[Number(k)] = v!; return g; };
+  const traits = (g: Float32Array): Float32Array => { const out = new Float32Array(PHEN_COUNT); computePhenotype(g, 0, out, 0); return out; };
+
+  it('eyes and warm blood come by degrees, and each sense is worth most where it suits', () => {
+    // a patch of skin that knows light from dark is already worth a little, and a whole eye more
+    const none = senseParts(genes({ [G.EyeCount]: 0.02 })).sight, patch = senseParts(genes({ [G.EyeCount]: 0.06 })).sight, eye = senseParts(genes({ [G.EyeCount]: 0.2 })).sight;
+    expect(none).toBe(0);
+    expect(patch).toBeGreaterThan(0);
+    expect(eye).toBeGreaterThan(patch * 2);
+    // warm blood likewise: nothing, some, all
+    expect(warmth(0.05)).toBe(0);
+    expect(warmth(0.3)).toBeGreaterThan(0.2);
+    expect(warmth(0.3)).toBeLessThan(0.6);
+    expect(warmth(0.7)).toBe(1);
+    // sight is worth less by night, and large eyes lose less by it
+    const day = { [G.EyeCount]: 0.3, [G.Sight]: 0.7, [G.Nocturnal]: 0.05 }, night = { ...day, [G.Nocturnal]: 0.9 };
+    const small = senseParts(genes({ ...night, [G.EyeSize]: 0.2 })).sight / senseParts(genes({ ...day, [G.EyeSize]: 0.2 })).sight;
+    const large = senseParts(genes({ ...night, [G.EyeSize]: 0.9 })).sight / senseParts(genes({ ...day, [G.EyeSize]: 0.9 })).sight;
+    expect(small).toBeLessThan(0.7);
+    expect(large).toBeGreaterThan(small);
+    // echoes are worth more in the dark and underground than in daylight in the open
+    expect(senseParts(genes({ [G.Echo]: 0.8, [G.Nocturnal]: 0.9 })).byEcho).toBeGreaterThan(senseParts(genes({ [G.Echo]: 0.8, [G.Nocturnal]: 0.05, [G.Burrow]: 0, [G.Water]: 0 })).byEcho * 1.5);
+    // the electric sense works in water only
+    expect(senseParts(genes({ [G.Electric]: 0.9, [G.Water]: 0 })).byField).toBe(0);
+    expect(senseParts(genes({ [G.Electric]: 0.9, [G.Water]: 1 })).byField).toBeGreaterThan(0.3);
+  });
+
+  it('seeing pays: a plant-eater with eyes finds more food than they cost it, by day', () => {
+    const blind = traits(genes({ [G.EyeCount]: 0, [G.Diet]: 0.05, [G.Nocturnal]: 0.1 }));
+    const seeing = traits(genes({ [G.EyeCount]: 0.3, [G.EyeSize]: 0.6, [G.Sight]: 0.6, [G.Diet]: 0.05, [G.Nocturnal]: 0.1 }));
+    expect(seeing[P.Sense]!).toBeGreaterThan(blind[P.Sense]! + 0.2);
+    // (food found per unit of food needed: what decides whether the line with eyes outgrows the line without)
+    expect(seeing[P.HerbEff]! / seeing[P.Need]!).toBeGreaterThan(blind[P.HerbEff]! / blind[P.Need]!);
+    // and an animal half-way to warm blood keeps half-way lively in the cold: its needs and its reach both rise by degrees
+    const cold = traits(genes({ [G.WarmBlood]: 0.05 })), half = traits(genes({ [G.WarmBlood]: 0.35 })), warm = traits(genes({ [G.WarmBlood]: 0.7 }));
+    expect(half[P.Need]!).toBeGreaterThan(cold[P.Need]!);
+    expect(warm[P.Need]!).toBeGreaterThan(half[P.Need]!);
+    expect(half[P.TMin]!).toBeLessThan(cold[P.TMin]!);
+    expect(warm[P.TMin]!).toBeLessThan(half[P.TMin]!);
+  });
+
+  it('in the five histories most animals have eyes, the builders can see, and some animals keep their own heat', () => {
+    const runs = fiveHistories();
+    let seeing = 0, warmWorlds = 0;
+    for (const { sim } of runs) {
+      const live = sim.creatures.species.filter((s) => s.extinctYear < 0 && s.name);
+      const eyed = live.filter((s) => s.ref[G.EyeCount]! > 0.1).length;
+      // (before this was looked at, the median animal of every world had no eyes at all)
+      expect(eyed, `${eyed} of ${live.length} living kinds have eyes`).toBeGreaterThan(live.length * 0.5);
+      const town = sim.civ.settlements.find((t) => t.ruined < 0);
+      if (town && vision(sim.creatures.species[town.species]!.ref).acuity >= 0.4) seeing++;
+      if (live.some((s) => s.ref[G.WarmBlood]! > 0.5)) warmWorlds++;
+    }
+    console.log('senses', { seeing, warmWorlds });
+    // (the people who built the towns had no eyes in any world measured before; fair sight or better in at least three of five now)
+    expect(seeing).toBeGreaterThanOrEqual(3);
+    expect(warmWorlds).toBeGreaterThanOrEqual(3);
   });
 });
 

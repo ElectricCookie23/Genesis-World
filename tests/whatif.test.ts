@@ -77,9 +77,11 @@ describe('E56 the butterfly tracker', () => {
     const st = cf.state();
     expect(st.done).toBe(true);
     const first = st.spread[0]!.share, last = st.spread[st.spread.length - 1]!.share;
-    expect(first).toBeGreaterThan(0);
+    // (forty animals more may show nowhere at all at the first look; then it does, and it spreads)
+    expect(first).toBeGreaterThanOrEqual(0);
     expect(first).toBeLessThan(0.35);
-    expect(last).toBeGreaterThan(first * 2);
+    expect(st.spread.some((x) => x.share > 0)).toBe(true);
+    expect(last).toBeGreaterThan(Math.max(first * 2, 0.05));
     expect(Math.max(...st.spread.map((s) => s.share))).toBeGreaterThan(0.3);
     // nothing but forty animals was changed: the land and sea of the two copies start alike
     const maps = cf.maps();

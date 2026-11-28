@@ -41,7 +41,40 @@ const NEUTRAL_WEIGHT: Partial<Record<number, number>> = {
 export const GENE_WEIGHT = new Float32Array(GENE_COUNT).fill(1);
 for (const k in NEUTRAL_WEIGHT) GENE_WEIGHT[Number(k)] = NEUTRAL_WEIGHT[Number(k)]!;
 /** Slow-changing body-plan genes. */
-const SLOW = new Set<number>([G.LimbType, G.PatternType, G.WarmBlood, G.LimbPairs, G.Segments, G.Metamorphosis]);
+// (warm blood was one of them while it was all or nothing; now that it comes by degrees it changes as other genes do)
+const SLOW = new Set<number>([G.LimbType, G.PatternType, G.LimbPairs, G.Segments, G.Metamorphosis]);
+
+/** How far an animal keeps its own heat, 0 (takes the day's warmth) .. 1 (burns food to stay warm), from its gene. */
+export function warmth(gene: number): number {
+  return Math.max(0, Math.min(1, (gene - 0.1) / 0.5));
+}
+
+/**
+ * What each of an animal's senses is worth to it, from its genes at offset `o`: sight (by day, in clear air), echoes,
+ * the electric sense (in water only), smell and hearing. Each is 0 when it has none of that sense. The traits are
+ * computed from these, and so is the view the page shows "through its eyes": the two must agree about which
+ * sense an animal lives by.
+ */
+export function senseParts(g: ArrayLike<number>, o = 0): { eyes: number; echo: number; field: number; sight: number; byEcho: number; byField: number; bySmell: number; byEar: number } {
+  const sat = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
+  const water = g[o + G.Water]!, night = g[o + G.Nocturnal]!;
+  // Eyes grow into use: a patch of skin that knows light from dark is already worth a little. They used to do
+  // nothing until there was a whole eye, and then cost more than they returned, so after a hundred million years
+  // most animals had none (and nor did the people who built the towns).
+  const eyes = sat((g[o + G.EyeCount]! - 0.02) / 0.1) * (g[o + G.EyeSize]! * 0.5 + g[o + G.Sight]! * 0.5);
+  // Sound and electric senses grow into use too: they used to do nothing at all below 0.6 and cost nothing either,
+  // so no lineage ever had a reason to cross that line (none did, in whole histories).
+  const grown = (x: number): number => sat((x - 0.05) / 0.45) * (0.4 + 0.6 * x);
+  const echo = grown(g[o + G.Echo]!);
+  const field = grown(g[o + G.Electric]!) * water;
+  // sight is the richest sense there is in daylight and clear air, and worth less in the dark, under water and underground
+  // (large eyes gather what light there is: a night animal with big eyes loses half as much by the dark as one with small)
+  const sight = eyes * 0.9 * (1 - night * (0.6 - 0.3 * g[o + G.EyeSize]!)) * (1 - water * 0.15) * (1 - g[o + G.Burrow]! * 0.3);
+  // echoes carry a stone's throw where sight carries to the horizon: they are worth most where there is little to see
+  // (by night, underground, in water), and the electric sense reaches less far still
+  const dark = Math.max(night, g[o + G.Burrow]!, water * 0.5);
+  return { eyes, echo, field, sight, byEcho: echo * (0.3 + 0.3 * dark), byField: field * (0.4 + 0.2 * night), bySmell: g[o + G.Smell]! * 0.25, byEar: g[o + G.Hearing]! * 0.22 };
+}
 
 export function geneDistance(a: Float32Array, ao: number, b: Float32Array, bo: number): number {
   let s = 0;
@@ -110,17 +143,18 @@ export function computePhenotype(g: Float32Array, o: number, out: Float32Array, 
   }
   swim *= 0.6 + 0.4 * g[o + G.Tail]!;
   const landUse = sat((1 - water) * 1.15 - 0.05);
-  const warm = g[o + G.WarmBlood]! > 0.5 ? 1 : 0;
+  // Warm blood comes by degrees (see `warmth`): it used to be all or nothing at half the gene's range, with no
+  // effect at all below that, so no lineage ever had a reason to move toward it (none got there, in whole histories).
+  const warm = warmth(g[o + G.WarmBlood]!);
   const metab = 0.5 + g[o + G.Metabolism]!;
   const brain = g[o + G.Intelligence]!;
-  const eyes = g[o + G.EyeCount]! > 0.1 ? g[o + G.EyeSize]! * 0.5 + g[o + G.Sight]! * 0.5 : 0;
-  // Sound and electric senses grow into use: they used to do nothing at all below 0.6 and cost nothing either, so no
-  // lineage ever had a reason to cross that line (none did, in whole histories).
-  const echo = sat((g[o + G.Echo]! - 0.2) / 0.4) * g[o + G.Echo]!;
-  const elec = sat((g[o + G.Electric]! - 0.2) / 0.4) * g[o + G.Electric]! * water;
-  const night = g[o + G.Nocturnal]!;
-  // eyes work by day; smell, hearing, echolocation and electric sense work any time
-  const sense = sat(0.08 + eyes * 0.55 * (1 - night * 0.6) + g[o + G.Smell]! * 0.25 + g[o + G.Hearing]! * 0.22 + echo * 0.35 + elec * 0.3 + brain * 0.15);
+  // eyes work by day; smell, hearing, echolocation and electric sense work any time. An animal finds its way mostly
+  // by its best sense, and the others add half of what they would alone: so a lineage is pulled toward one sense
+  // that suits how it lives (eyes by day, echoes by night, the electric sense under water) instead of a little of each.
+  const parts = senseParts(g, o);
+  const eyes = parts.eyes, echo = parts.echo, elec = parts.field, night = g[o + G.Nocturnal]!;
+  const bestSense = Math.max(parts.sight, parts.byEcho, parts.byField, parts.bySmell, parts.byEar);
+  const sense = sat(0.08 + bestSense + 0.5 * (parts.sight + parts.byEcho + parts.byField + parts.bySmell + parts.byEar - bestSense) + brain * 0.15);
   const baseSpeed = Math.pow(metres, 0.3) * (0.45 + 0.55 * limbLen) * metab;
   const speed = baseSpeed * Math.max(swim * water, walk * (1 - water), fly * 1.6) * (1 - g[o + G.Armor]! * 0.45);
   // every trait costs energy, so nothing can be maxed for free
@@ -129,11 +163,11 @@ export function computePhenotype(g: Float32Array, o: number, out: Float32Array, 
   const upkeep = 1
     + brain * 0.5 + brain * brain * 1.2 * (1 - 0.5 * g[o + G.Sociality]!) + g[o + G.Armor]! * 0.5 + g[o + G.Horn]! * 0.25 + g[o + G.Ornament]! * 0.3 + g[o + G.Glow]! * 0.2
     + g[o + G.Venom]! * 0.3 + g[o + G.Toxicity]! * 0.3 + g[o + G.ToxinResist]! * 0.2 + g[o + G.Insulation]! * 0.15
-    + eyes * 0.3 + echo * 0.3 + elec * 0.2 + g[o + G.Smell]! * 0.1 + g[o + G.Hearing]! * 0.1 + fly * 0.3 + g[o + G.ColorChange]! * 0.2
+    + eyes * 0.12 + echo * 0.2 + elec * 0.2 + g[o + G.Smell]! * 0.1 + g[o + G.Hearing]! * 0.1 + fly * 0.3 + g[o + G.ColorChange]! * 0.2
     + g[o + G.Care]! * 0.25;
   // how much it can eat depends on body and metabolism; how much it must eat also depends on upkeep
-  const forage = Math.pow(mass, 0.75) * metab * (warm ? 1.9 : 1);
-  const need = Math.pow(mass, 0.75) * metab * (warm ? 2.5 : 1) * upkeep;
+  const forage = Math.pow(mass, 0.75) * metab * (1 + 0.9 * warm);
+  const need = Math.pow(mass, 0.75) * metab * (1 + 1.5 * warm) * upkeep;
   const diet = g[o + G.Diet]!;
   const reach = sat(0.15 + g[o + G.Neck]! * 0.5 + size * 0.5 + fly * 0.4);
   out[p + P.Mass] = mass;
@@ -146,7 +180,7 @@ export function computePhenotype(g: Float32Array, o: number, out: Float32Array, 
   // minds pay off most in company: shared knowledge finds more food
   const wits = 1 + brain * 0.9 + brain * g[o + G.Sociality]! * 0.6;
   // good senses find food as well as prey
-  out[p + P.HerbEff] = Math.pow(1 - diet, 1.4) * (0.75 + 0.25 * g[o + G.Head]!) * wits * (0.92 + 0.16 * sense);
+  out[p + P.HerbEff] = Math.pow(1 - diet, 1.4) * (0.75 + 0.25 * g[o + G.Head]!) * wits * (0.8 + 0.4 * sense);
   out[p + P.MeatEff] = Math.pow(diet, 0.8) * 1.6 * wits;
   out[p + P.ScavEff] = (1 - Math.abs(diet - 0.55) * 1.6) * (0.3 + 0.7 * g[o + G.Smell]!) * (1 - g[o + G.Aggression]! * 0.4);
   out[p + P.Sense] = sense;

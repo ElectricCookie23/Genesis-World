@@ -13,7 +13,8 @@ function world(seed: string, years: number): Simulation {
 }
 
 describe('the record', () => {
-  const sim = world('amber-reef-101', 4000);
+  // (a world whose first five thousand years have several countries, wars between them and a city or two)
+  const sim = world('ember-moss-404', 5000);
   const h = sim.civ.h;
   const links = (ps: Piece[]) => ps.filter((p): p is { text: string; to: { kind: never; id: number } } => typeof p === 'object' && 'to' in p);
 

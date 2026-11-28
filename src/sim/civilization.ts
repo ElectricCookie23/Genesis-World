@@ -566,7 +566,9 @@ export class Civilization {
           foe.fatigue = sat(foe.fatigue + 0.22);
           this.woe(foe, 'war', warEvent, year, 0.09);
           const other = this.fine ? this.credit(sim, rng, foe, warEvent, `{name} stood against them for ${foe.name}.`, 'general', year) : null;
-          if (general && other && general.id !== other.id) { general.rival = other.id; other.rival = general.id; }
+          // (a general's rival is the first they faced: one who leads a second war keeps the old one, so that two
+          // people are each other's rival or neither is)
+          if (general && other && general.id !== other.id && general.rival < 0 && other.rival < 0) { general.rival = other.id; other.rival = general.id; }
           // the stronger side sometimes keeps what it took: this is how countries grow past what they can hold
           const warlike = this.h.cultures[n.culture]!.war;
           if (o.species === st.species && n.pop > foe.pop * 0.5 && n.tech >= foe.tech - 0.06 && rng.chance(0.25 + 0.35 * warlike)) {
@@ -1128,7 +1130,12 @@ export class Civilization {
         ev.description += ` ${claimant.name} claims the country${crowned ? ` against ${crowned.name}` : ''}.`;
         ev.data = { ...ev.data, person: claimant.id };
         this.note(claimant, ev.id);
-        if (crowned) { claimant.rival = crowned.id; crowned.rival = claimant.id; this.note(crowned, ev.id); }
+        if (crowned) {
+          // (if the crowned head had a rival from the wars of their youth, that one is a rival no longer)
+          const old = h.people[crowned.rival];
+          if (old && old.rival === crowned.id) old.rival = -1;
+          claimant.rival = crowned.id; crowned.rival = claimant.id; this.note(crowned, ev.id);
+        }
       }
       for (const st of others) {
         st.pop *= 0.8;

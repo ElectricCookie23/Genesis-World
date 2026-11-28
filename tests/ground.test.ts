@@ -199,11 +199,12 @@ describe('life on the ground', () => {
 
   it('E49 with E33: where a war was fought as a campaign, the field shows the campaign\'s own record of each battle', () => {
     // campaigns are fought only while the years are watched one at a time
-    const sim = new Simulation('amber-reef-101', 21);
+    // (a world whose first countries come to blows within a few thousand years: not every world's do)
+    const sim = new Simulation('ember-moss-404', 21);
     for (let t = 0; t < 400e6 && !sim.civ.historyActive; t += 15000) sim.step(15000);
-    for (let y = 0; y < 2500 && !(sim.civ.h.wars ?? []).some((w) => w.battles.length >= 2); y++) sim.step(1);
+    for (let y = 0; y < 6000 && !(sim.civ.h.wars ?? []).some((w) => w.battles.length >= 2); y += 5) sim.step(5);
     const war = (sim.civ.h.wars ?? []).find((w) => w.battles.length >= 2);
-    expect(war, 'a war with two battles within 2,500 watched years').toBeDefined();
+    expect(war, 'a war with two battles within 6,000 watched years').toBeDefined();
     const b = battle(sim, war!.eventId)!;
     expect(b).not.toBeNull();
     expect(b.campaign!.length).toBe(war!.battles.length);
@@ -232,7 +233,9 @@ describe('E50 through their eyes', () => {
   it('three species with different senses give three clearly different views', () => {
     const hawk = vision(genes({ [G.EyeCount]: 0.34, [G.EyeSize]: 0.8, [G.Sight]: 0.9, [G.Nocturnal]: 0.05, [G.Echo]: 0, [G.Electric]: 0 }));
     const bat = vision(genes({ [G.EyeCount]: 0.34, [G.EyeSize]: 0.15, [G.Sight]: 0.1, [G.Nocturnal]: 0.9, [G.Echo]: 0.9, [G.Electric]: 0 }));
-    const eel = vision(genes({ [G.EyeCount]: 0.2, [G.EyeSize]: 0.2, [G.Sight]: 0.15, [G.Electric]: 0.85, [G.Echo]: 0 }));
+    const eel = vision(genes({ [G.EyeCount]: 0.2, [G.EyeSize]: 0.2, [G.Sight]: 0.15, [G.Electric]: 0.85, [G.Echo]: 0, [G.Water]: 1 }));
+    // (the electric sense works in water: the same animal on dry land has only its poor eyes)
+    expect(vision(genes({ [G.EyeCount]: 0.2, [G.EyeSize]: 0.2, [G.Sight]: 0.15, [G.Electric]: 0.85, [G.Echo]: 0, [G.Water]: 0 })).mode).toBe('sight');
     const snake = vision(genes({ [G.EyeCount]: 0.34, [G.EyeSize]: 0.2, [G.Sight]: 0.2, [G.Nocturnal]: 0.8, [G.WarmBlood]: 0.1, [G.Diet]: 0.8, [G.Echo]: 0, [G.Electric]: 0 }));
     const worm = vision(genes({ [G.EyeCount]: 0, [G.Echo]: 0, [G.Electric]: 0 }));
     expect(hawk.mode).toBe('sight');

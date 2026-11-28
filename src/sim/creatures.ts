@@ -1,6 +1,6 @@
 // Creature populations ("cohorts"): groups of one species in one region sharing a genome.
 // Cohorts eat, get eaten, starve, freeze, breed, wander and mutate. Selection is whatever happens to them.
-import { G, GENE_COUNT, HUNTER_DIET, P, PHEN_COUNT, computePhenotype, geneDistance, mutateInto } from './genetics';
+import { G, GENE_COUNT, HUNTER_DIET, P, PHEN_COUNT, computePhenotype, geneDistance, mutateInto, warmth } from './genetics';
 import type { RNG } from './rng';
 import type { Regions } from './regions';
 import type { Plants } from './plants';
@@ -284,10 +284,11 @@ export class Creatures {
         if (cold > 0) cold *= 1 - 0.45 * sat((genome[g + G.Burrow]! - 0.1) * 5) * sat((0.6 - genome[g + G.Metabolism]!) * 5);
         const st = Math.max(0, cold, (t - phen[p + P.TMax]!) / 10);
         stress[i] = st;
-        const warm = genome[g + G.WarmBlood]! > 0.5;
-        let activity = warm ? 1 : 0.25 + 0.75 * sat((t + 1) / 19);
+        // (an animal that keeps its own heat is as lively in the cold as in the sun; by degrees: see `warmth`)
+        const warm = warmth(genome[g + G.WarmBlood]!);
+        let activity = warm + (1 - warm) * (0.25 + 0.75 * sat((t + 1) / 19));
         // big or warm-blooded bodies need more oxygen
-        const o2need = genome[g + G.Size]! * 0.6 + (warm ? 0.3 : 0) + phen[p + P.Fly]! * 0.3;
+        const o2need = genome[g + G.Size]! * 0.6 + warm * 0.3 + phen[p + P.Fly]! * 0.3;
         activity *= sat(0.75 + oxyLimit * 0.6 - o2need * (1 - oxyLimit) * 1.5);
         // rich air carries big bodies: above a fifth oxygen, the larger an animal is the more it gains, so an age of
         // rich air is an age of giants (thin air only held bodies back before; rich air did nothing)
@@ -383,7 +384,9 @@ export class Creatures {
           if (hueGap > 0.5) hueGap = 1 - hueGap;
           const blend = Math.max(0, 1 - hueGap * 6) * 0.22;
           // (alert prey is harder to surprise: senses are worth having on both sides of a hunt)
-          const detect = sat(0.7 + phen[p + P.Sense]! * 0.9 - phen[qp + P.Conceal]! * 0.6 - phen[qp + P.Sense]! * 0.2 - blend) * (1 - 0.5 * night);
+          // (prey that sees or hears the hunter coming gets away far more often than it used to here: before, good
+          // senses were worth a great deal to a hunter and next to nothing to the hunted)
+          const detect = sat(0.78 + phen[p + P.Sense]! * 0.9 - phen[qp + P.Conceal]! * 0.6 - phen[qp + P.Sense]! * 0.5 - blend) * (1 - 0.5 * night);
           const def = 1 - phen[qp + P.Defense]! * 0.75 * (1 - phen[p + P.Attack]! * 0.6);
           const tox = 1 - sat(genome[qg + G.Toxicity]! - genome[c * GENE_COUNT + G.ToxinResist]!);
           const k = Math.min(1, overlap * 1.4) * sizeFit * pursuit * detect * def * tox * meat;

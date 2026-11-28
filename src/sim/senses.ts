@@ -1,6 +1,6 @@
 // Through their eyes (expansion E50): what a species' senses, read from its genes, make of the world.
 // Kept apart from the rest of Section 5 so that the page can use it without the simulation.
-import { G } from './genetics';
+import { G, senseParts } from './genetics';
 
 export interface Vision {
   /** The sense the animal mostly finds its way by. */
@@ -23,8 +23,12 @@ export function vision(g: ArrayLike<number>): Vision {
   const acuity = eyes ? Math.min(1, g[G.EyeSize]! * 0.5 + g[G.Sight]! * 0.7) : 0;
   const echo = g[G.Echo]!, electric = g[G.Electric]!, night = Math.min(1, g[G.Nocturnal]! * 0.8 + g[G.EyeSize]! * 0.4);
   // a cold-blooded night hunter with poor eyes finds warm things by their warmth
-  const heat = g[G.Nocturnal]! > 0.55 && g[G.WarmBlood]! < 0.4 && g[G.Diet]! > 0.4 ? 0.7 - acuity * 0.4 : 0;
-  const mode: Vision['mode'] = echo > 0.5 && echo > acuity ? 'echo' : electric > 0.5 && electric > acuity ? 'electric' : heat > 0.35 && heat > acuity * 0.8 ? 'heat' : 'sight';
+  const heat = g[G.Nocturnal]! > 0.5 && g[G.WarmBlood]! < 0.35 && g[G.Diet]! > 0.4 ? 0.7 - acuity * 0.4 : 0;
+  // (which sense it lives by is read the way the simulation reads it, from what each sense is worth to this animal:
+  // the electric sense only works in water, and a gene left over from a life in the sea is not a sense on land)
+  const parts = senseParts(g);
+  const mode: Vision['mode'] = parts.byEcho > 0.15 && parts.byEcho >= parts.sight && parts.byEcho >= parts.byField ? 'echo'
+    : parts.byField > 0.15 && parts.byField > parts.sight ? 'electric' : heat > 0.35 && heat > acuity * 0.8 ? 'heat' : 'sight';
   // colour needs daylight eyes: night animals trade it for sensitivity; four or more eyes and sharp sight reach past violet
   const colour = eyes ? Math.max(0, Math.min(1, g[G.Sight]! * 0.9 - g[G.Nocturnal]! * 0.5 + (eyes >= 4 ? 0.25 : 0))) : 0;
   const field = eyes ? Math.min(1, 0.3 + eyes * 0.12 + (g[G.Diet]! < 0.35 ? 0.25 : 0)) : 0;
