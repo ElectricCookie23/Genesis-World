@@ -95,7 +95,9 @@ export function App() {
               </button>
             ))}
             {st?.skipTo != null
-              ? <button class={css.active} onClick={() => actions.skipTo(-1)} title="Stop skipping ahead">■ to {typeof st.skipTo === 'string' ? BEFORE_HISTORY.find((b) => b.key === st.skipTo)?.name.toLowerCase() : `the ${ERAS[st.skipTo]!.name}`}</button>
+              // (short, so that the bar is no wider while skipping than it is otherwise: where it is skipping to is in its
+              // tooltip, and in Settings with the year it has reached)
+              ? <button class={css.active} style={{ maxWidth: '92px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={() => actions.skipTo(-1)} title={`Skipping ahead to ${typeof st.skipTo === 'string' ? BEFORE_HISTORY.find((b) => b.key === st.skipTo)?.name.toLowerCase() : `the ${ERAS[st.skipTo]!.name}`}. Press to stop.`}>■ stop skip</button>
               : (
                 <select title="Skip ahead to an age" value="" style={{ background: 'none', color: 'inherit', border: 'none', font: 'inherit', opacity: 0.8, cursor: 'pointer', maxWidth: '92px' }}
                   onChange={(e) => { const el = e.target as HTMLSelectElement, v = el.value; el.value = ''; if (v !== '') actions.skipTo(/^\d+$/.test(v) ? +v : v); }}>

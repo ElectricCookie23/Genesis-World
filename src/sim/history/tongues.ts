@@ -56,7 +56,8 @@ export function languageList(h: HistoryState, year = 0, bodyOf?: (species: numbe
       people: who ? who.people : 0,
       sounds: describeSounds(lang), grammar: describeGrammar(lang),
       words: LEXICON.map((m) => word(lang, m)),
-      changes: lang.changes.slice(-10).map((c) => ({ year: c.year, note: c.note })),
+      // (changes of sound and changes of grammar in one list, by year: the last ten)
+      changes: [...lang.changes.map((c) => ({ year: c.year, note: c.note })), ...(lang.shifts ?? []).map((x) => ({ year: x.year, note: `grammar: ${x.note}` }))].sort((a, b) => a.year - b.year).slice(-10),
       samples: SAYINGS.map((x) => say(lang, x)),
       script: who && bodyOf ? scriptInfo(h, who.script, who.species, year, bodyOf) : undefined,
     });

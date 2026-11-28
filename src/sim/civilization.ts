@@ -17,7 +17,7 @@ import { eraOf, eraSlot, eraTitle, earthNote } from './history/eras';
 import { hash32 } from './history/hash';
 import { capital, compound, makeLanguage, personName, placeMeanings, soundChange, splitLanguage, word, type Language } from './history/language';
 import { clearedCover } from './plants';
-import { driftSpan } from './history/syntax';
+import { driftSpan, MOST_SHIFTS, SHIFT_YEARS, grammarShift } from './history/syntax';
 import { wearOf, type Script } from './history/script';
 import { ART_STYLES, against, styleOfEra, subjectOf, type Movement, type Painting } from './history/art';
 import { legendKind, legendName, tale, trueAnimal, type Legend } from './history/legend';
@@ -2238,6 +2238,12 @@ export class Civilization {
     }
     for (const [id, w] of written) {
       const lang = h.languages[id]!;
+      // (and now and then its grammar changes too: far more slowly than its sounds, and written speech more slowly
+      // still. The luck in it is its own, so that the changes of sound fall exactly as they did before this was added.)
+      if ((lang.shifts?.length ?? 0) < MOST_SHIFTS) {
+        const turn = new RNG(hash32(this.seedNum, id, Math.floor(year), 0x67a5));
+        if (turn.chance(1 - Math.exp(-y / (SHIFT_YEARS * (w ? 1.5 : 1))))) grammarShift(lang, turn, year);
+      }
       if (lang.changes.length >= 64) continue;
       const luck = new RNG(hash32(this.seedNum, id, Math.floor(year), 0xd41f7));
       if (!luck.chance(1 - Math.exp(-y / driftSpan(lang.changes.length, w)))) continue;

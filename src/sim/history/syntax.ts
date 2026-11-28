@@ -1,11 +1,13 @@
 // Syntax and lexicon of the generated languages (system E21).
 // A language's sounds and words live in language.ts. This file adds what is needed to say a
 // whole sentence: the order of words, where a describing word goes, how "many" and "before now"
-// are marked. Nothing is stored. The grammar of a family comes from its seed, so sister languages
-// share it, and its endings are themselves words of the language, worn down by the same sound
-// changes as everything else: sisters have endings that are recognisably the same ending.
+// are marked. The grammar a family begins with comes from its seed, so sister languages share what
+// they had when they parted; each then changes a part at a time over the centuries (the changes are
+// kept on the language). Its endings are themselves words of the language, worn down by the same
+// sound changes as everything else: sisters have endings that are recognisably the same ending.
 import { hash32 } from './hash';
-import { capital, wordAt, type Language } from './language';
+import { capital, wordAt, type GrammarShift, type Language } from './language';
+import type { RNG } from '../rng';
 
 /** The meanings every language is asked for: the list shown side by side in the language panel. */
 export const LEXICON = [
@@ -30,16 +32,62 @@ export interface Grammar {
   article: 'none' | 'suffix' | 'word';
 }
 
-/** The grammar of a language: fixed by its family, so that sisters share it. */
-export function grammarOf(lang: Language): Grammar {
+/**
+ * The grammar of a language as it was spoken in `year` (now, if no year is given). A family begins with one
+ * grammar, so sisters share what they had when they parted; after that each changes in its own time, a part at a
+ * time (`grammarShift`), and an old sentence is said the old way.
+ */
+export function grammarOf(lang: Language, year = Infinity): Grammar {
   const h = hash32(lang.family, 0x67a3);
-  return {
+  const g: Grammar = {
     order: (['SOV', 'SOV', 'SVO', 'SVO', 'VSO'] as const)[h % 5]!,
     adjAfter: lang.headFirst,
     plural: (['suffix', 'suffix', 'prefix', 'double'] as const)[(h >>> 4) % 4]!,
     past: (['suffix', 'suffix', 'before', 'after'] as const)[(h >>> 8) % 4]!,
     article: (['none', 'none', 'suffix', 'word'] as const)[(h >>> 12) % 4]!,
   };
+  for (const x of lang.shifts ?? []) {
+    if (x.year > year) break;
+    if (x.what === 'order') g.order = x.to as WordOrder;
+    else if (x.what === 'plural') g.plural = x.to as Grammar['plural'];
+    else if (x.what === 'past') g.past = x.to as Grammar['past'];
+    else g.article = x.to as Grammar['article'];
+  }
+  return g;
+}
+
+/** The most a language's grammar changes over its whole history: after this it has settled. */
+export const MOST_SHIFTS = 5;
+/** About how many years pass between one change of grammar and the next, in one language. */
+export const SHIFT_YEARS = 1800;
+
+/**
+ * One change of grammar, of the kinds that happen: an ending wears away and a small word takes its place; a small
+ * word leans on its neighbour until it is an ending; the word for "this" becomes a word for "the"; the doing-word
+ * moves up from the end of the sentence. The change is added to the language and returned, or null if its grammar
+ * has settled.
+ */
+export function grammarShift(lang: Language, rng: RNG, year: number): GrammarShift | null {
+  const shifts = (lang.shifts ??= []);
+  if (shifts.length >= MOST_SHIFTS) return null;
+  const g = grammarOf(lang);
+  const can: Omit<GrammarShift, 'year'>[] = [];
+  if (g.past === 'suffix') can.push({ what: 'past', to: 'after', note: 'the ending that marked what is over wore away, and a small word after the doing-word does its work' });
+  else if (g.past === 'after') can.push({ what: 'past', to: 'suffix', note: 'the small word for what is over came to be said in one breath with the doing-word, and is an ending now' });
+  if (g.article === 'none') can.push({ what: 'article', to: 'word', note: 'the word for "this" came to be said before every known thing, and is a word for "the"' });
+  else if (g.article === 'word') can.push({ what: 'article', to: 'suffix', note: 'the word for "the" moved behind its noun and stuck there as an ending' });
+  else can.push({ what: 'article', to: 'none', note: 'the ending that meant "the" wore away, and nothing took its place' });
+  if (g.plural === 'double') can.push({ what: 'plural', to: 'suffix', note: 'saying a word twice for more than one gave way to an ending' });
+  else if (g.plural === 'prefix') can.push({ what: 'plural', to: 'suffix', note: 'the mark of more than one moved from the front of the word to the end' });
+  if (g.order === 'SOV') can.push({ what: 'order', to: 'SVO', note: 'the doing-word moved up from the end of the sentence to the middle' });
+  else if (g.order === 'VSO') can.push({ what: 'order', to: 'SVO', note: 'the one who acts came to be named first, before the doing-word' });
+  // (not straight back the way it came: a language does not undo its last change)
+  const last = shifts[shifts.length - 1];
+  const open = can.filter((c) => !last || c.what !== last.what);
+  if (!open.length) return null;
+  const made: GrammarShift = { year, ...rng.pick(open) };
+  shifts.push(made);
+  return made;
 }
 
 const isVowel = (c: string | undefined): boolean => !!c && 'aeiou'.includes(c);
@@ -71,7 +119,7 @@ export const SAYINGS: Saying[] = [
 
 /** Say it in a language as it was spoken in `year`: the words, and under each what it means. */
 export function say(lang: Language, what: Saying, year = Infinity): { text: string; gloss: string } {
-  const g = grammarOf(lang);
+  const g = grammarOf(lang, year);
   const w = (m: string): string => wordAt(lang, m, year);
   const many = stub(w('many')), before = stub(w('old')), the = stub(w('this'));
   const noun = (m: string, adj: string | undefined, plural: boolean | undefined): [string, string] => {
@@ -106,7 +154,8 @@ export function describeGrammar(lang: Language): string {
   const plural = g.plural === 'suffix' ? `more than one is marked with the ending -${stub(wordAt(lang, 'many', Infinity))}` : g.plural === 'prefix' ? `more than one is marked by putting ${stub(wordAt(lang, 'many', Infinity))}- in front` : 'more than one is said by saying the word twice';
   const past = g.past === 'suffix' ? `what is over takes the ending -${stub(wordAt(lang, 'old', Infinity))}` : `what is over is marked with the small word ${stub(wordAt(lang, 'old', Infinity))} ${g.past === 'before' ? 'before' : 'after'} the doing-word`;
   const article = g.article === 'none' ? 'There is no word for "the".' : g.article === 'suffix' ? `"The" is an ending, -${stub(wordAt(lang, 'this', Infinity))}.` : `"The" is ${stub(wordAt(lang, 'this', Infinity))}.`;
-  return `${order}; ${adj}; ${plural}; ${past}. ${article}`;
+  const was = (lang.shifts ?? []).length;
+  return `${order}; ${adj}; ${plural}; ${past}. ${article}${was ? ` It has not always been so: its grammar has changed ${was === 1 ? 'once' : `${was} times`} since its family's first speech (the changes are in the list below, with its changes of sound).` : ''}`;
 }
 
 /** Its sounds in a line: which it uses, and how its syllables are built. */

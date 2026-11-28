@@ -51,7 +51,12 @@ export interface Language {
   changes: SoundChange[];
   /** Which pattern place names follow: 0 head last ("river-town"), 1 head first ("town-river"). */
   headFirst: boolean;
+  /** How its grammar has changed since its family's first speech, oldest first (see `grammarOf` in syntax.ts). */
+  shifts?: GrammarShift[];
 }
+
+/** One change in how a language puts its words together: which part of its grammar, what it became, and in plain words what happened. */
+export interface GrammarShift { year: number; what: 'order' | 'plural' | 'past' | 'article'; to: string; note: string }
 
 const VOWELS = new Set(['a', 'e', 'i', 'o', 'u']);
 const FRONT = new Set(['e', 'i']);
@@ -210,6 +215,7 @@ export function soundChange(lang: Language, rng: RNG, year: number): SoundChange
 /** A daughter language splits off: it starts identical and drifts apart from here on. */
 export function splitLanguage(parent: Language, id: number, year: number): Language {
   const d: Language = { ...parent, id, parent: parent.id, bornYear: year, consonants: parent.consonants.slice(), vowels: parent.vowels.slice(), changes: parent.changes.map((c) => ({ ...c })) };
+  if (parent.shifts) d.shifts = parent.shifts.map((x) => ({ ...x }));
   d.name = capital(word(d, 'tongue'));
   return d;
 }

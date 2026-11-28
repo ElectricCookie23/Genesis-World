@@ -1062,7 +1062,7 @@ import { believedSpot, chartingOf, describeMap, knownAt, mapError, type Charting
 import { LEGEND_KINDS, legendKind, legendName, tale, trueAnimal } from '../src/sim/history/legend';
 import { describeMusic, lineOf, musicDistance, phrase, tradition, type Players, type Tradition } from '../src/sim/history/music';
 import { describeScript, glyphDistance, glyphOf, glyphPath, picture, wearOf, type Body, type Glyph, type Script } from '../src/sim/history/script';
-import { LEXICON, SAYINGS, describeGrammar, describeSounds, driftSpan, grammarOf, say } from '../src/sim/history/syntax';
+import { LEXICON, MOST_SHIFTS, SAYINGS, describeGrammar, describeSounds, driftSpan, grammarOf, grammarShift, say } from '../src/sim/history/syntax';
 import { CALAMITIES, REBUILDS, answer, brittle, damage, describeScar, hazards, plotFate, rebuildYears, woodShare, type Ground, type Scar } from '../src/sim/history/calamity';
 
 describe('infrastructure networks (E15)', () => {
@@ -1568,6 +1568,31 @@ describe('generated languages (E21)', () => {
     for (let y = 500; y <= 1500; y += 100) { soundChange(east, rng, y); soundChange(west, rng, y); }
     const stranger = makeLanguage(3, 9911, small, 0);
     expect(grammarOf(east)).toEqual(grammarOf(west));
+    // grammar changes too, a part at a time, far more slowly than sounds do
+    {
+      const turn = new RNG(77), old = splitLanguage(east, 7, 1500), before = grammarOf(old);
+      const told = SAYINGS.map((x) => say(old, x, 1500));
+      const made = grammarShift(old, turn, 2600)!;
+      expect(made).not.toBeNull();
+      expect(made.note.length).toBeGreaterThan(20);
+      const after = grammarOf(old) as unknown as Record<string, unknown>, was = before as unknown as Record<string, unknown>;
+      // exactly one part of it is different now, and it is the part on record
+      expect(Object.keys(after).filter((k) => after[k] !== was[k])).toEqual([made.what]);
+      expect(after[made.what]).toBe(made.to);
+      // what was said before the change is still said the old way; the sister that did not change says it as ever
+      expect(grammarOf(old, 2000)).toEqual(before);
+      expect(SAYINGS.map((x) => say(old, x, 1500))).toEqual(told);
+      expect(grammarOf(east)).toEqual(grammarOf(west));
+      // a daughter born after the change has it; no part changes twice running; and in the end a grammar settles
+      expect(grammarOf(splitLanguage(old, 8, 3000))).toEqual(grammarOf(old));
+      let last = made.what;
+      for (let y = 4000; y < 40000; y += 1500) { const more = grammarShift(old, turn, y); if (!more) break; expect(more.what).not.toBe(last); last = more.what; }
+      expect(old.shifts!.length).toBeLessThanOrEqual(MOST_SHIFTS);
+      expect(grammarShift(old, turn, 50000)).toBeNull();
+      for (let i = 1; i < old.shifts!.length; i++) expect(old.shifts![i]!.year).toBeGreaterThan(old.shifts![i - 1]!.year);
+      // the sentences still come out as sentences
+      for (const x of SAYINGS) { const out = say(old, x); expect(out.text.length).toBeGreaterThan(6); expect(out.gloss.split(/\s+/).length).toBeGreaterThanOrEqual(3); }
+    }
     expect(LEXICON.length).toBeGreaterThanOrEqual(30);
     expect(new Set(LEXICON).size).toBe(LEXICON.length);
     for (const what of SAYINGS) {
@@ -1634,7 +1659,8 @@ describe('generated languages (E21)', () => {
         (between <= 8 ? near : between > 12 ? far : []).push(close);
         if (close >= LEXICON.length * 0.6) plain++;
         expect(same).toBeLessThan(LEXICON.length);
-        expect(grammarOf(a)).toEqual(grammarOf(b));
+        // sisters began with one grammar: they differ now in no more parts than the two of them have changed since
+        { const ga = grammarOf(a) as unknown as Record<string, unknown>, gb = grammarOf(b) as unknown as Record<string, unknown>; expect(Object.keys(ga).filter((k) => ga[k] !== gb[k]).length).toBeLessThanOrEqual((a.shifts?.length ?? 0) + (b.shifts?.length ?? 0)); }
       }
       for (const e of ev) {
         if (e.type !== 'language') continue;
