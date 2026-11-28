@@ -47,7 +47,7 @@ import { Caves, buildRibcage } from './gfx/landmarks';
 import { uMoonBody, uMoonBody2 } from './gfx/eclipse';
 import { MOON_RADIUS } from './common';
 import { CivMap, uNightMap } from './gfx/civmap';
-import { TradeRoutes, type Route } from './gfx/routes';
+import { ArmyMarches, TradeRoutes, type Route } from './gfx/routes';
 import type { Nation } from './gfx/nations';
 import { hashSeed as seedHash } from '../sim/rng';
 import type { HerdSnapshot, PlantInfo, SpeciesInfo } from '../shared/protocol';
@@ -487,6 +487,14 @@ export class GenesisScene {
     if (!this.tradeRoutes) { if (!routes || !routes.length) return; this.tradeRoutes = new TradeRoutes(); this.scene.add(this.tradeRoutes.mesh); }
     this.tradeRoutes.set(routes);
   }
+  /** Armies on the march (system E33): a streak of light from where an army was camped to where it camps next. */
+  private marches?: ArmyMarches;
+  marchArmy(from: readonly [number, number, number], to: readonly [number, number, number], size: number): void {
+    if (!this.marches) { this.marches = new ArmyMarches(); this.scene.add(this.marches.mesh); }
+    this.marches.add(from, to, size, performance.now() / 1000);
+  }
+  /** How many marches are being drawn now (for checks). */
+  get marchesShown(): number { return this.marches?.count ?? 0; }
   /** How many trade routes are drawn on the globe now (for checks). */
   get tradeRoutesShown(): number { const m = this.tradeRoutes?.mesh; return m && m.visible ? (m.geometry.index?.count ?? 0) / 6 / 24 : 0; }
   setSettlements(list: SettlementInfo[], known?: NationInfo[]): void {
@@ -1072,6 +1080,7 @@ export class GenesisScene {
     // (never more than a fraction of a second of sim time ahead of or behind the last report, however slow the frames)
     this.simYearShown = Math.max(this.simYearSeen - this.yearsPerSecond * 0.3, Math.min(this.simYearSeen + this.yearsPerSecond * 0.2, this.simYearShown + this.yearsPerSecond * dt));
     this.towns?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist, this.time, this.simYearShown, this.yearsPerSecond);
+    this.marches?.update(performance.now() / 1000);
     this.updateTornadoes();
     this.caves?.update(this.cam.focusDir(this.tmpFocus), this.cam.dist);
     // bones are too small to matter from orbit, except in the fossil view

@@ -298,6 +298,9 @@ async function boot(): Promise<void> {
   // while paused must still light up.)
   // (system E31) while the map panel shows the trade view, the same routes are drawn on the globe: from each seller's
   // capital to its buyer's, in the colour of what is carried
+  /** Where each army in the field was last camped, by its war (system E33): a change is a march. */
+  const armyAt = new Map<number, number>();
+  let armiesSeen = false;
   const tradeColour = new Map<string, [number, number, number]>();
   window.setInterval(() => {
     if (state.panel !== 'map' || state.mapOf !== -2) { scene.setTradeRoutes(null); return; }
@@ -1383,6 +1386,21 @@ async function boot(): Promise<void> {
         scene.setSettlements(withPast(msg.settlements), msg.nations);
         // (armies in the field show as camp fires on the night side: system E33)
         scene.civ?.setCamps(msg.armies ?? []);
+        // (and when one moves, a streak of light goes from its old camp to its new one; a new army sets out from its capital)
+        {
+          const at = (cell: number): [number, number, number] => [grid.pos[cell * 3]!, grid.pos[cell * 3 + 1]!, grid.pos[cell * 3 + 2]!];
+          const now = new Set<number>();
+          for (const a of msg.armies ?? []) {
+            if (a.war === undefined) continue;
+            now.add(a.war);
+            // (the armies already in the field when the page first hears of them are where they are: no march is shown for those)
+            const was = armyAt.get(a.war) ?? (armiesSeen ? a.from ?? -1 : -1);
+            if (was >= 0 && was !== a.cell) scene.marchArmy(at(was), at(a.cell), a.size);
+            armyAt.set(a.war, a.cell);
+          }
+          for (const id of [...armyAt.keys()]) if (!now.has(id)) armyAt.delete(id);
+          armiesSeen = true;
+        }
         update({ settlements: msg.settlements, realms: msg.nations ?? state.realms });
         // (tell the worker this list is in: it sends the next only then, so lists cannot pile up behind a busy page)
         send({ type: 'got' });

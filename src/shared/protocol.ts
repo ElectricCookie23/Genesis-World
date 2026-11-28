@@ -601,7 +601,7 @@ export type FromWorker =
   | { type: 'site'; detail: SiteDetail }
   | { type: 'memory'; answer: MemoryAnswer }
   | { type: 'whatif'; state: WhatIfState | null; maps?: WhatIfMaps; problem?: string }
-  | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[]; armies?: { cell: number; size: number }[] }
+  | { type: 'settlements'; settlements: SettlementInfo[]; nations?: NationInfo[]; armies?: { cell: number; size: number; war?: number; from?: number }[] }
   | { type: 'timeline'; points: TimelinePoint[] }
   | { type: 'cosmos'; cosmos: CosmosInfo; messages: StarMessage[]; archives: Archive[]; link?: LinkInfo; strange: StrangeInfo; future: FutureInfo; industry: IndustryInfo }
   | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }
