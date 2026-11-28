@@ -47,6 +47,7 @@ import { Caves, buildRibcage } from './gfx/landmarks';
 import { uMoonBody, uMoonBody2 } from './gfx/eclipse';
 import { MOON_RADIUS } from './common';
 import { CivMap, uNightMap } from './gfx/civmap';
+import { TradeRoutes, type Route } from './gfx/routes';
 import type { Nation } from './gfx/nations';
 import { hashSeed as seedHash } from '../sim/rng';
 import type { HerdSnapshot, PlantInfo, SpeciesInfo } from '../shared/protocol';
@@ -480,6 +481,14 @@ export class GenesisScene {
   onNations?: (nations: Nation[]) => void;
   /** Species whose nests copy the ruins they live among (E87). */
   setMimics(ids: number[]): void { if (this.creatures) this.creatures.mimics = ids; }
+  /** Trade routes drawn on the globe while the map's trade view is being looked at (system E31); `null` hides them. */
+  private tradeRoutes?: TradeRoutes;
+  setTradeRoutes(routes: readonly Route[] | null): void {
+    if (!this.tradeRoutes) { if (!routes || !routes.length) return; this.tradeRoutes = new TradeRoutes(); this.scene.add(this.tradeRoutes.mesh); }
+    this.tradeRoutes.set(routes);
+  }
+  /** How many trade routes are drawn on the globe now (for checks). */
+  get tradeRoutesShown(): number { const m = this.tradeRoutes?.mesh; return m && m.visible ? (m.geometry.index?.count ?? 0) / 6 / 24 : 0; }
   setSettlements(list: SettlementInfo[], known?: NationInfo[]): void {
     this.civ?.setSettlements(list, known);
     this.vegetation?.setTowns(list);

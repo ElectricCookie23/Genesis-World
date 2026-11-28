@@ -296,6 +296,25 @@ async function boot(): Promise<void> {
   // year shows up to a few years a second; one asked for from a panel shows for a while at any pace. (On the page's
   // own clock, not when figures arrive from the simulation: a paused world sends few, and a festival asked for
   // while paused must still light up.)
+  // (system E31) while the map panel shows the trade view, the same routes are drawn on the globe: from each seller's
+  // capital to its buyer's, in the colour of what is carried
+  const tradeColour = new Map<string, [number, number, number]>();
+  window.setInterval(() => {
+    if (state.panel !== 'map' || state.mapOf !== -2) { scene.setTradeRoutes(null); return; }
+    const capOf = (id: number) => { const r = state.realms.find((x) => x.id === id); return r ? state.settlements.find((t) => t.id === r.capital) : undefined; };
+    const at = (cell: number): [number, number, number] => [grid.pos[cell * 3]!, grid.pos[cell * 3 + 1]!, grid.pos[cell * 3 + 2]!];
+    const routes: { from: [number, number, number]; to: [number, number, number]; colour: [number, number, number] }[] = [];
+    for (const r of state.realms) {
+      if (r.ended >= 0 || !r.trade) continue;
+      const a = capOf(r.id), b = capOf(r.trade.to);
+      if (!a || !b) continue;
+      const hex = GOOD_COLOUR[r.trade.good as keyof typeof GOOD_COLOUR] ?? '#ffffff';
+      let c = tradeColour.get(hex);
+      if (!c) { const lin = (k: number): number => Math.pow(parseInt(hex.slice(1 + k * 2, 3 + k * 2), 16) / 255, 2.2); c = [lin(0), lin(1), lin(2)]; tradeColour.set(hex, c); }
+      routes.push({ from: at(a.cell), to: at(b.cell), colour: c });
+    }
+    scene.setTradeRoutes(routes);
+  }, 700);
   window.setInterval(() => {
     const stats = state.stats;
     if (!stats || !scene.civ) return;

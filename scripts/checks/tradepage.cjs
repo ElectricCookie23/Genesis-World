@@ -21,6 +21,18 @@ const { open } = require('./h.cjs');
   await h.page.mouse.move(40, 600);
   await h.page.screenshot({ path: `${out}/e31-trade-map.png`, timeout: 120000 }).catch((e) => console.log('shot failed', String(e).slice(0, 60)));
   console.log(await h.page.evaluate(() => __genesis.state.mapNote));
+  // the same routes on the globe itself (second pass): one ribbon for each, gone when another view is chosen
+  const shown = await h.page.evaluate(() => __genesis.scene.tradeRoutesShown);
+  const first = await h.page.evaluate(() => __genesis.actions.mapPoint(__genesis.state.settlements[0].cell));
+  await h.page.evaluate(() => __genesis.update({ uiHidden: true }));
+  await h.view(first[0] * Math.PI * 2 - Math.PI, (0.5 - first[1]) * Math.PI, 2.2, 0.5, 0);
+  await h.page.waitForTimeout(2500);
+  await h.page.screenshot({ path: `${out}/e31-trade-globe.png`, timeout: 120000 }).catch((e) => console.log('shot failed', String(e).slice(0, 60)));
+  await h.page.evaluate(() => __genesis.update({ mapOf: -1 }));
+  // (the page looks every 0.7 s, and a software renderer keeps its timers waiting)
+  await h.page.waitForTimeout(4000);
+  const after = await h.page.evaluate(() => __genesis.scene.tradeRoutesShown);
+  console.log('routes on the globe:', shown, 'with the trade view,', after, 'with another view', shown === 5 && after === 0 ? 'AS EXPECTED' : 'NOT AS EXPECTED');
   console.log('console:', [...new Set(h.log)].filter((x) => !x.includes('ReadPixels') && !x.includes('MANIFEST') && !x.includes('404')).slice(0, 6).join('\n') || 'no errors');
   await h.browser.close();
 })().catch((e) => { console.error(String(e).slice(0, 300)); process.exit(1); });
