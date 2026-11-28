@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 // Worker entry point: owns all world state and runs the fixed-timestep loop.
+import { skipStop } from './skip';
 import { Simulation } from './simulation';
 import { linkInfo } from './link';
 import { anchor, battle, citizenLife, museum, witness } from './ground';
@@ -7,7 +8,7 @@ import { Counterfactual, changeFor, replayable, type Change } from './whatif';
 import { ancestry, archiveIndex, article, atlas, braid, placeAt, records } from './memory';
 import { G, P, PHEN_COUNT, sizeMetres } from './genetics';
 import { nearestCell } from './world';
-import { loadSimulation, saveSimulation, type SaveState, packSave, eventsIn } from './snapshot';
+import { loadSimulation, saveSimulation, type SaveState, type ChunkPool, packSave, eventsIn } from './snapshot';
 import {
   HISTORY_SPEED, BEFORE_HISTORY, SPEEDS, type CellSnapshot, type FromWorker, type HerdSnapshot, type DynastyDetail, type HouseMember, type SiteDetail, type NationDetail, type PersonInfo, type NationInfo, type PlantInfo, type SpeciesInfo, type ToWorker, type WorldStats,
   type WonderInfo, type MemoryAnswer,
@@ -130,10 +131,12 @@ let historyOverride = false;
 let wasHistory = false;
 /** Highest era a snapshot has been kept for. */
 let snapshotEra = 0;
+/** The pieces of the kept copy made last: the next copy shares whatever has not changed since (see `packSave`). */
+const kept: ChunkPool = new Map();
 /** How many rewind points to keep (each is a whole copy of the world). */
 let rewindLimit = 12;
 /** A jump through time under way: run in slices so that it can be stopped, and so the page hears how far it has got. */
-let warp: { end: number; through: boolean; had: boolean; era: number; mark: string } | null = null;
+let warp: { end: number; through: boolean; had: boolean; era: number; mark: string; seen: boolean; lived: number } | null = null;
 
 function warpSlice(): void {
   const w = warp;
@@ -143,10 +146,20 @@ function warpSlice(): void {
   while (!done && performance.now() - t0 < 400) {
     // toward an age, history is walked in short steps: a whole age can pass in a century
     // (before history a skip steps to the same boundaries as the fast speeds do: see GRID_YEARS)
-    sim.step(Math.min(sim.civ.historyLive ? (w.era >= 0 ? 25 : GRID_YEARS) : toBoundary(sim), w.end - sim.simYear));
+    const live = sim.civ.historyLive;
+    const d = Math.min(live ? (w.era >= 0 ? 25 : GRID_YEARS) : toBoundary(sim), w.end - sim.simYear);
+    sim.step(d);
     keepEra(sim); // the ages passed on the way can be gone back to
     done = sim.simYear >= w.end || (!!w.mark && sim.milestones.has(w.mark))
       || (w.era >= 0 ? sim.civ.historyLive && sim.civ.h.topEra >= w.era : !w.through && !w.had && sim.civ.historyLive);
+    // A skip to an age waits for a people to reach it. It used to wait for ever (a billion and a half years) if they
+    // died out on the way, or settled into the long peace short of it, or simply never got there. Now it stops where
+    // that happened, and says so: that is a thing worth seeing, and the skip can be asked for again.
+    if (!done && w.era >= 0) {
+      if (live) { w.seen = true; w.lived += d; }
+      const why = skipStop(w.seen, sim.civ.historyActive, sim.civ.historyLive, w.lived);
+      if (why) { post({ type: 'skipStopped', why, era: w.era, reached: sim.civ.h.topEra }); done = true; }
+    }
   }
   if (done) endWarp();
   else { post({ type: 'stats', stats: stats(sim) }); setTimeout(warpSlice, 0); }
@@ -544,7 +557,7 @@ function keepEra(s: Simulation): void {
   if (s.civ.h.topEra > snapshotEra) {
     snapshotEra = s.civ.h.topEra;
     const title = `Start of the ${ERAS[snapshotEra]!.name}`;
-    rewinds.push({ simYear: s.simYear, title, save: packSave(saveSimulation(s, title)), era: true });
+    rewinds.push({ simYear: s.simYear, title, save: packSave(saveSimulation(s, title), kept), era: true });
     // (Each copy is kept in its small form, `packSave`: its event log and its people on record as text.)
     // A kept copy of the world is as large as its record. Where the record is long (a watched history of many
     // countries), a dozen copies ran to gigabytes and the page stopped answering; so the copies together may hold
@@ -577,7 +590,9 @@ function tick(): void {
     if (fast && !s.civ.historyLive) {
       if (excursion) { comeBack(); s = sim!; }
       // (a slowed tick, around a great event, earns fewer years; it does not take a step of another length)
-      owed += yps / TICK_HZ;
+      // (and a machine that cannot keep up does not run up a debt of years it will never pay: the clock shown
+      // would run away from the world. Steps stay on their boundaries, so one seed is still one world)
+      owed = Math.min(owed + yps / TICK_HZ, GRID_YEARS * 8);
       for (let k = 0; k < 4 && owed >= toBoundary(s) && !s.civ.historyLive; k++) { const d = toBoundary(s); s.step(d); owed -= d; }
       if (s.civ.historyLive) owed = 0;
     } else {
@@ -597,10 +612,14 @@ function tick(): void {
   const fresh = s.events.drainFresh();
   if (fresh.length) post({ type: 'events', events: fresh });
   // keep a few rewind points: every milestone-grade event, at most one per 4 My
-  const major = fresh.find((e) => e.importance >= 3);
+  // (the newest of them, and only if it has just happened: after a skip, everything recorded on the way arrives here
+  // at once, and the copy made on arrival used to be named for the oldest, so a world in the Age of Sails kept a
+  // copy called "First life")
+  let major: (typeof fresh)[number] | undefined;
+  for (let i = fresh.length - 1; i >= 0 && !major; i--) { const e = fresh[i]!; if (e.importance >= 3 && s.simYear - e.simYear <= Math.max(GRID_YEARS, 2 * yps / TICK_HZ)) major = e; }
   if (major && s.simYear - lastRewindYear > 4e6) {
     lastRewindYear = s.simYear;
-    rewinds.push({ simYear: s.simYear, title: major.title, save: packSave(saveSimulation(s, major.title)) });
+    rewinds.push({ simYear: s.simYear, title: major.title, save: packSave(saveSimulation(s, major.title), kept) });
     thinRewinds();
     post({ type: 'timeline', points: rewinds.map((r, index) => ({ index, simYear: r.simYear, title: r.title })) });
   }
@@ -829,7 +848,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         break;
       case 'fork':
         if (sim) {
-          rewinds.push({ simYear: sim.simYear, title: 'Fork point', save: packSave(saveSimulation(sim, 'fork')) });
+          rewinds.push({ simYear: sim.simYear, title: 'Fork point', save: packSave(saveSimulation(sim, 'fork'), kept) });
           thinRewinds();
           post({ type: 'timeline', points: rewinds.map((r, index) => ({ index, simYear: r.simYear, title: r.title })) });
         }
@@ -861,7 +880,7 @@ ctx.onmessage = (e: MessageEvent<ToWorker>) => {
         else if (sim && !warp) {
           if (excursion && !sim.civ.historyLive) comeBack(); else excursion = null;
           owed = 0;
-          warp = { end: sim.simYear + (msg.years ?? 0), through: !!msg.through, had: sim.civ.historyLive, era: msg.untilEra ?? -1, mark: msg.untilMark ?? '' };
+          warp = { end: sim.simYear + (msg.years ?? 0), through: !!msg.through, had: sim.civ.historyLive, era: msg.untilEra ?? -1, mark: msg.untilMark ?? '', seen: sim.civ.historyActive, lived: 0 };
           warpSlice();
         }
         break;

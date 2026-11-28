@@ -25,6 +25,8 @@ import { believedSpot, describeMap, knownAt } from './sim/history/worldmap';
 import { feastOf, festivalOn } from './sim/history/festival';
 import { GOOD_COLOUR } from './sim/history/trade';
 import { IDEA_COLOUR, IDEA_LABEL, type Idea } from './sim/history/ideology';
+import { ERAS } from './sim/history/eras';
+import { skipStopText } from './sim/skip';
 import type { SlotInfo, UIState } from './ui/store';
 import { GOALS, emptyRecord, evaluateGoals, type GoalRecord } from './game/goals';
 import { planFilm, shotAt, type Shot } from './game/film';
@@ -1456,6 +1458,13 @@ async function boot(): Promise<void> {
         scene.applyStats(msg.stats);
         update({ stats: msg.stats });
         break;
+      case 'skipStopped': {
+        const to = ERAS[msg.era]?.name ?? 'that age', got = ERAS[msg.reached]?.name ?? 'where they were';
+        const text = skipStopText(msg.why, to, got);
+        update({ notice: text });
+        window.setTimeout(() => { if (state.notice === text) update({ notice: '' }); }, 9000);
+        break;
+      }
       case 'resync': {
         // the world has gone back to where it was before a closer look: what was recorded during the look did not happen
         const n = msg.events;

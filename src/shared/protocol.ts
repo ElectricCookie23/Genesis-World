@@ -605,4 +605,6 @@ export type FromWorker =
   | { type: 'loaded'; cells: CellSnapshot; stats: WorldStats; events: SimEvent[] }
   /** The world has gone back to where it was before a closer look (see the worker's `excursion`): events from this id on did not happen. */
   | { type: 'resync'; events: number }
+  /** A skip to an age has stopped short of it: the people died out, settled into the long peace, or had far longer than a history takes. `reached` is the age they got to. */
+  | { type: 'skipStopped'; why: 'gone' | 'settled' | 'long'; era: number; reached: number }
   | { type: 'error'; message: string };
