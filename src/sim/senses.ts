@@ -21,14 +21,14 @@ export interface Vision {
 export function vision(g: ArrayLike<number>): Vision {
   const eyes = g[G.EyeCount]! > 0.1 ? Math.round(g[G.EyeCount]! * 6) : 0;
   const acuity = eyes ? Math.min(1, g[G.EyeSize]! * 0.5 + g[G.Sight]! * 0.7) : 0;
-  const echo = g[G.Echo]!, electric = g[G.Electric]!, night = Math.min(1, g[G.Nocturnal]! * 0.8 + g[G.EyeSize]! * 0.4);
-  // a cold-blooded night hunter with poor eyes finds warm things by their warmth
-  const heat = g[G.Nocturnal]! > 0.5 && g[G.WarmBlood]! < 0.35 && g[G.Diet]! > 0.4 ? 0.7 - acuity * 0.4 : 0;
+  const night = Math.min(1, g[G.Nocturnal]! * 0.8 + g[G.EyeSize]! * 0.4);
   // (which sense it lives by is read the way the simulation reads it, from what each sense is worth to this animal:
-  // the electric sense only works in water, and a gene left over from a life in the sea is not a sense on land)
+  // the electric sense only works in water, a gene left over from a life in the sea is not a sense on land, and a
+  // cold-blooded night hunter with poor eyes finds warm things by their warmth)
   const parts = senseParts(g);
-  const mode: Vision['mode'] = parts.byEcho > 0.15 && parts.byEcho >= parts.sight && parts.byEcho >= parts.byField ? 'echo'
-    : parts.byField > 0.15 && parts.byField > parts.sight ? 'electric' : heat > 0.35 && heat > acuity * 0.8 ? 'heat' : 'sight';
+  const mode: Vision['mode'] = parts.byEcho > 0.15 && parts.byEcho >= parts.sight && parts.byEcho >= parts.byField && parts.byEcho >= parts.byHeat ? 'echo'
+    : parts.byField > 0.15 && parts.byField > parts.sight && parts.byField >= parts.byHeat ? 'electric'
+      : parts.byHeat > 0.12 && parts.byHeat > parts.sight ? 'heat' : 'sight';
   // colour needs daylight eyes: night animals trade it for sensitivity; four or more eyes and sharp sight reach past violet
   const colour = eyes ? Math.max(0, Math.min(1, g[G.Sight]! * 0.9 - g[G.Nocturnal]! * 0.5 + (eyes >= 4 ? 0.25 : 0))) : 0;
   const field = eyes ? Math.min(1, 0.3 + eyes * 0.12 + (g[G.Diet]! < 0.35 ? 0.25 : 0)) : 0;

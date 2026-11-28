@@ -146,6 +146,8 @@ describe('the record', () => {
     const n = [...h.nations].sort((a, b) => b.peakTowns - a.peakTowns)[0]!;
     const r = records(sim, n.id)!;
     expect(r.historian.length).toBeGreaterThan(1);
+    // (every country's record has its founding in it, however eventful the history since)
+    for (const x of h.nations) { const rx = records(sim, x.id); if (rx && sim.events.events[x.eventId]) expect(rx.entries.some((e) => e.eventId === x.eventId), `${x.name} has its founding on record`).toBe(true); }
     const founding = r.entries.find((e) => e.eventId === n.eventId)!;
     expect(founding.slant).toBe('enlarged');
     const claimed = Number(founding.record!.text.match(/founded ([\d,]+) years ago/)![1]!.replace(/,/g, ''));

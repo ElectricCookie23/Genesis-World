@@ -380,13 +380,19 @@ export function records(sim: Simulation, nation: number): Records | null {
   const ruler = (year: number) => h.people.filter((p) => p.nation === n.id && p.role === 'ruler' && p.reignFrom <= year && (p.reignTo < 0 || p.reignTo >= year)).pop()?.name ?? 'our ruler';
   const end = n.ended >= 0 ? n.ended : Infinity;
   const mine = ev.filter((e) => {
+    // (its own founding is always in its record, whatever kind of event that was: a colony's is its independence)
+    if (e.id === n.eventId) return true;
     if (!RECORDED.has(e.type) || e.simYear < n.founded - 1 || e.simYear > end) return false;
     const d = e.data ?? {};
-    if (e.id === n.eventId) return true;
     if (e.type === 'plague') return sim.civ.settlements.some((s) => s.cell === e.cellId && s.nation === n.id);
     return num(d.nation) === n.id || num(d.foe) === n.id || num(d.other) === n.id || num(d.from) === n.id;
   });
-  const heavy = [...mine].sort((a, b) => b.importance - a.importance || b.simYear - a.simYear).slice(0, 40).sort((a, b) => a.simYear - b.simYear);
+  // (the forty that weigh most, and the founding whatever it weighs: in an eventful history it used to be crowded out,
+  // and a country's own record began in the middle)
+  const top = [...mine].sort((a, b) => b.importance - a.importance || b.simYear - a.simYear).slice(0, 40);
+  const birth = mine.find((e) => e.id === n.eventId);
+  if (birth && !top.includes(birth)) top[top.length - 1] = birth;
+  const heavy = top.sort((a, b) => a.simYear - b.simYear);
   const entries: RecordEntry[] = [];
   for (const e of heavy) {
     const d = e.data ?? {}, roll = unit(hash32(seed, n.id, e.id, 0x7ec0));

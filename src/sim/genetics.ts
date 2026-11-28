@@ -51,11 +51,12 @@ export function warmth(gene: number): number {
 
 /**
  * What each of an animal's senses is worth to it, from its genes at offset `o`: sight (by day, in clear air), echoes,
- * the electric sense (in water only), smell and hearing. Each is 0 when it has none of that sense. The traits are
+ * the electric sense (in water only), the warmth of prey (a cold-blooded night hunter's), smell and hearing. Each is 0
+ * when it has none of that sense. The traits are
  * computed from these, and so is the view the page shows "through its eyes": the two must agree about which
  * sense an animal lives by.
  */
-export function senseParts(g: ArrayLike<number>, o = 0): { eyes: number; echo: number; field: number; sight: number; byEcho: number; byField: number; bySmell: number; byEar: number } {
+export function senseParts(g: ArrayLike<number>, o = 0): { eyes: number; echo: number; field: number; sight: number; byEcho: number; byField: number; byHeat: number; bySmell: number; byEar: number } {
   const sat = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
   const water = g[o + G.Water]!, night = g[o + G.Nocturnal]!;
   // Eyes grow into use: a patch of skin that knows light from dark is already worth a little. They used to do
@@ -73,7 +74,10 @@ export function senseParts(g: ArrayLike<number>, o = 0): { eyes: number; echo: n
   // echoes carry a stone's throw where sight carries to the horizon: they are worth most where there is little to see
   // (by night, underground, in water), and the electric sense reaches less far still
   const dark = Math.max(night, g[o + G.Burrow]!, water * 0.5);
-  return { eyes, echo, field, sight, byEcho: echo * (0.3 + 0.3 * dark), byField: field * (0.4 + 0.2 * night), bySmell: g[o + G.Smell]! * 0.25, byEar: g[o + G.Hearing]! * 0.22 };
+  // a cold-blooded hunter of the night feels the warmth of what it hunts: the colder its own blood, the later its
+  // hours and the more of its food is meat, the more that is worth to it (it has no gene of its own: it comes with the life)
+  const byHeat = (1 - warmth(g[o + G.WarmBlood]!)) * night * sat((g[o + G.Diet]! - 0.35) / 0.3) * 0.32;
+  return { eyes, echo, field, sight, byEcho: echo * (0.3 + 0.3 * dark), byField: field * (0.4 + 0.2 * night), byHeat, bySmell: g[o + G.Smell]! * 0.25, byEar: g[o + G.Hearing]! * 0.22 };
 }
 
 export function geneDistance(a: Float32Array, ao: number, b: Float32Array, bo: number): number {
@@ -153,8 +157,8 @@ export function computePhenotype(g: Float32Array, o: number, out: Float32Array, 
   // that suits how it lives (eyes by day, echoes by night, the electric sense under water) instead of a little of each.
   const parts = senseParts(g, o);
   const eyes = parts.eyes, echo = parts.echo, elec = parts.field, night = g[o + G.Nocturnal]!;
-  const bestSense = Math.max(parts.sight, parts.byEcho, parts.byField, parts.bySmell, parts.byEar);
-  const sense = sat(0.08 + bestSense + 0.5 * (parts.sight + parts.byEcho + parts.byField + parts.bySmell + parts.byEar - bestSense) + brain * 0.15);
+  const bestSense = Math.max(parts.sight, parts.byEcho, parts.byField, parts.byHeat, parts.bySmell, parts.byEar);
+  const sense = sat(0.08 + bestSense + 0.5 * (parts.sight + parts.byEcho + parts.byField + parts.byHeat + parts.bySmell + parts.byEar - bestSense) + brain * 0.15);
   const baseSpeed = Math.pow(metres, 0.3) * (0.45 + 0.55 * limbLen) * metab;
   const speed = baseSpeed * Math.max(swim * water, walk * (1 - water), fly * 1.6) * (1 - g[o + G.Armor]! * 0.45);
   // every trait costs energy, so nothing can be maxed for free

@@ -2781,7 +2781,7 @@ describe('arms races (E38)', () => {
         for (const k of [0, 1] as const) { expect(r.arms[k]).toBeLessThanOrEqual(r.found[k]); found += r.found[k]; arms += r.arms[k]; }
         const e = ev[r.eventId];
         if (e) { expect(e.type).toBe('arms-race'); expect(e.data!.a).toBe(r.a); for (const c of e.causes) expect(ev[c]!.type).toBe('war'); }
-        if (r.ended >= 0) { cooled++; expect(r.ended).toBeGreaterThanOrEqual(r.began); const end = ev[r.endEvent]; if (end) { expect(end.type).toBe('arms-race-ends'); if (e) expect(end.causes).toContain(e.id); } }
+        if (r.ended >= 0) { cooled++; expect(r.ended).toBeGreaterThanOrEqual(r.began); const end = ev[r.endEvent]; if (end) { /* (it cooled of itself, or the long peace ended it with everything else) */ expect(['arms-race-ends', 'long-peace']).toContain(end.type); if (e && end.type === 'arms-race-ends') expect(end.causes).toContain(e.id); } }
       }
       // no country is in two races at once, and none is pressed by more than everything
       const live = (h.races ?? []).filter((r) => r.ended < 0).flatMap((r) => [r.a, r.b]);
@@ -3015,7 +3015,8 @@ describe('a crowded world', () => {
     let done = 0;
     for (const { sim: base, seed } of fiveHistories()) {
       if (done) break;
-      if (base.civ.h.nations.filter((n) => n.ended < 0).length < 6) continue;
+      // (a world still making its history: one that has settled into the long peace records next to nothing either way)
+      if (!base.civ.historyLive || base.civ.h.nations.filter((n) => n.ended < 0).length < 6) continue;
       done++;
       const save = saveSimulation(base, 'before');
       const run = (crowdedAbove: number): Simulation => { const sim = new Simulation(seed, 17); loadSimulation(sim, save); sim.civ.crowdedAbove = crowdedAbove; for (let y = 0; y < 300; y++) sim.step(1); return sim; };
@@ -3023,7 +3024,7 @@ describe('a crowded world', () => {
       const from = base.events.events.length;
       const added = (sim: Simulation) => sim.events.events.slice(from);
       // far fewer events, and still some; and what a crowded world keeps of small things belongs to someone of note or to no country
-      expect(added(crowded).length).toBeGreaterThan(0);
+      expect(added(crowded).length, `${seed}: ${base.civ.h.nations.filter((n) => n.ended < 0).length} living countries, peace ${base.civ.h.peace}, live ${base.civ.historyLive}, plain added ${added(plain).length}, years ${Math.round(crowded.simYear - base.simYear)}`).toBeGreaterThan(0);
       expect(added(crowded).length).toBeLessThan(added(plain).length * 0.8);
       expect(crowded.civ.crowded).toBe(true);
       expect(plain.civ.crowded).toBe(false);
@@ -3068,10 +3069,12 @@ describe('world wars (E40)', () => {
   });
 
   it('a war between four powers bound by alliances becomes a world war, redraws borders and ends in an order with new institutions', () => {
-    // (a copy of one of the five histories at its six-thousandth year: nothing here changes the shared ones)
+    // (a copy of one of the five histories some thousands of years in: nothing here changes the shared ones)
     let done = 0;
     for (const { sim: base, seed } of fiveHistories()) {
       if (done) break;
+      // (a world still making its history: in the long peace no war is begun)
+      if (!base.civ.historyLive) continue;
       const pool = base.civ.h.nations.filter((n) => n.ended < 0 && base.civ.settlements.filter((s) => s.ruined < 0 && s.nation === n.id).length >= 2);
       const kind = pool.find((n) => pool.filter((x) => x.species === n.species).length >= 4)?.species;
       if (kind === undefined) continue;
@@ -3146,6 +3149,45 @@ describe('world wars (E40)', () => {
     }
     expect(done).toBe(1);
   }, 900000);
+
+  it('a war under way when the long peace settles is seen to its end, and no arms race outlives it', () => {
+    // (a war used to stand open for ever once the peace had settled, "still being fought" in a world with no quarrels left)
+    let done = 0;
+    for (const { sim: base, seed } of fiveHistories()) {
+      if (done || !base.civ.historyLive) continue;
+      const sim = new Simulation(seed, 17);
+      loadSimulation(sim, saveSimulation(base, 'before'));
+      const h = sim.civ.h, ev = sim.events.events, towns = sim.civ.settlements;
+      const pool = h.nations.filter((n) => n.ended < 0 && towns.some((s) => s.ruined < 0 && s.nation === n.id));
+      const a = pool[0], b = a ? pool.find((n) => n.id !== a.id && n.species === a.species) : undefined;
+      if (!a || !b) continue;
+      const civ = sim.civ as unknown as {
+        campaign(sim: Simulation, n: unknown, foe: unknown, base: unknown, first: unknown, warEvent: number, year: number, general: string, other: string, opening: boolean, alone: boolean): { id: number; ended: number; outcome: string } | undefined;
+        settle(sim: Simulation, year: number, why: string): void;
+      };
+      h.wars = []; h.great = [];
+      const from = towns.find((s) => s.ruined < 0 && s.nation === a.id)!, at = towns.find((s) => s.ruined < 0 && s.nation === b.id)!;
+      const before = ev.length;
+      sim.civEvent('war', from.species, from.cell, from.id, at.id);
+      const war = civ.campaign(sim, a, b, from, at, before, sim.simYear, '', '', true, true)!;
+      expect(war).toBeTruthy();
+      expect(war.ended).toBe(-1);
+      (h.races ??= []).push({ id: 9999, a: Math.min(a.id, b.id), b: Math.max(a.id, b.id), began: sim.simYear, ended: -1, eventId: -1, endEvent: -1, found: [0, 0], arms: [0, 0] });
+      civ.settle(sim, sim.simYear, 'summit');
+      expect(sim.civ.historyLive).toBe(false);
+      // every arms race is over the day the peace settles, and the peace is the reason on record
+      for (const r of h.races) { expect(r.ended).toBeGreaterThanOrEqual(0); }
+      expect(ev[h.races[h.races.length - 1]!.endEvent]!.type).toBe('long-peace');
+      // and the war is fought out or given up within a few years, with a peace on record
+      for (let y = 0; y < 14 && war.ended < 0; y++) sim.step(1);
+      expect(war.ended).toBeGreaterThanOrEqual(0);
+      expect(['attacker', 'defender', 'stalemate']).toContain(war.outcome);
+      for (const w of h.wars) expect(w.ended).toBeGreaterThanOrEqual(0);
+      for (const g of h.great ?? []) expect(g.ended).toBeGreaterThanOrEqual(0);
+      done++;
+    }
+    expect(done).toBe(1);
+  });
 
   it('every war that drew in allies has two sides, wars of its own and an end; and every world war that ended left an order', () => {
     const runs = fiveHistories();

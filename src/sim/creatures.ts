@@ -386,7 +386,7 @@ export class Creatures {
           // (alert prey is harder to surprise: senses are worth having on both sides of a hunt)
           // (prey that sees or hears the hunter coming gets away far more often than it used to here: before, good
           // senses were worth a great deal to a hunter and next to nothing to the hunted)
-          const detect = sat(0.78 + phen[p + P.Sense]! * 0.9 - phen[qp + P.Conceal]! * 0.6 - phen[qp + P.Sense]! * 0.5 - blend) * (1 - 0.5 * night);
+          const detect = sat(0.78 + phen[p + P.Sense]! * 0.9 - phen[qp + P.Conceal]! * 0.6 - phen[qp + P.Sense]! * 0.5 - blend) * (1 - 0.7 * night);
           const def = 1 - phen[qp + P.Defense]! * 0.75 * (1 - phen[p + P.Attack]! * 0.6);
           const tox = 1 - sat(genome[qg + G.Toxicity]! - genome[c * GENE_COUNT + G.ToxinResist]!);
           const k = Math.min(1, overlap * 1.4) * sizeFit * pursuit * detect * def * tox * meat;

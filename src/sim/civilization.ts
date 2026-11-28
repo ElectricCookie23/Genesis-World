@@ -443,9 +443,11 @@ export class Civilization {
       for (const st of towns) this.town(sim, rng, n, st, st.id === n.capital, y, year);
     }
     // ---- the wars now being fought: each army marches, is fed or is not, and meets the other (system E33)
-    if (this.fine) this.warfare(sim, y, year);
+    // (a war begun while the years were watched is still seen to its end when they no longer are: it used to stand
+    // open for as long as time ran fast, "still being fought" for thousands of years)
+    if (this.fine || this.underWay('war')) this.warfare(sim, y, year);
     // ---- a sickness abroad: it goes where trade goes, town by town (system E37)
-    if (this.fine) this.pandemics(sim, year);
+    if (this.fine || this.underWay('plague')) this.pandemics(sim, year);
     // ---- the world's market: prices, a bubble now and then, and the panic when it bursts (system E32)
     this.market(sim, y, year);
     // industry: burning the buried forests of older ages warms the whole world
@@ -1291,12 +1293,19 @@ export class Civilization {
       if (ruler && ruler.died < 0) { ruler.died = year; ruler.reignTo = year; ruler.fate = 'was the last ruler whose name was kept'; }
       if (house && house.ended < 0) house.ended = year;
       x.government = 'custom'; x.stability = 1; x.fatigue = 0; x.woes.length = 0;
+      x.pressed = undefined; x.rival = undefined;
     }
+    // no country watches another's workshops any more: every arms race is over (system E38), and the peace is why
+    for (const r of h.races ?? []) if (r.ended < 0) { r.ended = year; r.endEvent = ev.id; }
   }
 
   /** One tick of the long peace: towns live on, spread slowly and can still be lost to the planet; nothing else changes. */
   private peaceTick(sim: Simulation, rng: RNG, members: Map<number, Settlement[]>, y: number, year: number): void {
     const h = this.h, reg = sim.regions;
+    // what was under way when the peace settled is seen to its end: a war is fought out or given up, a sickness
+    // runs its course (nothing new of either kind begins in the long peace)
+    if (this.underWay('war')) this.warfare(sim, y, year);
+    if (this.underWay('plague')) this.pandemics(sim, year);
     let pop = 0, cause = -1;
     for (const n of h.nations) {
       if (n.ended >= 0) continue;
@@ -1712,6 +1721,12 @@ export class Civilization {
   /** Is the world crowded (see `crowdedAbove`)? */
   get crowded(): boolean {
     return this.livingNations > this.crowdedAbove;
+  }
+
+  /** Is a war (or a war of alliances), or a sickness, still running its course? */
+  private underWay(what: 'war' | 'plague'): boolean {
+    const h = this.h;
+    return what === 'war' ? (h.wars ?? []).some((w) => w.ended < 0) || (h.great ?? []).some((g) => g.ended < 0) : (h.plagues ?? []).some((p) => p.ended < 0);
   }
 
   /** Put an event on a person's record, if it is an event that was kept (one of a lesser country in a crowded world, or in a fast-forwarded age, is not). */
