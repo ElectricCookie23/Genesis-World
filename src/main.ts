@@ -34,6 +34,7 @@ import { vision } from './sim/senses';
 import { loadModel } from './render/gfx/models';
 import { plantFromModel, type Form } from './render/gfx/plantmesh';
 import { actions, state, togglePanel, update } from './ui/store';
+import { signPath, wearAt } from './ui/glyphs';
 
 const bootBar = document.getElementById('boot-bar') as HTMLElement;
 const bootEl = document.getElementById('boot') as HTMLElement;
@@ -589,6 +590,31 @@ async function boot(): Promise<void> {
       ctx.moveTo(x - s * 1.5, y); ctx.lineTo(x - s * 2.1, y - s * 0.6); ctx.moveTo(x - s * 1.5, y); ctx.lineTo(x - s * 2.2, y + s * 0.1);
       ctx.stroke();
       ctx.fillText(m.name, Math.min(W - 90, Math.max(4, x - s)), Math.min(H - 4, y + s * 0.9 + 9));
+    }
+    // (system E29 with E23) a people that writes puts names on its map in its own signs: its own name under the
+    // title, and beside the chief town of each country it knows, that country's name as this people writes it
+    if (realm.script && typeof Path2D !== 'undefined') {
+      const script = realm.script, wear = wearAt(script, state.stats?.simYear ?? script.born);
+      const ink = (meanings: string[], x: number, y: number, size: number): void => {
+        ctx.save();
+        ctx.strokeStyle = '#3a2a1c'; ctx.lineWidth = Math.max(1, size / 14); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        meanings.forEach((m, k) => { ctx.save(); ctx.translate(x + k * (size + 2), y); ctx.stroke(new Path2D(signPath(m, script, wear, size))); ctx.restore(); });
+        ctx.restore();
+      };
+      let named = 0;
+      for (const other of state.realms) {
+        if (named >= 14 || other.id === realm.id || other.ended >= 0 || !touch.has(other.id) || !other.signs || !other.signs.length) continue;
+        const cap = theirs.find((t) => t.id === other.capital);
+        if (!cap) continue;
+        const [x, y] = place(cap.cell), signs = other.signs.slice(0, 3);
+        ink(signs, Math.min(W - signs.length * 12 - 4, x + 4), Math.max(2, Math.min(H - 12, y - 5)), 10);
+        named++;
+      }
+      if (realm.signs && realm.signs.length) {
+        const signs = realm.signs.slice(0, 5), wide = signs.length * 19 + 10;
+        ctx.fillStyle = 'rgba(217, 201, 163, 0.88)'; ctx.fillRect(8, 40, wide, 24); ctx.strokeStyle = '#4a3422'; ctx.lineWidth = 1; ctx.strokeRect(8.5, 40.5, wide, 24);
+        ink(signs, 14, 44, 17);
+      }
     }
     // the title, in a box in the corner
     ctx.fillStyle = 'rgba(217, 201, 163, 0.88)'; ctx.fillRect(8, 8, 190, 30); ctx.strokeStyle = '#4a3422'; ctx.strokeRect(8.5, 8.5, 190, 30);

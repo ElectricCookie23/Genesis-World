@@ -545,6 +545,8 @@ describe('dark ages (E5)', () => {
 import { ART_NAMES, Portrait, artStyle } from '../src/ui/portrait';
 import { G, GENE_COUNT, P, PHEN_COUNT, computePhenotype, senseParts, warmth } from '../src/sim/genetics';
 import { vision } from '../src/sim/senses';
+import { signPath } from '../src/ui/glyphs';
+import type { ScriptInfo } from '../src/shared/protocol';
 
 /** Everything a drawn portrait is made of, as one string, so two portraits can be compared. */
 function drawn(node: unknown): string {
@@ -1723,6 +1725,25 @@ describe('place name drift (E22)', () => {
 });
 
 describe('writing systems (E23)', () => {
+  it('a sign inked on a map is the same sign as on the page, and each people writes a name its own way (E29)', () => {
+    const script = (id: number, legs: number, hand: number): ScriptInfo => ({ id, parent: -1, parentName: '', name: 'x', born: 0, from: 0, hand, body: { legs, neck: 0.4, horn: 0.2, wings: 0, tail: 0.5 }, about: '' });
+    const a = script(3, 2, 1), b = script(9, 3, 0);
+    for (const meaning of ['river', 'great', 'hold', 'sun']) {
+      const path = signPath(meaning, a, 0.3, 17);
+      expect(path.startsWith('M')).toBe(true);
+      expect(path.length).toBeGreaterThan(10);
+      // the same sign every time, at any size the same shape
+      expect(signPath(meaning, a, 0.3, 17)).toBe(path);
+      expect(signPath(meaning, a, 0.3, 34).split(/[MLQ]/).length).toBe(path.split(/[MLQ]/).length);
+      // every number in it is inside the square it is drawn in
+      for (const v of path.match(/-?\d+(\.\d+)?/g)!.map(Number)) { expect(v).toBeGreaterThanOrEqual(-2); expect(v).toBeLessThanOrEqual(19); }
+    }
+    // a line of writing in another people's script is not the same line, nor is the same script's centuries on
+    const line = (sc: ScriptInfo, wear: number): string => ['river', 'great', 'hold', 'sun'].map((m) => signPath(m, sc, wear, 17)).join(' ');
+    expect(line(b, 0.6)).not.toBe(line(a, 0.6));
+    expect(line(a, 0.95)).not.toBe(line(a, 0.1));
+  });
+
   const body: Body = { legs: 2, neck: 0.5, horn: 0.7, wings: 0, tail: 0.6 };
   const script = (id: number, born = 0, from = 0, parent = -1): Script => ({ id, parent, nation: 0, born, from, eventId: -1, hand: 0, name: 'test script' });
 

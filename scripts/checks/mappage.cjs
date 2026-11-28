@@ -25,7 +25,9 @@ const { open } = require('./h.cjs');
       const town = (id, cell, nation) => ({ id, name: 'T' + id, cell, species: 0, pop: 50, tech: 0.5, founded: now - 500, lore: -1, eventId: -1, ruined: -1, nation });
       const towns = [...near.map((c, i) => town(i, c, 0)), ...other.map((c, i) => town(20 + i, c, 1))];
       const realm = (id, name, capital, extra) => ({ id, name, species: 0, capital, founded: now - 900, ended: -1, parent: -1, government: 'kingdom', stability: 0.7, tech: 0.5, era: 4, eraName: 'Age of Sails', eraOwn: '', earth: '', hue: 0.1, pop: 300, towns: 6, culture: 'x', language: 'x', ruler: '', rulerSince: -1, house: '', houseReigns: 0, houseId: -1, networks: [], cultureId: 0, fashionFrom: -1, fashionShare: 0, golden: '', goldenSince: -1, goldenWorks: 0, ...extra });
-      g.update({ hintStep: 9, panel: 'map', settlements: towns, realms: [realm(0, 'Kekaka', 0, { charting, contacts: [1], monsters: [{ species: 1, name: 'Neoaus ingens', cell: land[0], size: 0.8 }] }), realm(1, 'Farahot', 20, { charting, contacts: [0] })], mapOf: 0 });
+      // (second pass: the map-makers write; their own name goes under the title in their signs, and their neighbour's beside its chief town)
+      const script = { id: 3, parent: -1, parentName: '', name: 'the Kekaka signs', born: g.state.stats.simYear - 600, from: 0, hand: 1, body: { legs: 2, neck: 0.4, horn: 0.2, wings: 0, tail: 0.5 }, about: '' };
+      g.update({ hintStep: 9, panel: 'map', settlements: towns, realms: [realm(0, 'Kekaka', 0, { charting, contacts: [1], script, signs: ['river', 'great', 'hold'], monsters: [{ species: 1, name: 'Neoaus ingens', cell: land[0], size: 0.8 }] }), realm(1, 'Farahot', 20, { charting, contacts: [0], signs: ['sun', 'stone'] })], mapOf: 0 });
     }, { charting });
     await h.page.waitForTimeout(2500);
     await h.page.mouse.move(40, 600);

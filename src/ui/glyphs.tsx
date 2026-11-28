@@ -8,13 +8,21 @@ export function wearAt(script: ScriptInfo, year: number): number {
   return Math.min(0.97, script.from + (1 - script.from) * (1 - Math.exp(-Math.max(0, year - script.born) / 1100)));
 }
 
+/**
+ * The strokes of one sign as the path of a picture `size` across: the same sign whether it is set in the page or
+ * inked onto a map (system E29: a country's map is written in its own script).
+ */
+export function signPath(meaning: string, script: ScriptInfo, wear: number, size: number): string {
+  const g = wornGlyph(picture(meaning, script.body), wear, hash32(script.id, 0x5c1), hashText(meaning));
+  return glyphPath(g, size, script.hand === 1 && wear < 0.85);
+}
+
 /** One sign: the picture for a meaning, as worn as `wear` says (0 the first picture, 1 the last abstraction). */
 export function Sign({ meaning, script, wear, size = 22, colour = '#f2eee4', title }: { meaning: string; script: ScriptInfo; wear: number; size?: number; colour?: string; title?: string }) {
-  const g = wornGlyph(picture(meaning, script.body), wear, hash32(script.id, 0x5c1), hashText(meaning));
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flex: 'none', display: 'inline-block', verticalAlign: 'middle' }}>
       {title && <title>{title}</title>}
-      <path d={glyphPath(g, size, script.hand === 1 && wear < 0.85)} fill="none" stroke={colour} stroke-width={Math.max(1, size / 16)} stroke-linecap="round" stroke-linejoin="round" />
+      <path d={signPath(meaning, script, wear, size)} fill="none" stroke={colour} stroke-width={Math.max(1, size / 16)} stroke-linecap="round" stroke-linejoin="round" />
     </svg>
   );
 }
