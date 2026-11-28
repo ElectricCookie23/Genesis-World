@@ -1058,7 +1058,7 @@ import { GOODS, GOOD_COLOUR, bestTrade, describeMarket, prices, type Economy, ty
 import { FESTIVAL_KINDS, daysUntil, describeFestival, feastOf, festivalOn, lightOf, type Festival, type FestivalLight } from '../src/sim/history/festival';
 import { buildLayers, deriveNations, type Unrest } from '../src/render/gfx/nations';
 import type { CellSnapshot } from '../src/shared/protocol';
-import { believedSpot, chartingOf, describeMap, knownAt, mapError, type Charting } from '../src/sim/history/worldmap';
+import { believedSpot, chartingOf, describeMap, inventedLands, knownAt, mapError, type Charting } from '../src/sim/history/worldmap';
 import { LEGEND_KINDS, legendKind, legendName, tale, trueAnimal } from '../src/sim/history/legend';
 import { describeMusic, lineOf, musicDistance, phrase, tradition, type Players, type Tradition } from '../src/sim/history/music';
 import { describeScript, glyphDistance, glyphOf, glyphPath, picture, wearOf, type Body, type Glyph, type Script } from '../src/sim/history/script';
@@ -2150,6 +2150,33 @@ describe('their map of the world (E29)', () => {
   });
 
   it('a country knows its own ground, the coasts its ships reach, and what it has heard of its neighbours', () => {
+    // lands that are on the map and not in the world: where the paper is blank, fewer as a people learns, none on a map a sailor can steer by
+    {
+      const early: Charting = { reach: 0.2, sea: 0, skill: 0.1 }, later: Charting = { reach: 0.6, sea: 0.5, skill: 0.5 }, measured: Charting = { reach: 1, sea: 1.2, skill: 0.75 };
+      // (the known world is a disc in the middle of the map)
+      const blank = (u: number, v: number): boolean => Math.hypot(u - 0.5, (v - 0.5) * 0.5) > 0.12;
+      const first = inventedLands(4242, 0.05, early, blank), again = inventedLands(4242, 0.05, early, blank);
+      expect(first.length).toBeGreaterThanOrEqual(3);
+      expect(first.length).toBeLessThanOrEqual(5);
+      expect(JSON.stringify(again)).toBe(JSON.stringify(first));
+      for (const land of first) {
+        expect(blank(land.u, land.v)).toBe(true);
+        expect(land.outline.length).toBeGreaterThan(10);
+        for (const [u, v] of land.outline) { expect(Math.abs(u - land.u)).toBeLessThan(land.r * 2); expect(Math.abs(v - land.v)).toBeLessThan(land.r * 4); expect(blank(u, v)).toBe(true); }
+      }
+      // no two of them run into each other
+      for (let i = 0; i < first.length; i++) for (let j = 0; j < i; j++) expect(Math.hypot(first[i]!.u - first[j]!.u, (first[i]!.v - first[j]!.v) * 0.5)).toBeGreaterThan(first[i]!.r + first[j]!.r);
+      // knowing more rubs some out, and the ones that stay are ones that were there before
+      const fewer = inventedLands(4242, 0.3, later, blank);
+      expect(fewer.length).toBeLessThan(first.length);
+      expect(fewer.length).toBeGreaterThan(0);
+      for (const land of fewer) expect(first.some((f) => f.u === land.u && f.v === land.v)).toBe(true);
+      expect(inventedLands(4242, 0.3, measured, blank)).toEqual([]);
+      expect(inventedLands(4242, 0.7, early, blank)).toEqual([]);
+      // another people invents other lands; and where nothing is blank there is nowhere to put one
+      expect(JSON.stringify(inventedLands(99, 0.05, early, blank))).not.toBe(JSON.stringify(first));
+      expect(inventedLands(4242, 0.05, early, () => false)).toEqual([]);
+    }
     expect(knownAt(0, Infinity, Infinity, camps)).toBe(1);
     expect(knownAt(camps.reach * 3, Infinity, Infinity, camps)).toBe(0);
     // seen from the water: known, but less well than walked over

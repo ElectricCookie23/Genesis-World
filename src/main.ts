@@ -21,7 +21,7 @@ import { formatYear, bigNumber } from './ui/format';
 import { Vector3 } from 'three/webgpu';
 import { del, get, set } from 'idb-keyval';
 import { Music } from './audio/music';
-import { believedSpot, describeMap, knownAt } from './sim/history/worldmap';
+import { believedSpot, describeMap, inventedLands, knownAt } from './sim/history/worldmap';
 import { feastOf, festivalOn } from './sim/history/festival';
 import { GOOD_COLOUR } from './sim/history/trade';
 import { IDEA_COLOUR, IDEA_LABEL, type Idea } from './sim/history/ideology';
@@ -573,6 +573,22 @@ async function boot(): Promise<void> {
       else if ((seen[i] !== seen[i + 1] || seen[i] !== seen[i + W]) && (x + y) % 3 === 0) { img.data[i * 4] = 128; img.data[i * 4 + 1] = 104; img.data[i * 4 + 2] = 78; }
     }
     ctx.putImageData(img, 0, 0);
+    // lands that are on the map and not in the world (system E29): drawn beyond the edge of what they know, in a
+    // lighter hand than what they have seen, and rubbed out as they learn better
+    const tales = inventedLands((realm.id + 1) * 7919, believed.share, chart, (u, v) => { const x = Math.floor(u * W), y = Math.floor(v * H); return x >= 0 && y >= 0 && x < W && y < H && !seen[y * W + x]; });
+    if (tales.length) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(74, 52, 34, 0.5)'; ctx.fillStyle = 'rgba(186, 160, 110, 0.4)'; ctx.lineWidth = 1; ctx.setLineDash([3, 2]);
+      for (const land of tales) {
+        ctx.beginPath();
+        land.outline.forEach(([u, v], k) => { if (k) ctx.lineTo(u * W, v * H); else ctx.moveTo(u * W, v * H); });
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(74, 52, 34, 0.7)'; ctx.font = 'italic 9px Georgia, serif';
+      ctx.fillText('said to lie here', Math.min(W - 70, tales[0]!.u * W - 26), Math.min(H - 4, (tales[0]!.v + tales[0]!.r * 2) * H + 12));
+      ctx.restore();
+    }
     const place = (cell: number): [number, number] => { let u = (grid.lon[cell]! - shift + Math.PI) / (Math.PI * 2); u -= Math.floor(u); return [u * W, (0.5 - grid.lat[cell]! / Math.PI) * H]; };
     // towns: their own filled, those they have heard of hollow
     ctx.lineWidth = 1;
@@ -620,7 +636,7 @@ async function boot(): Promise<void> {
     ctx.fillStyle = 'rgba(217, 201, 163, 0.88)'; ctx.fillRect(8, 8, 190, 30); ctx.strokeStyle = '#4a3422'; ctx.strokeRect(8.5, 8.5, 190, 30);
     ctx.fillStyle = '#3a2a1c'; ctx.font = '600 12px Georgia, serif'; ctx.fillText(`The world, by ${realm.name}`, 14, 22);
     ctx.font = '10px Georgia, serif'; ctx.fillText(`${Math.round(believed.share * 100)}% of it known to them`, 14, 34);
-    update({ mapNote: describeMap(believed.share, chart) });
+    update({ mapNote: `${describeMap(believed.share, chart)}${tales.length ? ` Beyond the edge of what they know they have drawn ${tales.length === 1 ? 'a land' : `${tales.length} lands`} that travellers tell of and no one has seen.` : ''}` });
   };
   const drawMapOn = (cv: HTMLCanvasElement, bare: boolean): void => {
     const mapRealm = !bare && state.mapOf >= 0 ? state.realms.find((r) => r.id === state.mapOf && r.ended < 0 && r.charting) : undefined;

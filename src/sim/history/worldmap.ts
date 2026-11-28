@@ -65,3 +65,37 @@ export function describeMap(share: number, c: Charting): string {
   const trust = c.skill >= 0.97 ? 'and it is right' : c.skill >= 0.7 ? 'and what is on it is measured: a sailor can steer by it' : c.skill >= 0.4 ? 'and distances on it are fair near home and guesses far away' : c.skill >= 0.15 ? 'drawn from travellers\' reckonings: the shapes are roughly right and the sizes are not' : 'drawn from memory and from what travellers say: no distance on it can be trusted';
   return `${much}, ${trust}.`;
 }
+
+/** A land that is on a map and not in the world: where it is drawn (as shares of the map's width and height), how large, and its coast. */
+export interface InventedLand { u: number; v: number; r: number; outline: [number, number][] }
+
+/**
+ * The lands a people draws beyond the edge of what it knows (system E29): travellers' tales, put on the map
+ * because blank paper asks to be filled. A people that draws from memory and knows little of the world has four
+ * or five of them; as its maps come to be measured and the world fills in they are rubbed out one by one, and a
+ * map a sailor can steer by has none. `blank(u, v)` says whether the map has nothing drawn at a place; an
+ * invented land is only ever put where it and the sea round it are blank. The same people always invents the
+ * same lands (`seed`), so that the one that goes when they learn more is one the visitor has seen before.
+ */
+export function inventedLands(seed: number, share: number, c: Charting, blank: (u: number, v: number) => boolean): InventedLand[] {
+  if (c.skill >= 0.7 || share >= 0.6) return [];
+  const want = Math.max(1, Math.round(5 * (1 - c.skill / 0.7) * (1 - share / 0.6)));
+  let a = (seed | 0) || 0x9e3779b9;
+  const rnd = (): number => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const out: InventedLand[] = [];
+  for (let k = 0; k < 40 && out.length < want; k++) {
+    // (every try draws the same numbers whether or not it is kept, so that learning more removes lands and never moves them)
+    const u = 0.06 + 0.88 * rnd(), v = 0.16 + 0.68 * rnd(), r = 0.025 + 0.035 * rnd(), turn = rnd() * 6.28, lobes = 2 + Math.floor(rnd() * 3), rough = 0.18 + 0.22 * rnd();
+    let clear = blank(u, v);
+    for (let j = 0; clear && j < 8; j++) { const t = (j / 8) * 6.28; clear = blank(u + Math.cos(t) * r * 1.6, v + Math.sin(t) * r * 3.2); }
+    if (!clear || out.some((o) => Math.hypot(o.u - u, (o.v - v) * 0.5) < o.r + r + 0.03)) continue;
+    const outline: [number, number][] = [];
+    for (let j = 0; j < 18; j++) {
+      const t = (j / 18) * 6.28, wob = 1 + rough * Math.sin(t * lobes + turn) + rough * 0.5 * Math.sin(t * (lobes + 3) - turn * 2);
+      // (the map is twice as wide as it is high, so a round land is twice as tall in shares of the height)
+      outline.push([u + Math.cos(t) * r * wob, v + Math.sin(t) * r * wob * 2]);
+    }
+    out.push({ u, v, r, outline });
+  }
+  return out;
+}
