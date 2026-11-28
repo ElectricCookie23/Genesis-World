@@ -4,10 +4,12 @@
 // Two countries with the same enemy sign a paper that is not read out. These things are in the cause graph
 // like any other, marked as hidden: the public record has only the story that was told, and the "Truth"
 // switch shows what lay behind it. Sometimes, generations later, a chest of letters is opened.
+// Not every attempt succeeds. A clerk copying drawings is sometimes caught at it; and then either says who paid,
+// which the country robbed will remember, or says nothing, and who sent the spy is one more secret.
 //
 // The rules of when a country dares, whether it succeeds and when a secret comes out are here, pure.
 
-export const SECRET_KINDS = ['theft', 'assassination', 'pact'] as const;
+export const SECRET_KINDS = ['theft', 'assassination', 'pact', 'spy'] as const;
 export type SecretKind = (typeof SECRET_KINDS)[number];
 
 /** A secret as the history keeps it. */
@@ -24,7 +26,7 @@ export interface Secret {
 }
 
 /** The types of event that are hidden when they happen. */
-export const HIDDEN_TYPES = ['theft', 'assassination', 'secret-treaty'] as const;
+export const HIDDEN_TYPES = ['theft', 'assassination', 'secret-treaty', 'spy-sent'] as const;
 
 const sat = (x: number): number => Math.max(0, Math.min(1, x));
 
@@ -56,6 +58,16 @@ export function strikes(guard: number): number {
   return sat(0.6 - 0.35 * sat(guard));
 }
 
+/** The chance a theft succeeds: less from a steady country that watches what it knows (`guard` is its steadiness, 0..1). */
+export function steals(guard: number): number {
+  return sat(0.85 - 0.4 * sat(guard));
+}
+
+/** The chance a spy who is caught says who sent them: more under a hard ruler (`cruel` is the ruler's, 0..1, of the country that caught them). */
+export function talks(cruel: number): number {
+  return sat(0.35 + 0.4 * sat(cruel));
+}
+
 /** The chance, in a year, that a secret of a given age comes out: none while those who kept it live, then a little every year. */
 export function comesOut(age: number): number {
   return age < 60 ? 0 : 1 / 260;
@@ -63,5 +75,5 @@ export function comesOut(age: number): number {
 
 /** The story told in place of a secret, in a few words. */
 export function coverStory(kind: SecretKind): string {
-  return kind === 'theft' ? 'its own smiths found the way' : kind === 'assassination' ? 'a short illness' : 'nothing was said';
+  return kind === 'theft' ? 'its own smiths found the way' : kind === 'assassination' ? 'a short illness' : kind === 'spy' ? 'no one knew who had sent the spy' : 'nothing was said';
 }

@@ -28,7 +28,7 @@ import { GRUDGE_YEARS, pactBetween, type Treaty, type TreatyKind } from './histo
 import { growsApart, odds, ready, shipped, waits, type Colony, type Standing } from './history/colony';
 import { ordinal } from './history/grammar';
 import { LEAGUE_HOLDS, chain, describeGreatWar, institutionName, isWorld, powers, purposeOf, victor, INSTITUTION_KINDS, type GreatWar, type Institution } from './history/greatwar';
-import { chooses, comesOut, dares, strikes, type Secret } from './history/secrets';
+import { chooses, comesOut, dares, strikes, type Secret, steals, talks } from './history/secrets';
 import { BURST, BURST_EVERY, SPILL, WATCH_YEARS, armsLean, describeRace, drive, peers, tension, type Race } from './history/arms';
 import { CATCHING_YEARS, carried, describePandemic, describeVia, plagueName, shuts, toll, type Edge, type Pandemic, type Reach, type Via } from './history/plague';
 import { IDEA_GOVERNMENT, IDEA_SAYS, drift, governedAs, ideaName, pressure, ripest, type Conditions, type Ideology } from './history/ideology';
@@ -2468,7 +2468,8 @@ export class Civilization {
    * an unread pact with another country the rival has fought (`chooses`). Each is an event marked hidden, and
    * where the public saw something (a new craft, a ruler dead) there is a second, public event telling the
    * story that was told, with the hidden one as its cause. A blow at a ruler that fails is public at once, and
-   * is remembered as a wrong. And an old secret may come out, generations on (`comesOut`).
+   * is remembered as a wrong. A theft may fail too (`steals`): the spy is caught, and either names the sender
+   * (public, and a wrong remembered) or keeps silent (`talks`), and then who sent the spy is itself a secret. And an old secret may come out, generations on (`comesOut`).
    * (The luck in it comes from the country and the year, not from the stream that decides other things.)
    */
   private intrigue(sim: Simulation, n: Nation, year: number, y: number): void {
@@ -2482,7 +2483,7 @@ export class Civilization {
       if (!hidden || !victim) continue;
       const cap = this.settlements[n.capital]!;
       const e = sim.emit({
-        type: 'secret-revealed', year, cellId: cap.cell, title: s.kind === 'pact' ? `The secret pact of ${n.name} and ${victim.name}` : `What ${n.name} did to ${victim.name}`,
+        type: 'secret-revealed', year, cellId: cap.cell, title: s.kind === 'pact' ? `The secret pact of ${n.name} and ${victim.name}` : s.kind === 'spy' ? `Who sent the spy to ${victim.name}` : `What ${n.name} did to ${victim.name}`,
         description: `A chest of letters is opened in the archive at ${cap.name}, ${Math.round(year - s.year)} years after they were sealed. They say what was never said aloud: ${hidden.description.charAt(0).toLowerCase()}${hidden.description.slice(1)}`,
         causes: [s.eventId, s.cover].filter((x, i, a) => x >= 0 && ev[x] && a.indexOf(x) === i), importance: s.kind === 'assassination' && this.notable(victim) ? 1 : 0, speciesIds: [n.species], data: { secret: s.eventId, by: n.id, against: s.against, kind: s.kind },
       });
@@ -2511,10 +2512,37 @@ export class Civilization {
     const push = (kind: Secret['kind'], eventId: number, cover: number, against: number): void => { list.push({ id: list.length ? list[list.length - 1]!.id + 1 : 1, kind, year, by: n.id, against, eventId, cover, known: -1, knownEvent: -1 }); if (list.length > 120) list.shift(); };
     if (kind === 'theft') {
       const k = wayFor(slot, land), way = WEB[slot]!.ways[k]!;
+      const room = WEB[slot]!.field === 'war' ? 'arsenal' : 'archive';
+      if (luck(0x55) >= steals(o.stability)) {
+        // ---- the spy is caught, and nothing leaves the country
+        if (luck(0x56) < talks(theirs ? theirs.cruel : 0.5)) {
+          // (and says who paid: a wrong the country robbed will remember)
+          const e = sim.emit({
+            type: 'spy-caught', year, cellId: ocap.cell, title: `A spy of ${n.name} is caught at ${ocap.name}`,
+            description: `A clerk in the ${room} at ${ocap.name} is found copying what ${o.name} knows of ${way.name}, and names a merchant from ${n.name} who paid for it. The drawings never leave the country. ${o.name} will not forget who sent for them.`,
+            causes: [cause].filter((x) => x >= 0), importance: 0, speciesIds: [o.species], data: { by: n.id, against: o.id, slot },
+          });
+          if (e.id >= 0) { (o.grudges ??= []).push({ against: n.id, eventId: e.id, year }); if (o.grudges.length > 6) o.grudges.shift(); }
+          return;
+        }
+        // (or says nothing: the public knows a spy was caught, and only the record behind it knows whose)
+        const hidden = sim.emit({
+          type: 'spy-sent', hidden: true, year, cellId: ocap.cell, title: `${n.name} sent the spy caught at ${ocap.name}`,
+          description: `The clerk caught in the ${room} at ${ocap.name} was in the pay of ${n.name}, which wanted what ${o.name} knows of ${way.name}. The clerk never said so.`,
+          causes: [cause].filter((x) => x >= 0), importance: 0, speciesIds: [n.species], data: { by: n.id, against: o.id, slot },
+        });
+        const cover = sim.emit({
+          type: 'spy-caught', year, cellId: ocap.cell, title: `A spy is caught at ${ocap.name}`,
+          description: `A clerk in the ${room} at ${ocap.name} is found copying what ${o.name} knows of ${way.name}. Asked who paid for it, the clerk says nothing, then or after. No one in ${ocap.name} knows who sent for the drawings.`,
+          causes: [hidden.id].filter((x) => x >= 0), importance: 0, speciesIds: [o.species], data: { against: o.id, slot },
+        });
+        if (hidden.id >= 0) push('spy', hidden.id, cover.id, o.id);
+        return;
+      }
       n.know.way[slot] = k; n.know.year[slot] = year;
       const hidden = sim.emit({
         type: 'theft', hidden: true, year, cellId: ocap.cell, title: `${n.name} steals the secret of ${way.name}`,
-        description: `A clerk in the ${WEB[slot]!.field === 'war' ? 'arsenal' : 'archive'} at ${ocap.name} is paid more by ${n.name} than ${o.name} pays him. What ${o.name} knows of ${way.name} leaves the country in a bale of cloth.`,
+        description: `A clerk in the ${room} at ${ocap.name} is paid more by ${n.name} than ${o.name} pays him. What ${o.name} knows of ${way.name} leaves the country in a bale of cloth.`,
         causes: [cause].filter((x) => x >= 0), importance: 0, speciesIds: [n.species], data: { by: n.id, against: o.id, slot },
       });
       const cover = sim.emit({

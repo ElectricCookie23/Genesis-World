@@ -56,8 +56,8 @@ export function eventColor(type: string): string {
     case 'independence': return '#ffd76a';
     case 'independence-declared': case 'rising-crushed': case 'arms-race': return '#ff8a6a';
     case 'arms-race-ends': return '#c9d6e8';
-    case 'theft': case 'assassination': case 'secret-treaty': case 'secret-revealed': return '#c39bff';
-    case 'plot-uncovered': case 'world-war': case 'alliance-war': case 'order-fails': return '#ff8a6a';
+    case 'theft': case 'assassination': case 'secret-treaty': case 'secret-revealed': case 'spy-sent': return '#c39bff';
+    case 'plot-uncovered': case 'spy-caught': case 'world-war': case 'alliance-war': case 'order-fails': return '#ff8a6a';
     case 'great-peace': case 'institution': case 'arbitration': return '#fff1c9';
     case 'ruler-death': return '#f0b8d0';
     case 'craft-learned': return '#ffcf8a';
@@ -100,8 +100,8 @@ export function eventGlyph(type: string): string {
     case 'colony': return '⚓';
     case 'rising-crushed': return '⚔';
     case 'arms-race': case 'arms-race-ends': return '⚒';
-    case 'theft': case 'assassination': case 'secret-treaty': case 'secret-revealed': return '◈';
-    case 'plot-uncovered': case 'order-fails': return '✗';
+    case 'theft': case 'assassination': case 'secret-treaty': case 'secret-revealed': case 'spy-sent': return '◈';
+    case 'plot-uncovered': case 'spy-caught': case 'order-fails': return '✗';
     case 'world-war': case 'alliance-war': return '⚔';
     case 'great-peace': return '☮';
     case 'institution': case 'arbitration': return '⚖';

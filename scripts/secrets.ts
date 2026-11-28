@@ -10,7 +10,7 @@ const h = sim.civ.h, began = h.began;
 for (let y = 0; y < Number(years); y++) sim.step(1);
 const ev = sim.events.events, list = h.secrets ?? [];
 const count = (t: string): number => ev.filter((e) => e.type === t).length;
-console.log(`${seed}: ${list.length} secrets on record (${['theft', 'assassination', 'pact'].map((k) => `${k} ${list.filter((s) => s.kind === k).length}`).join(', ')}); hidden events ${ev.filter((e) => e.hidden).length}; plots uncovered ${count('plot-uncovered')}; come out ${count('secret-revealed')}; wars over a wrong ${ev.filter((e) => e.type === 'war' && e.data && e.data.avenges !== undefined).length}`);
+console.log(`${seed}: ${list.length} secrets on record (${['theft', 'assassination', 'pact', 'spy'].map((k) => `${k} ${list.filter((s) => s.kind === k).length}`).join(', ')}); hidden events ${ev.filter((e) => e.hidden).length}; plots uncovered ${count('plot-uncovered')}; come out ${count('secret-revealed')}; wars over a wrong ${ev.filter((e) => e.type === 'war' && e.data && e.data.avenges !== undefined).length}`);
 const show = (s: (typeof list)[number]): void => {
   const e = ev[s.eventId]!, c = ev[s.cover];
   console.log(`  [+${Math.round(s.year - began)}] HIDDEN ${e.title}: ${e.description}`);

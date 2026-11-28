@@ -8,7 +8,7 @@ import { IDEAS, IDEA_COLOUR, IDEA_GOVERNMENT, IDEA_SAYS, drift as driftIdea, gov
 import { emblemOf } from '../src/render/gfx/nations';
 import { grown } from '../src/sim/civilization';
 import { INSTITUTION_KINDS, LEAGUE_HOLDS, chain, describeGreatWar, institutionName, isWorld, powers, purposeOf, victor, weight } from '../src/sim/history/greatwar';
-import { HIDDEN_TYPES, chooses, comesOut, coverStory, dares, strikes } from '../src/sim/history/secrets';
+import { HIDDEN_TYPES, chooses, comesOut, coverStory, dares, steals, strikes, talks } from '../src/sim/history/secrets';
 import { records } from '../src/sim/memory';
 import { secretTies } from '../src/sim/history/diplomacy';
 import { BURST, SPILL, WATCH_YEARS, armsLean, describeRace, drive, peers, tension } from '../src/sim/history/arms';
@@ -2812,12 +2812,19 @@ describe('spies and secrets (E39)', () => {
     expect(strikes(0)).toBeLessThanOrEqual(1);
     expect(comesOut(59)).toBe(0);
     expect(comesOut(61)).toBeGreaterThan(0);
-    for (const k of ['theft', 'assassination', 'pact'] as const) expect(coverStory(k).length).toBeGreaterThan(8);
+    for (const k of ['theft', 'assassination', 'pact', 'spy'] as const) expect(coverStory(k).length).toBeGreaterThan(8);
+    // a theft is likelier to fail in a steady country, and never certain either way; a hard ruler gets a name out of a spy more often
+    expect(steals(1)).toBeLessThan(steals(0));
+    expect(steals(1)).toBeGreaterThan(0.3);
+    expect(steals(0)).toBeLessThan(1);
+    expect(talks(1)).toBeGreaterThan(talks(0));
+    expect(talks(0)).toBeGreaterThan(0);
+    expect(talks(1)).toBeLessThan(1);
   });
 
   it('hidden events are in the cause graph and not in the public record, and at least one changes the course of a history', () => {
     const runs = fiveHistories();
-    let secrets = 0, thefts = 0, killings = 0, pacts = 0, out = 0, changed = 0, further = 0;
+    let secrets = 0, thefts = 0, killings = 0, pacts = 0, out = 0, changed = 0, further = 0, silent = 0, named = 0;
     for (const { sim } of runs) {
       const h = sim.civ.h, ev = sim.events.events;
       // everything hidden is one of the hidden kinds, and never loud
@@ -2866,6 +2873,18 @@ describe('spies and secrets (E39)', () => {
           const more = e.effects.filter((x) => x !== s.cover && ev[x] && !ev[x]!.hidden && ev[x]!.type !== 'secret-revealed');
           if (more.length) further++;
           for (const x of more) expect(ev[x]!.causes).toContain(e.id);
+        } else if (s.kind === 'spy') {
+          silent++;
+          // a spy who was caught and said nothing: the public saw a spy caught and no sender; the hidden record has the sender
+          expect(e.type).toBe('spy-sent');
+          expect(e.data!.by).toBe(s.by);
+          const cover = ev[s.cover]!;
+          expect(cover.type).toBe('spy-caught');
+          expect(cover.hidden).toBeUndefined();
+          expect(cover.causes).toContain(e.id);
+          expect(cover.data!.by).toBeUndefined();
+          expect(cover.description).not.toContain(h.nations[s.by]!.name);
+          expect(cover.description).toMatch(/says nothing/);
         } else {
           pacts++;
           expect(e.type).toBe('secret-treaty');
@@ -2883,11 +2902,23 @@ describe('spies and secrets (E39)', () => {
       }
       // no pact signed in secret is in the public web of how countries stand
       for (const t of h.treaties ?? []) if (t.secret && !t.broken && t.until > sim.simYear) { const tie = web(h, sim.simYear).find((x) => x.a === Math.min(t.a, t.b) && x.b === Math.max(t.a, t.b)); if (tie) expect(tie.eventId).not.toBe(t.eventId); }
+      // a spy who was caught and talked is public from the first day, names the sender, and is nobody's secret
+      for (const e of ev) {
+        if (e.type !== 'spy-caught' || e.data!.by === undefined) continue;
+        named++;
+        expect(e.hidden).toBeUndefined();
+        expect(e.description).toContain(h.nations[Number(e.data!.by)]!.name);
+        expect((h.secrets ?? []).some((s) => s.cover === e.id)).toBe(false);
+      }
+      // and a caught spy carried nothing home: no craft is on record as learned from that attempt
+      for (const e of ev) if (e.type === 'spy-caught') expect(ev.some((x) => x.type === 'craft-learned' && x.simYear === e.simYear && x.data!.slot === e.data!.slot && x.causes.some((c) => ev[c] && ev[c]!.data?.against === e.data!.against))).toBe(false);
     }
-    console.log('E39', { secrets, thefts, killings, pacts, out, changed, further });
+    console.log('E39', { secrets, thefts, killings, pacts, out, changed, further, silent, named });
     expect(secrets).toBeGreaterThan(0);
     // the done-when
     expect(changed).toBeGreaterThan(0);
+    // and not every attempt comes off: somewhere in five histories a spy is caught
+    expect(silent + named).toBeGreaterThan(0);
   });
 });
 

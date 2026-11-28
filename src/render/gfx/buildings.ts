@@ -67,6 +67,11 @@ export const WONDER_MODEL: Record<string, { model: (typeof BUILDINGS)[number]; f
 const WONDER_MODELS = new Set<string>(Object.values(WONDER_MODEL).map((w) => w.model));
 /** How large a wonder is drawn, as a model unit in planet radii (before the boost every building gets from high up). */
 const WONDER_SIZE = 0.0019;
+/** For how many years after a town shut its gates against a sickness the barriers on its roads are drawn (system E37): about as long as a sickness stays abroad. */
+export const CORDON_SHOWN = 6;
+/** The barriers are of rough dark timber whatever the town is built of, and the watch huts burn a plain yellow lamp. */
+const CORDON_TIMBER: readonly number[] = [0.3, 0.22, 0.15];
+const CORDON_LAMP: readonly number[] = [1.0, 0.82, 0.4];
 export type Building = (typeof BUILDINGS)[number];
 
 type V3 = [number, number, number];
@@ -1039,6 +1044,27 @@ export class Towns {
             }
           }
           for (const g of wall.gates) { at(g[0], g[1]); if (!wet()) this.put('gate', up, 0, U * 1.25, 0.7, 0, era, tint, light, toward(Math.atan2(g[1], g[0]))); }
+        }
+        // ---- (system E37) a town that has shut its gates against a sickness, while the sickness is about: a barrier
+        // of rough timber across every road where the made road ends, a watch hut beside it with its lamp burning
+        // all night, and the gateways of its walls closed. (The wall a quarantine leaves behind is an ordinary wall,
+        // drawn above; this is what marks the years of the quarantine itself.)
+        if (!left && lapse >= 1 && st.cordon && simYear >= st.cordon.year && simYear - st.cordon.year < CORDON_SHOWN) {
+          for (const street of plan.streets) {
+            if (street.rank !== 0 || street.order > count) continue;
+            const pts = street.points, made = Math.min(pts.length - 1, 2 + Math.ceil(Math.sqrt(count) * 1.25));
+            if (made < 1) continue;
+            const [x0, y0] = pts[made - 1]!, [x1, y1] = pts[made]!, heading = Math.atan2(y1 - y0, x1 - x0), across = heading + Math.PI / 2;
+            at(x1, y1);
+            if (wet() || taken(px, py)) continue;
+            this.put('wall', up, 0, U * 1.4, 0.3, 0, 0.1, CORDON_TIMBER, light, toward(across));
+            at(x1 + Math.cos(across) * 1.1 - Math.cos(heading) * 0.4, y1 + Math.sin(across) * 1.1 - Math.sin(heading) * 0.4);
+            if (!wet() && !taken(px, py)) this.put('hut', up, 0, 0.00028 * boost * (arch ? arch.scale : 1), hash(st.id * 53 + street.order), 1, Math.max(era, 0.5), CORDON_TIMBER, CORDON_LAMP, toward(heading + Math.PI));
+          }
+          for (const wall of plan.walls) {
+            if (wall.order > count) continue;
+            for (const g of wall.gates) { at(g[0], g[1]); if (!wet()) this.put('wall', up, 0, U * 1.25, 0.3, 0, 0.1, CORDON_TIMBER, light, toward(Math.atan2(g[1], g[0]) + Math.PI / 2)); }
+          }
         }
         // ---- what joins this town to others (system E15): each kind runs out of town toward the town it leads to, beside the road
         if (st.links && lapse >= 1 && dist < 0.2 && !left) {

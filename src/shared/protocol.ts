@@ -322,6 +322,8 @@ export interface SettlementInfo {
   scars?: number[];
   /** The last time it shut its gates against a sickness (system E37): the year, and the sickness's name. */
   cordon?: { year: number; name: string };
+  /** Was it planted as a colony from across the sea (system E36)? Such a town is laid out by rule before anyone lives in it. */
+  planted?: boolean;
   /** The years its country's building laws were made: fire, earthquake, flood (-1 for none). */
   codes?: number[];
   /** Its walls, oldest first, as pairs: the people it held (thousands) and what it knew when each was built. */
