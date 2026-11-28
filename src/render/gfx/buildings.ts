@@ -80,6 +80,9 @@ export function feastLit(usual: number, feast?: { glow: number; dark: number }):
   if (!feast) return usual;
   return Math.max(0, Math.min(1, usual * feast.glow)) * (1 - 0.9 * feast.dark);
 }
+/** For how many seconds of the visitor's time a town's burnt quarter is drawn in flames after word of the fire arrives (system E20), and the light it throws. */
+export const BURN_SECONDS = 7;
+const FIRE_LIGHT: readonly number[] = [1.0, 0.42, 0.08];
 export type Building = (typeof BUILDINGS)[number];
 
 type V3 = [number, number, number];
@@ -579,6 +582,11 @@ export class Towns {
       let color: N = albedo.mul(sunColor.mul(max(dot(nW, L), 0).mul(0.85).add(0.15)).mul(sunVis).mul(1.1).add(secondSun(nW, up)).add(sky).add(moon).add(vec3(0.012, 0.016, 0.022))).add(sunColor.mul(glint));
       // lamplight in the nation's colour; fires burn day and night
       const flicker = sin(uTime.mul(9).add(vData.y.mul(60))).mul(0.2).add(0.85);
+      // (system E20) a building on fire carries a share of lit windows of 2: flame shows through every window by day or
+      // night, and the walls and roof glow with it, more toward the top, unsteadily
+      const burn = step(1.5, vData.z);
+      const blaze = sin(uTime.mul(13).add(vData.y.mul(47)).add(vUv.y.mul(5))).mul(0.3).add(0.7).mul(burn);
+      color = color.add(vec3(2.0, 0.55, 0.06).mul(blaze).mul(inPane.mul(is(PART.windows)).add(is(PART.roof).mul(0.4)).add(is(PART.wall).mul(fract(vUv.y)).mul(0.22))));
       color = color.add(vLight.mul(litPane.mul(is(PART.windows))).mul(night).mul(1.8))
         .add(mix(vec3(3.4, 1.3, 0.25), vLight.mul(2.6), smoothstep(0.45, 0.75, tech)).mul(is(PART.flame)).mul(flicker).mul(night.mul(0.8).add(0.35)));
       material.colorNode = color;
@@ -857,6 +865,16 @@ export class Towns {
     return made;
   }
 
+  /** Towns with a fire burning in them now (system E20), by cell: the clock time (seconds) at which each stops being drawn in flames. */
+  private burning = new Map<number, number>();
+  /** Word of a fire in the town at this cell: its burnt quarter is drawn in flames for a few seconds, then as what the fire left. */
+  burn(cell: number, seconds = BURN_SECONDS): void {
+    this.burning.set(cell, performance.now() / 1000 + seconds);
+    this.dirty = true;
+  }
+  /** How many towns are being drawn in flames (for checks). */
+  get ablaze(): number { const now = performance.now() / 1000; let n = 0; for (const until of this.burning.values()) if (until > now) n++; return n; }
+
   /** The festivals being kept now, by country (system E30). */
   private feasts = new Map<number, NonNullable<Unrest['feast']>>();
   private feastKey = '';
@@ -936,6 +954,8 @@ export class Towns {
     const boost = 1 + Math.min(1.6, dist * 3.2);
     const wall = performance.now() / 1000;
     if (this.lapse && wall - this.lapse.start > this.lapse.seconds + 0.5) { this.lapse = null; this.dirty = true; }
+    // (a fire that has burned out: the town is drawn again, as what the fire left)
+    for (const [cell, until] of this.burning) if (until <= wall) { this.burning.delete(cell); this.dirty = true; }
     // building sites are worth drawing from close by, while time runs slowly enough to watch them: then the towns
     // are redrawn as the work advances, a dozen times a second at most
     const working = dist < 0.14 && yearsPerSecond <= 3.01;
@@ -972,6 +992,7 @@ export class Towns {
         // (system E30) a town of a country keeping a festival is lit for it from close by as well as from orbit: its
         // windows burn brighter and in the festival's colour, or on the night of no lamps hardly at all
         const feast = left ? undefined : festival;
+        const ablaze = !left && (this.burning.get(st.cell) ?? 0) > wall;
         const lit = left ? 0 : feastLit(st.tech < 0.3 ? 0.15 : Math.min(0.55, 0.22 + 0.3 * st.tech), feast);
         // What gets built follows how many people there are as well as what they know: a few hundred farmers with
         // advanced neighbours do not raise tower blocks and domes. (Seen on a real GPU: a town of 503 drawn as a
@@ -1191,7 +1212,12 @@ export class Towns {
           // as tall as tower blocks, and from low altitude the blocks read as pins)
           const sz = (kind === 'hut' ? 0.00028 : kind === 'house' ? 0.0004 : kind === 'hall' ? 0.00048 : 0.00064) * boost * (0.85 + 0.3 * h3) * (arch ? arch.scale : 1);
           // it faces its street
-          if (fate && (fate.state === 'wreck' || fate.state === 'given-up')) {
+          if (ablaze && fate && fate.cause === 'fire' && fate.state === 'wreck') {
+            // (system E20) the fire itself, for the few seconds after word of it arrives: the quarter that is about
+            // to be black stumps stands in flames
+            this.put(kind, up, 0, sz, h2, 2, age, roofTint, FIRE_LIGHT, toward(plot.yaw));
+            this.mending = true;
+          } else if (fate && (fate.state === 'wreck' || fate.state === 'given-up')) {
             // what a calamity left: black stumps after a fire, heaps after an earthquake, mud to the eaves after a flood, grey mounds under ash
             const gone = fate.state === 'given-up';
             const [stump, shade] = fate.cause === 'fire' ? [0.3, [0.09, 0.08, 0.07]] : fate.cause === 'quake' ? [0.2, [0.42, 0.4, 0.37]] : fate.cause === 'flood' ? [0.7, [0.34, 0.29, 0.21]] : [0.3, [0.5, 0.49, 0.48]];

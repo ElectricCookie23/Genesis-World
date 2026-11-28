@@ -1316,6 +1316,8 @@ async function boot(): Promise<void> {
       if ((ev.type === 'war' || ev.type === 'plague') && ev.cellId >= 0) scene.civUnrest(ev.cellId, ev.type);
       // every battle flickers where it is fought, and a world war flickers in every town of every country in it (system E40)
       if (ev.type === 'battle' && ev.cellId >= 0) scene.civUnrest(ev.cellId, 'war');
+      // (a fire in a town is seen burning for a few seconds before it is the black quarter it leaves: system E20)
+      if (ev.type === 'city-fire' && ev.cellId >= 0) scene.townFire(ev.cellId);
       if (ev.type === 'world-war' && ev.data) { const ids = new Set(String(ev.data.sides ?? '').split(/[,|]/).map(Number)); for (const st of state.settlements) if (st.ruined < 0 && st.nation !== undefined && ids.has(st.nation)) scene.civUnrest(st.cell, 'war'); }
       // a fallen capital goes dark; a civil war flickers like any other
       if (ev.type === 'nation-collapse' && ev.cellId >= 0) scene.civUnrest(ev.cellId, 'plague');

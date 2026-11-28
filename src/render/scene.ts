@@ -506,6 +506,8 @@ export class GenesisScene {
   timelapse(id: number, seconds = 16): void {
     this.towns?.timelapse(id, seconds);
   }
+  /** A fire in the town at this cell (system E20): its burnt quarter is drawn in flames for a few seconds. */
+  townFire(cell: number): void { this.towns?.burn(cell); }
   /** A war or plague event at a settlement's cell. */
   civUnrest(cell: number, kind: 'war' | 'plague'): void {
     this.civ?.disturb(cell, kind);
