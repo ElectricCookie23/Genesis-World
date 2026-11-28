@@ -8,6 +8,7 @@
 // knowledge grows, towns are founded and abandoned, eras turn. Each nation is in its own era.
 // Ordinary citizens are never simulated one by one (see history/citizens.ts); rulers and other
 // people history remembers are stored for good.
+import { Biome } from './world';
 import { G, GENE_COUNT, P, PHEN_COUNT, computePhenotype } from './genetics';
 import { RNG, hashSeed } from './rng';
 import type { Simulation } from './simulation';
@@ -110,6 +111,10 @@ export interface Settlement {
   /** Where it has dammed a river, and where it mines (cells), once it has (system E16). */
   dam?: number;
   mine?: number;
+  /** Has it cut its hillsides into terraces (the year it did)? The river cell it waters its dry fields from. The marsh at its door that it drained (a cell). (System E16.) */
+  terraced?: number;
+  irrigated?: number;
+  drained?: number;
   /** The walls it has built (system E11): how many people it held and what it knew each time it was threatened and walled itself in. */
   walls?: { pop: number; tech: number; year: number }[];
   /** Great works raised here in golden ages (system E10). */
@@ -137,6 +142,14 @@ export function grown(pop: number, room: number, rate: number): number {
 }
 /** At most this many history ticks in one call: under a fast-forward each tick covers more years. */
 const MAX_TICKS = 300;
+/**
+ * How much higher than the town the ground beside it must be (in the world's units of height, about a kilometre) for
+ * it to be worth terracing. Measured on full-size and small planets alike: about one farming town in five has two
+ * neighbours that much above it (the height between neighbouring places hardly depends on how fine the planet is).
+ */
+export const TERRACE_RISE = 0.95;
+/** Country where rain cannot be counted on: a farming town with a river there waters its fields from it. */
+const DRY_BIOMES = new Set<number>([Biome.Desert, Biome.Shrubland, Biome.Savanna, Biome.SaltFlat]);
 /** Ticks longer than this many years are a fast-forward: rulers and minor events are summarised, not recorded. */
 const SUMMARY_YEARS = 8;
 /** After a departure, the years over which the towns of home thin out before the long peace settles on those who stayed. */
@@ -1804,6 +1817,58 @@ export class Civilization {
           n.found = { good: GOODS.indexOf('ore'), eventId: sim.events.events.length > opened ? opened : -1, year, what: `the mine above ${st.name}` };
           if (first && ev.id >= 0) firsts.mine = ev.id;
           this.credit(sim, rng, n, ev.id, 'The first to go underground was {name}.', 'explorer', year);
+        }
+      }
+    }
+    // ---- terraces, watered fields and drained marsh: each a work a farming town does once, where its land asks for it.
+    // (The luck in these is the town's and the year's own, so the dams and mines above fall as they did before these were added.)
+    {
+      const st = towns[hash32(this.seedNum, n.id, Math.floor(year), 0x7e44) % towns.length]!;
+      const luck = (k: number): number => (hash32(this.seedNum, st.id, Math.floor(year), k) % 100000) / 100000;
+      const land = (c: number): boolean => w.elevation[c]! > w.seaLevel;
+      const made = (work: 'terraces' | 'irrigation' | 'drained', site: number, title: string, firstTitle: string, text: string, firstText: string): void => {
+        const first = firsts[work] === undefined;
+        const ev = sim.emit({
+          type: 'landscape', year, cellId: site, title: first ? firstTitle : title, description: first ? firstText : text,
+          causes: [st.eventId, n.eventId].filter((x) => x >= 0), importance: first ? 2 : 0, speciesIds: [n.species], data: { nation: n.id, settlement: st.id, work },
+        });
+        if (first && ev.id >= 0) firsts[work] = ev.id;
+      };
+      if (st.farms && st.ruined < 0) {
+        // steep ground: fields cut into the hillside in steps, each held by a wall
+        if (st.terraced === undefined && st.tech > 0.3 && luck(1) < 1 - Math.exp(-y / 140)) {
+          let steep = 0;
+          for (let j = 0; j < g.ncount[st.cell]!; j++) { const nb = g.neighbors[st.cell * 6 + j]!; if (land(nb) && w.elevation[nb]! - w.elevation[st.cell]! > TERRACE_RISE) steep++; }
+          if (steep >= 2) {
+            st.terraced = year;
+            made('terraces', st.cell, `Terraces above ${st.name}`, 'The first terraces',
+              `The people of ${st.name} have cut the slopes above the town into steps and walled each one. There are fields now where there was only hillside.`,
+              `The hills above ${st.name} were too steep to plough, and the people of ${n.name} had run out of level ground. They have cut the slope into steps, a wall of dry stone under each, and carried the soil up in baskets. From below the hill looks like a stair.`);
+          }
+        }
+        // dry country with a river in it: the river is led out over the fields
+        if (st.irrigated === undefined && st.tech > 0.3 && DRY_BIOMES.has(w.biome[st.cell]!) && luck(2) < 1 - Math.exp(-y / 110)) {
+          let site = -1, most = 3;
+          const seen = (c: number): void => { if (land(c) && w.flow[c]! > most) { most = w.flow[c]!; site = c; } };
+          seen(st.cell);
+          for (let j = 0; j < g.ncount[st.cell]!; j++) seen(g.neighbors[st.cell * 6 + j]!);
+          if (site >= 0) {
+            st.irrigated = site;
+            made('irrigation', site, `${st.name} waters its fields from the river`, 'The first watered fields',
+              `${st.name} has dug channels from its river out over the dry ground. A green strip follows the water through brown country.`,
+              `Rain cannot be counted on at ${st.name}, and the river can. The people of ${n.name} have cut a channel from it above the town and smaller ones from that, and let the water out over ground that was dust. Where it reaches, the land is green all year; a step beyond the last ditch it is as it always was.`);
+          }
+        }
+        // a marsh at its door: ditched, banked and ploughed
+        if (st.drained === undefined && st.tech > 0.6 && luck(3) < 1 - Math.exp(-y / 160)) {
+          let site = -1;
+          for (let j = 0; j < g.ncount[st.cell]!; j++) { const nb = g.neighbors[st.cell * 6 + j]!; if (land(nb) && w.biome[nb] === Biome.Wetland) { site = nb; break; } }
+          if (site >= 0) {
+            st.drained = site;
+            made('drained', site, `The marsh by ${st.name} is drained`, 'The first marsh drained',
+              `${st.name} has ditched and banked the marsh beside it and ploughed what was under the water.`,
+              `Beside ${st.name} lay a marsh that fed birds and bred fevers. The people of ${n.name} have cut straight ditches through it to the river, raised a bank against the floods, and ploughed the black ground that came up out of the water. It is the best land they have.`);
+          }
         }
       }
     }
@@ -4674,6 +4739,29 @@ export class Civilization {
         }
         cleared[st.cell] = 1;
         if (st.mine !== undefined && elevation[st.mine]! > seaLevel) { cleared[st.mine] = 1; lights[st.mine] = Math.max(lights[st.mine]!, st.tech > 0.85 ? 0.12 : 0.04); }
+        // terraces: fields on the high ground above the town, and on the ground above that (second pass)
+        if (st.terraced !== undefined) {
+          for (let j = 0; j < g.ncount[st.cell]!; j++) {
+            const nb = g.neighbors[st.cell * 6 + j]!;
+            if (elevation[nb]! <= seaLevel || elevation[nb]! - elevation[st.cell]! <= TERRACE_RISE) continue;
+            fields[nb] = Math.max(fields[nb]!, 0.9);
+            for (let k = 0; k < g.ncount[nb]!; k++) { const n2 = g.neighbors[nb * 6 + k]!; if (elevation[n2]! > elevation[nb]!) fields[n2] = Math.max(fields[n2]!, 0.7); }
+          }
+        }
+        // watered fields: a green strip along the river it draws from, and down the river from there
+        if (st.irrigated !== undefined) {
+          let c: number = st.irrigated;
+          for (let step = 0; step < 4 && c >= 0 && elevation[c]! > seaLevel; step++) {
+            fields[c] = Math.max(fields[c]!, 0.95);
+            for (let j = 0; j < g.ncount[c]!; j++) { const nb = g.neighbors[c * 6 + j]!; if (elevation[nb]! > seaLevel) fields[nb] = Math.max(fields[nb]!, 0.8); }
+            c = sim.world.downhill[c]!;
+          }
+        }
+        // drained marsh: ploughland where the water stood, and along its edges
+        if (st.drained !== undefined && elevation[st.drained]! > seaLevel) {
+          fields[st.drained] = 1;
+          for (let j = 0; j < g.ncount[st.drained]!; j++) { const nb = g.neighbors[st.drained * 6 + j]!; if (elevation[nb]! > seaLevel && sim.world.biome[nb] === Biome.Wetland) fields[nb] = Math.max(fields[nb]!, 0.8); }
+        }
         // a dam holds a lake behind it: the river stands wide at the dam and for a way upstream
         const dam: number = st.dam ?? -1;
         if (dam >= 0 && elevation[dam]! > seaLevel) {

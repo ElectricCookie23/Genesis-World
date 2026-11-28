@@ -21,6 +21,12 @@ import { canUndo } from './memory';
 import css from './ui.module.css';
 
 /** The date of an event in the count of years of the nation it belongs to, when the page knows that nation (system E8). */
+/** What a town has done to its own land beyond clearing it (system E16), in a sentence. */
+export function landWorks(st: { terraced?: boolean; irrigated?: boolean; drained?: boolean }): string {
+  const done = [st.terraced ? 'cut the hills above it into terraces' : '', st.irrigated ? 'led its river out over dry fields' : '', st.drained ? 'drained the marsh beside it and ploughed it' : ''].filter(Boolean);
+  return done.length ? `It has ${done.length === 1 ? done[0] : `${done.slice(0, -1).join(', ')} and ${done[done.length - 1]}`}.` : '';
+}
+
 function localDate(realms: NationInfo[], e: SimEvent): string {
   const id = e.data?.nation;
   if (typeof id !== 'number') return '';
@@ -1059,6 +1065,7 @@ export function Peoples() {
               <div class={css.when} style={{ color: '#ece7db' }}>A {kind(st.tech)} of {bigNumber(st.pop * 1000)} {sp ? sp.name : 'people'}, founded {formatYear(st.founded).toLowerCase()}.</div>
               {(() => { const how = st.tech >= 0.22 ? actions.architecture(st) : ''; return how ? <div class={css.when} style={{ color: '#cfc9bd' }}>{how}</div> : null; })()}
               {(st.dam || st.mine) && <div class={css.when} style={{ color: '#cfc9bd' }}>{st.dam && st.mine ? 'It has dammed its river and mines the hills above it.' : st.dam ? 'It has dammed its river: a lake stands above the town.' : 'It works a mine in the hills above it.'}</div>}
+              {(st.terraced || st.irrigated || st.drained) && <div class={css.when} style={{ color: '#cfc9bd' }}>{landWorks(st)}</div>}
               {st.relic && <div class={css.when} style={{ color: '#d8b98a' }}>Its {st.relic} were built with a forgotten technique: no one here can make more.</div>}
               {actions.construction(st.id).map((j, i) => (
                 <div key={i} class={css.when} style={{ color: '#ece7db', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>

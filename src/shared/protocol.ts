@@ -339,6 +339,10 @@ export interface SettlementInfo {
   /** Has dammed a river; works a mine (system E16). */
   dam?: boolean;
   mine?: boolean;
+  /** Has it terraced its hillsides, led its river out over dry fields, drained the marsh at its door (system E16)? */
+  terraced?: boolean;
+  irrigated?: boolean;
+  drained?: boolean;
   /** What joins it to other towns (system E15), as pairs: the other town's id and the kind of network (0 road, 1 aqueduct, 2 canal, 3 railway, 4 telegraph, 5 pipeline, 6 power line). */
   links?: number[];
   farms?: boolean;

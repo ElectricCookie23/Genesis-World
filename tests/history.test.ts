@@ -6,7 +6,7 @@ import { applyChange, compound, makeLanguage, personName, placeMeanings, soundCh
 import { count, listing, ordinal, write } from '../src/sim/history/grammar';
 import { IDEAS, IDEA_COLOUR, IDEA_GOVERNMENT, IDEA_SAYS, drift as driftIdea, governedAs, ideaName, pressure, ripest, type Conditions } from '../src/sim/history/ideology';
 import { emblemOf } from '../src/render/gfx/nations';
-import { grown } from '../src/sim/civilization';
+import { TERRACE_RISE, grown } from '../src/sim/civilization';
 import { INSTITUTION_KINDS, LEAGUE_HOLDS, chain, describeGreatWar, institutionName, isWorld, powers, purposeOf, victor, weight } from '../src/sim/history/greatwar';
 import { HIDDEN_TYPES, chooses, comesOut, coverStory, dares, steals, strikes, talks } from '../src/sim/history/secrets';
 import { records } from '../src/sim/memory';
@@ -864,7 +864,7 @@ describe('calendars (E8)', () => {
   }, 900000);
 });
 
-import { arrowPath, recentMigrations } from '../src/ui/panels';
+import { arrowPath, landWorks, recentMigrations } from '../src/ui/panels';
 import type { SimEvent } from '../src/sim/events';
 
 describe('migrations of peoples (E9)', () => {
@@ -1165,7 +1165,7 @@ describe('farmland and landscape change (E16)', () => {
     expect(clearedCover(0.8, 1)).toBeCloseTo(0.38);
     expect(clearedCover(0, 1)).toBeCloseTo(0.22);
     const runs = fiveHistories();
-    let dams = 0, mines = 0, fellings = 0, clearedCells = 0;
+    let dams = 0, mines = 0, fellings = 0, clearedCells = 0, terraces = 0, watered = 0, drained = 0;
     for (const r of runs) {
       const w = r.sim.world, ev = r.sim.events.events, civ = r.sim.civ;
       for (let i = 0; i < w.cleared.length; i++) {
@@ -1183,15 +1183,38 @@ describe('farmland and landscape change (E16)', () => {
         expect(w.cleared[st.cell]).toBe(1);
         if (st.dam !== undefined) { dams++; expect(w.flow[st.dam]!).toBeGreaterThanOrEqual(34); }
         if (st.mine !== undefined) { mines++; expect(w.cleared[st.mine]).toBe(1); expect(w.elevation[st.mine]!).toBeGreaterThan(w.elevation[st.cell]!); }
+        // (second pass) terraces are fields on ground well above the town; watered fields follow a river through dry country; a drained marsh is ploughland
+        const g = r.sim.grid;
+        if (st.terraced !== undefined) {
+          terraces++;
+          let high = 0;
+          for (let j = 0; j < g.ncount[st.cell]!; j++) { const nb = g.neighbors[st.cell * 6 + j]!; if (w.elevation[nb]! > w.seaLevel && w.elevation[nb]! - w.elevation[st.cell]! > TERRACE_RISE) { high++; expect(w.fields[nb]!).toBeGreaterThanOrEqual(0.89); } }
+          void high;
+        }
+        if (st.irrigated !== undefined) { watered++; expect(w.fields[st.irrigated]!).toBeGreaterThanOrEqual(0.94); expect(w.elevation[st.irrigated]!).toBeGreaterThan(w.seaLevel); }
+        if (st.drained !== undefined) { drained++; expect(w.fields[st.drained]).toBe(1); }
+      }
+      for (const e of ev.filter((x) => x.type === 'landscape' && ['terraces', 'irrigation', 'drained'].includes(String(x.data!.work)))) {
+        const st = civ.settlements[Number(e.data!.settlement)]!;
+        expect(st).toBeDefined();
+        expect(e.description.length).toBeGreaterThan(60);
+        if (e.data!.work === 'terraces') expect(st.terraced).toBe(e.simYear);
       }
       for (const e of ev.filter((x) => x.type === 'landscape')) {
-        expect(['dam', 'mine', 'felling']).toContain(e.data!.work);
+        expect(['dam', 'mine', 'felling', 'terraces', 'irrigation', 'drained']).toContain(e.data!.work);
         expect(e.causes.length).toBeGreaterThan(0);
         if (e.data!.work === 'felling') { fellings++; expect(e.description).toMatch(/rain itself comes a little less often/); expect(civ.h.nations[Number(e.data!.nation)]!.felled).toBe(e.simYear); }
       }
       const first = civ.h.firstWorks ?? {};
-      for (const id of [first.dam, first.mine, first.felled]) if (id !== undefined) expect(ev[id]!.importance).toBe(2);
+      for (const id of [first.dam, first.mine, first.felled, first.terraces, first.irrigation, first.drained]) if (id !== undefined) expect(ev[id]!.importance).toBe(2);
     }
+    console.log('E16 second pass', { terraces, watered, drained });
+    // and a town's panel says what it has done, in one sentence
+    expect(landWorks({})).toBe('');
+    expect(landWorks({ terraced: true })).toBe('It has cut the hills above it into terraces.');
+    expect(landWorks({ terraced: true, irrigated: true, drained: true })).toBe('It has cut the hills above it into terraces, led its river out over dry fields and drained the marsh beside it and ploughed it.');
+    // (somewhere in five worlds a town has steep ground and has cut it into steps)
+    expect(terraces + watered + drained).toBeGreaterThan(0);
     expect(clearedCells).toBeGreaterThan(200);
     expect(dams).toBeGreaterThan(3);
     expect(mines).toBeGreaterThan(3);
