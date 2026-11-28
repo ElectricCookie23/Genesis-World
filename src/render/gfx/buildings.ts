@@ -836,6 +836,8 @@ export class Towns {
       uphill: Math.round(Math.atan2(gy, gx) * 8) / 8,
       slope: Math.round(Math.min(1, steep * 2.5) * 10) / 10,
       school: st.tech >= 0.35, port: coastal && (!!st.overseas || st.tech > 0.36 || wade > 0.3), capital: !!nat && nat.capital === st.id, walls,
+      // (system E36) a town planted as a colony keeps the ruled plan it was surveyed with
+      ...(st.planted ? { planted: true } : {}),
     };
     const key = JSON.stringify(site);
     const have = this.plans.get(st.id);

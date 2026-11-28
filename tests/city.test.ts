@@ -7,6 +7,47 @@ const crossroads: CitySite = { seed: 11, roads: [0.3, 2.2, 3.9, 5.2], coast: 0, 
 const harbour: CitySite = { seed: 23, roads: [2.6, 4.4], coast: 0.4, shore: 5, uphill: 3.3, slope: 0.5, school: true, port: true, capital: false, walls: [30, 140] };
 const valley: CitySite = { seed: 37, roads: [1.0, 4.1], coast: 0, shore: Infinity, uphill: 2.6, slope: 0.9, school: true, port: false, capital: false, walls: [60] };
 
+describe('a town planted as a colony (E36)', () => {
+  const landing: CitySite = { ...harbour, seed: 91, planted: true };
+  const grown: CitySite = { ...harbour, seed: 91 };
+  /** How far each step of each street is from square to the shore, at worst (radians). */
+  const skew = (plan: ReturnType<typeof planCity>, base: number): number => {
+    let worst = 0;
+    for (const st of plan.streets) for (let i = 1; i < st.points.length; i++) {
+      const [x0, y0] = st.points[i - 1]!, [x1, y1] = st.points[i]!;
+      let d = (Math.atan2(y1 - y0, x1 - x0) - base) % (Math.PI / 2);
+      if (d < 0) d += Math.PI / 2;
+      worst = Math.max(worst, Math.min(d, Math.PI / 2 - d));
+    }
+    return worst;
+  };
+  it('is laid out by rule: every street straight and square to the shore, where a town that grew wanders', () => {
+    const P = planCity(landing), G = planCity(grown);
+    expect(skew(P, landing.coast)).toBeLessThan(1e-6);
+    expect(skew(G, grown.coast)).toBeGreaterThan(0.2);
+    // it is still a town: plenty of plots, a harbour at the end of the road to the water, docks by it, the same every time
+    expect(P.plots.length).toBeGreaterThan(80);
+    expect(P.harbour).not.toBeNull();
+    expect(planShape(P).share.docks).toBeGreaterThan(0.01);
+    expect(JSON.stringify(planCity(landing).plots)).toBe(JSON.stringify(P.plots));
+    // nothing in the water, nothing on the square, no two buildings on one spot
+    const seaward = (p: { x: number; y: number }) => p.x * Math.cos(landing.coast) + p.y * Math.sin(landing.coast);
+    for (let i = 0; i < P.plots.length; i++) {
+      const p = P.plots[i]!;
+      expect(seaward(p)).toBeLessThan(landing.shore + 1.5);
+      expect(Math.hypot(p.x, p.y)).toBeGreaterThanOrEqual(1.25);
+      for (let j = 0; j < i; j++) { const q = P.plots[j]!; expect((p.x - q.x) ** 2 + (p.y - q.y) ** 2).toBeGreaterThan(0.9); }
+    }
+    // its walls and their gates come as any town's do
+    expect(planShape(P).walls).toBe(2);
+    // an inland site can be planted too (a colony's later towns): squared to its first road
+    const inland = planCity({ ...crossroads, planted: true });
+    expect(skew(inland, crossroads.roads[0]!)).toBeLessThan(1e-6);
+    // and a town that was not planted is laid out exactly as before
+    expect(JSON.stringify(planCity({ ...harbour, planted: false }).plots)).toBe(JSON.stringify(planCity(harbour).plots));
+  });
+});
+
 describe('living city growth (E11)', () => {
   it('a town is laid out the same way every time, and grows by adding to what is there', () => {
     const a = planCity(harbour), b = planCity(harbour);

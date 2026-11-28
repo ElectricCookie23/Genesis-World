@@ -28,6 +28,12 @@ export interface CitySite {
   capital: boolean;
   /** Each time it built a wall: how many plots the town had then. */
   walls: number[];
+  /**
+   * Planted as a colony (system E36): surveyed before anyone lived in it. Its roads are ruled straight and square to
+   * the shore it was landed on, with a street at every third pace on both sides, where a town that grew has roads
+   * that wander toward its neighbours and bend with the land.
+   */
+  planted?: boolean;
 }
 
 export interface Street {
@@ -83,6 +89,9 @@ function stream(seed: number): () => number {
 
 const turn = (a: number): number => { let d = a % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
 
+/** In a planted town, how many paces from one cross street to the next. */
+const RULED_BLOCK = 3;
+
 /** The largest town the plan is drawn for. */
 export const MAX_PLOTS = 320;
 
@@ -102,11 +111,18 @@ export function planCity(site: CitySite): CityPlan {
   // ---- the roads out of town: toward the neighbours, to the water, up to the school
   const headings: number[] = [];
   const add = (a: number, apart = 0.55) => { if (headings.every((h) => Math.abs(turn(h - a)) > apart)) headings.push(a); };
-  for (const r of site.roads.slice(0, 4)) add(r);
-  if (coastal && (site.port || site.shore < 14)) add(site.coast, 0.4);
-  if (site.school && site.slope > 0.05) add(site.uphill, 0.4);
-  // every town has at least a way in and a way out, and a crossroads if it is a capital
-  for (let k = 0; headings.length < (site.capital ? 4 : 2) && k < 12; k++) add((headings[0] ?? rnd() * 6.28) + Math.PI * (k % 2 ? 0.5 : 1) + (rnd() - 0.5) * 0.5 + k * 0.4);
+  const ruled = !!site.planted, loose = ruled ? 0 : 1;
+  if (ruled) {
+    // one road down to the landing, one straight inland from it, and one each way along the shore
+    const base = coastal ? site.coast : site.roads[0] ?? rnd() * 6.28;
+    for (let k = 0; k < 4; k++) headings.push(base + (k * Math.PI) / 2);
+  } else {
+    for (const r of site.roads.slice(0, 4)) add(r);
+    if (coastal && (site.port || site.shore < 14)) add(site.coast, 0.4);
+    if (site.school && site.slope > 0.05) add(site.uphill, 0.4);
+    // every town has at least a way in and a way out, and a crossroads if it is a capital
+    for (let k = 0; headings.length < (site.capital ? 4 : 2) && k < 12; k++) add((headings[0] ?? rnd() * 6.28) + Math.PI * (k % 2 ? 0.5 : 1) + (rnd() - 0.5) * 0.5 + k * 0.4);
+  }
 
   const streets: Street[] = [];
   /** How far from the centre along the streets each street begins: what build order is counted from. */
@@ -117,7 +133,7 @@ export function planCity(site: CitySite): CityPlan {
     for (let s = 0; s < length; s++) {
       // a road bends with the land: on a slope it eases round toward the contour instead of going straight up
       const up = Math.cos(h) * ux + Math.sin(h) * uy;
-      h += (rnd() - 0.5) * wander - site.slope * 0.35 * up * Math.sign(Math.cos(h) * -uy + Math.sin(h) * ux || 1);
+      h += ((rnd() - 0.5) * wander - site.slope * 0.35 * up * Math.sign(Math.cos(h) * -uy + Math.sin(h) * ux || 1)) * loose;
       const nx = x + Math.cos(h), ny = y + Math.sin(h);
       if (!dry(nx, ny, rank === 0 ? -0.2 : 0.4)) break;
       if (Math.hypot(nx, ny) > reach) break;
@@ -135,6 +151,17 @@ export function planCity(site: CitySite): CityPlan {
   for (let m = 0; m < mains; m++) {
     const road = streets[m]!.points;
     let side = rnd() < 0.5 ? 1 : -1;
+    if (ruled) {
+      // (a planted town: a straight street off both sides of the road at every third pace, shorter further out; where
+      // the streets off one road meet the streets off the next they cross, and that is the grid. Blocks are three
+      // paces long so that two plots fit between one cross street and the next.)
+      for (let i = RULED_BLOCK; i < road.length - 1; i += RULED_BLOCK) {
+        const [x, y] = road[i]!, [px, py] = road[i - 1]!;
+        const along = Math.atan2(y - py, x - px);
+        for (const sd of [1, -1]) grow(x, y, along + (sd * Math.PI) / 2, Math.max(3, 12 - Math.floor(i * 0.5)), 1, 0, i);
+      }
+      continue;
+    }
     for (let i = 2 + Math.floor(rnd() * 2); i < road.length - 1; i += 2 + Math.floor(rnd() * 2 + i * 0.06)) {
       const [x, y] = road[i]!, [px, py] = road[i - 1]!;
       const along = Math.atan2(y - py, x - px);
@@ -182,7 +209,19 @@ export function planCity(site: CitySite): CityPlan {
   // room for great works: between the roads, a little way out from the square
   const monuments: [number, number][] = [];
   const bearings = streets.slice(0, mains).map((s) => Math.atan2(s.points[1]![1], s.points[1]![0])).sort((a, b) => a - b);
-  for (let k = 0; k < bearings.length && monuments.length < 5; k++) {
+  if (ruled) {
+    // (a planted town keeps whole blocks open for them: the two that face each other across the crossing, and two
+    // further out on the other diagonal; the other two blocks at the crossing are its market)
+    const base = Math.atan2(streets[0]!.points[1]![1], streets[0]!.points[1]![0]);
+    for (const [quarter, out] of [[0, 0.5], [2, 0.5], [1, 1.5], [3, 1.5]] as const) {
+      const mid = base + (quarter * Math.PI) / 2 + Math.PI / 4, r = out * RULED_BLOCK * Math.SQRT2;
+      const x = Math.cos(mid) * r, y = Math.sin(mid) * r;
+      if (!dry(x, y, 1) || !free(x, y)) continue;
+      claim(x, y); claim(x + 0.6, y); claim(x - 0.6, y); claim(x, y + 0.6); claim(x, y - 0.6);
+      monuments.push([x, y]);
+    }
+  }
+  for (let k = 0; !ruled && k < bearings.length && monuments.length < 5; k++) {
     const a = bearings[k]!, b = k + 1 < bearings.length ? bearings[k + 1]! : bearings[0]! + Math.PI * 2;
     if (b - a < 0.7) continue;
     const mid = (a + b) / 2, r = 2.3 + rnd() * 0.9;
@@ -198,7 +237,8 @@ export function planCity(site: CitySite): CityPlan {
     for (let i = 1; i < p.length; i++) {
       const [x0, y0] = p[i - 1]!, [x1, y1] = p[i]!;
       const along = Math.atan2(y1 - y0, x1 - x0);
-      const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+      // (in a ruled town the plots stand at the paces of the street, not between them: that keeps them clear of the cross streets)
+      const mx = ruled ? x1 : (x0 + x1) / 2, my = ruled ? y1 : (y0 + y1) / 2;
       for (const side of [1, -1]) {
         const off = 0.78 + (st.rank === 0 ? 0.12 : 0);
         const x = mx + Math.cos(along + side * Math.PI / 2) * off, y = my + Math.sin(along + side * Math.PI / 2) * off;

@@ -33,6 +33,8 @@ const sites: [string, CitySite][] = [
   ['Inland crossroads, a capital, never attacked', { seed: 11, roads: [0.3, 2.2, 3.9, 5.2], coast: 0, shore: Infinity, uphill: 1.2, slope: 0.05, school: false, port: false, capital: true, walls: [] }],
   ['Harbour town under a hill, a school, walled twice', { seed: 23, roads: [2.6, 4.4], coast: 0.4, shore: 5, uphill: 3.3, slope: 0.5, school: true, port: true, capital: false, walls: [30, 140] }],
   ['Valley town on a steep slope, one road through', { seed: 37, roads: [1.0, 4.1], coast: 0, shore: Infinity, uphill: 2.6, slope: 0.9, school: true, port: false, capital: false, walls: [60] }],
+  // (system E36) the same harbour site, planted as a colony: surveyed before anyone lived there
+  ['The same harbour, planted as a colony: ruled streets square to the shore', { seed: 23, roads: [2.6, 4.4], coast: 0.4, shore: 5, uphill: 3.3, slope: 0.5, school: true, port: true, capital: false, walls: [30, 140], planted: true }],
 ];
 let html = `<!doctype html><meta charset="utf-8"><body style="background:#14161a;color:#ccc;font:12px system-ui;margin:10px"><div style="display:flex;flex-wrap:wrap;gap:8px">`;
 for (const [title, site] of sites) {
